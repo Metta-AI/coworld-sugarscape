@@ -1,13 +1,8 @@
-"""Standalone ``cogame-play`` CLI.
+"""Standalone ``cogame-play`` CLI for a one-line headless or GUI sanity check.
 
-Equivalent to::
-
-    cogames play -g cogame -m default --render none --max-steps 20
-
-but packaged as a console script so users can run a one-line sanity check
-without importing cogames' heavier CLI. The first import of :mod:`cogame`
-triggers ``register_game(MyCoGame())`` so the game is available to both
-CLIs interchangeably.
+Importing :mod:`cogame` triggers ``register_game(MyCoGame())`` via the local
+framework, so the game is discoverable by name through
+:func:`cogame.framework.get_game` once this module is loaded.
 
 TODO(cogame): rename the script in ``pyproject.toml`` (``cogame-play``) to
 match your package name.

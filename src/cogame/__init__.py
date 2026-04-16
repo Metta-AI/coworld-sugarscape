@@ -1,12 +1,8 @@
-"""cogame: template for a new MettaGrid game built on the cogames framework.
+"""cogame: template for a new MettaGrid game built on the cogames-style framework.
 
-Importing this package:
-
-1. loads ``cogame.game`` as a side effect, which calls
-   :func:`cogames.game.register_game` so the game appears to
-   ``cogames play -g cogame``;
-2. extends :data:`cogames.game._GAME_MODULES` so cogames' own lazy discovery
-   resolves ``cogame`` to this package without any cogames-side patch.
+Importing this package loads :mod:`cogame.game` as a side effect, which calls
+:func:`cogame.framework.register_game` so the game is discoverable by name via
+:func:`cogame.framework.get_game`.
 
 TODO(cogame): rename to match your package name in ``pyproject.toml``, then
 rename every ``cogame.*`` import accordingly.
@@ -14,17 +10,9 @@ rename every ``cogame.*`` import accordingly.
 
 from __future__ import annotations
 
-from cogames.game import _GAME_MODULES as _COGAMES_GAME_MODULES
-
 import cogame.game as _game  # noqa: F401  (side effect: register_game)
-
-# Make `cogames play -g cogame -m default` resolve to this module if someone
-# reaches it without having imported `cogame` first (the lazy loader inside
-# cogames will import it on demand).
-_COGAMES_GAME_MODULES.setdefault("cogame", "cogame.game")
-
-from cogame.game import MyCoGame, MyMission  # noqa: E402
-from cogame.variants import (  # noqa: E402
+from cogame.game import MyCoGame, MyMission
+from cogame.variants import (
     ALL_VARIANT_TYPES,
     HIDDEN_VARIANT_TYPES,
     PUBLIC_VARIANT_TYPES,

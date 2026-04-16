@@ -2,13 +2,13 @@
 
 This module defines:
 
-* ``MyMission`` — a :class:`cogames.core.CoGameMission` subclass whose
+* ``MyMission`` — a :class:`cogame.framework.CoGameMission` subclass whose
   ``make_base_env`` builds a tiny but valid :class:`MettaGridConfig`. Variants
-  (see ``cogame.variants``) can stack on top via the standard cogames lifecycle.
-* ``MyCoGame`` — a :class:`cogames.game.CoGame` subclass that advertises the
-  mission set and variant registry to the cogames CLI.
-* ``register_game(MyCoGame())`` at module bottom, so ``import cogame`` is enough
-  to make the game visible to ``cogames play -g cogame -m default``.
+  (see ``cogame.variants``) can stack on top via the standard lifecycle.
+* ``MyCoGame`` — a :class:`cogame.framework.CoGame` subclass that advertises
+  the mission set and variant registry.
+* ``register_game(MyCoGame())`` at module bottom, so ``import cogame`` is
+  enough to register the game with :func:`cogame.framework.get_game`.
 
 TODO(cogame): Replace ``MyMission`` / ``MyCoGame`` with names specific to your
 game, and rewrite ``_default_map`` + ``make_base_env`` for your mechanics.
@@ -18,9 +18,6 @@ from __future__ import annotations
 
 from typing import cast
 
-from cogames.core import CoGameMission
-from cogames.game import CoGame, register_game
-from cogames.variants import VariantRegistry
 from mettagrid.config.action_config import ActionsConfig, MoveActionConfig, NoopActionConfig
 from mettagrid.config.handler_config import Handler
 from mettagrid.config.mettagrid_config import (
@@ -44,6 +41,7 @@ from cogame.defaults import (
     DEFAULT_ORE_CAP,
     DEFAULT_VEIN_ORE,
 )
+from cogame.framework import CoGame, CoGameMission, register_game
 from cogame.variants import ALL_VARIANT_TYPES
 
 # ===== Resources =====
@@ -173,43 +171,18 @@ class MyMission(CoGameMission):
 
 
 class MyCoGame(CoGame):
-    """Cogames-facing handle for this template game.
-
-    Uses the overcogged lazy-loading pattern so importing ``cogame.game`` is
-    cheap and the real work happens on first access to ``missions`` /
-    ``variant_registry``.
+    """Framework-facing handle for this template game.
 
     TODO(cogame): rename to match your game (e.g. ``MyMiningCoGame``) and
     add eval missions under ``eval_missions`` when you have them.
     """
 
     def __init__(self) -> None:
-        self.name = "cogame"
-        self._missions: list[CoGameMission] | None = None
-        self._variant_registry: VariantRegistry | None = None
-        self._eval_missions: list[CoGameMission] = []
-
-    def _ensure_loaded(self) -> None:
-        if self._variant_registry is not None:
-            return
-        self._missions = [MyMission.create()]
-        self._variant_registry = VariantRegistry([cls() for cls in ALL_VARIANT_TYPES])
-
-    @property
-    def missions(self) -> list[CoGameMission]:
-        self._ensure_loaded()
-        assert self._missions is not None
-        return self._missions
-
-    @property
-    def variant_registry(self) -> VariantRegistry:
-        self._ensure_loaded()
-        assert self._variant_registry is not None
-        return self._variant_registry
-
-    @property
-    def eval_missions(self) -> list[CoGameMission]:
-        return self._eval_missions
+        super().__init__(
+            name="cogame",
+            missions=[MyMission.create()],
+            variants=[cls() for cls in ALL_VARIANT_TYPES],
+        )
 
 
 register_game(MyCoGame())

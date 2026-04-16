@@ -32,23 +32,27 @@ policy in this same checkout.
 ```bash
 pytest                                        # full test suite
 cogame-play --render none --max-steps 20      # standalone sanity check
-cogames play -g cogame -m default -v easy     # via cogames CLI
 ```
 
 ## Architecture
 
+- [`src/cogame/framework/`](src/cogame/framework) — local replica of the
+  cogames lifecycle: `core.py` (CoGameMission, CoGameMissionVariant, Deps),
+  `variants.py` (VariantRegistry, ResolvedDeps), `registry.py` (CoGame,
+  register_game, get_game). No runtime dependency on the shared `cogames`
+  package — copy this subpackage when forking the template.
 - [`src/cogame/game.py`](src/cogame/game.py) — the `MyMission` + `MyCoGame`
   classes. `register_game(MyCoGame())` at the bottom wires the game into
-  `cogames`' global registry at import time.
+  the local registry at import time.
 - [`src/cogame/variants/`](src/cogame/variants) — the variant tree. Every
-  variant subclasses `cogames.core.CoGameMissionVariant`. `FullVariant` in
-  `mechanics.py` demonstrates `dependencies()` + `configure(deps)`.
+  variant subclasses `cogame.framework.CoGameMissionVariant`. `FullVariant`
+  in `mechanics.py` demonstrates `dependencies()` + `configure(deps)`.
 - [`src/cogame/variants/__init__.py`](src/cogame/variants/__init__.py) —
   exports `PUBLIC_VARIANT_TYPES`, `HIDDEN_VARIANT_TYPES`, and
   `resolve_variant_selection()` following the overcogged convention.
 - [`src/cogame/cli.py`](src/cogame/cli.py) — the `cogame-play` console script.
 - [`src/cogame/__init__.py`](src/cogame/__init__.py) — side-effect imports
-  that register the game with `cogames`.
+  that register the game with the local framework.
 
 ## Reference documentation (local)
 
@@ -61,9 +65,9 @@ cogames play -g cogame -m default -v easy     # via cogames CLI
 
 ## Non-negotiables
 
-1. **Run the code.** If a change is local and reversible, run `pytest`,
-   `cogame-play --render none`, or `cogames play` to verify. Don't ask
-   permission for local, reversible operations.
+1. **Run the code.** If a change is local and reversible, run `pytest` or
+   `cogame-play --render none` to verify. Don't ask permission for local,
+   reversible operations.
 2. **Don't paper over errors.** Let exceptions crash with a full traceback.
    `try/except` that swallows errors silently is worse than no handling at all.
 3. **Minimal diffs, root-cause fixes.** Write the smallest change that
@@ -82,5 +86,5 @@ cogames play -g cogame -m default -v easy     # via cogames CLI
   `AsciiMapBuilder.Config` helpers in variant modules.
 - **Variants** — add new modules under `src/cogame/variants/` and register
   their classes in `PUBLIC_VARIANT_TYPES` / `HIDDEN_VARIANT_TYPES`.
-- **Missions** — add factories under `src/cogame/missions/` and include
-  their output in `MyCoGame._ensure_loaded`.
+- **Missions** — add factories under `src/cogame/missions/` and pass them
+  to `super().__init__(missions=...)` in `MyCoGame.__init__`.

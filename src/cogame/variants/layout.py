@@ -9,9 +9,10 @@ TODO(cogame): design your own maps and add more layout variants as needed.
 
 from __future__ import annotations
 
-from cogames.core import CoGameMissionVariant
 from mettagrid.config.mettagrid_config import MettaGridConfig
 from mettagrid.map_builder.ascii import AsciiMapBuilder
+
+from cogame.framework import CoGameMissionVariant
 
 # A larger 13x13 map with four corner spawns and four ore veins.
 BIG_MAP: list[list[str]] = [

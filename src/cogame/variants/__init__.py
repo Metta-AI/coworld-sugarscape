@@ -16,9 +16,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from cogames.core import CoGameMissionVariant
-from cogames.variants import VariantRegistry
-
+from cogame.framework import CoGameMissionVariant, VariantRegistry
 from cogame.variants.difficulty import EasyVariant, HardVariant
 from cogame.variants.layout import BigMapVariant
 from cogame.variants.mechanics import FullVariant

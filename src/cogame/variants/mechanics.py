@@ -13,11 +13,10 @@ default game is stable.
 
 from __future__ import annotations
 
-from cogames.core import CoGameMissionVariant, Deps
-from cogames.variants import ResolvedDeps
 from mettagrid.config.mettagrid_config import MettaGridConfig
 from pydantic import PrivateAttr
 
+from cogame.framework import CoGameMissionVariant, Deps, ResolvedDeps
 from cogame.variants.difficulty import HardVariant
 from cogame.variants.layout import BigMapVariant
 

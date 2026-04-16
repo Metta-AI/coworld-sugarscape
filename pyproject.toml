@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "cogame"
 version = "0.1.0"
-description = "Template for a new MettaGrid game built on the cogames variant framework"
+description = "Template for a new MettaGrid game with a self-contained variant framework"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.12,<3.13"
@@ -22,7 +22,6 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
-    "cogames",
     "mettagrid",
     "pydantic>=2",
     "typer>=0.12",
@@ -44,7 +43,6 @@ Homepage = "https://github.com/Metta-AI/cogame"
 Repository = "https://github.com/Metta-AI/cogame"
 
 [tool.uv.sources]
-cogames = { git = "https://github.com/Metta-AI/metta.git", subdirectory = "packages/cogames" }
 mettagrid = { git = "https://github.com/Metta-AI/mettagrid.git" }
 
 [tool.hatch.build.targets.wheel]

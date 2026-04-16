@@ -1,16 +1,18 @@
 # cogame
 
-A starter template for a **new MettaGrid game** that builds on the full
-[`cogames`](https://github.com/Metta-AI/metta/tree/main/packages/cogames)
-variant framework.
+A starter template for a **new MettaGrid game** with a self-contained variant
+framework — no runtime dependency on `cogames`. The framework classes
+(`CoGameMission`, `CoGameMissionVariant`, `VariantRegistry`, `CoGame`,
+`register_game`, `get_game`) live under [`src/cogame/framework/`](src/cogame/framework/),
+mirroring the `cogames` API so games written against this template stay
+familiar to anyone coming from the metta monorepo.
 
 This template gives you:
 
 - a Python package (`src/cogame/`) with a runnable placeholder mission,
-- a variant tree wired into `cogames.variants.VariantRegistry` (with dependency
+- a self-contained variant framework (`src/cogame/framework/`) with dependency
   resolution, topological configure order, and the standard
-  `PUBLIC / HIDDEN / resolve_variant_selection` layout),
-- a game registration that plugs straight into `cogames play -g cogame`,
+  `PUBLIC / HIDDEN / resolve_variant_selection` layout,
 - a standalone `cogame-play` CLI for quick local sanity checks,
 - the game-authoring [`cg.game.*`](skills/) skills (5 skills: `new-game`,
   `build-game`, `core-mechanics`, `variant-tree`, `generate-assets`) copied
@@ -24,25 +26,31 @@ This template gives you:
 
 ## Quickstart
 
+Install [`uv`](https://docs.astral.sh/uv/) first. It reads `.python-version`
+and the `requires-python` constraint in `pyproject.toml` to install and pin
+CPython 3.12 automatically — you don't need a system Python 3.12.
+
 ```bash
-# 1. Create a virtualenv (Python 3.12)
-python3.12 -m venv .venv
+# 1. Create the env (uv installs Python 3.12 if missing) and sync deps.
+uv sync --extra dev
+
+# 2. Run the tests (all four suites should pass)
+uv run pytest
+
+# 3. Run a quick headless episode
+uv run cogame-play --render none --max-steps 20
+
+# 4. Stack variants
+uv run cogame-play --render none --max-steps 10 -v easy -v big_map
+```
+
+If you prefer pip, activate the uv-managed venv and use pip:
+
+```bash
+uv venv                   # creates .venv with pinned Python 3.12
 source .venv/bin/activate
-
-# 2. Install in editable mode with dev extras
 pip install -e '.[dev]'
-
-# 3. Run the tests (all four suites should pass)
 pytest
-
-# 4. Run a quick headless episode
-cogame-play --render none --max-steps 20
-
-# 5. Stack variants
-cogame-play --render none --max-steps 10 -v easy -v big_map
-
-# 6. Drop into cogames' own CLI (same game, same variants)
-cogames play -g cogame -m default --render none --max-steps 20
 ```
 
 ## Variants shipped
@@ -55,10 +63,9 @@ cogames play -g cogame -m default --render none --max-steps 20
 | `full`    | hidden     | Interface variant: requires `hard` + `big_map`, halves `max_steps` again. |
 
 `full` is the canonical *interface variant* pattern: requesting it via
-`cogame-play -v full` (or `cogames play -g cogame -m default -v full`)
-automatically pulls `hard` and `big_map` into the `VariantRegistry` through
-`Deps(required=[...])`, configures them in topological order, and then runs
-`FullVariant.modify_env` on top.
+`cogame-play -v full` automatically pulls `hard` and `big_map` into the
+`VariantRegistry` through `Deps(required=[...])`, configures them in
+topological order, and then runs `FullVariant.modify_env` on top.
 
 ## Rename checklist
 
@@ -66,7 +73,8 @@ Before committing the template to your new game, rename:
 
 1. `pyproject.toml` — `name`, `description`, URLs, and the script entry point
    `[project.scripts] cogame-play = ...`.
-2. `src/cogame/` → `src/<your_game>/` (update every import accordingly).
+2. `src/cogame/` → `src/<your_game>/` (update every import accordingly,
+   including the `cogame.framework` references).
 3. `cogame.game.MyCoGame.name = "cogame"` → your game's registration name.
 4. `cogame.game.MyMission` → `YourMissionName`.
 5. `tests/` — search/replace `cogame` → `<your_game>`.
@@ -78,7 +86,12 @@ Once renamed, bootstrap your content via [`skills/cg.game.new-game/SKILL.md`](sk
 
 ```
 cogame/
-├── src/cogame/           # game.py, variants/, missions/, cli.py
+├── src/cogame/
+│   ├── framework/        # Local replica of cogames lifecycle (core/variants/registry)
+│   ├── game.py           # MyMission + MyCoGame, register_game(...) at module bottom
+│   ├── variants/         # difficulty, layout, mechanics + variant tree wiring
+│   ├── missions/         # mission factories
+│   └── cli.py            # cogame-play console script
 ├── tests/                # registration, play, dependencies, stacking
 ├── docs/                 # MAKING_A_COGAME.md + TECHNICAL_MANUAL.md + mettagrid/*
 ├── skills/               # 5 cg.game.* game-authoring skills

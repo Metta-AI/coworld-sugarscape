@@ -1,13 +1,12 @@
-"""Smoke tests: importing ``cogame`` registers the game + variants with cogames."""
+"""Smoke tests: importing ``cogame`` registers the game + variants with the framework."""
 
 from __future__ import annotations
 
-from cogames.game import get_game
-
 import cogame  # noqa: F401 (side-effect import under test)
+from cogame.framework import get_game
 
 
-def test_game_registered_with_cogames() -> None:
+def test_game_registered() -> None:
     game = get_game("cogame")
     assert game.name == "cogame"
     mission_names = [m.name for m in game.missions]

@@ -9,8 +9,9 @@ TODO(cogame): rename/expand these for your game's actual difficulty knobs.
 
 from __future__ import annotations
 
-from cogames.core import CoGameMissionVariant
 from mettagrid.config.mettagrid_config import MettaGridConfig, ResourceLimitsConfig
+
+from cogame.framework import CoGameMissionVariant
 
 
 class EasyVariant(CoGameMissionVariant):
