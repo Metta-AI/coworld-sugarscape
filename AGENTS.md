@@ -11,10 +11,21 @@ fresh clone so you can see every wire before rewriting the interior.
 1. Read [`skills/cg.game.new-game/SKILL.md`](skills/cg.game.new-game/SKILL.md)
    first — it's the design-first workflow for turning this scaffold into a
    real game.
-2. Then [`skills/cg.game.build-game/SKILL.md`](skills/cg.game.build-game/SKILL.md)
+2. Then [`skills/cg.game.core-mechanics/SKILL.md`](skills/cg.game.core-mechanics/SKILL.md)
+   to lock the rules, map, roles, and play loop before writing code.
+3. Then [`skills/cg.game.build-game/SKILL.md`](skills/cg.game.build-game/SKILL.md)
    when you're ready to implement mechanics.
-3. Use [`skills/cg.game.variant-tree/SKILL.md`](skills/cg.game.variant-tree/SKILL.md)
+4. Use [`skills/cg.game.variant-tree/SKILL.md`](skills/cg.game.variant-tree/SKILL.md)
    once the base game works and you need to factor variants.
+5. Use [`skills/cg.game.generate-assets/SKILL.md`](skills/cg.game.generate-assets/SKILL.md)
+   once the game plays and you want real art and atlas entries.
+
+Player-authoring skills (`build-player`, `audit-complete-episode`,
+`profile-complete-episode`, `leaderboard-gap`, `scrimmage-gauntlet`,
+`log-mine-player-design`, `map-mechanics`) are **not** shipped with this
+template — they belong with the game's player/policy repo, not the game
+repo. Grab them from `metta-ai/metta/skills/` if you end up building a
+policy in this same checkout.
 
 ## Quick commands
 

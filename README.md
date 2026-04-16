@@ -12,9 +12,13 @@ This template gives you:
   `PUBLIC / HIDDEN / resolve_variant_selection` layout),
 - a game registration that plugs straight into `cogames play -g cogame`,
 - a standalone `cogame-play` CLI for quick local sanity checks,
-- the complete [`cg.game.*`](skills/) skill set (12 skills) copied from
-  `metta-ai/metta`, so AI agents have the same game-authoring guidance inside a
-  fresh `cogame` clone as they do inside the main monorepo,
+- the game-authoring [`cg.game.*`](skills/) skills (5 skills: `new-game`,
+  `build-game`, `core-mechanics`, `variant-tree`, `generate-assets`) copied
+  from `metta-ai/metta`, so AI agents have the same guidance inside a fresh
+  `cogame` clone as they do inside the main monorepo. Player-authoring
+  skills (profiling, leaderboard-gap, scrimmage-gauntlet, etc.) are
+  intentionally excluded — this template is for building a new *game*, not
+  for building a policy against an existing one.
 - a full copy of `MAKING_A_COGAME.md`, `TECHNICAL_MANUAL.md`, and the five
   mettagrid API reference documents under [`docs/`](docs/).
 
@@ -77,7 +81,7 @@ cogame/
 ├── src/cogame/           # game.py, variants/, missions/, cli.py
 ├── tests/                # registration, play, dependencies, stacking
 ├── docs/                 # MAKING_A_COGAME.md + TECHNICAL_MANUAL.md + mettagrid/*
-├── skills/               # 12 cg.game.* skills
+├── skills/               # 5 cg.game.* game-authoring skills
 ├── .claude/skills → ../skills
 ├── .codex/skills → ../skills
 └── pyproject.toml
