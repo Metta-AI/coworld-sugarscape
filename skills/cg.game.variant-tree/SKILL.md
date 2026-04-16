@@ -36,10 +36,8 @@ registry, and prove the default/full paths still agree."
    training or auditing. The tree should be inspectable through tests and CLI surfaces such as:
 
    ```bash
-   cogames missions
-   cogames variants
-   metta play among_us -- variants=meetings render=none max_steps=200
-   uv run ./tools/run.py diplomacy.audit episodes=4 num_agents=12 max_steps=220 min_agent_sps=100
+   cogame-play -v full
+   cogame-play -v <variant_name> -- render=none max_steps=200
    ```
 
 ## Exit Criteria
@@ -52,7 +50,7 @@ registry, and prove the default/full paths still agree."
 
 ## Integration
 
-**Uses:** `tr.cogames-variant-debug`, `t.run-tests`, `cf.bop-it`
+**Uses:** `cogame-play -v <variant>` (for local variant testing), `t.run-tests`, `cf.bop-it`
 
 **Called by:** `cg.game.build-game`, `cg.game.new-game`
 

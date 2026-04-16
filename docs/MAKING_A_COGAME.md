@@ -1,6 +1,6 @@
 # Making a CoGame
 
-This guide is for people who want to build a new game on top of CoGames and MettaGrid. It covers the simulation primitives, how to define game objects and rules, how to wrap everything into a playable mission, and how to write evals. For a complete worked example of a cooperative-competitive game built this way, see `src/cogames/cogs_vs_clips/`.
+This guide is for people who want to build a new game on top of CoGames and MettaGrid. It covers the simulation primitives, how to define game objects and rules, how to wrap everything into a playable mission, and how to write evals. For a complete worked example, see the game module under `src/` in this template.
 
 ---
 
@@ -141,7 +141,7 @@ class OreMineMission(CoGameMission):
 ```
 
 ```bash
-cogames play --mission my_module.OreMineMission --cogs 4
+cogame-play --mission my_module.OreMineMission --cogs 4
 ```
 
 ---
@@ -184,19 +184,20 @@ HardOreMineMission = OreMineMission(
 
 ## Training
 
-```bash
-cogames train \
-    --mission my_module.OreMineMission \
-    --timesteps 2000000
-```
-
-CoGames uses [PufferLib](https://github.com/PufferAI/PufferLib) for training — PPO with parallel vectorized environments. The trained checkpoint loads back for play or eval:
+Training uses [PufferLib](https://github.com/PufferAI/PufferLib) — PPO with parallel vectorized environments. Use the standalone CLI or the Python API directly:
 
 ```bash
-cogames play --mission my_module.OreMineMission --policy file://./checkpoints/latest.pt
+# Via the standalone CLI (see cogame-train --help)
+cogame-train --mission my_module.OreMineMission --timesteps 2000000
 ```
 
-Before committing training time, run `cogames play --mission my_module.OreMineMission` to verify the game interactively — check that maps generate correctly, handlers fire, and rewards accumulate as expected.
+The trained checkpoint loads back for play or eval:
+
+```bash
+cogame-play --mission my_module.OreMineMission --policy file://./checkpoints/latest.pt
+```
+
+Before committing training time, run `cogame-play --mission my_module.OreMineMission` to verify the game interactively — check that maps generate correctly, handlers fire, and rewards accumulate as expected.
 
 ---
 
@@ -207,5 +208,5 @@ Before committing training time, run `cogames play --mission my_module.OreMineMi
 For broader testing, compose variants onto a procedural mission. A policy that passes a fixed diagnostic might collapse when ore is scarce or buildings are in unfamiliar positions. A good eval suite has both: diagnostics to catch regressions fast, integrated evals to confirm generalization.
 
 ```bash
-cogames play --mission my_module.NavigationEval --cogs 1
+cogame-play --mission my_module.NavigationEval --cogs 1
 ```

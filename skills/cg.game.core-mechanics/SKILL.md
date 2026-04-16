@@ -54,7 +54,7 @@ playtests before touching art or variant factoring."
 
 ## Integration
 
-**Uses:** `cf.bop-it`, `t.run-tests`, `cg.play`, `tr.cogames-variant-debug`
+**Uses:** `cf.bop-it`, `t.run-tests`, `cg.play`, `cogame-play -v <variant>` (for local variant testing)
 
 **Called by:** `cg.game.build-game`, `cg.game.new-game`
 

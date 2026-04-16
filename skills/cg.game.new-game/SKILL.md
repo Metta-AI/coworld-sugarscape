@@ -65,8 +65,8 @@ Plan these deliverables during design, not as an afterthought:
   can't be run via `./tools/run.py <game>.play`. Without `train()`, agents can't be trained via
   `./tools/run.py <game>.train`. Plan both alongside the game, not after. Follow the pattern in
   `recipes/game/overcogged.py`: import `make_game` from the game registry, build a `SimulationConfig`, return a
-  `tools.PlayTool` (for play) or `tools.TrainTool` (for train). For cogames-based games, register via `register_game()`
-  in the game module and ensure the module is imported at startup (add to `cogames/__init__.py`). The recipe MUST handle
+  `tools.PlayTool` (for play) or `tools.TrainTool` (for train). Register via `register_game()` at the bottom of
+  `src/<your_game>/game.py` and ensure the side-effect import in `__init__.py` triggers it at startup. The recipe MUST handle
   `policy_uri=None` gracefully — new games have no trained policy yet. The correct random policy URI is
   `"metta://policy/random"` (NOT the bare string `"random"`, which is treated as a file path and crashes). Either
   register a `policy_uri` in the `register()` call or default to `"metta://policy/random"` in the recipe. A recipe that
@@ -115,17 +115,12 @@ Before leaving `cg.game.new-game`, make sure you have:
   directory, not just discussed.
 - A variant table with names, dependencies, and implementation order — even if the base game has no variants, document
   the table with at least the base entry.
-- The target package surfaces for the build phase. Decide which package the game belongs in:
-  - **`packages/cogames/src/cogames/games/<game>/`** for games using the cogames `CoGameMission`/`CoGame` framework
-    (missions, variants, eval missions). Register via `register_game()` in a `game/__init__.py` module AND add an import
-    in `cogames/__init__.py` so the game is discoverable at runtime. Without the init import, `get_game("<name>")`
-    silently fails — the `register_game()` call never executes. This was missed in 2 out of 3 test games.
-  - **`metta/games/<game>/`** for games using the simpler `metta.games.games.register()` pattern. Register in
-    `metta/games/games.py` with a guarded import.
-  - **Standalone repo** for games developed outside the monorepo (e.g., tournament entries, external collaborators).
-    These depend on `mettagrid` and optionally `cogames` as published packages. The recipe still lives in the consuming
-    repo's `recipes/` directory.
-  - In either case, plan the recipe entrypoint at `recipes/game/<name>.py` and tests alongside the game package.
+- The target package surfaces for the build phase. In this standalone template:
+  - **`src/<your_game>/`** contains the game module. Register via `register_game()` at the bottom of `game.py` and
+    ensure the side-effect import in `__init__.py` triggers it at startup. Without that import, `get_game("<name>")`
+    silently fails — the `register_game()` call never executes.
+  - The template depends on `mettagrid`. The recipe lives in the repo's `recipes/` directory.
+  - Plan the recipe entrypoint at `recipes/game/<name>.py` and tests alongside the game package.
 
 ## Phase 3: Shared Build Loop
 
