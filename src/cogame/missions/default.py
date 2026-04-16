@@ -2,7 +2,7 @@
 
 Keeping factories in their own module lets tests and alternative CLIs build a
 mission without reaching into ``cogame.game`` directly. Every factory returns
-a fully-parameterised :class:`cogames.core.CoGameMission` instance.
+a fully-parameterised :class:`cogame.framework.CoGameMission` instance.
 
 TODO(cogame): add additional mission factories (eval missions, tutorials,
 curriculum scenarios) here as the game grows.

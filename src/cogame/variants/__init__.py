@@ -1,8 +1,8 @@
 """Variant tree for the cogame template.
 
-Structure mirrors ``cogames/games/overcogged/variants/__init__.py``:
+Structure mirrors the overcogged variants convention:
 
-* ``PUBLIC_VARIANT_TYPES`` — user-facing variants exposed by ``cogames variants``.
+* ``PUBLIC_VARIANT_TYPES`` — user-facing variants.
 * ``HIDDEN_VARIANT_TYPES`` — interface / composition variants (e.g. ``full``).
 * ``resolve_variant_selection(names)`` — instantiate + run the full lifecycle
   (dependency resolution, topological configure order, configure phase) for

@@ -44,7 +44,7 @@ def main(
     """Run a cogame episode, optionally with MettaScope rendering."""
     mission = MyMission.create(num_agents=num_agents, max_steps=max_steps)
     if variant:
-        # with_variants + make_env runs the full cogames variant lifecycle
+        # with_variants + make_env runs the full variant lifecycle
         # (dependency resolution, topological configure order, apply).
         mission = mission.with_variants(list(variant))
     env = mission.make_env()

@@ -1,4 +1,4 @@
-"""Exercise the cogames variant dependency lifecycle.
+"""Exercise the variant dependency lifecycle.
 
 Requesting ``full`` alone should pull in :class:`HardVariant` and
 :class:`BigMapVariant` via ``Deps(required=...)`` and configure them in
