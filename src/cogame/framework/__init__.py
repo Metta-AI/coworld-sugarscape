@@ -11,7 +11,11 @@ from cogame.framework.core import (
     Deps,
 )
 from cogame.framework.registry import CoGame, get_game, register_game
-from cogame.framework.variants import ResolvedDeps, VariantRegistry
+from cogame.framework.variants import (
+    ResolvedDeps,
+    VariantRegistry,
+    format_variant_catalog,
+)
 
 __all__ = [
     "CoGame",
@@ -20,6 +24,7 @@ __all__ = [
     "Deps",
     "ResolvedDeps",
     "VariantRegistry",
+    "format_variant_catalog",
     "get_game",
     "register_game",
 ]

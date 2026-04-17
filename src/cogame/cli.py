@@ -16,10 +16,27 @@ from mettagrid.simulator.simulator import Simulator
 
 # Side-effect import: registers the game + its variants.
 import cogame  # noqa: F401
+from cogame.framework import format_variant_catalog
 from cogame.game import MyMission
+from cogame.variants import HIDDEN_VARIANT_TYPES, PUBLIC_VARIANT_TYPES
+
+
+def _print_variants_and_exit(value: bool) -> None:
+    if not value:
+        return
+    typer.echo(format_variant_catalog(PUBLIC_VARIANT_TYPES, HIDDEN_VARIANT_TYPES))
+    raise typer.Exit()
 
 
 def main(
+    list_variants: bool = typer.Option(
+        False,
+        "--list-variants",
+        "-l",
+        callback=_print_variants_and_exit,
+        is_eager=True,
+        help="List all variants (name, description, dependencies) and exit.",
+    ),
     variant: list[str] = typer.Option(
         None,
         "--variant",

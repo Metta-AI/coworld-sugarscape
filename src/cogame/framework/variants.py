@@ -187,3 +187,50 @@ class VariantRegistry:
         self._resolve_dependencies()
         self._configure_order = self._topological_order()
         return list(self._edges)
+
+
+def _variant_class_name(cls: type[CoGameMissionVariant]) -> str:
+    """Return the registered name of a variant class without instantiating it."""
+    field = cls.model_fields.get("name")
+    if field is not None and isinstance(field.default, str) and field.default:
+        return field.default
+    return cls.__name__
+
+
+def format_variant_catalog(
+    public_types: Sequence[type[CoGameMissionVariant]],
+    hidden_types: Sequence[type[CoGameMissionVariant]] = (),
+) -> str:
+    """Format a multi-line description of all variants: name, description, deps.
+
+    Used by CLIs (--list-variants) and tooling that needs a human-readable
+    dump of the variant catalog without actually running an episode.
+    """
+
+    def _format(cls: type[CoGameMissionVariant]) -> list[str]:
+        v = cls()  # pyright: ignore[reportCallIssue]
+        out = [f"  {v.name}"]
+        if v.description:
+            out.append(f"      {v.description}")
+        deps = v.dependencies()
+        if deps.required:
+            names = [_variant_class_name(d) for d in deps.required]
+            out.append(f"      requires: {', '.join(names)}")
+        if deps.optional:
+            names = [_variant_class_name(d) for d in deps.optional]
+            out.append(f"      optional: {', '.join(names)}")
+        return out
+
+    lines: list[str] = []
+    if public_types:
+        lines.append("Public variants:")
+        for cls in public_types:
+            lines.extend(_format(cls))
+    else:
+        lines.append("No public variants defined.")
+    if hidden_types:
+        lines.append("")
+        lines.append("Hidden variants:")
+        for cls in hidden_types:
+            lines.extend(_format(cls))
+    return "\n".join(lines)
