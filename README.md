@@ -1,11 +1,11 @@
 # cogame
 
-A starter template for a **new MettaGrid game** with a self-contained variant
-framework — no runtime dependency on `cogames`. The framework classes
+A starter template for a **new [MettaGrid](https://github.com/Metta-AI/mettagrid)
+game** with a self-contained variant framework. The framework classes
 (`CoGameMission`, `CoGameMissionVariant`, `VariantRegistry`, `CoGame`,
 `register_game`, `get_game`) live under [`src/cogame/framework/`](src/cogame/framework/),
-mirroring the `cogames` API so games written against this template stay
-familiar to anyone coming from the metta monorepo.
+so a repo based on this template depends only on `mettagrid` and
+`pydantic` at runtime.
 
 This template gives you:
 
@@ -87,7 +87,7 @@ Once renamed, bootstrap your content via [`skills/cg.game.new-game/SKILL.md`](sk
 ```
 cogame/
 ├── src/cogame/
-│   ├── framework/        # Local replica of cogames lifecycle (core/variants/registry)
+│   ├── framework/        # Self-contained variant framework (core/variants/registry)
 │   ├── game.py           # MyMission + MyCoGame, register_game(...) at module bottom
 │   ├── variants/         # difficulty, layout, mechanics + variant tree wiring
 │   ├── missions/         # mission factories
