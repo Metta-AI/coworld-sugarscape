@@ -11,7 +11,7 @@ match your package name.
 from __future__ import annotations
 
 import typer
-from mettagrid.renderer.renderer import create_renderer
+from mettagrid.renderer.renderer import Renderer, create_renderer
 from mettagrid.simulator.simulator import Simulator
 
 # Side-effect import: registers the game + its variants.
@@ -67,7 +67,13 @@ def main(
     env = mission.make_env()
 
     simulator = Simulator()
-    renderer = create_renderer(render, autostart=autostart)  # type: ignore[arg-type]
+    renderer: Renderer
+    if render == "gui":
+        from cogame._asset_shim import CogameRenderer
+
+        renderer = CogameRenderer(autostart=autostart)
+    else:
+        renderer = create_renderer(render, autostart=autostart)  # type: ignore[arg-type]
     simulator.add_event_handler(renderer)
     sim = simulator.new_simulation(env, seed=seed)
 
