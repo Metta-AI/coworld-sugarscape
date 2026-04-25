@@ -53,6 +53,11 @@ cogame-play --render none --max-steps 20      # standalone sanity check
 - [`src/cogame/cli.py`](src/cogame/cli.py) — the `cogame-play` console script.
 - [`src/cogame/__init__.py`](src/cogame/__init__.py) — side-effect imports
   that register the game with the local framework.
+- [`src/cogame/_asset_shim.py`](src/cogame/_asset_shim.py) —
+  `CogameRenderer` builds a merged data dir at GUI startup that overlays
+  [`src/cogame/assets/`](src/cogame/assets) sprites on top of mettagrid's
+  bundled mettascope data. Drop a PNG at `assets/objects/<name>.png` and
+  mettascope picks it up.
 
 ## Reference documentation (local)
 
