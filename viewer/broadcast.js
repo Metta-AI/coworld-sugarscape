@@ -133,7 +133,6 @@ const state = {
 };
 
 const art = {};
-const tinted = [];               // per-seat tinted settler sprites
 
 // ---------------------------------------------------------------------------
 // Assets
@@ -148,37 +147,13 @@ function loadImage(source) {
   });
 }
 
-/** Tint a neutral-grey sprite to a seat colour, preserving its painted shading.
- *  The batch is generated once in grey and recoloured here, deterministically,
- *  rather than regenerating a sprite per population. */
-function tint(image, color) {
-  const canvas = document.createElement("canvas");
-  canvas.width = image.width;
-  canvas.height = image.height;
-  const paint = canvas.getContext("2d");
-  paint.drawImage(image, 0, 0);
-  paint.globalCompositeOperation = "color";
-  paint.fillStyle = color;
-  paint.fillRect(0, 0, canvas.width, canvas.height);
-  paint.globalCompositeOperation = "destination-in";
-  paint.drawImage(image, 0, 0);
-  return canvas;
-}
-
 async function loadAssets() {
   const names = [
     "terrain_barren", "terrain_sugar_1", "terrain_sugar_2",
-    "terrain_sugar_3", "terrain_sugar_4",
-    "settler", "settler_starving", "mote", "endcard",
+    "terrain_sugar_3", "terrain_sugar_4", "endcard",
   ];
   const images = await Promise.all(names.map((name) => loadImage(ART[name])));
   names.forEach((name, index) => { art[name] = images[index]; });
-  for (const seat of SEATS) {
-    tinted.push({
-      healthy: tint(art.settler, seat.color),
-      starving: tint(art.settler_starving, seat.color),
-    });
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -419,11 +394,12 @@ function relief() {
     }
   }
   maskContext.putImageData(data, 0, 0);
-  terrainContext.globalCompositeOperation = "soft-light";
-  terrainContext.imageSmoothingEnabled = true;
-  terrainContext.imageSmoothingQuality = "high";
-  terrainContext.drawImage(maskCanvas, 0, 0, terrain.width, terrain.height);
-  terrainContext.globalCompositeOperation = "source-over";
+  const paint = destination();
+  paint.globalCompositeOperation = "soft-light";
+  paint.imageSmoothingEnabled = true;
+  paint.imageSmoothingQuality = "high";
+  paint.drawImage(maskCanvas, 0, 0, terrain.width, terrain.height);
+  paint.globalCompositeOperation = "source-over";
 }
 
 /** Capacity isolines — the contour read the art direction is named for, and the
@@ -435,11 +411,12 @@ function contours() {
   const at = (x, y) => state.capacity[
     Math.max(0, Math.min(width - 1, x)) * height + Math.max(0, Math.min(height - 1, y))
   ];
-  terrainContext.lineWidth = Math.max(1, cell * 0.055);
-  terrainContext.lineJoin = "round";
+  const paint = destination();
+  paint.lineWidth = Math.max(1, cell * 0.055);
+  paint.lineJoin = "round";
   for (let level = 1; level <= state.maxCapacity; level += 1) {
-    terrainContext.strokeStyle = `rgba(60,42,22,${0.20 + level * 0.055})`;
-    terrainContext.beginPath();
+    paint.strokeStyle = `rgba(60,42,22,${0.20 + level * 0.055})`;
+    paint.beginPath();
     for (let x = 0; x < width - 1; x += 1) {
       for (let y = 0; y < height - 1; y += 1) {
         // Corner values of this lattice square, clockwise from top-left.
@@ -457,12 +434,12 @@ function contours() {
           edges.push([(points[0] + 0.5) * cell, (points[1] + 0.5) * cell]);
         }
         for (let edge = 0; edge + 1 < edges.length; edge += 2) {
-          terrainContext.moveTo(edges[edge][0], edges[edge][1]);
-          terrainContext.lineTo(edges[edge + 1][0], edges[edge + 1][1]);
+          paint.moveTo(edges[edge][0], edges[edge][1]);
+          paint.lineTo(edges[edge + 1][0], edges[edge + 1][1]);
         }
       }
     }
-    terrainContext.stroke();
+    paint.stroke();
   }
 }
 
@@ -503,11 +480,89 @@ function elevationLift() {
     }
   }
   maskContext.putImageData(data, 0, 0);
-  terrainContext.globalCompositeOperation = "screen";
-  terrainContext.imageSmoothingEnabled = true;
-  terrainContext.imageSmoothingQuality = "high";
-  terrainContext.drawImage(maskCanvas, 0, 0, terrain.width, terrain.height);
-  terrainContext.globalCompositeOperation = "source-over";
+  const paint = destination();
+  paint.globalCompositeOperation = "screen";
+  paint.imageSmoothingEnabled = true;
+  paint.imageSmoothingQuality = "high";
+  paint.drawImage(maskCanvas, 0, 0, terrain.width, terrain.height);
+  paint.globalCompositeOperation = "source-over";
+}
+
+/* The LANDFORM is a pure function of capacity, which never changes once the
+ * episode has been read — so it is built once and cached. It used to be rebuilt
+ * on every timestep along with the sugar, and the marching-squares contours plus
+ * three full-board composites were a ~100ms stall every 770ms: the jitter. */
+const landform = document.createElement("canvas");
+const landformContext = landform.getContext("2d");
+let landformKey = "";
+
+function buildLandform(frame) {
+  const size = Math.round(BOARD.w * RENDER_SCALE);
+  const key = `${size}:${frame.width}x${frame.height}:${state.maxCapacity}:${frames.length}`;
+  if (key === landformKey) return;
+  landformKey = key;
+  landform.width = landform.height = size;
+  landformContext.setTransform(1, 0, 0, 1, 0, 0);
+  landformContext.clearRect(0, 0, size, size);
+  landformContext.fillStyle = patternFor(art.terrain_barren, landformContext);
+  landformContext.fillRect(0, 0, size, size);
+  const target = terrainContext;
+  // relief/elevationLift/contours draw through the shared terrain context, so
+  // point them at the landform for this one build.
+  drawInto(landformContext, () => { elevationLift(); relief(); contours(); });
+  void target;
+}
+
+/** Run the terrain painters against a different destination canvas. */
+let terrainTarget = null;
+function drawInto(context, paint) {
+  terrainTarget = context;
+  paint();
+  terrainTarget = null;
+}
+function destination() {
+  return terrainTarget ?? terrainContext;
+}
+
+/** The sugar standing on each cell, right now.
+ *
+ *  This is the single most important thing on the board — it is what both
+ *  policies are competing for and what their settlers are standing on to eat.
+ *  Blending it as four soft painterly layers made the massif pretty and made
+ *  the actual per-cell resource unreadable, so it is drawn as discrete lattice
+ *  cells with a quantised amber ramp: crisp squares, one clear step per unit,
+ *  exactly how the model is drawn in the literature. */
+const sugarLayer = document.createElement("canvas");
+const sugarContext = sugarLayer.getContext("2d");
+const SUGAR_RAMP = [
+  null,                    // 0 — bare ground shows through
+  [176, 118, 46, 0.62],
+  [214, 158, 58, 0.78],
+  [240, 194, 88, 0.90],
+  [255, 224, 148, 0.97],
+];
+
+function drawSugar(frame) {
+  const { width, height } = frame;
+  if (sugarLayer.width !== width) {
+    sugarLayer.width = width;
+    sugarLayer.height = height;
+  }
+  const image = sugarContext.createImageData(width, height);
+  for (let index = 0; index < frame.cells.length; index += 1) {
+    const sugar = frame.cells[index][0];
+    if (sugar <= 0) continue;
+    const step = SUGAR_RAMP[Math.min(SUGAR_RAMP.length - 1, Math.round(sugar))]
+      ?? SUGAR_RAMP[SUGAR_RAMP.length - 1];
+    if (!step) continue;
+    // cellId = x * height + y (column-major), so decode before writing rows.
+    const offset = ((index % height) * width + Math.floor(index / height)) * 4;
+    image.data[offset] = step[0];
+    image.data[offset + 1] = step[1];
+    image.data[offset + 2] = step[2];
+    image.data[offset + 3] = Math.round(255 * step[3]);
+  }
+  sugarContext.putImageData(image, 0, 0);
 }
 
 function buildTerrain(frame) {
@@ -516,26 +571,24 @@ function buildTerrain(frame) {
     terrain.width = terrain.height = size;
     scratch.width = scratch.height = size;
     patterns.clear();
+    landformKey = "";
   }
   if (maskCanvas.width !== frame.width) {
     maskCanvas.width = frame.width;
     maskCanvas.height = frame.height;
+    landformKey = "";
   }
+  buildLandform(frame);
+  drawSugar(frame);
+
   terrainContext.setTransform(1, 0, 0, 1, 0, 0);
-  terrainContext.clearRect(0, 0, terrain.width, terrain.height);
-  terrainContext.fillStyle = patternFor(art.terrain_barren, terrainContext);
-  terrainContext.fillRect(0, 0, terrain.width, terrain.height);
-  // The landform first, from capacity, so the massif is always there...
-  elevationLift();
-  relief();
-  // ...then the sugar actually standing on it right now, which drains and
-  // regrows. Most cells hold nothing, so the thresholds are tuned to the real
-  // distribution rather than spread evenly over the range.
-  layer(frame, art.terrain_sugar_1, 0.02, 0.26);
-  layer(frame, art.terrain_sugar_2, 0.20, 0.48);
-  layer(frame, art.terrain_sugar_3, 0.42, 0.72);
-  layer(frame, art.terrain_sugar_4, 0.66, 0.98);
-  contours();
+  terrainContext.clearRect(0, 0, size, size);
+  terrainContext.imageSmoothingEnabled = true;
+  terrainContext.drawImage(landform, 0, 0);
+  // Crisp square cells: the resource read must not be blurred away.
+  terrainContext.imageSmoothingEnabled = false;
+  terrainContext.drawImage(sugarLayer, 0, 0, size, size);
+  terrainContext.imageSmoothingEnabled = true;
   drawLattice(frame);
 }
 
@@ -601,50 +654,48 @@ function drawBoard(frame, previous, t, now) {
   context.restore();
   context.drawImage(terrain, BOARD.x, BOARD.y, BOARD.w, BOARD.h);
 
-  // Death motes: a warm wisp rising off the cell where a settler starved.
+  // A settler starving leaves an expanding ring where it stood.
   for (let index = motes.length - 1; index >= 0; index -= 1) {
     const mote = motes[index];
     const age = (now - mote.born) / (MOTE_MS * animFactor(state.speed));
     if (age >= 1) { motes.splice(index, 1); continue; }
-    const size = cell * (1.5 + age * 1.1);
-    context.globalAlpha = Math.sin(Math.min(1, age) * Math.PI) * 0.85;
-    context.drawImage(
-      art.mote,
-      mote.px - size / 2,
-      mote.py - size / 2 - age * cell * 2.6,
-      size,
-      size,
-    );
+    context.globalAlpha = (1 - age) * 0.85;
+    context.strokeStyle = C.loss;
+    context.lineWidth = Math.max(1, cell * 0.16 * (1 - age));
+    context.beginPath();
+    context.arc(mote.px, mote.py, cell * (0.32 + age * 1.05), 0, Math.PI * 2);
+    context.stroke();
   }
   context.globalAlpha = 1;
 
+  /* Settlers are DOTS.
+   *
+   * They were painterly meeple sprites for a while. They looked like stickers
+   * pasted on the terrain, they aliased badly when scaled to a ~9px cell, and
+   * they buried the one thing a viewer needs from an agent-based model: where
+   * the population IS and which policy owns it. A flat disc with a warm-ink
+   * outline reads at every size, never aliases, and is how this model has been
+   * drawn since 1996. */
   const bodies = interpolate(previous, frame, t);
-  const base = cell * 0.80;
-
-  // Contact shadows first, so no settler casts a shadow over its neighbour.
-  context.fillStyle = "rgba(26,16,6,.42)";
+  const radius = cell * 0.30;
+  context.lineWidth = Math.max(0.8, cell * 0.085);
   for (const body of bodies) {
-    const size = base * (0.82 + 0.30 * Math.min(1, Math.log10(1 + body.wealth) / 2.4));
+    const seat = SEATS[body.slot] ?? SEATS[0];
+    // Wealth reads as size, within a range that never touches a neighbour.
+    const size = radius * (0.80 + 0.42 * Math.min(1, Math.log10(1 + body.wealth) / 2.4));
     context.beginPath();
-    context.ellipse(body.px, body.py + size * 0.30, size * 0.40, size * 0.17, 0, 0, Math.PI * 2);
-    context.fill();
-  }
-
-  for (const body of bodies) {
-    const sprites = tinted[body.slot] ?? tinted[0];
-    const sprite = body.starving ? sprites.starving : sprites.healthy;
-    // Wealth is physical: a rich settler is a visibly bigger piece.
-    const size = base * (0.82 + 0.30 * Math.min(1, Math.log10(1 + body.wealth) / 2.4));
-    const aspect = sprite.height / sprite.width;
-    // A slow desynced idle bob so the swarm breathes between timesteps.
-    const bob = Math.sin((now / 900) + body.agent.id * 1.7) * cell * 0.035;
-    context.drawImage(
-      sprite,
-      body.px - size / 2,
-      body.py - size * aspect * 0.62 + bob,
-      size,
-      size * aspect,
-    );
+    context.arc(body.px, body.py, size, 0, Math.PI * 2);
+    if (body.starving) {
+      // Fewer than two timesteps of food left: hollow, and visibly failing.
+      context.fillStyle = "rgba(20,15,8,.55)";
+      context.fill();
+      context.strokeStyle = seat.color;
+    } else {
+      context.fillStyle = seat.color;
+      context.fill();
+      context.strokeStyle = C.ink;
+    }
+    context.stroke();
   }
 
   if (state.hoverCell >= 0 && state.hoverCell < frame.cells.length) {
@@ -1464,8 +1515,11 @@ async function boot() {
   setPlaying(true);
   lastTick = performance.now();
   // A timer, not requestAnimationFrame: a backgrounded or headless tab throttles
-  // rAF to a few frames a second and starves the interpolation.
-  setInterval(tick, 33);
+  // rAF to a few frames a second and starves the interpolation. 16ms rather
+  // than 33 because settlers jump several cells per timestep, and at 30fps that
+  // motion reads as stepping rather than moving; the terrain is cached now, so
+  // the extra draws are cheap.
+  setInterval(tick, 16);
 
   const replay = new URLSearchParams(location.search).get("replay");
   if (replay) await loadArtifact(replay);

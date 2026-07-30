@@ -2,10 +2,10 @@
 // Generate the Sugarscape broadcast art batch with nanobanana (Gemini image models).
 //
 // Every prompt carries the SAME locked style sentence from the Phase-0c art-direction
-// lock so the whole batch coheres, and every subject is rendered on a flat magenta
-// field that gets chroma-keyed out here rather than trusting "transparent background"
-// (which bakes an opaque checkerboard). Population variants are recoloured
-// deterministically in the viewer, not regenerated.
+// lock, so the whole batch coheres. The batch is TERRAIN ONLY: the settlers are drawn
+// as flat discs in the viewer, because painterly agent sprites aliased badly at a ~9px
+// cell and buried the thing an agent-based model has to show - where the population is
+// and which policy owns it.
 //
 //   node tools/generate_art.mjs            # only missing assets
 //   node tools/generate_art.mjs --force    # regenerate everything
@@ -20,7 +20,6 @@ const outputDir = join(root, "src/sugarscape/art");
 const force = process.argv.includes("--force");
 // The image models 503 under load; fall through the tiers rather than failing the batch.
 const MODELS = ["gemini-3-pro-image", "gemini-3.1-flash-image", "gemini-2.5-flash-image"];
-const KEY_CHROMA = [255, 0, 255];
 
 const settings = JSON.parse(await readFile(join(homedir(), ".gemini/settings.json"), "utf8"));
 const apiKey = settings.apiKey;
@@ -33,9 +32,6 @@ const STYLE = "Painted in the style of a 1996 Santa Fe Institute artificial-life
   "black), raking light from the upper left, deep umber shadows. Muted, scientific, " +
   "tactile - not glossy, not neon, not digital.";
 
-const FLAT = "The entire background is FLAT PURE MAGENTA #FF00FF, one solid unbroken " +
-  "colour with no gradient, no checkerboard, no shadow cast onto it, no vignette.";
-
 const assets = [
   {
     name: "terrain-barren",
@@ -45,7 +41,6 @@ const assets = [
       `darker than surrounding terrain. No amber, no gold, no yellow anywhere. No ` +
       `plants, no objects, no creatures, no text. The texture fills the entire square ` +
       `frame edge to edge with no border and no background showing. ${STYLE}`,
-    chroma: false,
   },
   ...[1, 2, 3, 4].map((tier) => ({
     name: `terrain-sugar-${tier}`,
@@ -57,38 +52,7 @@ const assets = [
     ][tier - 1]}. Granular crystalline texture, no plants, no objects, no creatures, ` +
       `no text. The texture fills the entire square frame edge to edge with no border ` +
       `and no background showing. ${STYLE}`,
-    chroma: false,
   })),
-  {
-    name: "settler",
-    prompt: `A single small rounded figurine game piece seen from directly above at a ` +
-      `slight three-quarter tilt - a smooth featureless standing person, like a hand-` +
-      `painted wooden meeple. Painted in NEUTRAL WARM GREY AND OFF-WHITE ONLY, no ` +
-      `colour hue at all, so it can be tinted later. Thick warm-dark brown ink outline. ` +
-      `One single figure, centred, occupying most of the frame. No shadow, no base, no ` +
-      `text. ${FLAT} ${STYLE}`,
-    chroma: true,
-  },
-  {
-    name: "settler-starving",
-    prompt: `A single small rounded figurine game piece seen from directly above at a ` +
-      `slight three-quarter tilt - a smooth featureless standing person, but GAUNT and ` +
-      `SHRUNKEN, hollowed and stooped, visibly failing. Painted in NEUTRAL WARM GREY ` +
-      `AND OFF-WHITE ONLY, no colour hue at all, desaturated and dimmed. Thick warm-` +
-      `dark brown ink outline. One single figure, centred, occupying most of the frame. ` +
-      `No shadow, no base, no text. ${FLAT} ${STYLE}`,
-    chroma: true,
-  },
-  {
-    name: "mote",
-    prompt: `One single isolated curl of pale warm smoke, floating freely in empty ` +
-      `space, rising and tapering upward, translucent and feathered away to nothing at ` +
-      `its edges, glowing faintly amber at its base. CRITICAL: there is NOTHING else in ` +
-      `the image - no bowl, no plate, no dish, no cup, no vessel, no container, no ring, ` +
-      `no circle, no frame, no border, no ground, no surface, no table, no figure, no ` +
-      `text. Only the smoke curl and flat empty background. ${FLAT} ${STYLE}`,
-    chroma: true,
-  },
   {
     name: "endcard",
     prompt: `A wide cinematic vista looking down from high altitude onto a vast amber ` +
@@ -96,7 +60,6 @@ const assets = [
       `deep umber shadows in the valleys. Empty landscape - no figures, no buildings, no ` +
       `text, no watermark. Dark and atmospheric enough that white text would sit ` +
       `comfortably on top of it. ${STYLE}`,
-    chroma: false,
     aspect: "16:9",
   },
 ];
@@ -105,9 +68,6 @@ async function exists(path) {
   try { await access(path); return true; } catch { return false; }
 }
 
-// Decode a PNG with zero dependencies by round-tripping through the platform's
-// own decoder is not available in plain node, so the chroma key runs on the raw
-// PNG via sharp if present and is otherwise deferred to the build step.
 async function generate(asset) {
   const body = {
     contents: [{ parts: [{ text: asset.prompt }] }],
@@ -152,8 +112,6 @@ for (const asset of assets) {
   const { bytes, model } = await generate(asset);
   await writeFile(path, bytes);
   const digest = createHash("sha256").update(bytes).digest("hex").slice(0, 12);
-  console.log(`${asset.name.padEnd(20)} ${String(bytes.length).padStart(8)} bytes  ${digest}  ` +
-    `${model}${asset.chroma ? "  [chroma]" : ""}`);
+  console.log(`${asset.name.padEnd(20)} ${String(bytes.length).padStart(8)} bytes  ${digest}  ${model}`);
 }
 console.log(`\n${assets.length} assets in ${outputDir}`);
-console.log(`chroma key colour: rgb(${KEY_CHROMA.join(",")})`);

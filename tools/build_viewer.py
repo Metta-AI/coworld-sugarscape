@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import argparse
 import base64
-import colorsys
 import io
 import sys
 from pathlib import Path
@@ -31,55 +30,6 @@ ART = ROOT / "src/sugarscape/art"
 FONTS = ROOT / "src/sugarscape/fonts"
 SOURCE = ROOT / "viewer"
 OUTPUT = ROOT / "src/sugarscape/viewer.html"
-
-# The generated art is drawn on a flat magenta field. Keying on hue and
-# saturation (rather than an exact colour match) also removes the shadow the
-# model casts onto that field, which a plain colour match leaves as a dark halo.
-# The subjects are deliberately prompted as neutral grey, so nothing on the
-# figure itself is saturated enough to be mistaken for background.
-CHROMA_MIN_SATURATION = 0.34
-CHROMA_HUE_RANGE = (0.74, 0.94)  # magenta, as a fraction of the hue circle
-
-
-def chroma_key(image: Image.Image) -> Image.Image:
-    """Replace the magenta field with transparency and feather the cut edge."""
-    image = image.convert("RGBA")
-    pixels = image.load()
-    width, height = image.size
-    mask = Image.new("L", image.size, 255)
-    mask_pixels = mask.load()
-    for y in range(height):
-        for x in range(width):
-            red, green, blue, _ = pixels[x, y]
-            hue, _, value = colorsys.rgb_to_hsv(red / 255, green / 255, blue / 255)
-            largest, smallest = max(red, green, blue), min(red, green, blue)
-            saturation = 0.0 if largest == 0 else (largest - smallest) / largest
-            magenta = (
-                saturation >= CHROMA_MIN_SATURATION
-                and CHROMA_HUE_RANGE[0] <= hue <= CHROMA_HUE_RANGE[1]
-                and value > 0.10
-            )
-            if magenta:
-                mask_pixels[x, y] = 0
-    mask = mask.filter(ImageFilter.GaussianBlur(1.1))
-    image.putalpha(mask)
-    return image
-
-
-def trim(image: Image.Image, pad: int = 6) -> Image.Image:
-    """Crop to the opaque subject so the sprite's own box is its silhouette."""
-    alpha = image.getchannel("A")
-    box = alpha.point(lambda value: 255 if value > 8 else 0).getbbox()
-    if box is None:
-        return image
-    left, top, right, bottom = box
-    return image.crop((
-        max(0, left - pad),
-        max(0, top - pad),
-        min(image.width, right + pad),
-        min(image.height, bottom + pad),
-    ))
-
 
 def trim_border(image: Image.Image, tolerance: int = 26) -> Image.Image:
     """Drop the painted border the model likes to add around a framed vista."""
@@ -158,13 +108,6 @@ def build_assets() -> dict[str, str]:
         assets[f"terrain_{name.replace('-', '_')}"] = encode(
             texture, "JPEG", quality=76, optimize=True, subsampling=1
         )
-
-    # Sprites keep alpha. They are drawn ~30 px on the board, so 128 px carries
-    # plenty of headroom for a high-density display.
-    for name, size in (("settler", 128), ("settler-starving", 128), ("mote", 96)):
-        sprite = trim(chroma_key(Image.open(ART / f"{name}.png")))
-        sprite.thumbnail((size, size), Image.LANCZOS)
-        assets[name.replace("-", "_")] = encode(sprite, "PNG", optimize=True)
 
     endcard = trim_border(Image.open(ART / "endcard.png"))
     endcard = endcard.resize((1280, int(1280 * endcard.height / endcard.width)), Image.LANCZOS)
