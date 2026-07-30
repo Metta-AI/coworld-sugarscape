@@ -21,10 +21,10 @@
       <button id="step-back" type="button" aria-label="Previous timestep">◀</button>
       <button id="step-forward" type="button" aria-label="Next timestep">▶</button>
       <input id="scrub" type="range" min="0" max="0" value="0" step="1"
-             aria-label="Timestep">
-      <button id="speed" type="button" aria-label="Playback speed">1&times;</button>
+             aria-label="Timestep" aria-valuetext="timestep 0">
+      <button id="speed" type="button" aria-label="Playback speed, 1&times;">1&times;</button>
     </div>
-    <p class="notice" id="notice" role="status"></p>
+    <p class="notice" id="notice" role="alert"></p>
   </div>
 </div>
 <script>

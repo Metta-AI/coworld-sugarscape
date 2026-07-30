@@ -1194,6 +1194,11 @@ function tick() {
     state.lastDrawnIndex = index;
     onFrameEntered(index, now);
     controls.scrub.value = String(index);
+    // A bare "62" tells a screen-reader user nothing; name the unit and the end.
+    controls.scrub.setAttribute(
+      "aria-valuetext",
+      `timestep ${frames[index].timestep} of ${state.maxTimestep || frames.length - 1}`,
+    );
   }
 
   const frame = frames[index];
@@ -1233,6 +1238,9 @@ controls.scrub.addEventListener("input", () => seek(Number(controls.scrub.value)
 controls.speed.addEventListener("click", () => {
   state.speed = SPEEDS[(SPEEDS.indexOf(state.speed) + 1) % SPEEDS.length];
   controls.speed.innerHTML = `${state.speed}&times;`;
+  // The label has to carry the VALUE: an aria-label overrides the visible "2x",
+  // so a static one would leave the current speed unannounced.
+  controls.speed.setAttribute("aria-label", `Playback speed, ${state.speed}×`);
 });
 
 board.addEventListener("mousemove", (event) => {

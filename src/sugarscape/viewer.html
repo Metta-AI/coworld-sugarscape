@@ -94,16 +94,24 @@ html, body {
 #hud { pointer-events: none; }
 
 /* Zero-data floating chrome. The container ignores pointer events so clicks fall
-   through to the board; only the real controls take them back. */
+   through to the board; only the real controls take them back.
+
+   The board scales with the frame, but the controls must not: sized purely in
+   viewport units they collapsed to 20x17px at the 640x360 embed, under the
+   24x24 CSS-px minimum target size. Every dimension below is a clamp with an
+   accessible floor, so the chrome stays operable at the smallest embed and
+   grows to comfortable at full size. */
 .controls {
   position: absolute;
   left: 1.6%;
   bottom: 1.9%;
   width: 47.5%;
+  min-width: 260px;
+  max-width: calc(100% - 3.2%);
   display: flex;
   align-items: center;
-  gap: clamp(3px, 0.7%, 9px);
-  padding: clamp(3px, 0.55%, 8px) clamp(5px, 0.9%, 12px);
+  gap: clamp(4px, 0.7%, 9px);
+  padding: clamp(4px, 0.55%, 8px) clamp(6px, 0.9%, 12px);
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--panel);
@@ -113,27 +121,29 @@ html, body {
 
 .controls button {
   flex: none;
-  min-width: clamp(20px, 3.4%, 34px);
-  height: clamp(16px, 2.6vw, 28px);
-  padding: 0 clamp(3px, 0.7%, 9px);
+  min-width: clamp(24px, 2.2vw, 32px);
+  height: clamp(24px, 2.2vw, 32px);
+  padding: 0 clamp(4px, 0.7%, 9px);
   border: 1px solid transparent;
   border-radius: 999px;
   background: transparent;
   color: var(--paper);
-  font: 600 clamp(8px, 1.15vw, 14px)/1 var(--mono);
+  font: 600 clamp(11px, 1vw, 14px)/1 var(--mono);
   cursor: pointer;
 }
 .controls button:hover { background: rgba(232, 168, 56, 0.16); }
+/* A real outline, not only a box-shadow: forced-colors mode drops shadows, and
+   a focus ring that disappears there is no focus ring. */
 .controls button:focus-visible {
-  outline: none;
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
   border-color: var(--gold);
-  box-shadow: 0 0 0 2px rgba(232, 168, 56, 0.45);
 }
 
 #scrub {
   flex: 1;
   min-width: 0;
-  height: clamp(14px, 2.4vw, 26px);
+  height: clamp(24px, 2.2vw, 32px);
   accent-color: var(--gold);
   cursor: pointer;
 }
@@ -141,6 +151,12 @@ html, body {
   outline: 2px solid var(--gold);
   outline-offset: 2px;
   border-radius: 999px;
+}
+
+@media (forced-colors: active) {
+  .controls { border-color: CanvasText; }
+  .controls button:focus-visible,
+  #scrub:focus-visible { outline-color: Highlight; }
 }
 
 /* Failure has to be visible, never a black box. */
@@ -177,10 +193,10 @@ html, body {
       <button id="step-back" type="button" aria-label="Previous timestep">◀</button>
       <button id="step-forward" type="button" aria-label="Next timestep">▶</button>
       <input id="scrub" type="range" min="0" max="0" value="0" step="1"
-             aria-label="Timestep">
-      <button id="speed" type="button" aria-label="Playback speed">1&times;</button>
+             aria-label="Timestep" aria-valuetext="timestep 0">
+      <button id="speed" type="button" aria-label="Playback speed, 1&times;">1&times;</button>
     </div>
-    <p class="notice" id="notice" role="status"></p>
+    <p class="notice" id="notice" role="alert"></p>
   </div>
 </div>
 <script>
@@ -1391,6 +1407,11 @@ function tick() {
     state.lastDrawnIndex = index;
     onFrameEntered(index, now);
     controls.scrub.value = String(index);
+    // A bare "62" tells a screen-reader user nothing; name the unit and the end.
+    controls.scrub.setAttribute(
+      "aria-valuetext",
+      `timestep ${frames[index].timestep} of ${state.maxTimestep || frames.length - 1}`,
+    );
   }
 
   const frame = frames[index];
@@ -1430,6 +1451,9 @@ controls.scrub.addEventListener("input", () => seek(Number(controls.scrub.value)
 controls.speed.addEventListener("click", () => {
   state.speed = SPEEDS[(SPEEDS.indexOf(state.speed) + 1) % SPEEDS.length];
   controls.speed.innerHTML = `${state.speed}&times;`;
+  // The label has to carry the VALUE: an aria-label overrides the visible "2x",
+  // so a static one would leave the current speed unannounced.
+  controls.speed.setAttribute("aria-label", `Playback speed, ${state.speed}×`);
 });
 
 board.addEventListener("mousemove", (event) => {
