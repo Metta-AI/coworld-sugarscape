@@ -89,3 +89,6 @@ tests/nim/test_*
 *.swp
 *.swo
 .DS_Store
+
+# ux.replay build outputs
+.build/

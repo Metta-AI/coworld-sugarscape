@@ -10,7 +10,11 @@ const
   FrameHistoryLimit = 300
   HealthPath = "/healthz"
   PlayerPath = "/player"
-  GlobalPath = "/global"
+  # The spectator stream answers on both names. `/global` is the live spectator
+  # socket; `/replay` is the sibling the Coworld certifier probes for replay
+  # liveness, and the path the browser viewer derives for itself when it is
+  # served at `/client/replay` behind the Observatory proxy.
+  GlobalSocketPaths = ["/global", "/replay"]
   PlayerClientPaths = ["/client/player", "/clients/player"]
   GlobalClientPaths = ["/client/global", "/clients/global", "/client/replay",
     "/clients/replay"]
@@ -46,6 +50,7 @@ type
     actions: Table[int, int]
     pendingRequests: Table[int, PendingRequest]
     frameHistory: seq[string]
+    frameHistoryLimit: int
     catchupFrames: Table[WebSocket, seq[string]]
     streamId: string
     nextRequestId: int
@@ -126,9 +131,10 @@ proc readCoworldConfig(raw: JsonNode, normalized: JsonNode): CoworldConfig =
       slot.decisionModels.add(configuredModels[index].getStr())
     result.slots.add(slot)
 
-proc initAppState(slots: seq[PolicySlot]) =
+proc initAppState(slots: seq[PolicySlot], frameHistoryLimit: int) =
   initLock(appState.lock)
   appState.slots = slots
+  appState.frameHistoryLimit = frameHistoryLimit
   appState.playerSockets = initTable[int, WebSocket]()
   appState.socketSlots = initTable[WebSocket, int]()
   appState.globalSockets = @[]
@@ -189,7 +195,7 @@ proc httpHandler(request: Request) =
   elif request.path == PlayerPath and request.httpMethod == "GET" and
       request.isWebSocketUpgrade():
     discard request.registerPlayer()
-  elif request.path == GlobalPath and request.httpMethod == "GET" and
+  elif request.path in GlobalSocketPaths and request.httpMethod == "GET" and
       request.isWebSocketUpgrade():
     let websocket = request.upgradeToWebSocket()
     var history: seq[string]
@@ -459,6 +465,10 @@ proc frameJson(
   %*{
     "format": "sugarscape.frame.v1",
     "timestep": sim.timestep,
+    # The scheduled end of the episode, so a spectator's clock counts toward the
+    # configured limit rather than toward whatever timestep this recording
+    # happens to stop at. An early extinction then visibly finishes short.
+    "maxTimestep": sim.maxTimestep,
     "width": sim.environment.width,
     "height": sim.environment.height,
     "cells": cells,
@@ -476,7 +486,8 @@ proc publishFrame(frame: JsonNode) =
   {.gcsafe.}:
     withLock appState.lock:
       appState.frameHistory.add(body)
-      if appState.frameHistory.len > FrameHistoryLimit:
+      if appState.frameHistoryLimit > 0 and
+          appState.frameHistory.len > appState.frameHistoryLimit:
         appState.frameHistory.delete(0)
       for frames in appState.catchupFrames.mvalues:
         frames.add(body)
@@ -552,7 +563,13 @@ proc runCoworld*(runtimeConfig: RuntimeConfig) =
         raw
     normalized = parseConfiguration(input)
     coworldConfig = readCoworldConfig(coworldRaw, normalized)
-  initAppState(coworldConfig.slots)
+  # A live episode trims its backlog so a long run cannot grow without bound. A
+  # recorded replay keeps every frame instead: a spectator who opens the viewer
+  # minutes after the process started must still receive the whole episode.
+  initAppState(
+    coworldConfig.slots,
+    if runtimeConfig.replayMode: 0 else: FrameHistoryLimit,
+  )
 
   let httpServer = newServer(httpHandler, websocketHandler, workerThreads = 2)
   var
@@ -578,7 +595,14 @@ proc runCoworld*(runtimeConfig: RuntimeConfig) =
       raise newException(ValueError, "invalid sugarscape.replay.v1 artifact")
     for frame in replay["frames"]:
       frame.publishFrame()
-      sleep(40)
+    # Replay mode is a SERVER, not a one-shot broadcast: publishing the frames
+    # and exiting left nothing for a spectator who connected a moment later, and
+    # raced the certifier's own replay-liveness probe. Publish the episode into
+    # the backlog at once - the browser owns playback pacing - then keep serving
+    # until the runner stops the container.
+    echo "Replay ready: ", replay["frames"].len, " frames"
+    joinThread(thread)
+    return
   else:
     var
       sim = initSimulation(normalized)

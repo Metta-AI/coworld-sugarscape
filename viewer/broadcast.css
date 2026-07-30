@@ -1,0 +1,155 @@
+/* Sugarscape broadcast — art direction lock:
+   a 1996 Santa Fe Institute artificial-life plate, re-lit as a broadcast. An amber
+   topographic sugar massif under a warm raking light, read from directly above,
+   with two populations of small physical beads swarming it.
+
+   Every neutral is warmed toward the world and NOTHING is pure black or pure white:
+   the signature ink is #2a1f12, the paper is #f6ead2. The terrain owns the warm half
+   of the wheel, so the two competitors take the cool half. */
+
+@font-face {
+  font-family: "Space Grotesk";
+  font-style: normal;
+  font-weight: 500;
+  font-display: block;
+  src: url({{space_grotesk_500}}) format("woff2");
+}
+@font-face {
+  font-family: "Space Grotesk";
+  font-style: normal;
+  font-weight: 700;
+  font-display: block;
+  src: url({{space_grotesk_700}}) format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: block;
+  src: url({{ibm_plex_mono_500}}) format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 600;
+  font-display: block;
+  src: url({{ibm_plex_mono_600}}) format("woff2");
+}
+
+:root {
+  color-scheme: dark;
+  --ground: #14100a;
+  --ink: #2a1f12;
+  --paper: #f6ead2;
+  --muted: #a8977c;
+  --border: #4a3620;
+  --panel: rgba(20, 15, 8, 0.86);
+  --gold: #e8a838;
+  --display: "Space Grotesk", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--ground);
+  color: var(--paper);
+  font-family: var(--display);
+  overflow: hidden;
+}
+
+/* The embed frame is 16/9 and can be as short as 360px. The stage is letterboxed
+   to exactly 16/9 inside it and everything - board, overlay, controls - lives in
+   that one box, so the short hosted frame can never clip the broadcast off the
+   top or starve the board of height. */
+.frame { position: fixed; inset: 0; display: grid; }
+.stage {
+  position: relative;
+  margin: auto;
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  max-width: calc(100vh * 16 / 9);
+  max-height: 100vh;
+}
+
+#board, #hud {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+#hud { pointer-events: none; }
+
+/* Zero-data floating chrome. The container ignores pointer events so clicks fall
+   through to the board; only the real controls take them back. */
+.controls {
+  position: absolute;
+  left: 1.6%;
+  bottom: 1.9%;
+  width: 47.5%;
+  display: flex;
+  align-items: center;
+  gap: clamp(3px, 0.7%, 9px);
+  padding: clamp(3px, 0.55%, 8px) clamp(5px, 0.9%, 12px);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+  backdrop-filter: blur(7px);
+  pointer-events: auto;
+}
+
+.controls button {
+  flex: none;
+  min-width: clamp(20px, 3.4%, 34px);
+  height: clamp(16px, 2.6vw, 28px);
+  padding: 0 clamp(3px, 0.7%, 9px);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--paper);
+  font: 600 clamp(8px, 1.15vw, 14px)/1 var(--mono);
+  cursor: pointer;
+}
+.controls button:hover { background: rgba(232, 168, 56, 0.16); }
+.controls button:focus-visible {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px rgba(232, 168, 56, 0.45);
+}
+
+#scrub {
+  flex: 1;
+  min-width: 0;
+  height: clamp(14px, 2.4vw, 26px);
+  accent-color: var(--gold);
+  cursor: pointer;
+}
+#scrub:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+
+/* Failure has to be visible, never a black box. */
+.notice {
+  position: absolute;
+  inset: auto 8% 46%;
+  margin: 0;
+  padding: 1.1em 1.4em;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--gold);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--paper);
+  font: 500 clamp(11px, 1.5vw, 17px)/1.5 var(--display);
+  text-align: center;
+  backdrop-filter: blur(7px);
+}
+.notice:empty { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .controls { backdrop-filter: none; }
+}

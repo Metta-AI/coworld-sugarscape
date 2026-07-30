@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<!-- The Observatory proxy rewrites this to the proxy base; every URL below is
+     relative or inlined so nothing resolves off the prefix. -->
+<base href="/">
+<title>Sugarscape</title>
+<style>{{STYLE}}</style>
+</head>
+<body>
+<div class="frame">
+  <div class="stage" id="stage">
+    <canvas id="board" width="2880" height="1620" aria-label="The sugarscape"></canvas>
+    <svg id="hud" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid meet"
+         xmlns="http://www.w3.org/2000/svg" role="img"
+         aria-label="Broadcast overlay: standings, clock and events"></svg>
+    <div class="controls" id="controls">
+      <button id="play" type="button" aria-label="Pause"><span id="play-glyph">❚❚</span></button>
+      <button id="step-back" type="button" aria-label="Previous timestep">◀</button>
+      <button id="step-forward" type="button" aria-label="Next timestep">▶</button>
+      <input id="scrub" type="range" min="0" max="0" value="0" step="1"
+             aria-label="Timestep">
+      <button id="speed" type="button" aria-label="Playback speed">1&times;</button>
+    </div>
+    <p class="notice" id="notice" role="status"></p>
+  </div>
+</div>
+<script>
+{{ART}}
+{{SCRIPT}}
+</script>
+</body>
+</html>

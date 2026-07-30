@@ -1,0 +1,234 @@
+#!/usr/bin/env python3
+"""Build the single-file Sugarscape broadcast viewer.
+
+The Observatory embeds the replay in a sandboxed iframe behind the Kubernetes
+service proxy, which rewrites the page's base href and cannot reach a CDN. A page
+that pulls any separate sub-resource therefore renders as a black box. So this
+tool folds the stylesheet, the script, the vendored typefaces and the whole art
+batch into one self-contained document with every asset as a data URI, and writes
+it to ``src/sugarscape/viewer.html`` where ``coworld.nim`` reads it at compile
+time.
+
+    python3 tools/build_viewer.py [--check]
+
+``--check`` rebuilds into memory and fails if the committed output is stale,
+which is what the test suite runs.
+"""
+
+from __future__ import annotations
+
+import argparse
+import base64
+import colorsys
+import io
+import sys
+from pathlib import Path
+
+from PIL import Image, ImageChops, ImageFilter, ImageStat
+
+ROOT = Path(__file__).resolve().parent.parent
+ART = ROOT / "src/sugarscape/art"
+FONTS = ROOT / "src/sugarscape/fonts"
+SOURCE = ROOT / "viewer"
+OUTPUT = ROOT / "src/sugarscape/viewer.html"
+
+# The generated art is drawn on a flat magenta field. Keying on hue and
+# saturation (rather than an exact colour match) also removes the shadow the
+# model casts onto that field, which a plain colour match leaves as a dark halo.
+# The subjects are deliberately prompted as neutral grey, so nothing on the
+# figure itself is saturated enough to be mistaken for background.
+CHROMA_MIN_SATURATION = 0.34
+CHROMA_HUE_RANGE = (0.74, 0.94)  # magenta, as a fraction of the hue circle
+
+
+def chroma_key(image: Image.Image) -> Image.Image:
+    """Replace the magenta field with transparency and feather the cut edge."""
+    image = image.convert("RGBA")
+    pixels = image.load()
+    width, height = image.size
+    mask = Image.new("L", image.size, 255)
+    mask_pixels = mask.load()
+    for y in range(height):
+        for x in range(width):
+            red, green, blue, _ = pixels[x, y]
+            hue, _, value = colorsys.rgb_to_hsv(red / 255, green / 255, blue / 255)
+            largest, smallest = max(red, green, blue), min(red, green, blue)
+            saturation = 0.0 if largest == 0 else (largest - smallest) / largest
+            magenta = (
+                saturation >= CHROMA_MIN_SATURATION
+                and CHROMA_HUE_RANGE[0] <= hue <= CHROMA_HUE_RANGE[1]
+                and value > 0.10
+            )
+            if magenta:
+                mask_pixels[x, y] = 0
+    mask = mask.filter(ImageFilter.GaussianBlur(1.1))
+    image.putalpha(mask)
+    return image
+
+
+def trim(image: Image.Image, pad: int = 6) -> Image.Image:
+    """Crop to the opaque subject so the sprite's own box is its silhouette."""
+    alpha = image.getchannel("A")
+    box = alpha.point(lambda value: 255 if value > 8 else 0).getbbox()
+    if box is None:
+        return image
+    left, top, right, bottom = box
+    return image.crop((
+        max(0, left - pad),
+        max(0, top - pad),
+        min(image.width, right + pad),
+        min(image.height, bottom + pad),
+    ))
+
+
+def trim_border(image: Image.Image, tolerance: int = 26) -> Image.Image:
+    """Drop the painted border the model likes to add around a framed vista."""
+    rgb = image.convert("RGB")
+    corner = Image.new("RGB", rgb.size, rgb.getpixel((2, 2)))
+    difference = ImageChops.difference(rgb, corner).convert("L")
+    box = difference.point(lambda value: 255 if value > tolerance else 0).getbbox()
+    return rgb.crop(box) if box else rgb
+
+
+def encode(image: Image.Image, fmt: str, **options: object) -> str:
+    buffer = io.BytesIO()
+    image.save(buffer, format=fmt, **options)
+    mime = "image/png" if fmt == "PNG" else "image/jpeg"
+    return f"data:{mime};base64,{base64.b64encode(buffer.getvalue()).decode()}"
+
+
+# The board must read as a MASSIF: barren ground dark and cool, the sugar peak
+# bright and golden. An image model will not hit a monotone luminance ramp from
+# prose - the first batch came back with barren as the BRIGHTEST texture, so the
+# mountain rendered as a pit. Each texture therefore keeps its own painted
+# detail but has its brightness, contrast and tint remapped here, which makes
+# the ramp a property of the build rather than of a lucky generation.
+TERRAIN_RAMP = [
+    #  name       luma  contrast  tint             tint strength
+    # Barren is deliberately the flattest layer: its painted cracks are large and
+    # high-contrast, and left alone they read as decoration competing with the
+    # board. Low contrast plus a soften pass sends it behind everything else.
+    ("barren",     36,   0.24,    (44, 34, 25),    0.68),
+    ("sugar-1",    88,   0.86,    (150, 104, 44),  0.34),
+    ("sugar-2",   126,   0.95,    (196, 140, 56),  0.28),
+    ("sugar-3",   162,   1.00,    (232, 176, 74),  0.24),
+    ("sugar-4",   201,   0.92,    (255, 214, 128), 0.22),
+]
+
+
+def tone_ramp(
+    texture: Image.Image,
+    target_luma: float,
+    contrast: float,
+    tint: tuple[int, int, int],
+    strength: float,
+) -> Image.Image:
+    """Remap a texture onto its slot in the terrain ramp, keeping its detail."""
+    pixels = texture.load()
+    grey = texture.convert("L")
+    stat = ImageStat.Stat(grey)
+    mean = stat.mean[0] or 1.0
+    width, height = texture.size
+    for y in range(height):
+        for x in range(width):
+            red, green, blue = pixels[x, y]
+            channels = []
+            for value, tint_value in zip((red, green, blue), tint):
+                # Re-centre on the target luma and scale the deviation, so the
+                # painted grain survives the move.
+                shifted = target_luma + (value - mean) * contrast
+                blended = shifted * (1 - strength) + tint_value * strength
+                channels.append(max(0, min(255, int(blended))))
+            pixels[x, y] = tuple(channels)
+    return texture
+
+
+def build_assets() -> dict[str, str]:
+    """Process the raw batch into the sizes and formats the viewer actually draws."""
+    assets: dict[str, str] = {}
+
+    # Terrain is composited as a full-board repeating pattern, so it needs no
+    # alpha - JPEG keeps five 512px textures inside a sane inline budget.
+    for name, luma, contrast, tint, strength in TERRAIN_RAMP:
+        texture = Image.open(ART / f"terrain-{name}.png").convert("RGB")
+        texture = texture.resize((512, 512), Image.LANCZOS)
+        if name == "barren":
+            texture = texture.filter(ImageFilter.GaussianBlur(2.6))
+        texture = tone_ramp(texture, luma, contrast, tint, strength)
+        assets[f"terrain_{name.replace('-', '_')}"] = encode(
+            texture, "JPEG", quality=76, optimize=True, subsampling=1
+        )
+
+    # Sprites keep alpha. They are drawn ~30 px on the board, so 128 px carries
+    # plenty of headroom for a high-density display.
+    for name, size in (("settler", 128), ("settler-starving", 128), ("mote", 96)):
+        sprite = trim(chroma_key(Image.open(ART / f"{name}.png")))
+        sprite.thumbnail((size, size), Image.LANCZOS)
+        assets[name.replace("-", "_")] = encode(sprite, "PNG", optimize=True)
+
+    endcard = trim_border(Image.open(ART / "endcard.png"))
+    endcard = endcard.resize((1280, int(1280 * endcard.height / endcard.width)), Image.LANCZOS)
+    assets["endcard"] = encode(endcard, "JPEG", quality=72, optimize=True)
+    return assets
+
+
+def build_fonts() -> dict[str, str]:
+    fonts = {}
+    for path in sorted(FONTS.glob("*.woff2")):
+        encoded = base64.b64encode(path.read_bytes()).decode()
+        fonts[path.stem.replace("-", "_")] = f"data:font/woff2;base64,{encoded}"
+    if not fonts:
+        raise SystemExit("no vendored fonts; run tools/vendor_fonts.mjs first")
+    return fonts
+
+
+def substitute(template: str, tokens: dict[str, str]) -> str:
+    for key, value in tokens.items():
+        marker = "{{" + key + "}}"
+        if marker not in template:
+            raise SystemExit(f"template has no slot for {marker}")
+        template = template.replace(marker, value)
+    return template
+
+
+def build() -> str:
+    assets = build_assets()
+    fonts = build_fonts()
+    css = substitute((SOURCE / "broadcast.css").read_text(), fonts)
+    script = (SOURCE / "broadcast.js").read_text()
+    art_literal = ",\n".join(f'  {key}: "{value}"' for key, value in sorted(assets.items()))
+    document = substitute(
+        (SOURCE / "broadcast.html").read_text(),
+        {
+            "STYLE": css,
+            "ART": f"const ART = {{\n{art_literal},\n}};",
+            "SCRIPT": script,
+        },
+    )
+    return (
+        "<!-- Generated by tools/build_viewer.py from viewer/. Do not edit by hand. -->\n"
+        + document
+    )
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--check", action="store_true", help="fail if the committed output is stale")
+    arguments = parser.parse_args()
+
+    document = build()
+    if arguments.check:
+        current = OUTPUT.read_text() if OUTPUT.exists() else ""
+        if current != document:
+            print(f"{OUTPUT} is stale; run: python3 tools/build_viewer.py", file=sys.stderr)
+            return 1
+        print(f"{OUTPUT} is up to date ({len(document) / 1024:.0f} KB)")
+        return 0
+
+    OUTPUT.write_text(document)
+    print(f"{OUTPUT}  {len(document) / 1024:.0f} KB")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
