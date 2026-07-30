@@ -812,7 +812,7 @@ function text(content, x, y, options = {}) {
 
 function eyebrow(content, x, y) {
   return text(content.toUpperCase(), x, y, {
-    size: 17, weight: 700, fill: C.muted, spacing: 2.6, outline: 3,
+    size: 21, weight: 700, fill: C.muted, spacing: 2.6, outline: 3,
   });
 }
 
@@ -900,7 +900,7 @@ function scorebug(frame) {
       })
       + `</g>`;
     markup += text(`${row.population} settler${row.population === 1 ? "" : "s"}`, x + 84, 78, {
-      size: 16, weight: 500, family: F.mono, fill: C.muted,
+      size: 20, weight: 500, family: F.mono, fill: C.muted,
     });
     markup += text(format(row.score), x + chipW - 20, 62, {
       size: 40, weight: 700, family: F.mono, anchor: "end",
@@ -954,7 +954,7 @@ function raceChart(frame, x, y, width, height) {
     markup += `<line x1="${left}" y1="${top + plotH}" x2="${left + plotW}" y2="${top + plotH}" `
       + `stroke="rgba(246,234,210,.16)" stroke-width="1"/>`;
     markup += text(format(state.maxWealth), left - 10, top + 6, {
-      size: 14, weight: 500, family: F.mono, fill: C.dim, anchor: "end", outline: 2.4,
+      size: 18, weight: 500, family: F.mono, fill: C.dim, anchor: "end", outline: 2.4,
     });
     frame.slots.forEach((_, slot) => {
       const points = visible
@@ -965,7 +965,7 @@ function raceChart(frame, x, y, width, height) {
         + `stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`;
     });
     markup += text("total wealth", left + plotW / 2, top + plotH + 26, {
-      size: 14, weight: 500, family: F.mono, fill: C.dim, anchor: "middle", outline: 2.4,
+      size: 18, weight: 500, family: F.mono, fill: C.dim, anchor: "middle", outline: 2.4,
     });
     return markup;
   }
@@ -1013,30 +1013,30 @@ function raceChart(frame, x, y, width, height) {
   markup += `<line x1="${left}" y1="${zeroY}" x2="${left + plotW}" y2="${zeroY}" `
     + `stroke="rgba(246,234,210,.42)" stroke-width="1.5"/>`;
   markup += text(`+${format(peak)}`, left - 10, top + 12, {
-    size: 14, weight: 500, family: F.mono, fill: C.dim, anchor: "end", outline: 2.4,
+    size: 18, weight: 500, family: F.mono, fill: C.dim, anchor: "end", outline: 2.4,
   });
   markup += text("level", left - 10, zeroY + 5, {
-    size: 14, weight: 500, family: F.mono, fill: C.dim, anchor: "end", outline: 2.4,
+    size: 18, weight: 500, family: F.mono, fill: C.dim, anchor: "end", outline: 2.4,
   });
   markup += text(`+${format(peak)}`, left - 10, top + plotH, {
-    size: 14, weight: 500, family: F.mono, fill: C.dim, anchor: "end", outline: 2.4,
+    size: 18, weight: 500, family: F.mono, fill: C.dim, anchor: "end", outline: 2.4,
   });
 
   // Name which half of the plot belongs to whom, so the shading needs no legend.
   const label = (slot, atY, anchorY) => seatMark(left + 14, atY, slot, 6)
     + text(`${frame.slots[slot]?.name ?? `Population ${slot + 1}`} ahead`, left + 28, anchorY, {
-      size: 15, weight: 600, fill: SEATS[slot].color, outline: 2.8,
+      size: 19, weight: 600, fill: SEATS[slot].color, outline: 2.8,
     });
   markup += label(0, top + 16, top + 21);
   markup += label(1, top + plotH - 14, top + plotH - 9);
   markup += text("t0", left, y + height - 16, {
-    size: 14, weight: 500, family: F.mono, fill: C.dim, outline: 2.4,
+    size: 18, weight: 500, family: F.mono, fill: C.dim, outline: 2.4,
   });
   markup += text(`t${scheduled}`, left + plotW, y + height - 16, {
-    size: 14, weight: 500, family: F.mono, fill: C.dim, anchor: "end", outline: 2.4,
+    size: 18, weight: 500, family: F.mono, fill: C.dim, anchor: "end", outline: 2.4,
   });
   markup += text("lead, in sugar", left + plotW / 2, y + height - 16, {
-    size: 14, weight: 500, family: F.mono, fill: C.dim, anchor: "middle", outline: 2.4,
+    size: 18, weight: 500, family: F.mono, fill: C.dim, anchor: "middle", outline: 2.4,
   });
   return markup;
 }
@@ -1067,12 +1067,12 @@ function eventFeed(frame, x, y, width, height) {
   markup += eyebrow("What just happened", x + 18, y + 26);
 
   const recent = coalesce(events.filter((event) => event.timestep <= frame.timestep))
-    .slice(-5)
+    .slice(-4)
     .reverse();
 
   if (recent.length === 0) {
     markup += text("The settlers spread out across the lattice.", x + 18, y + 62, {
-      size: 18, weight: 500, fill: C.muted,
+      size: 24, weight: 500, fill: C.muted,
     });
     return markup;
   }
@@ -1084,7 +1084,7 @@ function eventFeed(frame, x, y, width, height) {
       ? `t${event.since}–${event.until}`
       : `t${event.timestep}`;
     markup += text(stamp, x + 18, rowY + 15, {
-      size: 16, weight: 600, family: F.mono, fill: fresh ? C.gold : C.dim,
+      size: 19, weight: 600, family: F.mono, fill: fresh ? C.gold : C.dim,
     });
     if (event.kind === "death") {
       markup += `<rect x="${x + 112}" y="${rowY - 2}" width="4" height="24" rx="2" fill="${C.loss}"/>`;
@@ -1097,7 +1097,7 @@ function eventFeed(frame, x, y, width, height) {
       markup += text(
         `${event.count} starved${detail ? ` — ${detail}` : ""}`,
         x + 128, rowY + 16,
-        { size: 19, weight: 500, fill: fresh ? C.paper : C.muted },
+        { size: 25, weight: 500, fill: fresh ? C.paper : C.muted },
       );
     } else {
       markup += `<rect x="${x + 112}" y="${rowY - 2}" width="4" height="24" rx="2" `
@@ -1105,10 +1105,10 @@ function eventFeed(frame, x, y, width, height) {
       markup += text(
         `${event.name} takes the lead`,
         x + 128, rowY + 16,
-        { size: 19, weight: 700, fill: fresh ? C.paper : C.muted },
+        { size: 25, weight: 700, fill: fresh ? C.paper : C.muted },
       );
     }
-    rowY += 42;
+    rowY += 54;
   }
   return markup;
 }
@@ -1150,27 +1150,31 @@ function emergence(frame, x, y, width, height) {
     markup += `<polyline points="${points.join(" ")}" fill="none" stroke="${C.gold}" stroke-width="2.5"/>`;
   }
   markup += text("wealth share", curveX + size / 2, curveY + size + 20, {
-    size: 13, weight: 500, family: F.mono, fill: C.dim, anchor: "middle", outline: 2.4,
+    size: 17, weight: 500, family: F.mono, fill: C.dim, anchor: "middle", outline: 2.4,
   });
 
+  // Two readouts, not three: the live population is already on both scorebug
+  // chips, so repeating it as "survivors" only crowded the panel. Pairing it
+  // with the capacity instead is the reading that means something - the world
+  // deciding how many settlers it will carry.
   const readX = curveX + size + 26;
   const rows = [
     ["Gini", gini.toFixed(3), gini > 0.4 ? "sharply unequal" : gini > 0.28 ? "unequal" : "even"],
-    ["Carrying capacity", format(capacity), `${population} alive`],
-    ["Survivors", `${population}`, `of ${state.startingPopulation} settlers`],
+    ["Carrying capacity", format(capacity),
+      `${population} alive of ${state.startingPopulation}`],
   ];
-  let readY = curveY + 20;
+  let readY = curveY + 26;
   for (const [label, value, note] of rows) {
     markup += text(label.toUpperCase(), readX, readY, {
-      size: 14, weight: 700, fill: C.muted, spacing: 1.8, outline: 2.6,
+      size: 18, weight: 700, fill: C.muted, spacing: 1.8, outline: 2.6,
     });
-    markup += text(value, readX, readY + 34, {
-      size: 32, weight: 600, family: F.mono, fill: C.paper,
+    markup += text(value, readX, readY + 38, {
+      size: 40, weight: 600, family: F.mono, fill: C.paper,
     });
-    markup += text(note, readX, readY + 56, {
-      size: 15, weight: 500, fill: C.dim,
+    markup += text(note, readX, readY + 62, {
+      size: 19, weight: 500, fill: C.dim,
     });
-    readY += 84;
+    readY += 96;
   }
   return markup;
 }
@@ -1254,7 +1258,7 @@ function endCard(frame) {
     rowY += 78;
   }
   markup += text("Score is the final living population's total sugar plus spice.",
-    x + 56, y + cardH - 26, { size: 17, weight: 500, fill: C.dim });
+    x + 56, y + cardH - 26, { size: 20, weight: 500, fill: C.dim });
   markup += `</g>`;
   return markup;
 }
