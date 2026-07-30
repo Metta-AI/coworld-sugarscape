@@ -143,7 +143,9 @@ policy and agent-attribute coloring, social links, inspection, labeled live
 time series, a stable-domain wealth histogram, a normalized Lorenz curve, and
 replay scrubbing. Its broadcast-style layout keeps the world dominant while
 making episode metrics, population identity, and analytical context glanceable
-across desktop and narrow screens. Late spectators receive up to 300 recent
+across desktop and narrow screens. The world renders sugar crystals, spice
+pods, pollution effects, and animated settler sprites while retaining the
+selected analytical color modes. Late spectators receive up to 300 recent
 frames before live updates. Results report each slot's final living population
 wealth (sugar plus spice, truncated to an integer). Replay artifacts contain
 the effective configuration and immutable statistics for all recorded frames

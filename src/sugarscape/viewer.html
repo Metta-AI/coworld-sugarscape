@@ -646,6 +646,219 @@ function pollutionColor(cell, maximum) {
   return `rgb(${red} ${green} ${blue})`;
 }
 
+function visualNoise(value, salt = 0) {
+  const mixed = Math.imul(value + salt + 1, 2654435761) >>> 0;
+  return (mixed % 1000) / 1000;
+}
+
+function drawResourceTile(cell, index, x, y, width, height) {
+  const [sugar, spice] = cell;
+  const unit = Math.min(width, height);
+  worldContext.fillStyle = "#0b191b";
+  worldContext.fillRect(x, y, Math.ceil(width), Math.ceil(height));
+  worldContext.globalAlpha = .5;
+  worldContext.fillStyle = resourceColor(cell);
+  worldContext.fillRect(x, y, Math.ceil(width), Math.ceil(height));
+  worldContext.globalAlpha = 1;
+
+  const grainX = x + visualNoise(index, 11) * width;
+  const grainY = y + visualNoise(index, 29) * height;
+  worldContext.fillStyle = "rgba(215, 239, 224, .12)";
+  worldContext.fillRect(grainX, grainY, Math.max(1, unit * .05), Math.max(1, unit * .05));
+
+  const sugarPieces = Math.min(3, Math.ceil(sugar / 2));
+  for (let piece = 0; piece < sugarPieces; piece += 1) {
+    const centerX = x + width * (.24 + piece * .09);
+    const centerY = y + height * (.7 - (piece % 2) * .13);
+    const radius = Math.max(1.2, unit * (.08 + Math.min(4, sugar) * .008));
+    worldContext.beginPath();
+    worldContext.moveTo(centerX, centerY - radius * 1.45);
+    worldContext.lineTo(centerX + radius, centerY);
+    worldContext.lineTo(centerX, centerY + radius);
+    worldContext.lineTo(centerX - radius, centerY);
+    worldContext.lineTo(centerX, centerY - radius * 1.45);
+    worldContext.fillStyle = piece === 0 ? "#ffe078" : "#e9a938";
+    worldContext.fill();
+  }
+
+  const spicePods = Math.min(3, Math.ceil(spice / 2));
+  for (let pod = 0; pod < spicePods; pod += 1) {
+    const centerX = x + width * (.68 + pod * .08);
+    const centerY = y + height * (.68 - (pod % 2) * .14);
+    const radius = Math.max(1.1, unit * (.07 + Math.min(4, spice) * .007));
+    worldContext.beginPath();
+    worldContext.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    worldContext.fillStyle = pod === 0 ? "#d98cff" : "#9e5cce";
+    worldContext.fill();
+    worldContext.fillStyle = "rgba(255, 236, 255, .65)";
+    worldContext.fillRect(
+      centerX - radius * .3,
+      centerY - radius * .55,
+      Math.max(1, radius * .35),
+      Math.max(1, radius * .35),
+    );
+  }
+}
+
+function drawPollutionTile(cell, index, x, y, width, height, maximum) {
+  const unit = Math.min(width, height);
+  const ratio = Math.max(0, Math.min(1, cell[2] / Math.max(1, maximum)));
+  worldContext.fillStyle = pollutionColor(cell, maximum);
+  worldContext.fillRect(x, y, Math.ceil(width), Math.ceil(height));
+  worldContext.globalAlpha = .16 + ratio * .32;
+  const bubbles = Math.ceil(ratio * 4);
+  for (let bubble = 0; bubble < bubbles; bubble += 1) {
+    const centerX = x + (.2 + visualNoise(index, bubble * 17) * .6) * width;
+    const centerY = y + (.22 + visualNoise(index, bubble * 31) * .58) * height;
+    worldContext.beginPath();
+    worldContext.arc(
+      centerX,
+      centerY,
+      Math.max(1.2, unit * (.05 + bubble * .012)),
+      0,
+      Math.PI * 2,
+    );
+    worldContext.fillStyle = bubble % 2 === 0 ? "#ffbc4a" : "#ce7dff";
+    worldContext.fill();
+  }
+  worldContext.globalAlpha = 1;
+}
+
+function drawAgentSprite(agent, frame, scaleX, scaleY) {
+  const position = agentPosition(frame, agent);
+  const unit = Math.min(scaleX, scaleY);
+  const centerX = (position.x + .5) * scaleX;
+  const bob = Math.sin((frame.timestep + agent.id * 3) * .7) * unit * .025;
+  const centerY = (position.y + .5) * scaleY + bob;
+  const radius = Math.max(2, unit * .43);
+  const color = agentColor(agent, frame);
+
+  if (unit < 8) {
+    worldContext.beginPath();
+    worldContext.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    worldContext.fillStyle = color;
+    worldContext.fill();
+    return;
+  }
+
+  worldContext.beginPath();
+  worldContext.arc(centerX, centerY + radius * .58, radius * .5, 0, Math.PI * 2);
+  worldContext.fillStyle = "rgba(0, 0, 0, .38)";
+  worldContext.fill();
+
+  worldContext.fillStyle = "#172126";
+  worldContext.fillRect(
+    centerX - radius * .36,
+    centerY + radius * .34,
+    radius * .24,
+    radius * .38,
+  );
+  worldContext.fillRect(
+    centerX + radius * .12,
+    centerY + radius * .34,
+    radius * .24,
+    radius * .38,
+  );
+
+  worldContext.shadowColor = color;
+  worldContext.shadowBlur = Math.max(3, unit * .16);
+  worldContext.beginPath();
+  worldContext.moveTo(centerX - radius * .58, centerY + radius * .38);
+  worldContext.lineTo(centerX - radius * .42, centerY - radius * .28);
+  worldContext.lineTo(centerX, centerY - radius * .48);
+  worldContext.lineTo(centerX + radius * .42, centerY - radius * .28);
+  worldContext.lineTo(centerX + radius * .58, centerY + radius * .38);
+  worldContext.lineTo(centerX, centerY + radius * .56);
+  worldContext.lineTo(centerX - radius * .58, centerY + radius * .38);
+  worldContext.fillStyle = color;
+  worldContext.fill();
+  worldContext.shadowBlur = 0;
+  worldContext.strokeStyle = "rgba(2, 10, 13, .9)";
+  worldContext.lineWidth = Math.max(1, unit * .06);
+  worldContext.stroke();
+
+  const skinTones = ["#f2c6a0", "#d89a72", "#a9684b", "#70412f"];
+  const skinToneIndex = Math.min(
+    skinTones.length - 1,
+    Math.floor(
+      visualNoise(agent.id, Number(agent.race) || 0) * skinTones.length,
+    ),
+  );
+  const skinTone = skinTones[skinToneIndex];
+  worldContext.beginPath();
+  worldContext.arc(
+    centerX,
+    centerY - radius * .55,
+    radius * .34,
+    0,
+    Math.PI * 2,
+  );
+  worldContext.fillStyle = skinTone;
+  worldContext.fill();
+  worldContext.strokeStyle = "rgba(2, 10, 13, .9)";
+  worldContext.stroke();
+
+  worldContext.beginPath();
+  worldContext.arc(
+    centerX,
+    centerY - radius * .66,
+    radius * .34,
+    Math.PI,
+    Math.PI * 2,
+  );
+  worldContext.fillStyle = "#253139";
+  worldContext.fill();
+
+  const eyeSize = Math.max(1, unit * .045);
+  worldContext.fillStyle = "#10181b";
+  worldContext.fillRect(
+    centerX - radius * .15,
+    centerY - radius * .57,
+    eyeSize,
+    eyeSize,
+  );
+  worldContext.fillRect(
+    centerX + radius * .06,
+    centerY - radius * .57,
+    eyeSize,
+    eyeSize,
+  );
+
+  if (agent.sick) {
+    worldContext.beginPath();
+    worldContext.arc(
+      centerX + radius * .5,
+      centerY - radius * .62,
+      radius * .18,
+      0,
+      Math.PI * 2,
+    );
+    worldContext.fillStyle = "#c789ff";
+    worldContext.fill();
+    worldContext.fillStyle = "#fff";
+    worldContext.fillRect(
+      centerX + radius * .46,
+      centerY - radius * .74,
+      Math.max(1, radius * .08),
+      radius * .24,
+    );
+    worldContext.fillRect(
+      centerX + radius * .38,
+      centerY - radius * .66,
+      radius * .24,
+      Math.max(1, radius * .08),
+    );
+  } else if (agent.depressed) {
+    worldContext.beginPath();
+    worldContext.moveTo(centerX + radius * .5, centerY - radius * .58);
+    worldContext.lineTo(centerX + radius * .62, centerY - radius * .34);
+    worldContext.lineTo(centerX + radius * .42, centerY - radius * .34);
+    worldContext.lineTo(centerX + radius * .5, centerY - radius * .58);
+    worldContext.fillStyle = "#72b9ff";
+    worldContext.fill();
+  }
+}
+
 function addDefinition(term, value) {
   const metric = document.createElement("div");
   const dt = document.createElement("dt");
@@ -732,17 +945,20 @@ function renderWorld(frame) {
   const maxPollution = Math.max(...frame.cells.map((cell) => cell[2]), 1);
   worldContext.fillStyle = "#050504";
   worldContext.fillRect(0, 0, world.width, world.height);
+  const drawTile = cellMode.value === "pollution"
+    ? drawPollutionTile
+    : drawResourceTile;
   frame.cells.forEach((cell, index) => {
     const x = Math.floor(index / frame.height);
     const y = index % frame.height;
-    worldContext.fillStyle = cellMode.value === "pollution"
-      ? pollutionColor(cell, maxPollution)
-      : resourceColor(cell);
-    worldContext.fillRect(
+    drawTile(
+      cell,
+      index,
       x * scaleX,
       y * scaleY,
-      Math.ceil(scaleX),
-      Math.ceil(scaleY),
+      scaleX,
+      scaleY,
+      maxPollution,
     );
   });
   if (Math.min(scaleX, scaleY) >= 10) {
@@ -761,34 +977,7 @@ function renderWorld(frame) {
   }
   drawLinks(frame, scaleX, scaleY);
   for (const agent of frame.agents) {
-    const position = agentPosition(frame, agent);
-    const color = agentColor(agent, frame);
-    worldContext.beginPath();
-    worldContext.arc(
-      (position.x + .5) * scaleX,
-      (position.y + .5) * scaleY,
-      Math.max(2, Math.min(scaleX, scaleY) * .38),
-      0,
-      Math.PI * 2,
-    );
-    worldContext.shadowColor = color;
-    worldContext.shadowBlur = Math.max(5, Math.min(scaleX, scaleY) * .28);
-    worldContext.fillStyle = color;
-    worldContext.fill();
-    worldContext.shadowBlur = 0;
-    worldContext.strokeStyle = "rgba(4, 12, 16, .85)";
-    worldContext.lineWidth = 1.5;
-    worldContext.stroke();
-    worldContext.beginPath();
-    worldContext.arc(
-      (position.x + .39) * scaleX,
-      (position.y + .39) * scaleY,
-      Math.max(1, Math.min(scaleX, scaleY) * .08),
-      0,
-      Math.PI * 2,
-    );
-    worldContext.fillStyle = "rgba(255, 255, 255, .62)";
-    worldContext.fill();
+    drawAgentSprite(agent, frame, scaleX, scaleY);
   }
   if (inspectedCell >= 0) {
     const x = Math.floor(inspectedCell / frame.height);

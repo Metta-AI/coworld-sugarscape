@@ -97,17 +97,21 @@ assert.match(viewerHtml, /class="world-pane surface"/);
 
 const drawnPoints = [];
 const createdElements = [];
+const renderOperations = [];
 const canvasContext = {
-  arc() {},
+  arc() { renderOperations.push("arc"); },
   beginPath() {},
   clearRect() {},
-  fill() {},
-  fillRect() {},
+  fill() { renderOperations.push("fill"); },
+  fillRect() { renderOperations.push("fillRect"); },
   fillText() {},
-  lineTo(x, y) { drawnPoints.push([x, y]); },
+  lineTo(x, y) {
+    drawnPoints.push([x, y]);
+    renderOperations.push("lineTo");
+  },
   moveTo() {},
-  stroke() {},
-  strokeRect() {},
+  stroke() { renderOperations.push("stroke"); },
+  strokeRect() { renderOperations.push("strokeRect"); },
 };
 function fakeElement(selector = "") {
   return {
@@ -141,6 +145,7 @@ class FakeWebSocket {
 const viewerContext = vm.createContext({
   console,
   createdElements,
+  renderOperations,
   document: {
     createElement: () => {
       const element = fakeElement();
@@ -177,6 +182,42 @@ assert.deepEqual(JSON.parse(displayState), {
   metricValue: "0.089",
   worldCaption: "pollution field · t7",
 });
+const gameRenderingState = vm.runInContext(`
+  const resourceStart = renderOperations.length;
+  drawResourceTile([4, 4, 0], 3, 0, 0, 18, 18);
+  const resourceOperations = renderOperations.length - resourceStart;
+  const pollutionStart = renderOperations.length;
+  drawPollutionTile([0, 0, 8], 4, 0, 0, 18, 18, 10);
+  const pollutionOperations = renderOperations.length - pollutionStart;
+  const spriteAgent = {
+    id: 2,
+    cell: 0,
+    slot: -1,
+    decisionModel: "none",
+    race: 1,
+    depressed: false,
+    sick: false,
+  };
+  const spriteStart = renderOperations.length;
+  drawAgentSprite(spriteAgent, {
+    timestep: 4,
+    width: 1,
+    height: 1,
+    agents: [spriteAgent],
+  }, 18, 18);
+  const spriteOperations = renderOperations.length - spriteStart;
+  JSON.stringify({
+    noise: [visualNoise(7, 11), visualNoise(7, 12), visualNoise(0)],
+    pollutionOperations,
+    resourceOperations,
+    spriteOperations,
+  });
+`, viewerContext);
+const gameRendering = JSON.parse(gameRenderingState);
+assert.deepEqual(gameRendering.noise, [0.203, 0.668, 0.761]);
+assert.ok(gameRendering.resourceOperations > 0);
+assert.ok(gameRendering.pollutionOperations > 0);
+assert.ok(gameRendering.spriteOperations > 0);
 const reconnectState = vm.runInContext(`
   recordFrame({
     streamId: "first",
