@@ -63,6 +63,7 @@
   --panel: rgba(20, 15, 8, 0.86);
   --gold: #e8a838;
   --track-fill: #e8a838;
+  --track-bed: #4a4034;
   --display: "Space Grotesk", "Avenir Next", "Segoe UI", system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
@@ -180,13 +181,14 @@ html, body {
   height: 6px;
   border-radius: 999px;
   background:
+    var(--marks, none),
     linear-gradient(var(--track-fill), var(--track-fill)) left center / var(--played, 0%) 100% no-repeat,
-    rgba(246, 234, 210, 0.24);
+    var(--track-bed);
 }
 #scrub::-moz-range-track {
   height: 6px;
   border-radius: 999px;
-  background: rgba(246, 234, 210, 0.22);
+  background: var(--track-bed);
 }
 #scrub::-moz-range-progress { height: 6px; border-radius: 999px; background: var(--track-fill); }
 #scrub::-webkit-slider-thumb {
@@ -217,7 +219,7 @@ html, body {
    product rather than a bare fallback. */
 .notice {
   position: absolute;
-  inset: auto 12% 30%;
+  inset: auto 12% 34%;
   margin: 0;
   padding: 1.4em 1.6em 1.5em;
   border: 1px solid var(--border);
@@ -231,10 +233,16 @@ html, body {
 .notice::before {
   content: "SUGARSCAPE";
   display: block;
-  margin-bottom: 0.55em;
+  margin-bottom: 0.5em;
+  color: var(--paper);
+  font: 700 clamp(13px, 1.7vw, 21px)/1 var(--display);
+  letter-spacing: 0.26em;
+}
+.notice .hint {
+  display: block;
+  margin-top: 0.7em;
   color: var(--muted);
-  font: 700 clamp(9px, 1.05vw, 13px)/1 var(--display);
-  letter-spacing: 0.34em;
+  font-size: 0.82em;
 }
 .notice code {
   font-family: var(--mono);
@@ -243,6 +251,10 @@ html, body {
 }
 .notice:empty { display: none; }
 .controls[hidden] { display: none; }
+/* Under the end card the scrim dims everything else; a full-brightness scrubber
+   there reads as playback continuing under a final result. */
+.controls.dimmed { opacity: 0.34; }
+.controls.dimmed:hover, .controls.dimmed:focus-within { opacity: 1; }
 
 @media (prefers-reduced-motion: reduce) {
   .controls, .notice { backdrop-filter: none; }
@@ -266,10 +278,10 @@ html, body {
         <span id="play-glyph" aria-hidden="true">&#10074;&#10074;</span>
       </button>
       <button id="step-back" type="button" aria-label="Previous timestep">
-        <span aria-hidden="true">&#9664;&#65038;</span>
+        <span aria-hidden="true">&#124;&#9664;</span>
       </button>
       <button id="step-forward" type="button" aria-label="Next timestep">
-        <span aria-hidden="true">&#9654;&#65038;</span>
+        <span aria-hidden="true">&#9654;&#124;</span>
       </button>
       <input id="scrub" type="range" min="0" max="0" value="0" step="1"
              aria-label="Timestep" aria-valuetext="timestep 0">
@@ -357,7 +369,9 @@ const RENDER_SCALE = 1.5;          // canvas supersampling; see setTransform bel
 const MARGIN = 30;
 const BUG_H = 92;
 const TOP_INSET = BUG_H + 22;
-const BOARD = { x: MARGIN, y: TOP_INSET, w: H - TOP_INSET - MARGIN, h: H - TOP_INSET - MARGIN };
+const KEY_H = 34;
+const BOARD = { x: MARGIN, y: TOP_INSET + KEY_H, w: H - TOP_INSET - KEY_H - MARGIN,
+  h: H - TOP_INSET - KEY_H - MARGIN };
 const RAIL = { x: BOARD.x + BOARD.w + 26, y: TOP_INSET, w: W - (BOARD.x + BOARD.w + 26) - MARGIN };
 RAIL.h = H - TOP_INSET - MARGIN;
 
@@ -648,6 +662,7 @@ function resetStream() {
   state.finished = false;
   state.lastDrawnIndex = -1;
   spokenIndex = -1;
+  markedLeads = -1;
   standingsSignature = "";
   beatsSignature = "";
 }
@@ -712,8 +727,13 @@ function buildTerrain(frame) {
   // the board moired into a plaid at the embed floor. Filling the field with the
   // lattice colour and insetting each cell by a fixed hairline gives a perfectly
   // even grid at any scale.
-  const hairline = Math.max(1, Math.round(cell * 0.05));
-  terrainContext.fillStyle = GRID_HEX;
+  // At the embed floor a cell is under 10 CSS px, so a hairline lands on a
+  // fraction of a device pixel: a third of the lines drop out and the survivors
+  // carry three different weights, which is the plaid. Below that size the
+  // lattice is simply not drawn - the flat cell blocks already read as a grid,
+  // and a grid you cannot render evenly is worse than none.
+  const hairline = state.compact ? 0 : Math.max(1, Math.round(cell * 0.05));
+  terrainContext.fillStyle = hairline > 0 ? GRID_HEX : `rgb(${EMPTY_HEX.join(",")})`;
   terrainContext.fillRect(0, 0, size, size);
 
   for (let index = 0; index < frame.cells.length; index += 1) {
@@ -865,14 +885,16 @@ function resourceName() {
 function text(content, x, y, options = {}) {
   const {
     size = 20, weight = 500, fill = C.paper, family = F.display,
-    anchor = "start", spacing = 0, outline = null, opacity = 1,
+    anchor = "start", spacing = null, outline = null, opacity = 1,
   } = options;
+  // Mono gives a comma and a point a full cell, so a big figure reads loose.
+  const track = spacing ?? (family === F.mono && size >= 28 ? -size * 0.035 : 0);
   // Scale the halo with the type: a fixed 3.4 units closed the counters on the
   // small labels it was meant to protect.
   const stroke = outline ?? Math.max(1.6, size * 0.14);
   return `<text x="${x}" y="${y}" font-family="${family}" font-size="${size}" `
     + `font-weight="${weight}" fill="${fill}" text-anchor="${anchor}" `
-    + `letter-spacing="${spacing}" opacity="${opacity}" `
+    + `letter-spacing="${track}" opacity="${opacity}" `
     + `paint-order="stroke" stroke="${C.ink}" stroke-width="${stroke}" `
     + `stroke-linejoin="round">${escapeText(content)}</text>`;
 }
@@ -899,6 +921,36 @@ function seatMark(x, y, slot, radius) {
     + `stroke="${C.ink}" stroke-width="1.6"/>`;
 }
 
+/** The board's key. Nothing on screen said the yellow field was sugar, and the
+ *  hollow settler was a visible state a viewer could not decode - the legend
+ *  for it used to live in the feed's header and vanished at the embed floor. */
+function boardKey(frame) {
+  const y = TOP_INSET + KEY_H - 12;
+  let x = BOARD.x + 2;
+  let markup = "";
+  const swatchW = T(13);
+  for (let step = 0; step <= 4; step += 1) {
+    markup += `<rect x="${x + step * (swatchW + 2)}" y="${y - swatchW + 2}" `
+      + `width="${swatchW}" height="${swatchW}" fill="${cellColor(step / 4 * state.maxSugar, 0)}" `
+      + `stroke="${GRID_HEX}" stroke-width="0.8"/>`;
+  }
+  x += 5 * (swatchW + 2) + 8;
+  markup += text("sugar", x, y, { size: T(17), weight: 600, fill: C.muted, outline: 2.6 });
+  x += T(17) * 3.4 + 14;
+  frame.slots.forEach((slot, index) => {
+    markup += `<circle cx="${x}" cy="${y - T(6)}" r="${T(6)}" fill="${SEATS[index].color}"/>`;
+    const label = slot.name || `Population ${index + 1}`;
+    markup += text(label, x + T(10), y, { size: T(17), weight: 600, fill: C.muted, outline: 2.6 });
+    x += T(10) + label.length * T(8.6) + 16;
+  });
+  markup += `<circle cx="${x}" cy="${y - T(6)}" r="${T(6)}" fill="none" `
+    + `stroke="${C.muted}" stroke-width="${T(2.2)}"/>`;
+  markup += text("about to starve", x + T(10), y, {
+    size: T(17), weight: 600, fill: C.muted, outline: 2.6,
+  });
+  return markup;
+}
+
 function scorebug(frame) {
   const rows = ranked(frame);
   const scheduled = state.maxTimestep || frame.timestep;
@@ -912,7 +964,9 @@ function scorebug(frame) {
     size: 27, weight: 700, fill: C.paper, spacing: 5.2,
   });
   markup += text(
-    state.compact ? `most ${resourceName()} wins` : `two populations forage one mountain · most ${resourceName()} wins`,
+    state.compact
+      ? `two populations · most ${resourceName()} wins`
+      : `two populations forage one mountain · most ${resourceName()} wins`,
     MARGIN + 2, 66, { size: T(16), weight: 500, fill: C.muted });
 
   // Clock — counts to the SCHEDULED end of the match, so an early extinction
@@ -973,8 +1027,7 @@ function scorebug(frame) {
       })
       + `</g>`;
     markup += text(
-      `${row.population} settler${row.population === 1 ? "" : "s"}`
-        + (state.compact ? "" : ` · ${resourceName()}`),
+      `${row.population} settler${row.population === 1 ? "" : "s"} · ${resourceName()}`,
       x + 84, 78,
       { size: T(20), weight: 500, family: F.mono, fill: C.muted },
     );
@@ -985,11 +1038,11 @@ function scorebug(frame) {
       fill: leader ? C.gold : C.muted,
     });
     markup += text(
-      margin === 0 ? "level" : margin > 0 ? `+${format(margin)}` : `${format(margin)}`,
+      margin === 0 ? "level" : margin > 0 ? `+${format(margin)}` : `\u2212${format(-margin)}`,
       x + chipW - 20, 84,
       {
         size: T(16) + 4, weight: 700, family: F.mono, anchor: "end",
-        fill: margin > 0 ? C.live : C.muted,
+        fill: margin > 0 ? C.gold : C.muted,
       },
     );
     x += chipW + gap;
@@ -1041,6 +1094,9 @@ function raceChart(frame, x, y, width, height) {
       if (!points) return;
       markup += `<polyline points="${points}" fill="none" stroke="${SEATS[slot].color}" `
         + `stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`;
+      markup += seatMark(left + 14, top + 16 + slot * 26, slot, 6)
+        + text(frame.slots[slot]?.name ?? `Population ${slot + 1}`, left + 28, top + 21 + slot * 26,
+          { size: T(17), weight: 600, fill: SEATS[slot].color, outline: 2.8 });
     });
     markup += text("total wealth", left + plotW / 2, top + plotH + 26, {
       size: T(18), weight: 500, family: F.mono, fill: C.dim, anchor: "middle", outline: 2.4,
@@ -1048,72 +1104,78 @@ function raceChart(frame, x, y, width, height) {
     return markup;
   }
 
-  // Diverging lead margin. The axis is the largest gap the whole episode ever
-  // reaches, so the curve never rescales under the viewer as it plays.
-  // Scaled to the whole episode's peak, the trace was a flat line near zero for
-  // the first half of every replay - a 615x225 panel holding 45px of ink. It now
-  // scales to the largest gap SEEN SO FAR, which fills the plot from the first
-  // timesteps. Taking the running maximum means it only ever grows, so the curve
-  // never rescales downward under the viewer.
+  /* The size of the lead, always upward, coloured by who holds it.
+   *
+   * This was a signed diverging plot: slot 0 above the midline, slot 1 below.
+   * It was quantitatively correct and it read BACKWARDS - the leader's line
+   * descended, so a viewer applying the near-universal "up is winning" saw the
+   * chart contradict the scoreboard on the one question that matters. Plotting
+   * the ABSOLUTE lead removes the ambiguity: higher is a bigger lead, the colour
+   * says whose, and a lead change is the band touching zero and changing colour. */
   const peak = Math.max(
     12,
     ...visible.map((point) => Math.abs((point.scores[0] ?? 0) - (point.scores[1] ?? 0))),
   );
-  const zeroY = top + plotH / 2;
-  const scaleY = (margin) => zeroY - (margin / peak) * (plotH / 2);
-
-  markup += `<rect x="${left}" y="${top}" width="${plotW}" height="${plotH / 2}" `
-    + `fill="${SEATS[0].color}" opacity=".05"/>`;
-  markup += `<rect x="${left}" y="${zeroY}" width="${plotW}" height="${plotH / 2}" `
-    + `fill="${SEATS[1].color}" opacity=".05"/>`;
+  const baseY = top + plotH;
+  const scaleY = (lead) => baseY - (Math.abs(lead) / peak) * plotH;
 
   for (const event of events) {
     if (event.kind !== "lead" || event.timestep > frame.timestep) continue;
     markup += `<line x1="${scaleX(event.timestep)}" y1="${top}" `
-      + `x2="${scaleX(event.timestep)}" y2="${top + plotH}" `
+      + `x2="${scaleX(event.timestep)}" y2="${baseY}" `
       + `stroke="${C.gold}" stroke-width="1.2" stroke-dasharray="3 4" opacity=".6"/>`;
   }
 
-  const points = visible.map((point) => ({
-    x: scaleX(point.timestep),
-    y: scaleY((point.scores[0] ?? 0) - (point.scores[1] ?? 0)),
-  }));
-  if (points.length > 0) {
-    const path = points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
-    // Fill toward the zero line so the shaded side names the leader at a glance.
-    markup += `<clipPath id="race-above"><rect x="${left}" y="${top}" width="${plotW}" height="${plotH / 2}"/></clipPath>`;
-    markup += `<clipPath id="race-below"><rect x="${left}" y="${zeroY}" width="${plotW}" height="${plotH / 2}"/></clipPath>`;
-    const area = `${points[0].x.toFixed(1)},${zeroY} ${path} ${points.at(-1).x.toFixed(1)},${zeroY}`;
-    markup += `<polygon points="${area}" fill="${SEATS[0].color}" opacity=".34" clip-path="url(#race-above)"/>`;
-    markup += `<polygon points="${area}" fill="${SEATS[1].color}" opacity=".34" clip-path="url(#race-below)"/>`;
-    markup += `<polyline points="${path}" fill="none" stroke="${C.paper}" stroke-width="2.4" `
-      + `stroke-linejoin="round" stroke-linecap="round"/>`;
-    const last = points.at(-1);
-    markup += `<circle cx="${last.x}" cy="${last.y}" r="6" fill="${C.paper}" `
-      + `stroke="${C.ink}" stroke-width="1.8"/>`;
+  // One filled band per unbroken spell of leadership, so the colour changes
+  // exactly where the lead does.
+  let spell = [];
+  let spellLeader = -1;
+  const flush = () => {
+    if (spell.length === 0 || spellLeader < 0) return;
+    const path = spell.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
+    markup += `<polygon points="${spell[0].x.toFixed(1)},${baseY} ${path} `
+      + `${spell.at(-1).x.toFixed(1)},${baseY}" fill="${SEATS[spellLeader].color}" opacity=".42"/>`;
+    markup += `<polyline points="${path}" fill="none" stroke="${SEATS[spellLeader].color}" `
+      + `stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>`;
+  };
+  for (const point of visible) {
+    const lead = (point.scores[0] ?? 0) - (point.scores[1] ?? 0);
+    const leader = lead === 0 ? spellLeader : (lead > 0 ? 0 : 1);
+    const at = { x: scaleX(point.timestep), y: scaleY(lead) };
+    if (leader !== spellLeader && spell.length > 0) {
+      spell.push({ x: at.x, y: baseY });
+      flush();
+      spell = [{ x: at.x, y: baseY }];
+    }
+    spellLeader = leader;
+    spell.push(at);
+  }
+  flush();
+
+  markup += `<line x1="${left}" y1="${baseY}" x2="${left + plotW}" y2="${baseY}" `
+    + `stroke="rgba(246,234,210,.42)" stroke-width="1.5"/>`;
+  markup += text(`+${format(peak)}`, left - 10, top + 12, {
+    size: T(18), weight: 500, family: F.mono, fill: C.dim, anchor: "end", outline: 2.4,
+  });
+  markup += text("level", left - 10, baseY + 5, {
+    size: T(18), weight: 500, family: F.mono, fill: C.dim, anchor: "end", outline: 2.4,
+  });
+
+  // Who currently holds it, stated in words at the head of the band.
+  const last = visible.at(-1);
+  if (last) {
+    const lead = (last.scores[0] ?? 0) - (last.scores[1] ?? 0);
+    const leader = lead === 0 ? -1 : (lead > 0 ? 0 : 1);
+    const headY = scaleY(lead);
+    markup += `<circle cx="${scaleX(last.timestep)}" cy="${headY}" r="6" `
+      + `fill="${leader < 0 ? C.muted : SEATS[leader].color}" stroke="${C.ink}" stroke-width="1.8"/>`;
+    markup += text(
+      leader < 0 ? "level" : `${frame.slots[leader]?.name ?? `Population ${leader + 1}`} ahead`,
+      left + 14, top + 20,
+      { size: T(19), weight: 700, fill: leader < 0 ? C.muted : SEATS[leader].color, outline: 3 },
+    );
   }
 
-  markup += `<line x1="${left}" y1="${zeroY}" x2="${left + plotW}" y2="${zeroY}" `
-    + `stroke="rgba(246,234,210,.42)" stroke-width="1.5"/>`;
-  // Each end of the axis names WHOSE lead it measures. A bare "+120" printed at
-  // both ends made the scale unreadable, and a floating "Population A ahead"
-  // inside the plot read as a claim about the present rather than a label for
-  // that half - so it contradicted the scorebug whenever A was behind.
-  // Both poles printed a bare "+120", which made the scale unreadable. Each end
-  // now names whose lead it measures.
-  const axisEnd = (slot, baseline) => seatMark(left + 12, baseline - 5, slot, 6)
-    + text(
-      `${frame.slots[slot]?.name ?? `Population ${slot + 1}`} +${format(peak)}`,
-      left + 26, baseline,
-      { size: T(17), weight: 600, family: F.mono, fill: SEATS[slot].color, outline: 2.8 },
-    );
-  markup += axisEnd(0, top + 18);
-  markup += axisEnd(1, top + plotH - 14);
-  if (!state.compact) {
-    markup += text("level", left - 10, zeroY + 5, {
-      size: 18, weight: 500, family: F.mono, fill: C.dim, anchor: "end", outline: 2.4,
-    });
-  }
   // At the embed floor these land under 7px, so the chart keeps its shape and
   // its headline count and drops the annotations rather than printing a smear.
   if (!state.compact) {
@@ -1227,18 +1289,23 @@ function eventFeed(frame, x, y, width, height) {
       size: T(19), weight: 600, family: F.mono, fill: fresh ? C.gold : C.dim,
     });
     if (event.kind === "death") {
-      markup += `<rect x="${x + indent - 16}" y="${rowY - 2}" width="4" height="${T(24)}" rx="2" fill="${C.loss}"/>`;
+      markup += `<rect x="${x + indent - 16}" y="${rowY - 2}" width="4" height="${T(24)}" rx="2" fill="${C.dim}"/>`;
       // No flavour text: an earlier version asserted the losses were at the
       // mountain's edge, which nothing here computes and which the recording
       // does not actually support for the runs it was printed on.
-      const detail = state.compact
-        ? ""
-        : event.bySlot
+      const shorten = (name) => (state.compact ? name.split(/\s+/).at(-1) : name);
+      const detail = event.bySlot
           .filter(([slot]) => slot >= 0)
-          .map(([slot, count]) => `${count} ${frame.slots[slot]?.name ?? `slot ${slot}`}`)
+          .map(([slot, count]) => `${count} ${shorten(frame.slots[slot]?.name ?? `slot ${slot}`)}`)
           .join(", ");
+      const named = event.bySlot.filter(([slot]) => slot >= 0);
+      // One population involved reads better as "3 Population A starved" than
+      // as "3 starved - 3 Population A", which prints the count twice.
+      const line = named.length === 1
+        ? `${event.count} ${shorten(frame.slots[named[0][0]]?.name ?? "")} ${event.cause ?? "lost"}`
+        : `${event.count} ${event.cause ?? "lost"}${detail ? ` — ${detail}` : ""}`;
       markup += text(
-        `${event.count} ${event.cause ?? "lost"}${detail ? ` — ${detail}` : ""}`,
+        line,
         x + indent, rowY + 16,
         { size: T(25), weight: 500, fill: fresh ? C.paper : C.muted },
       );
@@ -1319,7 +1386,7 @@ function emergence(frame, x, y, width, height) {
     ["Survivors", `${population}`,
       lost > 0 ? `of ${state.startingPopulation} · ${lost} starved` : `of ${state.startingPopulation}`],
   ];
-  let readY = curveY + (state.compact ? 6 : 26);
+  let readY = curveY + (state.compact ? 22 : 26);
   for (const [label, value, note] of rows) {
     markup += text(label.toUpperCase(), readX, readY, {
       size: T(18), weight: 700, fill: C.muted, spacing: 1.8, outline: 2.6,
@@ -1366,10 +1433,20 @@ function endCard(frame) {
   const stats = frame.stats ?? {};
   const gini = Number(stats.giniCoefficient ?? 0);
 
+  // A match that changed hands and was won from behind is the most interesting
+  // thing about it, and the card used to report only the result.
+  const leadChanges = events.filter((event) => event.kind === "lead").length;
+  const halfway = wealthSeries[Math.floor(wealthSeries.length / 2)];
+  const trailedAtHalfway = halfway
+    && (halfway.scores[winner.index] ?? 0) < Math.max(...halfway.scores);
+  const arc = leadChanges === 0 ? ""
+    : trailedAtHalfway
+      ? ` Won from behind, after ${leadChanges} lead change${leadChanges === 1 ? "" : "s"}.`
+      : ` ${leadChanges} lead change${leadChanges === 1 ? "" : "s"} along the way.`;
   const verdict = tie
-    ? `${winner.name} and ${runnerUp.name} finish level on ${format(winner.score)}.`
+    ? `${winner.name} and ${runnerUp.name} finish level on ${format(winner.score)}.${arc}`
     : `${winner.name} finishes ${format(margin)} ahead of ${runnerUp?.name ?? "the field"}`
-      + ` — a ${((margin / Math.max(1, winner.score)) * 100).toFixed(1)}% margin.`;
+      + ` — a ${((margin / Math.max(1, winner.score)) * 100).toFixed(1)}% margin.${arc}`;
   const context = `${survivors} of ${state.startingPopulation} settlers survived the mountain,`
     + ` and the richest of them ended up holding most of the ${resourceName()}.`;
 
@@ -1381,7 +1458,7 @@ function endCard(frame) {
   let markup = `<g class="endcard">`;
   markup += `<rect x="0" y="0" width="${W}" height="${H}" fill="rgba(10,7,4,.965)"/>`;
   markup += `<rect x="${x}" y="${y}" width="${cardW}" height="${cardH}" rx="16" `
-    + `fill="rgba(16,12,6,.97)"/>`;
+    + `fill="rgba(31,24,14,.985)"/>`;
   markup += `<rect x="${x}" y="${y}" width="${cardW}" height="${cardH}" rx="16" fill="none" `
     + `stroke="${C.gold}" stroke-width="2.5"/>`;
 
@@ -1462,6 +1539,9 @@ function drawBeats(frame, now) {
   if (full === beatsSignature) return;
   beatsSignature = full;
   beatsLayer.innerHTML = (live ? stinger() : "") + (atEnd ? endCard(frame) : "");
+  // The scrubber was the only lit object outside the end card's scrim, which
+  // read as playback continuing under a final result.
+  controls.container.classList.toggle("dimmed", atEnd);
 }
 
 function drawHud(frame, index) {
@@ -1478,6 +1558,7 @@ function drawHud(frame, index) {
   markup += eventFeed(frame, RAIL.x, RAIL.y + raceH + railGap, RAIL.w, feedH);
   markup += emergence(frame, RAIL.x, RAIL.y + raceH + feedH + railGap * 2, RAIL.w, emergenceH);
   markup += scorebug(frame);
+  markup += boardKey(frame);
   standingsLayer.innerHTML = markup;
 }
 
@@ -1490,6 +1571,7 @@ let lastTick = 0;
 const commentary = document.getElementById("commentary");
 const verdictLine = document.getElementById("verdict");
 let spokenIndex = -1;
+let markedLeads = -1;
 
 /** Say what the picture shows. The board and the overlay are both hidden from
  *  assistive technology - they are one image, and an image cannot carry a
@@ -1583,6 +1665,18 @@ function tick() {
     controls.scrub.value = String(index);
     const span = Math.max(1, frames.length - 1);
     controls.scrub.style.setProperty("--played", `${(index / span) * 100}%`);
+    // Mark the lead changes on the timeline itself, so the shape of the match is
+    // visible from the transport and not only from the chart.
+    if (markedLeads !== events.length) {
+      markedLeads = events.length;
+      const marks = events
+        .filter((event) => event.kind === "lead")
+        .map((event) => (event.index / span) * 100);
+      controls.scrub.style.setProperty("--marks", marks.length === 0
+        ? "none"
+        : marks.map((at) => `linear-gradient(${C.gold}, ${C.gold}) ${at}% 0 / 2px 100% no-repeat`)
+          .join(", "));
+    }
     // A bare "62" tells a screen-reader user nothing; name the unit and the end.
     controls.scrub.setAttribute(
       "aria-valuetext",
@@ -1664,7 +1758,8 @@ controls.speed.addEventListener("click", () => {
 function fail(message, detail = "") {
   const shown = detail.length > 96 ? `${detail.slice(0, 93)}…` : detail;
   notice.innerHTML = escapeText(message)
-    + (shown ? ` <code>${escapeText(shown)}</code>` : "");
+    + (shown ? ` <code>${escapeText(shown)}</code>` : "")
+    + '<span class="hint">Reload to try again.</span>';
   controls.container.hidden = true;
 }
 

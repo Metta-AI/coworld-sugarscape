@@ -53,6 +53,7 @@
   --panel: rgba(20, 15, 8, 0.86);
   --gold: #e8a838;
   --track-fill: #e8a838;
+  --track-bed: #4a4034;
   --display: "Space Grotesk", "Avenir Next", "Segoe UI", system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
@@ -170,13 +171,14 @@ html, body {
   height: 6px;
   border-radius: 999px;
   background:
+    var(--marks, none),
     linear-gradient(var(--track-fill), var(--track-fill)) left center / var(--played, 0%) 100% no-repeat,
-    rgba(246, 234, 210, 0.24);
+    var(--track-bed);
 }
 #scrub::-moz-range-track {
   height: 6px;
   border-radius: 999px;
-  background: rgba(246, 234, 210, 0.22);
+  background: var(--track-bed);
 }
 #scrub::-moz-range-progress { height: 6px; border-radius: 999px; background: var(--track-fill); }
 #scrub::-webkit-slider-thumb {
@@ -207,7 +209,7 @@ html, body {
    product rather than a bare fallback. */
 .notice {
   position: absolute;
-  inset: auto 12% 30%;
+  inset: auto 12% 34%;
   margin: 0;
   padding: 1.4em 1.6em 1.5em;
   border: 1px solid var(--border);
@@ -221,10 +223,16 @@ html, body {
 .notice::before {
   content: "SUGARSCAPE";
   display: block;
-  margin-bottom: 0.55em;
+  margin-bottom: 0.5em;
+  color: var(--paper);
+  font: 700 clamp(13px, 1.7vw, 21px)/1 var(--display);
+  letter-spacing: 0.26em;
+}
+.notice .hint {
+  display: block;
+  margin-top: 0.7em;
   color: var(--muted);
-  font: 700 clamp(9px, 1.05vw, 13px)/1 var(--display);
-  letter-spacing: 0.34em;
+  font-size: 0.82em;
 }
 .notice code {
   font-family: var(--mono);
@@ -233,6 +241,10 @@ html, body {
 }
 .notice:empty { display: none; }
 .controls[hidden] { display: none; }
+/* Under the end card the scrim dims everything else; a full-brightness scrubber
+   there reads as playback continuing under a final result. */
+.controls.dimmed { opacity: 0.34; }
+.controls.dimmed:hover, .controls.dimmed:focus-within { opacity: 1; }
 
 @media (prefers-reduced-motion: reduce) {
   .controls, .notice { backdrop-filter: none; }
