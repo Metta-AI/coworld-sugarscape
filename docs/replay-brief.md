@@ -56,10 +56,13 @@ Recorded episode: 32×32, 100 timesteps, 64 agents, two policy populations.
    visible race (16 v 16 at the end) but the SCORE is wealth (2334 v 2253). The scorebug
    goes on wealth; population rides as the secondary figure.
 2. **Dramatic beats**, ranked by what actually happened in the recording:
-   - **Starvation deaths — the crush.** 32 of 64 agents die, all starvation, all before
-     t≈40 (diffed frame-to-frame; `stats.agentStarvationDeaths` confirms the cause). The
-     dead die *far from the mountain* (mean distance 13.4 cells) while survivors sit on it
-     (4.7). This is the single loudest beat.
+   - **Starvation deaths — the crush.** 32 of 64 agents die, all starvation (diffed
+     frame-to-frame; `stats.agentStarvationDeaths` confirms the cause). 28 of them go
+     before t40; the last four straggle in at t61, t64, t79 and t82. The dead die *far
+     from the sugar* — mean **13.07** cells to the nearest configured peak — while
+     survivors sit on it at **3.90**. (Metric: Euclidean distance in lattice cells to the
+     nearer of the two peaks in the recorded `environmentSugarPeaks`.) This is the single
+     loudest beat.
    - **Lead changes — the race.** **4** of them: A leads at t0, B takes it at t2 and holds
      to t62, A takes it, B retakes at t69, A takes it back at t71 and holds. Final margin
      81 (3.5%). (An earlier draft said five and then listed four; four is correct.)
@@ -71,10 +74,16 @@ Recorded episode: 32×32, 100 timesteps, 64 agents, two policy populations.
      top 5 agents hold 31%. The founding result of the model.
 3. **Board — a single shared 32×32 lattice.** `environment.nim cellId = x * height + y`
    (column-major; the incumbent viewer decodes this correctly). Cells carry
-   `[sugar, spice, pollution]`. In the shipping variant the terrain is **one central sugar
-   mountain**, not the twin peaks of the literature: `environmentSugarPeaks` defaults to
-   `[[35,15,4],[15,35,4]]`, both centred outside a 32-wide grid, so their gradients
-   superpose into one massif. Render the snapshot, not the textbook.
+   `[sugar, spice, pollution]`.
+
+   **How many mountains a world has is a property of the SEED, not the config** — an
+   earlier draft of this brief got that wrong and a masthead string was built on it.
+   `environmentSugarPeaks` defaults to `[[35,15,4],[15,35,4]]`, both out of range on a
+   32-wide grid, and `configuration.nim:137-141` does **not** clamp or superpose them: it
+   **replaces** each out-of-range coordinate with `rng.randomInteger(0, width-1)`. In the
+   recorded episode they were re-seated to `[[15,17,4],[14,15,4]]` — 2.24 cells apart,
+   which is why that world has one massif. Another seed can put them anywhere. Render the
+   snapshot, and never assert the terrain's shape in copy.
 4. **Readable entities — agents and sugar.** Per agent the frame carries id, cell, slot,
    age, sugar, spice, metabolism, movement, vision, sex, race, tribe, sick, depressed.
    In the shipping variant **spice, pollution, social links, disease, depression, trade,
@@ -93,7 +102,7 @@ Recorded episode: 32×32, 100 timesteps, 64 agents, two policy populations.
 | 2 | `coworld certify` requires a `/replay` WebSocket when no static bundle is declared (`runner.py replay_session_path`) | `coworld.nim` serves the spectator WS only at `/global`; `/replay` 404s | **P0, certification fails** |
 | 3 | Score = total living wealth per slot | No score is shown anywhere; the "Populations" panel is a bare colour legend with no numbers | **P0, North Star fail** |
 | 4 | The match is 100 scheduled timesteps | No clock, no progress toward the end | P1 |
-| 5 | 32 agents starve; the lead changes 5 times | No event feed, no callouts, no end card, no winner | P1 |
+| 5 | 32 agents starve; the lead changes 4 times | No event feed, no callouts, no end card, no winner | P1 |
 | 6 | Spice, pollution, links, disease, depression, race, tribe are all inert in the shipping variant | 9 agent-colour modes, 2 cell modes and a links toggle, most of which render nothing | P2, misleads the viewer |
 | 7 | The embed is 16:9 and can be 640×360 | `grid-template-columns: minmax(440px,1fr) 340px` + a square board + three 120px charts | P1, unreadable at the embed floor |
 | 8 | `cellId = x*height + y` | `x = floor(cell/height), y = cell % height` | correct — not a bug |
@@ -166,6 +175,6 @@ audits confirmed 9 of 10 AI-default tells PASS on measured evidence, so the fail
    "topographic plate" half of the lock is only partly delivered.
 
 The audit also raised "the board looks static — the resource never visibly changes." That
-one is a **false bug**: total sugar genuinely plateaus after t8 (1034 → 738 → ~730 for the
-rest of the episode). That plateau IS the carrying-capacity result the model is famous for,
+one is a **false bug**: total sugar genuinely plateaus after t8 (1034 → 738, then 711–765 for the
+rest of the episode, closing at 763). That plateau IS the carrying-capacity result the model is famous for,
 and the per-cell churn underneath it is real and now visible. Do not "fix" it.

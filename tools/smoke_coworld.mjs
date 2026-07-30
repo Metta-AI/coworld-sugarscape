@@ -247,6 +247,24 @@ const guards = JSON.parse(vm.runInContext(`
 `, viewerContext));
 assert.deepEqual(guards, { good: true, wrongFormat: false, noSlots: false, badCells: false });
 
+// The manifest permits up to 16 populations while the palette lists four.
+// Indexing the palette raw threw on the fifth population and blanked the whole
+// overlay, and silently dropped those populations' wealth from every total.
+const manySeats = JSON.parse(vm.runInContext(`
+  const wide = ${sandboxFrame(0, [])};
+  wide.slots = Array.from({ length: 16 }, (_, index) => ({ name: \`Population \${index}\` }));
+  wide.agents = wide.slots.map((_, index) => (${settler.toString()})(index, index, index % 4, 5));
+  recordFrame(wide);
+  JSON.stringify({
+    seats: wide.slots.map((_, index) => Boolean(seatOf(index) && seatOf(index).color)),
+    counted: ranked(wide).reduce((sum, row) => sum + row.population, 0),
+    scored: ranked(wide).filter((row) => row.score > 0).length,
+  });
+`, viewerContext));
+assert.ok(manySeats.seats.every(Boolean), "every declared population must get a colour");
+assert.equal(manySeats.counted, 16, "no population may be dropped from the standing");
+assert.equal(manySeats.scored, 16, "no population may be silently scored zero");
+
 // A stream from a new server run resets rather than interleaving.
 const afterRestart = JSON.parse(vm.runInContext(`
   recordFrame(${sandboxFrame(0, [settler(9, 0, 0, 1)], { streamId: "second" })});

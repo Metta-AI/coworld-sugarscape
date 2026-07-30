@@ -339,16 +339,6 @@ const C = {
 // Each hue is lifted slightly from the source so the same colour is legible
 // BOTH as a dot on the white plate and as a chip on the dark broadcast panels,
 // and each carries a redundant shape so the read never depends on hue alone.
-// The original assigns palette colours to decision models in order
-// (reference/dtl-python/gui.py: palette[0] red, palette[1] blue), so the two
-// populations are red and blue exactly as in the model everyone recognises.
-//
-// Each seat carries TWO values of that hue. One swatch cannot clear 3:1 on both
-// a near-white board plate and a near-black broadcast panel, so `board` is the
-// dark variant drawn on the plate and `color` the light variant used in the
-// chrome. Red against blue also stays separable under protanopia, deuteranopia
-// and tritanopia, which is why the original's first two palette entries happen
-// to be the safest possible pair.
 const SEATS = [
   { color: "#f5504a", board: "#c22318" },   // gui.py palette[0] #FA3232
   { color: "#5a7cff", board: "#2340c4" },   // gui.py palette[1] #3232FA
@@ -498,8 +488,16 @@ function isRenderableFrame(frame) {
   return shaped && frame.slots.length > 0;
 }
 
+/** A seat's colours. The manifest permits up to 16 populations while the
+ *  palette lists four, so this cycles rather than returning undefined: indexing
+ *  SEATS raw threw on the fifth population and blanked the whole overlay, and
+ *  silently dropped those populations' wealth from every total. */
+function seatOf(index) {
+  return SEATS[((index % SEATS.length) + SEATS.length) % SEATS.length];
+}
+
 function slotOf(agent) {
-  return agent.slot >= 0 && agent.slot < SEATS.length ? agent.slot : -1;
+  return agent.slot >= 0 ? agent.slot : -1;
 }
 
 /** Per-population standing. The score axis is total living wealth, matching
@@ -568,7 +566,10 @@ function deriveEvents(index) {
 
   const before = ranked(previous);
   const after = ranked(frame);
-  const tied = after.length > 1 && after[0].score === after[1].score;
+  // ranked() breaks ties by slot index, so a momentary tie would otherwise
+  // "change" the leader twice against a leader who never actually lost it.
+  const tied = (after.length > 1 && after[0].score === after[1].score)
+    || (before.length > 1 && before[0].score === before[1].score);
   if (!tied && before[0] && after[0] && before[0].index !== after[0].index) {
     events.push({
       index,
@@ -617,7 +618,10 @@ function recordFrame(frame) {
   // live episode past the server's backlog cap never sees frame zero, and would
   // otherwise normalise the whole colour ramp against a partly-eaten world.
   // The artifact path overrides both from config, which is authoritative.
-  if (state.startingPopulation === 0) state.startingPopulation = frame.agents.length;
+  // On the socket path there is no config to read, and a spectator joining past
+  // the server's backlog cap never sees frame zero - so take the largest
+  // population ever observed rather than the first one seen.
+  state.startingPopulation = Math.max(state.startingPopulation, frame.agents.length);
   for (const cell of frame.cells) {
     if (cell[0] > state.maxSugar) state.maxSugar = cell[0];
     if (cell[1] > state.maxSpice) state.maxSpice = cell[1];
@@ -661,7 +665,8 @@ function resetStream() {
   terrainShown = null;
   state.finished = false;
   state.lastDrawnIndex = -1;
-  spokenIndex = -1;
+  spokenKey = "";
+  spokenVerdict = false;
   markedLeads = -1;
   standingsSignature = "";
   beatsSignature = "";
@@ -785,11 +790,12 @@ function interpolate(previous, frame, t) {
       px: BOARD.x + (x + 0.5) * cell,
       py: BOARD.y + (y + 0.5) * cell,
       wealth,
-      // Less than one timestep of food left - it will not survive metabolism
-      // unless it eats this move. At two timesteps the ring fired on roughly
-      // seven times as many settlers as actually died.
-      starving: agent.sugar < agent.sugarMetabolism
-        || (agent.spiceMetabolism > 0 && agent.spice < agent.spiceMetabolism),
+      // The engine kills when metabolism takes a settler to or below zero
+      // (simulation.nim doTimestep), so the test is <=, not <. At < it missed
+      // 12 of the 32 deaths in the reference recording while the board's key
+      // promised "about to starve"; at < 2x metabolism it over-warned sevenfold.
+      starving: agent.sugar <= agent.sugarMetabolism
+        || (agent.spiceMetabolism > 0 && agent.spice <= agent.spiceMetabolism),
     };
   });
 }
@@ -840,7 +846,7 @@ function drawBoard(frame, previous, t, now) {
   const bodies = interpolate(previous, frame, t);
   const radius = cell * 0.31;
   for (const body of bodies) {
-    const seat = SEATS[body.slot] ?? SEATS[0];
+    const seat = seatOf(body.slot);
     const size = radius * (0.82 + 0.36 * Math.min(1, Math.log10(1 + body.wealth) / 2.4));
     context.beginPath();
     context.arc(body.px, body.py, size, 0, Math.PI * 2);
@@ -916,7 +922,7 @@ function panel(x, y, width, height, radius = 10) {
  *  which is the strongest redundancy available; red and blue also stay separable
  *  under every common colour-vision deficiency. */
 function seatMark(x, y, slot, radius) {
-  const seat = SEATS[slot] ?? SEATS[0];
+  const seat = seatOf(slot);
   return `<circle cx="${x}" cy="${y}" r="${radius}" fill="${seat.color}" `
     + `stroke="${C.ink}" stroke-width="1.6"/>`;
 }
@@ -938,7 +944,7 @@ function boardKey(frame) {
   markup += text("sugar", x, y, { size: T(17), weight: 600, fill: C.muted, outline: 2.6 });
   x += T(17) * 3.4 + 14;
   frame.slots.forEach((slot, index) => {
-    markup += `<circle cx="${x}" cy="${y - T(6)}" r="${T(6)}" fill="${SEATS[index].color}"/>`;
+    markup += `<circle cx="${x}" cy="${y - T(6)}" r="${T(6)}" fill="${seatOf(index).color}"/>`;
     const label = slot.name || `Population ${index + 1}`;
     markup += text(label, x + T(10), y, { size: T(17), weight: 600, fill: C.muted, outline: 2.6 });
     x += T(10) + label.length * T(8.6) + 16;
@@ -964,9 +970,12 @@ function scorebug(frame) {
     size: 27, weight: 700, fill: C.paper, spacing: 5.2,
   });
   markup += text(
+    // Not "one mountain": configuration.nim re-seats an out-of-range peak to a
+    // RANDOM in-range coordinate, so how many massifs a world has is a property
+    // of the seed, not of the config. Do not assert what the board can show.
     state.compact
-      ? `two populations · most ${resourceName()} wins`
-      : `two populations forage one mountain · most ${resourceName()} wins`,
+      ? `${frame.slots.length} populations · most ${resourceName()} wins`
+      : `${frame.slots.length} populations forage one lattice · most ${resourceName()} wins`,
     MARGIN + 2, 66, { size: T(16), weight: 500, fill: C.muted });
 
   // Clock — counts to the SCHEDULED end of the match, so an early extinction
@@ -1092,11 +1101,11 @@ function raceChart(frame, x, y, width, height) {
         .map((point) => `${scaleX(point.timestep).toFixed(1)},${scaleY(point.scores[slot] ?? 0).toFixed(1)}`)
         .join(" ");
       if (!points) return;
-      markup += `<polyline points="${points}" fill="none" stroke="${SEATS[slot].color}" `
+      markup += `<polyline points="${points}" fill="none" stroke="${seatOf(slot).color}" `
         + `stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`;
       markup += seatMark(left + 14, top + 16 + slot * 26, slot, 6)
         + text(frame.slots[slot]?.name ?? `Population ${slot + 1}`, left + 28, top + 21 + slot * 26,
-          { size: T(17), weight: 600, fill: SEATS[slot].color, outline: 2.8 });
+          { size: T(17), weight: 600, fill: seatOf(slot).color, outline: 2.8 });
     });
     markup += text("total wealth", left + plotW / 2, top + plotH + 26, {
       size: T(18), weight: 500, family: F.mono, fill: C.dim, anchor: "middle", outline: 2.4,
@@ -1134,8 +1143,8 @@ function raceChart(frame, x, y, width, height) {
     if (spell.length === 0 || spellLeader < 0) return;
     const path = spell.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
     markup += `<polygon points="${spell[0].x.toFixed(1)},${baseY} ${path} `
-      + `${spell.at(-1).x.toFixed(1)},${baseY}" fill="${SEATS[spellLeader].color}" opacity=".42"/>`;
-    markup += `<polyline points="${path}" fill="none" stroke="${SEATS[spellLeader].color}" `
+      + `${spell.at(-1).x.toFixed(1)},${baseY}" fill="${seatOf(spellLeader).color}" opacity=".42"/>`;
+    markup += `<polyline points="${path}" fill="none" stroke="${seatOf(spellLeader).color}" `
       + `stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>`;
   };
   for (const point of visible) {
@@ -1168,11 +1177,11 @@ function raceChart(frame, x, y, width, height) {
     const leader = lead === 0 ? -1 : (lead > 0 ? 0 : 1);
     const headY = scaleY(lead);
     markup += `<circle cx="${scaleX(last.timestep)}" cy="${headY}" r="6" `
-      + `fill="${leader < 0 ? C.muted : SEATS[leader].color}" stroke="${C.ink}" stroke-width="1.8"/>`;
+      + `fill="${leader < 0 ? C.muted : seatOf(leader).color}" stroke="${C.ink}" stroke-width="1.8"/>`;
     markup += text(
       leader < 0 ? "level" : `${frame.slots[leader]?.name ?? `Population ${leader + 1}`} ahead`,
       left + 14, top + 20,
-      { size: T(19), weight: 700, fill: leader < 0 ? C.muted : SEATS[leader].color, outline: 3 },
+      { size: T(19), weight: 700, fill: leader < 0 ? C.muted : seatOf(leader).color, outline: 3 },
     );
   }
 
@@ -1311,7 +1320,7 @@ function eventFeed(frame, x, y, width, height) {
       );
     } else {
       markup += `<rect x="${x + indent - 16}" y="${rowY - 2}" width="4" height="${T(24)}" rx="2" `
-        + `fill="${SEATS[event.slot].color}"/>`;
+        + `fill="${seatOf(event.slot).color}"/>`;
       markup += text(
         `${event.name} takes the lead`,
         x + indent, rowY + 16,
@@ -1323,9 +1332,11 @@ function eventFeed(frame, x, y, width, height) {
   return markup;
 }
 
-/** The readouts that make Sugarscape's famous emergent results legible: an
- *  inequality curve nobody programmed, and a carrying capacity the world
- *  imposes on its own population. */
+/** The readouts that make Sugarscape's famous emergent result legible: an
+ *  inequality curve nobody programmed. (A carrying-capacity readout used to sit
+ *  beside it and was removed - the engine's `carryingCapacity` is a lagging
+ *  average of the headcount with a ceil() ratchet, so presenting it as a ceiling
+ *  the world imposes was simply false.) */
 function emergence(frame, x, y, width, height) {
   const stats = frame.stats ?? {};
   const gini = Number(stats.giniCoefficient ?? 0);
@@ -1377,14 +1388,16 @@ function emergence(frame, x, y, width, height) {
   // than printed bare, because "57" beside "38 alive of 64" read as a
   // contradiction rather than as a ceiling.
   const readX = state.compact ? curveX : curveX + size + 26;
-  const lost = state.startingPopulation - population;
+  // Net change, not a death count - the engine can also add agents - so this
+  // is deliberately labelled 'lost' rather than asserting a cause.
+  const lost = Math.max(0, state.startingPopulation - population);
   const rows = [
     ["Inequality", gini.toFixed(3),
       gini > 0.4 ? "a few settlers hold almost all of it"
         : gini > 0.28 ? "the richest hold most of it"
           : "spread fairly evenly"],
     ["Survivors", `${population}`,
-      lost > 0 ? `of ${state.startingPopulation} · ${lost} starved` : `of ${state.startingPopulation}`],
+      lost > 0 ? `of ${state.startingPopulation} · ${lost} lost` : `of ${state.startingPopulation}`],
   ];
   let readY = curveY + (state.compact ? 22 : 26);
   for (const [label, value, note] of rows) {
@@ -1407,7 +1420,7 @@ function stinger() {
   const width = 720;
   const x = BOARD.x + (BOARD.w - width) / 2;
   const y = BOARD.y + BOARD.h * 0.36;
-  const color = event.kind === "lead" ? SEATS[event.slot].color : C.loss;
+  const color = event.kind === "lead" ? seatOf(event.slot).color : C.loss;
   const headline = event.kind === "lead" ? "LEAD CHANGE" : "DIE-OFF";
   const detail = event.kind === "lead"
     ? `${event.name} moves ahead by ${format(event.margin)}`
@@ -1447,8 +1460,13 @@ function endCard(frame) {
     ? `${winner.name} and ${runnerUp.name} finish level on ${format(winner.score)}.${arc}`
     : `${winner.name} finishes ${format(margin)} ahead of ${runnerUp?.name ?? "the field"}`
       + ` — a ${((margin / Math.max(1, winner.score)) * 100).toFixed(1)}% margin.${arc}`;
-  const context = `${survivors} of ${state.startingPopulation} settlers survived the mountain,`
-    + ` and the richest of them ended up holding most of the ${resourceName()}.`;
+  // Gated, not asserted: the same sentence used to print at any Gini.
+  const spread = gini > 0.4
+    ? ` A few of them ended up holding almost all the ${resourceName()}.`
+    : gini > 0.28
+      ? ` The richest of them ended up holding most of the ${resourceName()}.`
+      : ` What they held ended up spread fairly evenly.`;
+  const context = `${survivors} of ${state.startingPopulation} settlers survived.${spread}`;
 
   const cardW = state.compact ? 1500 : 1180;
   const cardH = 580;
@@ -1570,36 +1588,66 @@ let lastTick = 0;
 
 const commentary = document.getElementById("commentary");
 const verdictLine = document.getElementById("verdict");
-let spokenIndex = -1;
+let spokenKey = "";
+let spokenVerdict = false;
 let markedLeads = -1;
 
-/** Say what the picture shows. The board and the overlay are both hidden from
- *  assistive technology - they are one image, and an image cannot carry a
- *  standing - so the same information is announced here as text. */
+/** Say what the picture shows, at a pace a screen reader can actually consume.
+ *
+ *  Announcing the full standing on every timestep - one every 770ms at 1x, and
+ *  forever, because the replay loops - queues minutes behind and clips
+ *  continuously. So this speaks on BEATS: when a settler dies, when the lead
+ *  changes, at the quarter marks, and at the finish. The picture is hidden from
+ *  assistive technology, so this text is the whole broadcast and it has to carry
+ *  everything the panels do, not a subset of it. */
 function speak(frame, index) {
-  if (index === spokenIndex) return;
-  spokenIndex = index;
+  const atEnd = state.finished && currentIndex() >= frames.length - 1;
+  if (atEnd) {
+    if (spokenVerdict) return;
+    spokenVerdict = true;
+    const rows = ranked(frame);
+    const margin = rows[0].score - (rows[1]?.score ?? 0);
+    const changes = events.filter((event) => event.kind === "lead").length;
+    verdictLine.textContent = (margin === 0
+      ? `Final. ${rows.map((row) => row.name).join(" and ")} finish level on `
+        + `${format(rows[0].score)} ${resourceName()}.`
+      : `Final. ${rows[0].name} wins with ${format(rows[0].score)} ${resourceName()}, `
+        + `${format(margin)} ahead of ${rows[1]?.name ?? "the field"}.`)
+      + ` ${frame.agents.length} of ${state.startingPopulation} settlers survived`
+      + `, after ${changes} lead change${changes === 1 ? "" : "s"}.`;
+    return;
+  }
+  spokenVerdict = false;
+  verdictLine.textContent = "";
+
+  const beat = [...events].reverse().find((event) => event.timestep <= frame.timestep);
+  const beatKey = beat ? `${beat.index}:${beat.kind}` : "none";
+  const quarter = Math.floor((frame.timestep / Math.max(1, state.maxTimestep)) * 4);
+  const key = `${beatKey}|${quarter}`;
+  if (key === spokenKey) return;
+  spokenKey = key;
+  void index;
+
   const rows = ranked(frame);
-  const scheduled = state.maxTimestep || frame.timestep;
+  const stats = frame.stats ?? {};
+  const gini = Number(stats.giniCoefficient ?? 0);
   const standing = rows
     .map((row, rank) => `${rank + 1}. ${row.name}, ${format(row.score)} ${resourceName()},`
       + ` ${row.population} settler${row.population === 1 ? "" : "s"}`)
     .join(". ");
-  const beat = [...events].reverse().find((event) => event.timestep <= frame.timestep);
   const beatText = !beat ? ""
-    : beat.kind === "lead" ? ` Latest: at timestep ${beat.timestep}, ${beat.name} took the lead.`
-      : ` Latest: at timestep ${beat.timestep}, ${beat.count} settler`
+    : beat.kind === "lead" ? ` At timestep ${beat.timestep}, ${beat.name} took the lead.`
+      : ` At timestep ${beat.timestep}, ${beat.count} settler`
         + `${beat.count === 1 ? "" : "s"} ${beat.cause ?? "lost"}.`;
-  commentary.textContent = `Timestep ${frame.timestep} of ${scheduled}. ${standing}.${beatText}`;
-
-  const atEnd = state.finished && currentIndex() >= frames.length - 1;
-  if (!atEnd) { verdictLine.textContent = ""; return; }
-  const margin = rows[0].score - (rows[1]?.score ?? 0);
-  verdictLine.textContent = margin === 0
-    ? `Final. ${rows.map((row) => row.name).join(" and ")} finish level on ${format(rows[0].score)}.`
-    : `Final. ${rows[0].name} wins with ${format(rows[0].score)} ${resourceName()},`
-      + ` ${format(margin)} ahead of ${rows[1]?.name ?? "the field"}.`
-      + ` ${frame.agents.length} of ${state.startingPopulation} settlers survived.`;
+  const changes = events.filter((event) => event.timestep <= frame.timestep
+    && event.kind === "lead").length;
+  const lost = state.startingPopulation - frame.agents.length;
+  commentary.textContent = `Timestep ${frame.timestep} of ${state.maxTimestep || frame.timestep}.`
+    + ` ${standing}.${beatText}`
+    + ` ${changes} lead change${changes === 1 ? "" : "s"} so far.`
+    + ` ${frame.agents.length} settlers alive of ${state.startingPopulation}, ${lost} lost.`
+    + ` Inequality, as a Gini coefficient, ${gini.toFixed(3)}.`
+    + " A hollow settler on the board has less than one timestep of food left.";
 }
 
 function currentIndex() {
