@@ -1,0 +1,18 @@
+{
+  "agentMovement": [1, 2],
+  "agentStartingSugar": [3, 6],
+  "agentSugarMetabolism": [1, 2],
+  "agentVision": [1, 2],
+  "environmentHeight": 5,
+  "environmentMaxSpice": 0,
+  "environmentMaxSugar": 4,
+  "environmentSpicePeaks": [],
+  "environmentSugarPeaks": [[1, 1, 4], [4, 3, 4]],
+  "environmentSugarRegrowRate": 1,
+  "environmentWidth": 6,
+  "headlessMode": true,
+  "logfile": "log.json",
+  "seed": 12345,
+  "startingAgents": 4,
+  "timesteps": 4
+}

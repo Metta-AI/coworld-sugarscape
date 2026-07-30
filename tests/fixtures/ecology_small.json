@@ -1,0 +1,22 @@
+{
+  "agentMovement": [3, 3],
+  "agentMovementMode": "radial",
+  "agentVision": [3, 3],
+  "agentVisionMode": "radial",
+  "environmentHeight": 5,
+  "environmentMaxSpice": 0,
+  "environmentMaxSugar": 4,
+  "environmentPollutionDiffusionDelay": 2,
+  "environmentPollutionDiffusionTimeframe": [0, 4],
+  "environmentSeasonalGrowbackDelay": 2,
+  "environmentSeasonInterval": 2,
+  "environmentSpicePeaks": [],
+  "environmentSugarPeaks": [[1, 1, 4]],
+  "environmentSugarRegrowRate": 1,
+  "environmentWidth": 5,
+  "environmentWraparound": true,
+  "headlessMode": true,
+  "seed": 12345,
+  "startingAgents": 0,
+  "timesteps": 4
+}

@@ -1,0 +1,9 @@
+{
+    "__README__": "Agent replacement with constant sugar growback (pgs. 32-33 of Growing Artificial Societies).",
+    "agentMaxAge": [60, 100],
+    "agentMovement": [1000, 1000],
+    "agentReplacements": 250,
+    "agentStartingSugar": [5, 25],
+    "seed": 12345,
+    "timesteps": 500
+}

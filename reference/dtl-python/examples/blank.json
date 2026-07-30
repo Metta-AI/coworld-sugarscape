@@ -1,0 +1,13 @@
+{
+    "__README__": "Bare minimum values for Sugarscape simulation provided here. Details can be found in the README.",
+    "agentLookaheadFactor": [1, 1],
+    "agentMaxAge": [60, 100],
+    "agentMovement": [1000, 1000],
+    "agentStartingSugar": [0, 0],
+    "agentSugarMetabolism": [0, 0],
+    "environmentMaxSugar": 0,
+    "environmentSugarRegrowRate": 0,
+    "seed": 12345,
+    "startingAgents": 500,
+    "timesteps": 500
+}

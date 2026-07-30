@@ -1,0 +1,14 @@
+{
+    "__README__": "Agent sugar collection with constant sugar growback and pollution (pgs. 45-50 of Growing Artificial Societies).",
+    "agentMaleToFemaleRatio": 1,
+    "agentMovement": [1000, 1000],
+    "agentStartingSugar": [3, 10],
+    "environmentPollutionDiffusionDelay": 1,
+    "environmentPollutionDiffusionTimeframe": [100, 500],
+    "environmentPollutionTimeframe": [50, 500],
+    "environmentSugarConsumptionPollutionFactor": 1,
+    "environmentSugarProductionPollutionFactor": 1,
+    "seed": 12345,
+    "startingAgents": 400,
+    "timesteps": 500
+}

@@ -41,6 +41,11 @@ htmlcov/
 .nox/
 coverage.xml
 *.cover
+.build/
+.nimcache/
+.nimble/
+tests/nim/test_*
+!tests/nim/test_*.nim
 
 # Type checkers / linters
 .mypy_cache/
