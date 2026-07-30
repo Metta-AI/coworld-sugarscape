@@ -25,7 +25,7 @@ const C = {
   ink: "#2a1f12",          // the brand line; NEVER pure black
   paper: "#f6ead2",        // warm off-white; NEVER pure white
   muted: "#a8977c",
-  dim: "#6f6250",
+  dim: "#8a7a62",   // lifted from #6f6250, which measured 3.3:1 on the panel
   border: "#4a3620",
   panel: "rgba(20,15,8,.86)",
   gold: "#e8a838",         // sugar — the world's own accent
@@ -41,10 +41,10 @@ const C = {
 // BOTH as a dot on the white plate and as a chip on the dark broadcast panels,
 // and each carries a redundant shape so the read never depends on hue alone.
 const SEATS = [
-  { color: "#f5504a", shape: "circle" },   // gui.py palette[0] #FA3232
-  { color: "#5a7cff", shape: "square" },   // gui.py palette[1] #3232FA
-  { color: "#3aae5a", shape: "triangle" }, // palette[2] #32FA32
-  { color: "#3ec6d8", shape: "diamond" },  // palette[3] #32FAFA
+  { color: "#f5504a" },   // gui.py palette[0] #FA3232
+  { color: "#5a7cff" },   // gui.py palette[1] #3232FA
+  { color: "#3aae5a" },   // palette[2] #32FA32
+  { color: "#3ec6d8" },   // palette[3] #32FAFA
 ];
 
 const F = { display: "Space Grotesk", mono: "IBM Plex Mono" };
@@ -135,30 +135,27 @@ const state = {
   stingerUntil: 0,
   stinger: null,
   hoverCell: -1,
+  // The overlay scales with the stage, so at the 640x360 embed everything in the
+  // rail shrinks by two thirds and a dozen small labels fall under 7px. Below
+  // this width the rail sheds detail and sizes up instead of scaling down.
+  compact: false,
 };
 
-const art = {};
-
-// ---------------------------------------------------------------------------
-// Assets
-// ---------------------------------------------------------------------------
-
-function loadImage(source) {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error("asset failed to decode"));
-    image.src = source;
-  });
+/** Scale a type size for the current density. Compact mode pairs this with
+ *  DROPPING content — sizing up alone would just overflow the panels. */
+function T(size) {
+  return state.compact ? Math.round(size * 1.28) : size;
 }
 
-async function loadAssets() {
-  const names = [
-    "endcard",
-  ];
-  const images = await Promise.all(names.map((name) => loadImage(ART[name])));
-  names.forEach((name, index) => { art[name] = images[index]; });
+function measureDensity() {
+  const width = document.getElementById("stage").getBoundingClientRect().width;
+  const compact = width > 0 && width < 900;
+  if (compact === state.compact) return;
+  state.compact = compact;
+  standingsSignature = "";
+  beatsSignature = "";
 }
+
 
 // ---------------------------------------------------------------------------
 // Frame ingestion + derived model
@@ -521,7 +518,7 @@ function text(content, x, y, options = {}) {
 
 function eyebrow(content, x, y) {
   return text(content.toUpperCase(), x, y, {
-    size: 21, weight: 700, fill: C.muted, spacing: 2.6, outline: 3,
+    size: T(21), weight: 700, fill: C.muted, spacing: T(21) > 24 ? 2.0 : 2.6, outline: 3,
   });
 }
 
@@ -530,22 +527,15 @@ function panel(x, y, width, height, radius = 10) {
     + `fill="${C.panel}" stroke="${C.border}" stroke-width="1.5"/>`;
 }
 
+/** The original draws every agent as a plain oval, so the board carries no shape
+ *  encoding and neither does the HUD - a legend teaching a key the field does not
+ *  use is worse than none. Identity is the seat colour plus the name and rank,
+ *  which is the strongest redundancy available; red and blue also stay separable
+ *  under every common colour-vision deficiency. */
 function seatMark(x, y, slot, radius) {
   const seat = SEATS[slot] ?? SEATS[0];
-  const stroke = `stroke="${C.ink}" stroke-width="1.8"`;
-  if (seat.shape === "square") {
-    return `<rect x="${x - radius}" y="${y - radius}" width="${radius * 2}" `
-      + `height="${radius * 2}" rx="${radius * 0.35}" fill="${seat.color}" ${stroke}/>`;
-  }
-  if (seat.shape === "triangle") {
-    const points = `${x},${y - radius} ${x + radius},${y + radius * 0.8} ${x - radius},${y + radius * 0.8}`;
-    return `<polygon points="${points}" fill="${seat.color}" ${stroke}/>`;
-  }
-  if (seat.shape === "diamond") {
-    const points = `${x},${y - radius} ${x + radius},${y} ${x},${y + radius} ${x - radius},${y}`;
-    return `<polygon points="${points}" fill="${seat.color}" ${stroke}/>`;
-  }
-  return `<circle cx="${x}" cy="${y}" r="${radius}" fill="${seat.color}" ${stroke}/>`;
+  return `<circle cx="${x}" cy="${y}" r="${radius}" fill="${seat.color}" `
+    + `stroke="${C.ink}" stroke-width="1.6"/>`;
 }
 
 function scorebug(frame) {
@@ -662,7 +652,7 @@ function raceChart(frame, x, y, width, height) {
     leadCount === 0 ? "no lead change yet"
       : `${leadCount} lead change${leadCount === 1 ? "" : "s"}`,
     x + width - 18, y + 26,
-    { size: 15, weight: 600, family: F.mono, fill: C.gold, anchor: "end", spacing: 1 },
+    { size: T(15), weight: 600, family: F.mono, fill: C.gold, anchor: "end", spacing: 1 },
   );
 
   if (frame.slots.length !== 2) {
@@ -671,7 +661,7 @@ function raceChart(frame, x, y, width, height) {
     markup += `<line x1="${left}" y1="${top + plotH}" x2="${left + plotW}" y2="${top + plotH}" `
       + `stroke="rgba(246,234,210,.16)" stroke-width="1"/>`;
     markup += text(format(state.maxWealth), left - 10, top + 6, {
-      size: 18, weight: 500, family: F.mono, fill: C.dim, anchor: "end", outline: 2.4,
+      size: T(18), weight: 500, family: F.mono, fill: C.dim, anchor: "end", outline: 2.4,
     });
     frame.slots.forEach((_, slot) => {
       const points = visible
@@ -682,7 +672,7 @@ function raceChart(frame, x, y, width, height) {
         + `stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`;
     });
     markup += text("total wealth", left + plotW / 2, top + plotH + 26, {
-      size: 18, weight: 500, family: F.mono, fill: C.dim, anchor: "middle", outline: 2.4,
+      size: T(18), weight: 500, family: F.mono, fill: C.dim, anchor: "middle", outline: 2.4,
     });
     return markup;
   }
@@ -735,22 +725,28 @@ function raceChart(frame, x, y, width, height) {
   // that half - so it contradicted the scorebug whenever A was behind.
   const axisEnd = (slot, baseline) => seatMark(left + 12, baseline - 5, slot, 6)
     + text(`+${format(peak)}`, left + 26, baseline, {
-      size: 17, weight: 600, family: F.mono, fill: SEATS[slot].color, outline: 2.8,
+      size: T(17), weight: 600, family: F.mono, fill: SEATS[slot].color, outline: 2.8,
     });
   markup += axisEnd(0, top + 18);
   markup += axisEnd(1, top + plotH - 8);
-  markup += text("level", left - 10, zeroY + 5, {
-    size: 18, weight: 500, family: F.mono, fill: C.dim, anchor: "end", outline: 2.4,
-  });
-  markup += text("t0", left, y + height - 16, {
-    size: 18, weight: 500, family: F.mono, fill: C.dim, outline: 2.4,
-  });
-  markup += text(`t${scheduled}`, left + plotW, y + height - 16, {
-    size: 18, weight: 500, family: F.mono, fill: C.dim, anchor: "end", outline: 2.4,
-  });
-  markup += text("lead, in sugar", left + plotW / 2, y + height - 16, {
-    size: 18, weight: 500, family: F.mono, fill: C.dim, anchor: "middle", outline: 2.4,
-  });
+  if (!state.compact) {
+    markup += text("level", left - 10, zeroY + 5, {
+      size: 18, weight: 500, family: F.mono, fill: C.dim, anchor: "end", outline: 2.4,
+    });
+  }
+  // At the embed floor these land under 7px, so the chart keeps its shape and
+  // its headline count and drops the annotations rather than printing a smear.
+  if (!state.compact) {
+    markup += text("t0", left, y + height - 16, {
+      size: 18, weight: 500, family: F.mono, fill: C.dim, outline: 2.4,
+    });
+    markup += text(`t${scheduled}`, left + plotW, y + height - 16, {
+      size: 18, weight: 500, family: F.mono, fill: C.dim, anchor: "end", outline: 2.4,
+    });
+    markup += text("lead, in sugar", left + plotW / 2, y + height - 16, {
+      size: 18, weight: 500, family: F.mono, fill: C.dim, anchor: "middle", outline: 2.4,
+    });
+  }
   return markup;
 }
 
@@ -779,49 +775,87 @@ function eventFeed(frame, x, y, width, height) {
   let markup = panel(x, y, width, height);
   markup += eyebrow("What just happened", x + 18, y + 26);
 
-  const recent = coalesce(events.filter((event) => event.timestep <= frame.timestep))
-    .slice(-4)
-    .reverse();
+  const seen = events.filter((event) => event.timestep <= frame.timestep);
+  const limit = state.compact ? 3 : 4;
+  // Keep the most recent lead change even when routine starvation would push it
+  // out: a lead change is the beat this match is actually about.
+  const lastLead = [...seen].reverse().find((event) => event.kind === "lead");
+  let recent = coalesce(seen).slice(-limit).reverse();
+  if (lastLead && !recent.some((event) => event.kind === "lead")) {
+    recent = [...recent.slice(0, limit - 1), { ...lastLead }];
+  }
 
-  if (recent.length === 0) {
+  let rowY = y + 58;
+  const rowStep = state.compact ? 64 : 54;
+  const indent = state.compact ? 124 : 128;
+
+  // A live row, always. Without it the panel could sit on a beat from nine
+  // timesteps ago under a heading that promises the present.
+  const rows = ranked(frame);
+  const margin = rows[0].score - (rows[1]?.score ?? 0);
+  const quiet = seen.length === 0
+    || frame.timestep - (seen.at(-1).until ?? seen.at(-1).timestep) > 2;
+  if (quiet) {
+    markup += text(`t${frame.timestep}`, x + 18, rowY + 15, {
+      size: T(19), weight: 600, family: F.mono, fill: C.gold,
+    });
+    markup += `<rect x="${x + indent - 16}" y="${rowY - 2}" width="4" height="${T(24)}" rx="2" `
+      + `fill="${C.muted}"/>`;
+    markup += text(
+      margin === 0
+        ? (state.compact
+          ? `level · ${frame.agents.length} alive`
+          : `level at ${format(rows[0].score)} — ${frame.agents.length} settlers foraging`)
+        : (state.compact
+          ? `${rows[0].name} +${format(margin)} · ${frame.agents.length} alive`
+          : `${rows[0].name} leads by ${format(margin)} — ${frame.agents.length} settlers foraging`),
+      x + indent, rowY + 16,
+      { size: T(25), weight: 500, fill: C.paper },
+    );
+    rowY += rowStep;
+    recent = recent.slice(0, limit - 1);
+  }
+
+  if (recent.length === 0 && !quiet) {
     markup += text("The settlers spread out across the lattice.", x + 18, y + 62, {
-      size: 24, weight: 500, fill: C.muted,
+      size: T(24), weight: 500, fill: C.muted,
     });
     return markup;
   }
 
-  let rowY = y + 58;
   for (const event of recent) {
     const fresh = (event.until ?? event.timestep) === frame.timestep;
     const stamp = event.merged && event.until > event.since
       ? `t${event.since}–${event.until}`
       : `t${event.timestep}`;
     markup += text(stamp, x + 18, rowY + 15, {
-      size: 19, weight: 600, family: F.mono, fill: fresh ? C.gold : C.dim,
+      size: T(19), weight: 600, family: F.mono, fill: fresh ? C.gold : C.dim,
     });
     if (event.kind === "death") {
-      markup += `<rect x="${x + 112}" y="${rowY - 2}" width="4" height="24" rx="2" fill="${C.loss}"/>`;
-      const detail = event.merged
-        ? "the mountain thins the edges"
-        : event.bySlot
-          .filter(([slot]) => slot >= 0)
-          .map(([slot, count]) => `${count} ${frame.slots[slot]?.name ?? `slot ${slot}`}`)
-          .join(", ");
+      markup += `<rect x="${x + indent - 16}" y="${rowY - 2}" width="4" height="${T(24)}" rx="2" fill="${C.loss}"/>`;
+      const detail = state.compact
+        ? ""
+        : event.merged
+          ? "the mountain thins the edges"
+          : event.bySlot
+            .filter(([slot]) => slot >= 0)
+            .map(([slot, count]) => `${count} ${frame.slots[slot]?.name ?? `slot ${slot}`}`)
+            .join(", ");
       markup += text(
         `${event.count} starved${detail ? ` — ${detail}` : ""}`,
-        x + 128, rowY + 16,
-        { size: 25, weight: 500, fill: fresh ? C.paper : C.muted },
+        x + indent, rowY + 16,
+        { size: T(25), weight: 500, fill: fresh ? C.paper : C.muted },
       );
     } else {
-      markup += `<rect x="${x + 112}" y="${rowY - 2}" width="4" height="24" rx="2" `
+      markup += `<rect x="${x + indent - 16}" y="${rowY - 2}" width="4" height="${T(24)}" rx="2" `
         + `fill="${SEATS[event.slot].color}"/>`;
       markup += text(
         `${event.name} takes the lead`,
-        x + 128, rowY + 16,
-        { size: 25, weight: 700, fill: fresh ? C.paper : C.muted },
+        x + indent, rowY + 16,
+        { size: T(25), weight: 700, fill: fresh ? C.paper : C.muted },
       );
     }
-    rowY += 54;
+    rowY += rowStep;
   }
   return markup;
 }
@@ -842,15 +876,20 @@ function emergence(frame, x, y, width, height) {
   const size = height - 60;
   const curveX = x + 18;
   const curveY = y + 42;
+  // The Lorenz curve is the signature chart but the first thing to go at the
+  // embed floor: unlabelled and 60px wide it carries nothing a viewer can read.
+  const showCurve = !state.compact;
   const wealth = frame.agents
     .map((agent) => Math.max(0, agent.sugar + agent.spice))
     .sort((first, second) => first - second);
   const total = wealth.reduce((sum, value) => sum + value, 0);
-  markup += `<rect x="${curveX}" y="${curveY}" width="${size}" height="${size}" `
-    + `fill="rgba(246,234,210,.04)" stroke="rgba(246,234,210,.12)" stroke-width="1"/>`;
-  markup += `<line x1="${curveX}" y1="${curveY + size}" x2="${curveX + size}" y2="${curveY}" `
-    + `stroke="rgba(246,234,210,.22)" stroke-width="1" stroke-dasharray="4 4"/>`;
-  if (total > 0) {
+  if (showCurve) {
+    markup += `<rect x="${curveX}" y="${curveY}" width="${size}" height="${size}" `
+      + `fill="rgba(246,234,210,.04)" stroke="rgba(246,234,210,.12)" stroke-width="1"/>`;
+    markup += `<line x1="${curveX}" y1="${curveY + size}" x2="${curveX + size}" y2="${curveY}" `
+      + `stroke="rgba(246,234,210,.22)" stroke-width="1" stroke-dasharray="4 4"/>`;
+  }
+  if (showCurve && total > 0) {
     let cumulative = 0;
     const points = [`${curveX},${curveY + size}`];
     wealth.forEach((value, index) => {
@@ -862,32 +901,36 @@ function emergence(frame, x, y, width, height) {
     });
     markup += `<polyline points="${points.join(" ")}" fill="none" stroke="${C.gold}" stroke-width="2.5"/>`;
   }
-  markup += text("wealth share", curveX + size / 2, curveY + size + 20, {
-    size: 17, weight: 500, family: F.mono, fill: C.dim, anchor: "middle", outline: 2.4,
-  });
+  if (showCurve) {
+    markup += text("poorest → richest", curveX + size / 2, curveY + size + 20,
+      { size: 17, weight: 500, family: F.mono, fill: C.dim, anchor: "middle", outline: 2.4 });
+  }
 
   // Two readouts, not three: the live population is already on both scorebug
   // chips, so repeating it as "survivors" only crowded the panel. Pairing it
   // with the capacity instead is the reading that means something - the world
-  // deciding how many settlers it will carry.
-  const readX = curveX + size + 26;
+  // deciding how many settlers it will carry. The capacity is phrased rather
+  // than printed bare, because "57" beside "38 alive of 64" read as a
+  // contradiction rather than as a ceiling.
+  const readX = state.compact ? curveX : curveX + size + 26;
   const rows = [
-    ["Gini", gini.toFixed(3), gini > 0.4 ? "sharply unequal" : gini > 0.28 ? "unequal" : "even"],
+    ["Gini", gini.toFixed(3),
+      gini > 0.4 ? "sharply unequal" : gini > 0.28 ? "unequal" : "fairly even"],
     ["Carrying capacity", format(capacity),
-      `${population} alive of ${state.startingPopulation}`],
+      `settlers the world will carry · ${population} alive`],
   ];
-  let readY = curveY + 26;
+  let readY = curveY + (state.compact ? 6 : 26);
   for (const [label, value, note] of rows) {
     markup += text(label.toUpperCase(), readX, readY, {
-      size: 18, weight: 700, fill: C.muted, spacing: 1.8, outline: 2.6,
+      size: T(18), weight: 700, fill: C.muted, spacing: 1.8, outline: 2.6,
     });
-    markup += text(value, readX, readY + 38, {
-      size: 40, weight: 600, family: F.mono, fill: C.paper,
+    markup += text(value, readX, readY + T(38), {
+      size: T(40), weight: 600, family: F.mono, fill: C.paper,
     });
-    markup += text(note, readX, readY + 62, {
-      size: 19, weight: 500, fill: C.dim,
+    markup += text(note, readX, readY + T(62), {
+      size: T(19), weight: 500, fill: C.dim,
     });
-    readY += 96;
+    readY += state.compact ? 132 : 96;
   }
   return markup;
 }
@@ -930,30 +973,26 @@ function endCard(frame) {
   const context = `${survivors} of ${state.startingPopulation} settlers survived the mountain;`
     + ` wealth ended at a Gini of ${gini.toFixed(2)}.`;
 
-  const cardW = 1180;
+  const cardW = state.compact ? 1500 : 1180;
   const cardH = 580;
   const x = (W - cardW) / 2;
   const y = (H - cardH) / 2;
 
   let markup = `<g class="endcard">`;
-  markup += `<rect x="0" y="0" width="${W}" height="${H}" fill="rgba(10,7,4,.93)"/>`;
-  markup += `<clipPath id="endcard-clip"><rect x="${x}" y="${y}" width="${cardW}" height="${cardH}" rx="16"/></clipPath>`;
-  markup += `<g clip-path="url(#endcard-clip)">`
-    + `<image href="${ART.endcard}" x="${x}" y="${y - 60}" width="${cardW}" height="${cardH + 160}" `
-    + `preserveAspectRatio="xMidYMid slice" opacity=".55"/>`
-    + `<rect x="${x}" y="${y}" width="${cardW}" height="${cardH}" fill="rgba(14,10,5,.66)"/>`
-    + `</g>`;
+  markup += `<rect x="0" y="0" width="${W}" height="${H}" fill="rgba(10,7,4,.90)"/>`;
+  markup += `<rect x="${x}" y="${y}" width="${cardW}" height="${cardH}" rx="16" `
+    + `fill="rgba(16,12,6,.97)"/>`;
   markup += `<rect x="${x}" y="${y}" width="${cardW}" height="${cardH}" rx="16" fill="none" `
     + `stroke="${C.gold}" stroke-width="2.5"/>`;
 
   markup += text("SUGARSCAPE", x + 56, y + 54, {
-    size: 21, weight: 700, fill: C.muted, spacing: 4.4,
+    size: T(21), weight: 700, fill: C.muted, spacing: 4.4,
   });
   markup += eyebrow(tie ? "Final — level" : "Final", x + 56, y + 84);
   markup += seatMark(x + 68, y + 140, winner.index, 21);
-  markup += text(winner.name, x + 104, y + 154, { size: 62, weight: 700, fill: C.paper });
-  markup += text(verdict, x + 56, y + 212, { size: 27, weight: 500, fill: C.gold });
-  markup += text(context, x + 56, y + 250, { size: 22, weight: 500, fill: C.muted });
+  markup += text(winner.name, x + 104, y + 154, { size: T(62), weight: 700, fill: C.paper });
+  markup += text(verdict, x + 56, y + 212, { size: T(27), weight: 500, fill: C.gold });
+  markup += text(context, x + 56, y + 250, { size: T(22), weight: 500, fill: C.muted });
 
   let rowY = y + 306;
   for (const [rank, row] of rows.entries()) {
@@ -964,17 +1003,17 @@ function endCard(frame) {
       size: 28, weight: 600, family: F.mono, fill: C.dim, anchor: "middle",
     });
     markup += seatMark(x + 134, rowY + 33, row.index, 12);
-    markup += text(row.name, x + 162, rowY + 42, { size: 28, weight: 700, fill: C.paper });
+    markup += text(row.name, x + 162, rowY + 42, { size: T(28), weight: 700, fill: C.paper });
     markup += text(`${row.population} alive`, x + cardW - 250, rowY + 42, {
       size: 20, weight: 500, family: F.mono, fill: C.muted, anchor: "end",
     });
     markup += text(format(row.score), x + cardW - 92, rowY + 44, {
-      size: 34, weight: 700, family: F.mono, fill: leader ? C.gold : C.paper, anchor: "end",
+      size: T(34), weight: 700, family: F.mono, fill: leader ? C.gold : C.paper, anchor: "end",
     });
     rowY += 78;
   }
   markup += text("Score is the final living population's total sugar plus spice.",
-    x + 56, y + cardH - 26, { size: 20, weight: 500, fill: C.dim });
+    x + 56, y + cardH - 26, { size: T(20), weight: 500, fill: C.dim });
   markup += `</g>`;
   return markup;
 }
@@ -1101,6 +1140,8 @@ function tick() {
       }
     }
   }
+
+  measureDensity();
 
   const index = currentIndex();
   if (index !== state.lastDrawnIndex) {
@@ -1271,12 +1312,6 @@ async function loadArtifact(url) {
 }
 
 async function boot() {
-  try {
-    await loadAssets();
-  } catch (error) {
-    fail("The broadcast artwork failed to load; this build may be corrupt.");
-    return;
-  }
   setPlaying(true);
   lastTick = performance.now();
   // A timer, not requestAnimationFrame: a backgrounded or headless tab throttles
