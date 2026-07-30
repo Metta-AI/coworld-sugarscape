@@ -1,0 +1,19 @@
+{
+  "agentLeader": true,
+  "agentMovement": [1, 1],
+  "agentSpiceMetabolism": [1, 1],
+  "agentStartingSpice": [5, 5],
+  "agentStartingSugar": [5, 5],
+  "agentSugarMetabolism": [1, 1],
+  "agentVision": [1, 1],
+  "environmentHeight": 3,
+  "environmentMaxSpice": 1,
+  "environmentMaxSugar": 1,
+  "environmentSpicePeaks": [[1, 1, 1]],
+  "environmentSugarPeaks": [[1, 1, 1]],
+  "environmentWidth": 3,
+  "headlessMode": true,
+  "seed": 24680,
+  "startingAgents": 2,
+  "timesteps": 4
+}

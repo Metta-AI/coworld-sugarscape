@@ -4,11 +4,11 @@ import sugarscape/configuration
 import sugarscape/simulation
 
 suite "DTL base log compatibility":
-  test "native JSON log is byte-identical to the pinned Python oracle":
+  proc checkOracle(name: string) =
     let
-      configPath = "tests/fixtures/base_small.json"
-      oraclePath = "tests/fixtures/base_small.oracle.json"
-      outputPath = getTempDir() / "coworld-sugarscape-base-native.json"
+      configPath = "tests/fixtures/" & name & ".json"
+      oraclePath = "tests/fixtures/" & name & ".oracle.json"
+      outputPath = getTempDir() / ("coworld-sugarscape-" & name & ".json")
       config = loadConfiguration(configPath)
     if fileExists(outputPath):
       removeFile(outputPath)
@@ -16,3 +16,9 @@ suite "DTL base log compatibility":
     simulation.runSimulation(outputPath)
     check readFile(outputPath) == readFile(oraclePath)
     removeFile(outputPath)
+
+  test "base JSON log is byte-identical to the pinned Python oracle":
+    checkOracle("base_small")
+
+  test "dual-resource JSON log is byte-identical to the pinned Python oracle":
+    checkOracle("spice_small")

@@ -1,0 +1,17 @@
+[
+  [
+    {"sugar": 1, "spice": 7},
+    {"sugar": 2, "spice": 8},
+    {"sugar": 3, "spice": 9}
+  ],
+  [
+    {"sugar": 4, "spice": 10},
+    {"sugar": 5, "spice": 11},
+    {"sugar": 6, "spice": 12}
+  ],
+  [
+    {"sugar": 7, "spice": 13},
+    {"sugar": 8, "spice": 14},
+    {"sugar": 9, "spice": 15}
+  ]
+]

@@ -16,6 +16,7 @@ type
     sugar*, spice*: int64
     sugarLastProduced*, spiceLastProduced*: int64
     pollution*, pollutionFlux*: float64
+    pollutionIsFloat*, pollutionFluxIsFloat*: bool
     agent*: int
     neighbors*: array[8, int]
     neighborCount*: int
@@ -29,6 +30,7 @@ type
     neighborhoodMode*: string
     visionMode*, movementMode*: string
     maxCellDistance*: int
+    maxCombatLoot*: float64
     sugarRegrowRate*, spiceRegrowRate*: int64
     seasonInterval*: int
     seasonalGrowbackDelay*, seasonalGrowbackCountdown*: int
@@ -39,6 +41,11 @@ type
     sugarProductionPollutionFactor*: float64
     spiceConsumptionPollutionFactor*: float64
     spiceProductionPollutionFactor*: float64
+    sugarConsumptionPollutionFactorIsFloat*: bool
+    sugarProductionPollutionFactorIsFloat*: bool
+    spiceConsumptionPollutionFactorIsFloat*: bool
+    spiceProductionPollutionFactorIsFloat*: bool
+    universalSpiceIncomeInterval*, universalSugarIncomeInterval*: int
     timestep*: int
     cells*: seq[Cell]
     ## Indexed by cell ID, then integer distance. Entry order is observable:
@@ -327,8 +334,11 @@ proc doCellUpdate(world: var Environment) =
       for index in 0 ..< cell.neighborCount:
         pollution += world.cells[cell.neighbors[index]].pollution
       cell.pollutionFlux = pollution / float64(cell.neighborCount)
+      # Python 3 true division always produces a float, including 0 / n.
+      cell.pollutionFluxIsFloat = true
     for cell in world.cells.mitems:
       cell.pollution = cell.pollutionFlux
+      cell.pollutionIsFloat = cell.pollutionFluxIsFloat
 
 proc doTimestep*(world: var Environment, timestep: int) =
   world.timestep = timestep
@@ -337,8 +347,17 @@ proc doTimestep*(world: var Environment, timestep: int) =
   world.doCellUpdate()
 
 proc initEnvironment*(config: JsonNode): Environment =
-  result.width = config["environmentWidth"].getInt()
-  result.height = config["environmentHeight"].getInt()
+  let loadedEnvironment =
+    if config["environmentFile"].kind == JString:
+      parseJson(readFile(config["environmentFile"].getStr()))
+    else:
+      nil
+  if loadedEnvironment != nil:
+    result.height = loadedEnvironment.len
+    result.width = loadedEnvironment[0].len
+  else:
+    result.width = config["environmentWidth"].getInt()
+    result.height = config["environmentHeight"].getInt()
   result.equator =
     if config["environmentEquator"].getInt() >= 0:
       config["environmentEquator"].getInt()
@@ -349,6 +368,8 @@ proc initEnvironment*(config: JsonNode): Environment =
   result.visionMode = config["agentVisionMode"].getStr()
   result.movementMode = config["agentMovementMode"].getStr()
   result.sugarRegrowRate = int64(config["environmentSugarRegrowRate"].getInt())
+  result.maxCombatLoot =
+    config["environmentMaxCombatLoot"].getFloat()
   result.spiceRegrowRate = int64(config["environmentSpiceRegrowRate"].getInt())
   result.seasonInterval = config["environmentSeasonInterval"].getInt()
   result.seasonalGrowbackDelay =
@@ -367,12 +388,24 @@ proc initEnvironment*(config: JsonNode): Environment =
     config["environmentPollutionTimeframe"][1].getInt()
   result.sugarConsumptionPollutionFactor =
     config["environmentSugarConsumptionPollutionFactor"].getFloat()
+  result.sugarConsumptionPollutionFactorIsFloat =
+    config["environmentSugarConsumptionPollutionFactor"].kind == JFloat
   result.sugarProductionPollutionFactor =
     config["environmentSugarProductionPollutionFactor"].getFloat()
+  result.sugarProductionPollutionFactorIsFloat =
+    config["environmentSugarProductionPollutionFactor"].kind == JFloat
   result.spiceConsumptionPollutionFactor =
     config["environmentSpiceConsumptionPollutionFactor"].getFloat()
+  result.spiceConsumptionPollutionFactorIsFloat =
+    config["environmentSpiceConsumptionPollutionFactor"].kind == JFloat
   result.spiceProductionPollutionFactor =
     config["environmentSpiceProductionPollutionFactor"].getFloat()
+  result.spiceProductionPollutionFactorIsFloat =
+    config["environmentSpiceProductionPollutionFactor"].kind == JFloat
+  result.universalSpiceIncomeInterval =
+    config["environmentUniversalSpiceIncomeInterval"].getInt()
+  result.universalSugarIncomeInterval =
+    config["environmentUniversalSugarIncomeInterval"].getInt()
   result.cells = newSeq[Cell](result.width * result.height)
 
   for x in 0 ..< result.width:
@@ -388,24 +421,34 @@ proc initEnvironment*(config: JsonNode): Environment =
           wet
         else:
           dry
+      if loadedEnvironment != nil:
+        # DTL passes the serialized spice value as Cell.maxSugar and sugar as
+        # Cell.maxSpice. Preserve that observable upstream argument swap.
+        result.cells[id].maxSugar =
+          loadedEnvironment[x][y]["spice"].getInt()
+        result.cells[id].sugar = result.cells[id].maxSugar
+        result.cells[id].maxSpice =
+          loadedEnvironment[x][y]["sugar"].getInt()
+        result.cells[id].spice = result.cells[id].maxSpice
 
-  let radius = int(ceil(sqrt(2.0 * float64(result.height + result.width))))
-  for peak in config["environmentSugarPeaks"]:
-    result.addResourcePeak(
-      peak[0].getInt(),
-      peak[1].getInt(),
-      radius,
-      peak[2].getInt(),
-      true,
-    )
-  for peak in config["environmentSpicePeaks"]:
-    result.addResourcePeak(
-      peak[0].getInt(),
-      peak[1].getInt(),
-      radius,
-      peak[2].getInt(),
-      false,
-    )
+  if loadedEnvironment == nil:
+    let radius = int(ceil(sqrt(2.0 * float64(result.height + result.width))))
+    for peak in config["environmentSugarPeaks"]:
+      result.addResourcePeak(
+        peak[0].getInt(),
+        peak[1].getInt(),
+        radius,
+        peak[2].getInt(),
+        true,
+      )
+    for peak in config["environmentSpicePeaks"]:
+      result.addResourcePeak(
+        peak[0].getInt(),
+        peak[1].getInt(),
+        radius,
+        peak[2].getInt(),
+        false,
+      )
 
   result.findCellNeighbors()
   result.findCellRanges(config)

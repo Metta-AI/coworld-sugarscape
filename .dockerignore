@@ -1,0 +1,8 @@
+*
+!nimby.lock
+!config.nims
+!src/
+!src/**
+!players/
+!players/greedy/
+!players/greedy/greedy.nim

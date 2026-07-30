@@ -1,4 +1,4 @@
-import std/unittest
+import std/[json, unittest]
 
 import sugarscape/[configuration, simulation]
 
@@ -60,3 +60,35 @@ suite "DTL base simulation compatibility":
         check agent.age == target.age
       if timestep < 4:
         sim.doTimestep()
+
+  test "a population policy receives legal ranked moves sequentially":
+    let config = loadConfiguration("tests/fixtures/base_small.json")
+    var
+      sim = initSimulation(config)
+      decisions = 0
+    let policy: PopulationPolicy = proc(
+        snapshot: Simulation,
+        agentId: int,
+        candidates: openArray[MoveCandidate],
+        greedyCell: int,
+    ): int =
+      check snapshot.timestep == 1
+      check snapshot.agents[agentId].alive
+      check candidates.len > 0
+      check candidates[0].cell == greedyCell
+      inc decisions
+      candidates[^1].cell
+    sim.doTimestep(policy)
+    check decisions == 4
+
+  test "seed -1 is replaced with a replayable nonnegative seed":
+    var config = loadConfiguration("tests/fixtures/base_small.json")
+    config["seed"] = newJInt(-1)
+    let first = initSimulation(config)
+    check first.config["seed"].getBiggestInt() >= 0
+    let replay = initSimulation(first.config)
+    check replay.activeAgents == first.activeAgents
+    for id in first.activeAgents:
+      check replay.agents[id].cell == first.agents[id].cell
+      check replay.agents[id].sugar == first.agents[id].sugar
+      check replay.agents[id].spice == first.agents[id].spice

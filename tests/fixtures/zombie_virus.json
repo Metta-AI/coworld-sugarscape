@@ -1,0 +1,18 @@
+{
+  "agentMovement": [1, 2],
+  "agentStartingSugar": [20, 25],
+  "agentSugarMetabolism": [1, 2],
+  "agentVision": [1, 2],
+  "diseaseList": ["zombieVirus"],
+  "environmentSpicePeaks": [],
+  "environmentHeight": 8,
+  "environmentMaxSugar": 4,
+  "environmentSugarPeaks": [[2, 2, 4], [6, 5, 4]],
+  "environmentWidth": 8,
+  "headlessMode": true,
+  "seed": 112233,
+  "startingAgents": 8,
+  "startingDiseases": 1,
+  "startingDiseasesPerAgent": [0, 0],
+  "timesteps": 8
+}

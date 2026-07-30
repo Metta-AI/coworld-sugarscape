@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Sugarscape Observatory</title>
+  <style>
+    :root { color-scheme: dark; --ink:#f5eddc; --muted:#a89f91; --panel:#171713; --line:#343029; }
+    * { box-sizing:border-box }
+    body { margin:0; background:#0d0d0b; color:var(--ink); font:14px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace }
+    header { display:flex; align-items:baseline; gap:20px; padding:16px 22px; border-bottom:1px solid var(--line) }
+    h1 { margin:0; font:600 18px/1 ui-sans-serif,system-ui; letter-spacing:.08em; text-transform:uppercase }
+    #status { color:#e2b659 }
+    main { display:grid; grid-template-columns:minmax(320px,1fr) 310px; gap:18px; padding:18px; min-height:calc(100vh - 58px) }
+    canvas { width:100%; aspect-ratio:1; image-rendering:pixelated; background:#050504; border:1px solid var(--line) }
+    aside { display:flex; flex-direction:column; gap:14px }
+    section { background:var(--panel); border:1px solid var(--line); padding:14px }
+    h2 { margin:0 0 12px; color:var(--muted); font-size:11px; letter-spacing:.12em; text-transform:uppercase }
+    dl { display:grid; grid-template-columns:1fr auto; gap:7px 14px; margin:0 }
+    dt { color:var(--muted) } dd { margin:0; text-align:right }
+    .legend { display:grid; grid-template-columns:12px 1fr; gap:7px 9px; align-items:center }
+    .dot { width:10px; height:10px; border-radius:50% }
+    @media (max-width:800px) { main { grid-template-columns:1fr } }
+  </style>
+</head>
+<body>
+  <header><h1>Sugarscape Observatory</h1><span id="status">connecting</span></header>
+  <main>
+    <canvas id="world" width="900" height="900"></canvas>
+    <aside>
+      <section><h2>Episode</h2><dl id="stats"></dl></section>
+      <section><h2>Populations</h2><div class="legend" id="legend"></div></section>
+      <section><h2>Reading the world</h2><p style="color:var(--muted);margin:0">Gold is sugar, violet is spice, and brighter cells hold more resources. Circles are agents, coloured by the policy population that controls their movement.</p></section>
+    </aside>
+  </main>
+<script>
+const canvas=document.querySelector("#world"),ctx=canvas.getContext("2d");
+const statusEl=document.querySelector("#status"),statsEl=document.querySelector("#stats"),legendEl=document.querySelector("#legend");
+let frame=null;
+const colors=["#f06449","#35b9c7","#a48be0","#f1c75b","#70c36b","#e96ba8","#5c8ee6","#e08d42"];
+function render(){
+  if(!frame)return;
+  const {width:w,height:h,cells,agents}=frame, sx=canvas.width/w, sy=canvas.height/h;
+  ctx.fillStyle="#050504";ctx.fillRect(0,0,canvas.width,canvas.height);
+  for(let i=0;i<cells.length;i++){const [s,p]=cells[i],x=Math.floor(i/h),y=i%h,m=Math.min(1,(s+p)/10);
+    const r=Math.round(30+190*(s/(s+p||1))*m),b=Math.round(25+170*(p/(s+p||1))*m),g=Math.round(22+75*m);
+    ctx.fillStyle=`rgb(${r},${g},${b})`;ctx.fillRect(x*sx,y*sy,Math.ceil(sx),Math.ceil(sy));
+  }
+  for(const a of agents){const x=Math.floor(a.cell/h),y=a.cell%h;ctx.beginPath();ctx.arc((x+.5)*sx,(y+.5)*sy,Math.max(2,Math.min(sx,sy)*.38),0,Math.PI*2);
+    ctx.fillStyle=colors[(a.slot<0?colors.length-1:a.slot)%colors.length];ctx.fill();ctx.strokeStyle="#111";ctx.lineWidth=1;ctx.stroke();
+  }
+  const s=frame.stats||{}, shown=[["timestep",frame.timestep],["population",agents.length],["mean wealth",s.meanWealth],["gini",s.giniCoefficient],["mean happiness",s.meanHappiness],["carrying capacity",s.carryingCapacity]];
+  statsEl.innerHTML=shown.filter(x=>x[1]!==undefined).map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join("");
+  legendEl.innerHTML=(frame.slots||[]).map((slot,i)=>`<span class="dot" style="background:${colors[i%colors.length]}"></span><span>${slot.name||"population "+(i+1)}</span>`).join("");
+}
+function connect(){
+  const protocol=location.protocol==="https:"?"wss":"ws",socket=new WebSocket(`${protocol}://${location.host}/global`);
+  socket.onopen=()=>statusEl.textContent="live";
+  socket.onmessage=e=>{frame=JSON.parse(e.data);render()};
+  socket.onclose=()=>{statusEl.textContent="reconnecting";setTimeout(connect,1000)};
+  socket.onerror=()=>socket.close();
+}
+connect();
+</script>
+</body>
+</html>

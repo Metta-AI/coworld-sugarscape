@@ -18,3 +18,9 @@ suite "CPython json.dumps compatibility":
     check pythonJson(%1e-4) == "0.0001"
     check pythonJson(%1e15) == "1000000000000000.0"
     check pythonJson(%1e16) == "1e+16"
+
+  test "Python integers wider than int64 remain unquoted":
+    let value = pythonIntegerNode("100000000000000000000")
+
+    check pythonJson(value) == "100000000000000000000"
+    check pythonString(value) == "100000000000000000000"

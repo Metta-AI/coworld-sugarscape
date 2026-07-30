@@ -1,0 +1,21 @@
+{
+  "agentMovement": [1, 2],
+  "agentSpiceMetabolism": [1, 2],
+  "agentStartingSpice": [3, 6],
+  "agentStartingSugar": [3, 6],
+  "agentSugarMetabolism": [1, 2],
+  "agentVision": [1, 2],
+  "environmentHeight": 5,
+  "environmentMaxSpice": 4,
+  "environmentMaxSugar": 4,
+  "environmentSpicePeaks": [[1, 3, 4], [4, 1, 4]],
+  "environmentSpiceRegrowRate": 1,
+  "environmentSugarPeaks": [[1, 1, 4], [4, 3, 4]],
+  "environmentSugarRegrowRate": 1,
+  "environmentWidth": 6,
+  "headlessMode": true,
+  "logfile": "spice-small.json",
+  "seed": 12345,
+  "startingAgents": 4,
+  "timesteps": 4
+}

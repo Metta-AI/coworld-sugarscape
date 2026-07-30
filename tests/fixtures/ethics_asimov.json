@@ -1,0 +1,23 @@
+{
+  "agentAggressionFactor": [1, 1],
+  "agentDecisionModels": ["asimov", "none", "bentham"],
+  "agentDecisionModelFactor": [1, 1],
+  "agentMovement": [1, 2],
+  "agentSelfishnessFactor": [0.5, 0.5],
+  "agentSpiceMetabolism": [1, 2],
+  "agentStartingSpice": [5, 8],
+  "agentStartingSugar": [5, 8],
+  "agentSugarMetabolism": [1, 2],
+  "agentVision": [1, 2],
+  "environmentHeight": 8,
+  "environmentMaxCombatLoot": 2,
+  "environmentMaxSpice": 4,
+  "environmentMaxSugar": 4,
+  "environmentSpicePeaks": [[2, 5, 4], [6, 2, 4]],
+  "environmentSugarPeaks": [[2, 2, 4], [6, 5, 4]],
+  "environmentWidth": 8,
+  "headlessMode": true,
+  "seed": 9876,
+  "startingAgents": 9,
+  "timesteps": 8
+}

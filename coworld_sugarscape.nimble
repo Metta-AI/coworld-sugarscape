@@ -3,9 +3,13 @@ author = "Metta-AI"
 description = "High-performance, behaviorally identical Nim port of DTL Sugarscape"
 license = "Unlicense"
 srcDir = "src"
-bin = @["sugarscape"]
+bin = @["sugarscape", "sugarscape_coworld"]
 
 requires "nim >= 2.2.0"
+requires "bitworld >= 0.1.0"
+requires "mummy >= 0.4.7"
+requires "curly >= 1.1.1"
+requires "checksums >= 0.2.2"
 
 task test, "Run native compatibility tests":
   for test in [

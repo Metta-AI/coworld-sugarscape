@@ -40,15 +40,14 @@ proc main() =
     if configPath.len == 0: parseConfiguration("{}")
     else: loadConfiguration(configPath)
 
+  var simulation = initSimulation(config)
   if dumpConfig:
-    stdout.write($config)
+    stdout.write($simulation.config)
     stdout.write("\n")
     return
-
-  var simulation = initSimulation(config)
   let logPath =
-    if config["logfile"].kind == JNull: ""
-    else: config["logfile"].getStr()
+    if simulation.config["logfile"].kind == JNull: ""
+    else: simulation.config["logfile"].getStr()
   simulation.runSimulation(logPath)
 
 when isMainModule:

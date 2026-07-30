@@ -1,0 +1,18 @@
+{
+  "seed": 12345,
+  "timesteps": 3,
+  "startingAgents": 8,
+  "environmentWidth": 12,
+  "environmentHeight": 12,
+  "environmentMaxSugar": 4,
+  "environmentSugarPeaks": [[3, 3, 4], [9, 9, 4]],
+  "agentMovement": [2, 2],
+  "agentVision": [2, 2],
+  "agentStartingSugar": [8, 8],
+  "agentSugarMetabolism": [1, 1],
+  "connectionWaitMs": 5000,
+  "decisionTimeoutMs": 100,
+  "players": [{"name": "Greedy remote"}],
+  "tokens": ["smoke-token"],
+  "slots": [{"decisionModels": ["none"]}]
+}

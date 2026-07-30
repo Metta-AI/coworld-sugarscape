@@ -1,0 +1,22 @@
+{
+  "agentDecisionModels": ["temperance", "temperancePECS"],
+  "agentDecisionModelFactor": [0.4, 0.8],
+  "agentDynamicDecisionModelFactor": [0.1, 0.2],
+  "agentDynamicSocialPressureFactor": [0.1, 0.2],
+  "agentMovement": [1, 2],
+  "agentSpiceMetabolism": [1, 2],
+  "agentStartingSpice": [5, 8],
+  "agentStartingSugar": [5, 8],
+  "agentSugarMetabolism": [1, 2],
+  "agentVision": [1, 2],
+  "environmentHeight": 8,
+  "environmentMaxSpice": 4,
+  "environmentMaxSugar": 4,
+  "environmentSpicePeaks": [[2, 5, 4], [6, 2, 4]],
+  "environmentSugarPeaks": [[2, 2, 4], [6, 5, 4]],
+  "environmentWidth": 8,
+  "headlessMode": true,
+  "seed": 54321,
+  "startingAgents": 8,
+  "timesteps": 8
+}

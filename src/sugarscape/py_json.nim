@@ -3,6 +3,19 @@
 
 import std/[json, math, strutils]
 
+const PythonIntegerPrefix = "\x00python-integer:"
+
+proc pythonIntegerNode*(value: string): JsonNode =
+  ## ``JsonNode`` only carries signed 64-bit integers, while CPython integers
+  ## are unbounded. Keep the uncommon wider value lossless until serialization.
+  newJString(PythonIntegerPrefix & value)
+
+proc isPythonInteger(node: JsonNode): bool =
+  node.kind == JString and node.getStr().startsWith(PythonIntegerPrefix)
+
+proc pythonIntegerText(node: JsonNode): string =
+  node.getStr()[PythonIntegerPrefix.len .. ^1]
+
 proc exponentText(exponent: int): string =
   let magnitude = abs(exponent)
   result = if exponent < 0: "-" else: "+"
@@ -54,7 +67,7 @@ proc normalizeScientific(text: string): string =
   let exponent = parseInt(text[exponentMarker + 1 .. ^1])
   mantissa & "e" & exponentText(exponent)
 
-proc pythonFloat(value: float64): string =
+proc pythonFloat*(value: float64): string =
   if value.isNaN:
     return "NaN"
   if value == Inf:
@@ -70,6 +83,8 @@ proc pythonFloat(value: float64): string =
     return scientificFromFixed(result)
 
 proc pythonJson*(node: JsonNode): string =
+  if node.isPythonInteger:
+    return node.pythonIntegerText
   case node.kind
   of JObject:
     result.add("{")
@@ -93,3 +108,19 @@ proc pythonJson*(node: JsonNode): string =
     result = pythonFloat(node.getFloat())
   else:
     result = $node
+
+proc pythonString*(node: JsonNode): string =
+  ## CPython ``str`` for scalar values written by the upstream CSV logger.
+  if node.isPythonInteger:
+    return node.pythonIntegerText
+  case node.kind
+  of JNull:
+    "None"
+  of JBool:
+    if node.getBool(): "True" else: "False"
+  of JFloat:
+    pythonFloat(node.getFloat())
+  of JString:
+    node.getStr()
+  else:
+    $node

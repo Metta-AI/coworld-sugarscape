@@ -1,0 +1,7 @@
+{
+  "author": "Metta-AI",
+  "name": "sugarscape-greedy",
+  "image_uri": "public.ecr.aws/PLACEHOLDER/players/sugarscape-greedy:latest",
+  "run": ["/bin/sugarscape_greedy"],
+  "games": ["sugarscape"]
+}

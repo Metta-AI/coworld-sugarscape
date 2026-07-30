@@ -78,3 +78,14 @@ suite "DTL environment compatibility":
     check world.cells[world.cellId(0, 2)].pollution == 0.5
     check world.cells[world.cellId(0, 3)].pollution == 0.75
     check world.cells[world.cellId(0, 4)].pollution == 0.25
+
+  test "environment files preserve the oracle's swapped resources":
+    let
+      config = loadConfiguration("tests/fixtures/environment_loaded.json")
+      world = initEnvironment(config)
+    check world.width == 3
+    check world.height == 3
+    check world.cells[world.cellId(0, 0)].sugar == 7
+    check world.cells[world.cellId(0, 0)].spice == 1
+    check world.cells[world.cellId(2, 1)].sugar == 14
+    check world.cells[world.cellId(2, 1)].spice == 8

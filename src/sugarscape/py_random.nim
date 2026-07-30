@@ -2,7 +2,7 @@
 ## by DTL Sugarscape. The generator is MT19937, but CPython's integer seeding,
 ## getrandbits truncation, and randbelow rejection behavior are also observable.
 
-import std/md5
+import checksums/md5
 
 const
   StateSize = 624

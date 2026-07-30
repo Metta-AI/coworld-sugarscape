@@ -24,12 +24,19 @@ Compatibility covers:
 - aggregate and per-agent JSON and CSV logs, including key order, whitespace,
   numeric formatting, delimiter placement, and termination behavior;
 - deterministic replay from the same normalized configuration and seed;
-- environment-file loading and the upstream command-line interface.
+- environment-file loading and the headless `--conf` configuration-file
+  workflow.
 
 The DTL Tk GUI is a presentation layer, not part of byte-level output
-compatibility. The Coworld browser spectator must expose the same visible world
-state and graph semantics without changing simulation state or random-number
-consumption.
+compatibility. The Coworld browser spectator exposes the core resource grid,
+agents, policy populations, and aggregate statistics without changing
+simulation state or random-number consumption. It does not reproduce the
+desktop GUI's optional social-network and Lorenz-curve views.
+
+The upstream desktop GUI, screenshots, profiling hooks, diagnostic debug text,
+and individual command-line configuration override flags are outside the
+compatibility boundary. They do not affect the canonical headless model state
+or logs used by Coworld.
 
 ## Core loop
 
@@ -108,7 +115,7 @@ connection per simulated agent, preserving large-population behavior.
 - `agentEthicalTheory` and `agentEthicalFactor` retain their upstream alias
   behavior.
 - Validation preserves upstream sorting, clamping, special negative values,
-  timeframe normalization, and debug output.
+  timeframe normalization, and RNG consumption.
 - Seed `-1` is nondeterministic; every integer seed reproduces CPython 3.12's
   `random.Random` sequence used by the oracle.
 - JSON output is byte-identical to CPython 3.12 `json.dumps` for values emitted
@@ -152,8 +159,9 @@ A layer is complete only when:
    collection iteration order, log ordering, or observable state.
 
 The full port is complete only when all 29 upstream example configurations,
-the mixed-model determinism configuration, aggregate logs, agent logs, CLI
-behavior, Coworld adapters, and spectator/replay state have been verified.
+the mixed-model determinism configuration, aggregate logs, agent logs, the
+headless configuration-file CLI, Coworld adapters, and spectator/replay state
+have been verified.
 
 ## Performance constraints
 
@@ -167,3 +175,8 @@ Correctness comes first: no optimization may reorder floating-point operations
 or random-number consumption relative to the oracle. Benchmarks always run
 outside the byte-comparison process and never enable alternate simulation
 semantics.
+
+Optimized builds disable fused multiply-add contraction because CPython rounds
+after each primitive floating-point operation. Python integer-versus-float
+provenance is observable in logs and must be preserved even when the numeric
+values compare equal.

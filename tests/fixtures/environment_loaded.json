@@ -1,0 +1,13 @@
+{
+  "agentMovement": [1, 1],
+  "agentStartingSugar": [4, 4],
+  "agentSugarMetabolism": [1, 1],
+  "agentVision": [1, 1],
+  "environmentFile": "tests/fixtures/environment_file.json",
+  "environmentHeight": 99,
+  "environmentWidth": 99,
+  "headlessMode": true,
+  "seed": 13579,
+  "startingAgents": 2,
+  "timesteps": 4
+}

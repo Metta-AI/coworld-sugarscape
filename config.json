@@ -1,0 +1,20 @@
+{
+  "seed": 8675309,
+  "timesteps": 100,
+  "startingAgents": 64,
+  "environmentWidth": 32,
+  "environmentHeight": 32,
+  "agentDecisionModels": ["population-a", "population-b"],
+  "connectionWaitMs": 5000,
+  "decisionTimeoutMs": 100,
+  "frameInterval": 1,
+  "players": [
+    {"name": "Population A"},
+    {"name": "Population B"}
+  ],
+  "tokens": ["population-a-token", "population-b-token"],
+  "slots": [
+    {"decisionModels": ["population-a"]},
+    {"decisionModels": ["population-b"]}
+  ]
+}
