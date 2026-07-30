@@ -142,9 +142,8 @@ const viewerContext = vm.createContext({
     getElementById: () => fakeElement(),
     querySelector: () => fakeElement(),
   },
-  // Never resolves, so boot() stops at asset loading and the playback timer
-  // never starts - the sandbox only needs the pure model below.
-  Image: class { set src(_value) {} },
+  // The sandbox exercises the pure model; setInterval is stubbed out below so
+  // playback never starts.
   WebSocket: class { addEventListener() {} close() {} },
   DOMMatrix: class { translate() { return this; } scale() { return this; } },
   location: { host: "localhost", protocol: "http:", pathname: "/client/global", search: "" },
@@ -222,12 +221,45 @@ assert.deepEqual(model.standing, [["Beta", 31], ["Alpha", 0]]);
 // Beats are derived by diffing frames: a death and a lead change at t2.
 assert.deepEqual(model.events, [[2, "death", 1], [2, "lead", "Beta"]]);
 
+// Replacing a timestep must update everything derived from it. It used to swap
+// the frame and return, leaving the race chart describing the overwritten one.
+const afterReplace = JSON.parse(vm.runInContext(`
+  recordFrame(${sandboxFrame(2, [settler(2, 1, 1, 900)])});
+  JSON.stringify({
+    frames: frames.length,
+    series: wealthSeries.at(-1).scores,
+    standing: ranked(frames.at(-1)).map((row) => row.score),
+  });
+`, viewerContext));
+assert.equal(afterReplace.frames, 3, "a repeated timestep replaces, never appends");
+assert.deepEqual(afterReplace.series, [0, 900], "the chart follows the replacement");
+assert.deepEqual(afterReplace.standing, [900, 0], "and so does the standing");
+
+// A frame the viewer cannot render must be REJECTED, not half-drawn behind a
+// confident HUD. Wrong format, no slots, and a malformed lattice all count.
+const guards = JSON.parse(vm.runInContext(`
+  JSON.stringify({
+    good: isRenderableFrame(${sandboxFrame(9, [])}),
+    wrongFormat: isRenderableFrame(Object.assign(${sandboxFrame(9, [])}, { format: "sugarscape.frame.v2" })),
+    noSlots: isRenderableFrame(Object.assign(${sandboxFrame(9, [])}, { slots: [] })),
+    badCells: isRenderableFrame(Object.assign(${sandboxFrame(9, [])}, { cells: "nope" })),
+  });
+`, viewerContext));
+assert.deepEqual(guards, { good: true, wrongFormat: false, noSlots: false, badCells: false });
+
 // A stream from a new server run resets rather than interleaving.
 const afterRestart = JSON.parse(vm.runInContext(`
   recordFrame(${sandboxFrame(0, [settler(9, 0, 0, 1)], { streamId: "second" })});
   JSON.stringify({ frames: frames.length, events: events.length });
 `, viewerContext));
 assert.deepEqual(afterRestart, { frames: 1, events: 0 });
+// A restart must not inherit the previous episode's schedule, or the clock
+// counts to the old buzzer and the race chart is scaled to the wrong length.
+assert.equal(
+  Number(vm.runInContext("String(state.maxTimestep)", viewerContext)),
+  40,
+  "the new stream's own maxTimestep must replace the old one",
+);
 
 // Speed must collapse dead time between timesteps, never the walk itself.
 const tempo = JSON.parse(vm.runInContext(`
@@ -239,7 +271,14 @@ const tempo = JSON.parse(vm.runInContext(`
   });
 `, viewerContext));
 assert.equal(tempo.animAtOne, 1);
-assert.equal(tempo.animAtFour, 0.5, "motion is capped at 2x real time");
+// Every speed step has to actually do something. With the animation cap at 2x
+// both levers saturated there and "4x" changed the label and nothing else.
+const dwells = JSON.parse(vm.runInContext(
+  "JSON.stringify(SPEEDS.map((speed) => frameDwellMs(speed)))", viewerContext));
+assert.equal(new Set(dwells).size, dwells.length, `speed steps must differ: ${dwells}`);
+assert.ok(dwells.every((value, index) => index === 0 || value < dwells[index - 1]),
+  `each speed step must shorten the dwell: ${dwells}`);
+assert.equal(tempo.animAtFour, 1 / 3, "motion is capped at 3x real time");
 assert.ok(tempo.dwellAtFour < tempo.dwellAtOne, "speed shortens the dwell");
 assert.ok(
   tempo.dwellAtFour >= tempo.animAtFour * 620,

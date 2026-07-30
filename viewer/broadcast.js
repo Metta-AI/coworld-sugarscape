@@ -25,7 +25,7 @@ const C = {
   ink: "#2a1f12",          // the brand line; NEVER pure black
   paper: "#f6ead2",        // warm off-white; NEVER pure white
   muted: "#a8977c",
-  dim: "#8a7a62",   // lifted from #6f6250, which measured 3.3:1 on the panel
+  dim: "#9c8b70",   // lifted twice: #6f6250 was 3.3:1, #8a7a62 passed by only 0.07
   border: "#4a3620",
   panel: "rgba(20,15,8,.86)",
   gold: "#e8a838",         // sugar — the world's own accent
@@ -40,11 +40,21 @@ const C = {
 // Each hue is lifted slightly from the source so the same colour is legible
 // BOTH as a dot on the white plate and as a chip on the dark broadcast panels,
 // and each carries a redundant shape so the read never depends on hue alone.
+// The original assigns palette colours to decision models in order
+// (reference/dtl-python/gui.py: palette[0] red, palette[1] blue), so the two
+// populations are red and blue exactly as in the model everyone recognises.
+//
+// Each seat carries TWO values of that hue. One swatch cannot clear 3:1 on both
+// a near-white board plate and a near-black broadcast panel, so `board` is the
+// dark variant drawn on the plate and `color` the light variant used in the
+// chrome. Red against blue also stays separable under protanopia, deuteranopia
+// and tritanopia, which is why the original's first two palette entries happen
+// to be the safest possible pair.
 const SEATS = [
-  { color: "#f5504a" },   // gui.py palette[0] #FA3232
-  { color: "#5a7cff" },   // gui.py palette[1] #3232FA
-  { color: "#3aae5a" },   // palette[2] #32FA32
-  { color: "#3ec6d8" },   // palette[3] #32FAFA
+  { color: "#f5504a", board: "#c22318" },   // gui.py palette[0] #FA3232
+  { color: "#5a7cff", board: "#2340c4" },   // gui.py palette[1] #3232FA
+  { color: "#6bd47f", board: "#1c7038" },   // palette[2] #32FA32
+  { color: "#52d6e8", board: "#0d6f7e" },   // palette[3] #32FAFA
 ];
 
 const F = { display: "Space Grotesk", mono: "IBM Plex Mono" };
@@ -71,13 +81,22 @@ RAIL.h = H - TOP_INSET - MARGIN;
 //   timesteps, never the walk itself.
 // ---------------------------------------------------------------------------
 
-const ANIM_MAX = 2;
+// The board's motion IS the product, so reduced motion does not disable it -
+// it stops the replay auto-advancing, snaps between timesteps instead of
+// interpolating, and drops the death rings. The viewer can still step and scrub.
+const reducedMotion = typeof matchMedia === "function"
+  && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+const ANIM_MAX = 3;
 const BASE_FRAME_MS = 620;
 const READ_PAUSE = 150;
 const MOTE_MS = 1500;
 const STINGER_MS = 2100;
 const SPEEDS = [0.5, 1, 2, 4];
 
+// With ANIM_MAX at 2 both levers saturated there, so pressing 4x changed the
+// label and nothing else. At 3 the dwell floor keeps shortening past 2x while
+// motion still never plays faster than 3x real time.
 function animFactor(speed) {
   return Math.max(1 / Math.max(speed, 0.05), 1 / ANIM_MAX);
 }
@@ -127,7 +146,7 @@ const state = {
   lastDrawnIndex: -1,
   stingerUntil: 0,
   stinger: null,
-  hoverCell: -1,
+  holdUntil: 0,
   // The overlay scales with the stage, so at the 640x360 embed everything in the
   // rail shrinks by two thirds and a dozen small labels fall under 7px. Below
   // this width the rail sheds detail and sizes up instead of scaling down.
@@ -153,6 +172,30 @@ function measureDensity() {
 // ---------------------------------------------------------------------------
 // Frame ingestion + derived model
 // ---------------------------------------------------------------------------
+
+const FRAME_FORMAT = "sugarscape.frame.v1";
+let rejectedFormat = false;
+
+/** The server stamps a format on every frame. Checking only that `cells` is an
+ *  array let a future shape through to throw on every tick behind a fully
+ *  populated HUD - confidently wrong, which is worse than a black box. */
+function isRenderableFrame(frame) {
+  if (!frame || typeof frame !== "object") return false;
+  if (typeof frame.format === "string" && frame.format !== FRAME_FORMAT) {
+    if (!rejectedFormat) {
+      rejectedFormat = true;
+      fail(`This episode is recorded as ${frame.format}, which this viewer cannot read.`);
+    }
+    return false;
+  }
+  const shaped = Array.isArray(frame.cells) && Array.isArray(frame.agents)
+    && Array.isArray(frame.slots) && Array.isArray(frame.cells[0])
+    && Number.isFinite(frame.width) && Number.isFinite(frame.height)
+    && Number.isFinite(frame.timestep);
+  // A frame with no policy slots has no standing to draw, and every panel that
+  // reads rows[0] would throw and wipe the whole overlay.
+  return shaped && frame.slots.length > 0;
+}
 
 function slotOf(agent) {
   return agent.slot >= 0 && agent.slot < SEATS.length ? agent.slot : -1;
@@ -244,9 +287,24 @@ function recordFrame(frame) {
   }
   if (frame.streamId !== undefined) state.streamId = frame.streamId;
 
+  // A repeated timestep must update everything derived from it, not just the
+  // frame: replacing in place and returning left the race chart and the event
+  // feed describing the frame that was overwritten.
   const existing = frameIndexByTimestep.get(frame.timestep);
   if (existing !== undefined) {
     frames[existing] = frame;
+    const rows = standings(frame);
+    for (const row of rows) state.maxWealth = Math.max(state.maxWealth, row.score);
+    wealthSeries[existing] = {
+      timestep: frame.timestep,
+      scores: rows.map((row) => row.score),
+      population: rows.map((row) => row.population),
+    };
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      if (events[index].index === existing) events.splice(index, 1);
+    }
+    deriveEvents(existing);
+    standingsSignature = "";
     return;
   }
 
@@ -294,10 +352,17 @@ function resetStream() {
   state.maxWealth = 1;
   state.maxSugar = 1;
   state.maxSpice = 0;
+  state.maxTimestep = 0;
   state.startingPopulation = 0;
+  state.stinger = null;
+  state.stingerUntil = 0;
+  state.holdUntil = 0;
   terrainShown = null;
   state.finished = false;
   state.lastDrawnIndex = -1;
+  spokenIndex = -1;
+  standingsSignature = "";
+  beatsSignature = "";
 }
 
 // ---------------------------------------------------------------------------
@@ -446,8 +511,8 @@ function drawBoard(frame, previous, t, now) {
     const age = (now - mote.born) / (MOTE_MS * animFactor(state.speed));
     if (age >= 1) { motes.splice(index, 1); continue; }
     context.globalAlpha = (1 - age) * 0.85;
-    context.strokeStyle = C.loss;
-    context.lineWidth = Math.max(1.2, cell * 0.20 * (1 - age));
+    context.strokeStyle = "#a8321a";   // the loss hue, dark enough for the plate
+    context.lineWidth = Math.max(1.4, cell * 0.22 * (1 - age));
     context.beginPath();
     context.arc(mote.px, mote.py, cell * (0.32 + age * 1.05), 0, Math.PI * 2);
     context.stroke();
@@ -473,27 +538,15 @@ function drawBoard(frame, previous, t, now) {
     context.beginPath();
     context.arc(body.px, body.py, size, 0, Math.PI * 2);
     if (body.starving) {
-      context.fillStyle = "rgba(251,248,240,.72)";
+      context.fillStyle = "rgba(251,248,240,.9)";
       context.fill();
-      context.lineWidth = Math.max(1, cell * 0.10);
-      context.strokeStyle = seat.color;
+      context.lineWidth = Math.max(1.2, cell * 0.12);
+      context.strokeStyle = seat.board;
       context.stroke();
     } else {
-      context.fillStyle = seat.color;
+      context.fillStyle = seat.board;
       context.fill();
     }
-  }
-
-  if (state.hoverCell >= 0 && state.hoverCell < frame.cells.length) {
-    const position = cellPosition(frame, state.hoverCell);
-    context.strokeStyle = C.peak;
-    context.lineWidth = 2;
-    context.strokeRect(
-      BOARD.x + position.x * cell,
-      BOARD.y + position.y * cell,
-      cell,
-      cell,
-    );
   }
 
 }
@@ -525,12 +578,15 @@ function resourceName() {
 function text(content, x, y, options = {}) {
   const {
     size = 20, weight = 500, fill = C.paper, family = F.display,
-    anchor = "start", spacing = 0, outline = 3.4, opacity = 1,
+    anchor = "start", spacing = 0, outline = null, opacity = 1,
   } = options;
+  // Scale the halo with the type: a fixed 3.4 units closed the counters on the
+  // small labels it was meant to protect.
+  const stroke = outline ?? Math.max(1.6, size * 0.14);
   return `<text x="${x}" y="${y}" font-family="${family}" font-size="${size}" `
     + `font-weight="${weight}" fill="${fill}" text-anchor="${anchor}" `
     + `letter-spacing="${spacing}" opacity="${opacity}" `
-    + `paint-order="stroke" stroke="${C.ink}" stroke-width="${outline}" `
+    + `paint-order="stroke" stroke="${C.ink}" stroke-width="${stroke}" `
     + `stroke-linejoin="round">${escapeText(content)}</text>`;
 }
 
@@ -580,7 +636,7 @@ function scorebug(frame) {
     size: 40, weight: 600, family: F.mono, fill: C.paper,
   });
   markup += text(` / ${scheduled}`, MARGIN + 494 + String(frame.timestep).length * 25, 84, {
-    size: 24, weight: 500, family: F.mono, fill: C.muted,
+    size: T(24), weight: 500, family: F.mono, fill: C.muted,
   });
   const barX = MARGIN + 654;
   const barW = clockW - 196;
@@ -588,9 +644,9 @@ function scorebug(frame) {
   markup += `<rect x="${barX}" y="60" width="${Math.max(3, barW * progress)}" height="9" rx="4.5" fill="${C.gold}"/>`;
   // FINAL belongs to where the CURSOR is, not to whether the stream has ended:
   // scrubbing back into the middle of a finished episode is mid-match again.
-  const atEnd = state.finished && Math.round(state.cursor) >= frames.length - 1;
+  const atEnd = state.finished && currentIndex() >= frames.length - 1;
   markup += text(atEnd ? "FINAL" : `${Math.round(progress * 100)}%`, barX + barW, 46, {
-    size: 16, weight: 700, family: F.mono, anchor: "end",
+    size: T(16), weight: 700, family: F.mono, anchor: "end",
     fill: atEnd ? C.gold : C.muted, spacing: 1.4,
   });
 
@@ -613,7 +669,7 @@ function scorebug(frame) {
       + `fill="${C.panel}" stroke="${leader ? C.gold : C.border}" `
       + `stroke-width="${leader ? 2.5 : 1.5}"/>`;
     markup += text(`${rank + 1}`, x + 26, 70, {
-      size: 30, weight: 600, family: F.mono, fill: C.dim, anchor: "middle",
+      size: T(30), weight: 600, family: F.mono, fill: C.dim, anchor: "middle",
     });
     markup += seatMark(x + 62, 60, row.index, 11);
     // The crown is a 3px smudge at the embed floor; the gold border and the rank
@@ -638,7 +694,7 @@ function scorebug(frame) {
     // White at the same size out-punches gold, so the LOSING number was winning
     // the eye. The leader is gold and bright; everyone else steps back.
     markup += text(format(row.score), x + chipW - 20, 62, {
-      size: 40, weight: 700, family: F.mono, anchor: "end",
+      size: T(40), weight: 700, family: F.mono, anchor: "end",
       fill: leader ? C.gold : C.muted,
     });
     markup += text(
@@ -923,7 +979,7 @@ function emergence(frame, x, y, width, height) {
   const curveY = y + 44;
   // Leave room for the caption BELOW the square, inside the panel: it used to be
   // sized off the full panel height and punched through the bottom hairline.
-  const size = Math.max(40, height - 44 - 34 - 16);
+  const size = Math.max(40, height - 44 - 40 - 18);
   // The Lorenz curve is the signature chart but the first thing to go at the
   // embed floor: unlabelled and 60px wide it carries nothing a viewer can read.
   const showCurve = !state.compact;
@@ -1107,17 +1163,17 @@ let beatsSignature = "";
 
 function drawBeats(frame, now) {
   const live = Boolean(state.stinger) && now <= state.stingerUntil;
-  const atEnd = state.finished && Math.round(state.cursor) >= frames.length - 1;
+  const atEnd = state.finished && currentIndex() >= frames.length - 1;
   const signature = live ? `stinger:${state.stinger.index}:${state.stinger.kind}` : "";
-  const full = `${signature}|${atEnd}`;
+  const full = `${signature}|${atEnd}|${currentIndex()}`;
   if (full === beatsSignature) return;
   beatsSignature = full;
   beatsLayer.innerHTML = (live ? stinger() : "") + (atEnd ? endCard(frame) : "");
 }
 
 function drawHud(frame, index) {
-  const atEnd = state.finished && Math.round(state.cursor) >= frames.length - 1;
-  const signature = `${index}|${atEnd}|${state.speed}`;
+  const atEnd = state.finished && currentIndex() >= frames.length - 1;
+  const signature = `${index}|${atEnd}`;
   if (signature === standingsSignature) return;
   standingsSignature = signature;
 
@@ -1138,6 +1194,39 @@ function drawHud(frame, index) {
 
 let lastTick = 0;
 
+const commentary = document.getElementById("commentary");
+const verdictLine = document.getElementById("verdict");
+let spokenIndex = -1;
+
+/** Say what the picture shows. The board and the overlay are both hidden from
+ *  assistive technology - they are one image, and an image cannot carry a
+ *  standing - so the same information is announced here as text. */
+function speak(frame, index) {
+  if (index === spokenIndex) return;
+  spokenIndex = index;
+  const rows = ranked(frame);
+  const scheduled = state.maxTimestep || frame.timestep;
+  const standing = rows
+    .map((row, rank) => `${rank + 1}. ${row.name}, ${format(row.score)} ${resourceName()},`
+      + ` ${row.population} settler${row.population === 1 ? "" : "s"}`)
+    .join(". ");
+  const beat = [...events].reverse().find((event) => event.timestep <= frame.timestep);
+  const beatText = !beat ? ""
+    : beat.kind === "lead" ? ` Latest: at timestep ${beat.timestep}, ${beat.name} took the lead.`
+      : ` Latest: at timestep ${beat.timestep}, ${beat.count} settler`
+        + `${beat.count === 1 ? "" : "s"} ${beat.cause ?? "lost"}.`;
+  commentary.textContent = `Timestep ${frame.timestep} of ${scheduled}. ${standing}.${beatText}`;
+
+  const atEnd = state.finished && currentIndex() >= frames.length - 1;
+  if (!atEnd) { verdictLine.textContent = ""; return; }
+  const margin = rows[0].score - (rows[1]?.score ?? 0);
+  verdictLine.textContent = margin === 0
+    ? `Final. ${rows.map((row) => row.name).join(" and ")} finish level on ${format(rows[0].score)}.`
+    : `Final. ${rows[0].name} wins with ${format(rows[0].score)} ${resourceName()},`
+      + ` ${format(margin)} ahead of ${rows[1]?.name ?? "the field"}.`
+      + ` ${frame.agents.length} of ${state.startingPopulation} settlers survived.`;
+}
+
 function currentIndex() {
   return Math.max(0, Math.min(frames.length - 1, Math.floor(state.cursor)));
 }
@@ -1149,7 +1238,7 @@ function onFrameEntered(index, now) {
   const cell = BOARD.w / frame.width;
   for (const event of events) {
     if (event.index !== index) continue;
-    if (event.kind === "death") {
+    if (event.kind === "death" && !reducedMotion) {
       for (const agent of event.agents) {
         const position = cellPosition(frame, agent.cell);
         motes.push({
@@ -1202,7 +1291,8 @@ function tick() {
     // A bare "62" tells a screen-reader user nothing; name the unit and the end.
     controls.scrub.setAttribute(
       "aria-valuetext",
-      `timestep ${frames[index].timestep} of ${state.maxTimestep || frames.length - 1}`,
+      `timestep ${frames[index].timestep} of `
+      + `${state.maxTimestep || frames.at(-1).timestep}`,
     );
   }
 
@@ -1214,7 +1304,12 @@ function tick() {
   // must not empty until it arrives. Painting frame N's terrain while the
   // settlers were still walking in from N-1 made sugar vanish from cells nobody
   // was standing on yet, a full beat ahead of the cause.
-  const settled = !previous || fraction >= 0.88;
+  // "Settled" means the settlers have arrived, so the lattice, the standings and
+  // the commentary all describe the same instant. A cursor at rest - paused,
+  // scrubbed, or held on the final frame - is always settled; only a walk in
+  // progress shows the state they are leaving.
+  const settled = !previous || reducedMotion || !state.playing
+    || fraction >= 0.88 || index >= frames.length - 1;
   const terrainFrame = settled ? frame : previous;
   if (terrainFrame !== terrainShown) {
     terrainShown = terrainFrame;
@@ -1222,9 +1317,13 @@ function tick() {
   }
   // Interpolate from the PREVIOUS frame into this one, so the settler arrives
   // exactly as its recorded state lands rather than leaving it early.
-  drawBoard(frame, previous, previous ? fraction : 1, now);
-  drawHud(frame, index);
+  drawBoard(frame, previous, previous && !reducedMotion ? fraction : 1, now);
+  // The HUD reads the same frame the board is showing. Rendering frame N's
+  // scores while the settlers were still walking in from N-1 put the clock, the
+  // harvested lattice and the scoreboard a full timestep ahead of the bodies.
+  drawHud(terrainFrame, settled ? index : index - 1);
   drawBeats(frame, now);
+  speak(terrainFrame, settled ? index : index - 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -1246,6 +1345,7 @@ function seek(index) {
 
 controls.play.addEventListener("click", () => {
   if (!state.playing && state.cursor >= frames.length - 1 && state.finished) state.cursor = 0;
+  state.holdUntil = 0;
   setPlaying(!state.playing);
 });
 controls.back.addEventListener("click", () => seek(Math.floor(state.cursor) - 1));
@@ -1259,21 +1359,6 @@ controls.speed.addEventListener("click", () => {
   controls.speed.setAttribute("aria-label", `Playback speed, ${state.speed}×`);
 });
 
-board.addEventListener("mousemove", (event) => {
-  const frame = frames[currentIndex()];
-  if (!frame) return;
-  const bounds = board.getBoundingClientRect();
-  const x = ((event.clientX - bounds.left) / bounds.width) * W;
-  const y = ((event.clientY - bounds.top) / bounds.height) * H;
-  const cell = BOARD.w / frame.width;
-  const column = Math.floor((x - BOARD.x) / cell);
-  const row = Math.floor((y - BOARD.y) / cell);
-  state.hoverCell = column >= 0 && column < frame.width && row >= 0 && row < frame.height
-    ? column * frame.height + row
-    : -1;
-});
-board.addEventListener("mouseleave", () => { state.hoverCell = -1; });
-
 // ---------------------------------------------------------------------------
 // Sources
 // ---------------------------------------------------------------------------
@@ -1282,8 +1367,9 @@ board.addEventListener("mouseleave", () => { state.hoverCell = -1; });
  *  and a filled scrubber on screen told the viewer a replay was playing while
  *  the message said none had loaded. */
 function fail(message, detail = "") {
+  const shown = detail.length > 96 ? `${detail.slice(0, 93)}…` : detail;
   notice.innerHTML = escapeText(message)
-    + (detail ? ` <code>${escapeText(detail)}</code>` : "");
+    + (shown ? ` <code>${escapeText(shown)}</code>` : "");
   controls.container.hidden = true;
 }
 
@@ -1299,7 +1385,12 @@ function ready() {
 function socketUrl() {
   const path = location.pathname.replace(/\/+$/, "");
   const match = /^(.*)\/clients?\/(replay|global)$/.exec(path);
-  const suffix = match ? `${match[1]}/${match[2]}` : "/global";
+  // Falling back to an absolute "/global" would resolve off the proxy prefix -
+  // the exact black screen this function exists to prevent - so an unrecognised
+  // path resolves the sibling RELATIVE to wherever the document actually is.
+  const suffix = match
+    ? `${match[1]}/${match[2]}`
+    : new URL("global", new URL(".", location.href)).pathname;
   const protocol = location.protocol === "https:" ? "wss:" : "ws:";
   return `${protocol}//${location.host}${suffix}`;
 }
@@ -1313,6 +1404,14 @@ function connect() {
     return;
   }
   let idleTimer = 0;
+  // A socket can open and never speak - an episode with no recorded frames does
+  // exactly that. Without this the canvas is never touched and the embed is the
+  // ground colour, forever, with nothing said.
+  const silence = setTimeout(() => {
+    if (frames.length === 0) {
+      fail("This episode is not sending any frames to replay.");
+    }
+  }, 12000);
   const markFinished = () => {
     if (frames.length === 0) return;
     state.live = false;
@@ -1327,7 +1426,8 @@ function connect() {
       fail("The episode stream sent a frame this viewer could not read.");
       return;
     }
-    if (!frame || !Array.isArray(frame.cells) || !Array.isArray(frame.agents)) return;
+    if (!isRenderableFrame(frame)) return;
+    clearTimeout(silence);
     if (frames.length === 0) state.live = true;
     recordFrame(frame);
     // The server streams recorded frames back to back and then goes quiet; a
@@ -1336,11 +1436,12 @@ function connect() {
     idleTimer = setTimeout(() => {
       markFinished();
       state.cursor = 0;
-      setPlaying(true);
+      setPlaying(!reducedMotion);
     }, 1200);
   });
   socket.addEventListener("close", () => {
     clearTimeout(idleTimer);
+    clearTimeout(silence);
     if (frames.length === 0) {
       fail("The episode stream closed before sending any frames.");
       return;
@@ -1389,11 +1490,11 @@ async function loadArtifact(url) {
   state.finished = true;
   state.live = false;
   state.cursor = 0;
-  setPlaying(true);
+  setPlaying(!reducedMotion);
 }
 
 async function boot() {
-  setPlaying(true);
+  setPlaying(!reducedMotion);
   lastTick = performance.now();
   // A timer, not requestAnimationFrame: a backgrounded or headless tab throttles
   // rAF to a few frames a second and starves the interpolation. 16ms rather

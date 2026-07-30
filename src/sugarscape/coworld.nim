@@ -563,6 +563,15 @@ proc runCoworld*(runtimeConfig: RuntimeConfig) =
         raw
     normalized = parseConfiguration(input)
     coworldConfig = readCoworldConfig(coworldRaw, normalized)
+    replayFrames =
+      if runtimeConfig.replayMode:
+        let replay = parseJson(runtimeConfig.replay)
+        if replay.kind != JObject or not replay.hasKey("frames") or
+            replay["frames"].kind != JArray:
+          raise newException(ValueError, "invalid sugarscape.replay.v1 artifact")
+        replay["frames"]
+      else:
+        newJArray()
   # A live episode trims its backlog so a long run cannot grow without bound. A
   # recorded replay keeps every frame instead: a spectator who opens the viewer
   # minutes after the process started must still receive the whole episode.
@@ -589,18 +598,14 @@ proc runCoworld*(runtimeConfig: RuntimeConfig) =
     runtimeConfig.port
 
   if runtimeConfig.replayMode:
-    let replay = parseJson(runtimeConfig.replay)
-    if replay.kind != JObject or not replay.hasKey("frames") or
-        replay["frames"].kind != JArray:
-      raise newException(ValueError, "invalid sugarscape.replay.v1 artifact")
-    for frame in replay["frames"]:
+    for frame in replayFrames:
       frame.publishFrame()
     # Replay mode is a SERVER, not a one-shot broadcast: publishing the frames
     # and exiting left nothing for a spectator who connected a moment later, and
     # raced the certifier's own replay-liveness probe. Publish the episode into
     # the backlog at once - the browser owns playback pacing - then keep serving
     # until the runner stops the container.
-    echo "Replay ready: ", replay["frames"].len, " frames"
+    echo "Replay ready: ", replayFrames.len, " frames"
     joinThread(thread)
     return
   else:
