@@ -23,7 +23,7 @@ import io
 import sys
 from pathlib import Path
 
-from PIL import Image, ImageChops, ImageFilter, ImageStat
+from PIL import Image, ImageChops
 
 ROOT = Path(__file__).resolve().parent.parent
 ART = ROOT / "src/sugarscape/art"
@@ -47,67 +47,9 @@ def encode(image: Image.Image, fmt: str, **options: object) -> str:
     return f"data:{mime};base64,{base64.b64encode(buffer.getvalue()).decode()}"
 
 
-# The board must read as a MASSIF: barren ground dark and cool, the sugar peak
-# bright and golden. An image model will not hit a monotone luminance ramp from
-# prose - the first batch came back with barren as the BRIGHTEST texture, so the
-# mountain rendered as a pit. Each texture therefore keeps its own painted
-# detail but has its brightness, contrast and tint remapped here, which makes
-# the ramp a property of the build rather than of a lucky generation.
-TERRAIN_RAMP = [
-    #  name       luma  contrast  tint             tint strength
-    # Barren is deliberately the flattest layer: its painted cracks are large and
-    # high-contrast, and left alone they read as decoration competing with the
-    # board. Low contrast plus a soften pass sends it behind everything else.
-    ("barren",     36,   0.24,    (44, 34, 25),    0.68),
-    ("sugar-1",    88,   0.86,    (150, 104, 44),  0.34),
-    ("sugar-2",   126,   0.95,    (196, 140, 56),  0.28),
-    ("sugar-3",   162,   1.00,    (232, 176, 74),  0.24),
-    ("sugar-4",   201,   0.92,    (255, 214, 128), 0.22),
-]
-
-
-def tone_ramp(
-    texture: Image.Image,
-    target_luma: float,
-    contrast: float,
-    tint: tuple[int, int, int],
-    strength: float,
-) -> Image.Image:
-    """Remap a texture onto its slot in the terrain ramp, keeping its detail."""
-    pixels = texture.load()
-    grey = texture.convert("L")
-    stat = ImageStat.Stat(grey)
-    mean = stat.mean[0] or 1.0
-    width, height = texture.size
-    for y in range(height):
-        for x in range(width):
-            red, green, blue = pixels[x, y]
-            channels = []
-            for value, tint_value in zip((red, green, blue), tint):
-                # Re-centre on the target luma and scale the deviation, so the
-                # painted grain survives the move.
-                shifted = target_luma + (value - mean) * contrast
-                blended = shifted * (1 - strength) + tint_value * strength
-                channels.append(max(0, min(255, int(blended))))
-            pixels[x, y] = tuple(channels)
-    return texture
-
-
 def build_assets() -> dict[str, str]:
     """Process the raw batch into the sizes and formats the viewer actually draws."""
     assets: dict[str, str] = {}
-
-    # Terrain is composited as a full-board repeating pattern, so it needs no
-    # alpha - JPEG keeps five 512px textures inside a sane inline budget.
-    for name, luma, contrast, tint, strength in TERRAIN_RAMP:
-        texture = Image.open(ART / f"terrain-{name}.png").convert("RGB")
-        texture = texture.resize((512, 512), Image.LANCZOS)
-        if name == "barren":
-            texture = texture.filter(ImageFilter.GaussianBlur(2.6))
-        texture = tone_ramp(texture, luma, contrast, tint, strength)
-        assets[f"terrain_{name.replace('-', '_')}"] = encode(
-            texture, "JPEG", quality=76, optimize=True, subsampling=1
-        )
 
     endcard = trim_border(Image.open(ART / "endcard.png"))
     endcard = endcard.resize((1280, int(1280 * endcard.height / endcard.width)), Image.LANCZOS)

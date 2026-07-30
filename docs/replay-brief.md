@@ -93,25 +93,33 @@ the payload reference; the viewer is designed from scratch (L51).
 
 ## 0c — Art direction lock
 
-> **A 1996 Santa Fe Institute artificial-life plate, re-lit as a broadcast: an amber
-> topographic sugar massif under a warm raking light, read from directly above, with two
-> populations of small physical beads swarming it.**
+> **The board is the original.** `reference/dtl-python/gui.py` is vendored in this repo
+> and is the oracle for the LOOK, exactly as the Python model is the oracle for
+> behaviour. The broadcast is a dark warm surround that seats that bright plate.
 
-- **Palette.** Warm near-black ground `#14100a` (never `#000`); one signature warm-dark ink
-  line `#2a1f12` for every stroke and text outline; the sugar field ramps barren umber
-  `#2b2114` → `#6b4a1c` → `#b8792a` → `#e8a838` → peak honey `#ffd97a`. Because the terrain
-  owns the entire warm half of the wheel, the two competitors take the cool half:
-  **Population A cyan `#3FC1D8`**, **Population B rose `#F0568A`**, each with a redundant
-  shape token so the read never depends on hue alone.
-- **Framing.** Full-bleed board at exact 16:9, a *subtle* corner vignette and a slight
-  brightness lift over the massif so the mountain is the hero. Orthographic top-down —
-  no rendered desk, no table, no furniture.
-- **Type.** Display face for names, scores and titles; mono restricted to tabular numbers
-  (timestep, wealth, counts); one uppercase letter-spaced eyebrow token. System fallbacks
-  on every stack so a proxied embed never blanks.
-- **The numeric HUD is dataviz.** Colour is held to the population and never repainted;
-  numbers wear ink tokens, not the population hue; every score appears with its rank and
-  its margin.
+**This was the mistake worth recording.** The first lock was invented — "a 1996 Santa Fe
+Institute artificial-life plate, re-lit as a broadcast: an amber topographic sugar massif
+under warm raking light, with two populations of small physical beads swarming it." It
+sounded right and it was researched from nothing. It produced a generated terrain batch, a
+relief pass and contours that buried the per-cell resource under texture, read as fog, and
+looked nothing like the model anyone recognises. The source renderer was in the repo the
+whole time and was never opened. **For a port, the thing being ported is the reference —
+for behaviour AND for presentation.**
+
+What `gui.py` actually specifies, and what the viewer now does:
+
+| Element | Original (`gui.py`) | Here |
+|---|---|---|
+| Field | `tkinter.Canvas(background="white")` | `#fbf8f0`, warmed a touch off pure white |
+| Cell | `create_rectangle(..., outline="#c0c0c0")` | same, one rect per cell, same lattice colour |
+| Cell fill | `findSugarAndSpiceColors("#F2FA00", "#9B4722")` — a two-axis interpolation from white through sugar-yellow and spice-brown | the same interpolation, ported exactly, so a spice-enabled variant renders faithfully |
+| Agent | `create_oval(fill=color, outline="")` | plain filled circle; sized by wealth, hollow when within two timesteps of starving |
+| Agent colour | `palette[i]` per decision model — `#FA3232` red, `#3232FA` blue | the same order, each hue lifted slightly so one value reads on the white plate AND on the dark chrome |
+
+The broadcast surround keeps its own identity, since the original has no broadcast layer to
+copy: warm near-black ground, ink `#2a1f12`, paper `#f6ead2`, one sugar-gold accent
+`#e8a838` taken from the world's own resource, mono restricted to tabular numbers, and a
+redundant shape per seat so the read never depends on hue alone.
 
 ## Phase 4 — where the gates stand
 

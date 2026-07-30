@@ -34,13 +34,17 @@ const C = {
   loss: "#e2703a",
 };
 
-// The terrain owns the warm half of the wheel, so the competitors take the cool
-// half. Each also carries a redundant shape so the read never depends on hue.
+// The original assigns palette colours to decision models in order
+// (reference/dtl-python/gui.py: palette[0] red, palette[1] blue), so the two
+// populations are red and blue exactly as in the model everyone recognises.
+// Each hue is lifted slightly from the source so the same colour is legible
+// BOTH as a dot on the white plate and as a chip on the dark broadcast panels,
+// and each carries a redundant shape so the read never depends on hue alone.
 const SEATS = [
-  { color: "#3fc1d8", shape: "circle" },
-  { color: "#f0568a", shape: "square" },
-  { color: "#b6e36b", shape: "triangle" },
-  { color: "#c69bf0", shape: "diamond" },
+  { color: "#f5504a", shape: "circle" },   // gui.py palette[0] #FA3232
+  { color: "#5a7cff", shape: "square" },   // gui.py palette[1] #3232FA
+  { color: "#3aae5a", shape: "triangle" }, // palette[2] #32FA32
+  { color: "#3ec6d8", shape: "diamond" },  // palette[3] #32FAFA
 ];
 
 const F = { display: "Space Grotesk", mono: "IBM Plex Mono" };
@@ -116,6 +120,7 @@ const state = {
   finished: false,
   maxTimestep: 0,
   maxSugar: 1,
+  maxSpice: 0,
   // Per-cell sugar CAPACITY, accumulated as the running maximum ever observed.
   // The frames carry only what a cell holds right now, but the landform has to
   // persist: without it, the middle of the mountain - which is exactly where
@@ -149,8 +154,7 @@ function loadImage(source) {
 
 async function loadAssets() {
   const names = [
-    "terrain_barren", "terrain_sugar_1", "terrain_sugar_2",
-    "terrain_sugar_3", "terrain_sugar_4", "endcard",
+    "endcard",
   ];
   const images = await Promise.all(names.map((name) => loadImage(ART[name])));
   names.forEach((name, index) => { art[name] = images[index]; });
@@ -246,7 +250,10 @@ function recordFrame(frame) {
 
   if (index === 0) {
     state.startingPopulation = frame.agents.length;
-    for (const cell of frame.cells) state.maxSugar = Math.max(state.maxSugar, cell[0]);
+    for (const cell of frame.cells) {
+      state.maxSugar = Math.max(state.maxSugar, cell[0]);
+      state.maxSpice = Math.max(state.maxSpice, cell[1]);
+    }
   }
   if (!state.capacity || state.capacity.length !== frame.cells.length) {
     state.capacity = new Float32Array(frame.cells.length);
@@ -295,301 +302,80 @@ function resetStream() {
 // only changes when the frame does, while agents move every animation tick.
 // ---------------------------------------------------------------------------
 
+/* The board is a faithful rebuild of the DTL Sugarscape plate.
+ *
+ * The original renderer is vendored in this repo at reference/dtl-python/gui.py
+ * and it is the oracle for the LOOK, exactly as the Python model is the oracle
+ * for behaviour. It draws a white canvas, one rectangle per cell outlined in
+ * #c0c0c0, filled by interpolating white -> #F2FA00 with sugar and -> #9B4722
+ * with spice, and plain filled circles for agents coloured by decision model.
+ *
+ * An earlier pass here invented a warm painterly massif with generated terrain
+ * textures, a relief pass and contours. It buried the per-cell resource under
+ * texture, read as fog, and looked nothing like the model anyone recognises.
+ * The lattice IS the picture; it does not want scenery. */
+
+const SUGAR_HEX = [242, 250, 0];      // #F2FA00, from gui.py
+const SPICE_HEX = [155, 71, 34];      // #9B4722, from gui.py
+const EMPTY_HEX = [251, 248, 240];    // the original's white, warmed a touch
+const GRID_HEX = "#c0c0c0";           // gui.py cell outline
+
 const terrain = document.createElement("canvas");
 const terrainContext = terrain.getContext("2d");
-const maskCanvas = document.createElement("canvas");
-const maskContext = maskCanvas.getContext("2d", { willReadFrequently: true });
-const scratch = document.createElement("canvas");
-const scratchContext = scratch.getContext("2d");
-const patterns = new Map();
 
-function smoothstep(edge0, edge1, value) {
-  const t = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)));
-  return t * t * (3 - 2 * t);
-}
-
-/** A repeating texture at native size tiles visibly across the board, so each
- *  layer is scaled up and offset by a different amount — the seams of the five
- *  layers then never coincide and the ground reads as continuous. */
-const PATTERN_TRANSFORM = new Map([
-  ["terrain_barren", { scale: 1.45, x: 0, y: 0 }],
-  ["terrain_sugar_1", { scale: 1.30, x: 137, y: 61 }],
-  ["terrain_sugar_2", { scale: 1.55, x: 43, y: 191 }],
-  ["terrain_sugar_3", { scale: 1.35, x: 229, y: 113 }],
-  ["terrain_sugar_4", { scale: 1.60, x: 91, y: 247 }],
-]);
-
-function patternFor(image, target) {
-  if (!patterns.has(image)) {
-    const pattern = target.createPattern(image, "repeat");
-    const name = Object.keys(art).find((key) => art[key] === image);
-    const transform = PATTERN_TRANSFORM.get(name);
-    if (transform && typeof pattern.setTransform === "function") {
-      pattern.setTransform(new DOMMatrix()
-        .translate(transform.x, transform.y)
-        .scale(transform.scale));
-    }
-    patterns.set(image, pattern);
-  }
-  return patterns.get(image);
-}
-
-/** Paint `image` over the terrain through a per-cell coverage mask. Building the
- *  mask at lattice resolution and letting the canvas upscale it gives a
- *  continuous landform rather than 1024 visibly tiled squares. */
-function layer(frame, image, edge0, edge1) {
-  const { width, height } = frame;
-  const data = maskContext.createImageData(width, height);
-  let visible = false;
-  for (let index = 0; index < frame.cells.length; index += 1) {
-    const density = frame.cells[index][0] / state.maxSugar;
-    const alpha = Math.round(255 * smoothstep(edge0, edge1, density));
-    if (alpha > 0) visible = true;
-    // cellId = x * height + y (column-major), so decode before writing rows.
-    const x = Math.floor(index / height);
-    const y = index % height;
-    data.data[(y * width + x) * 4 + 3] = alpha;
-  }
-  if (!visible) return;
-  maskContext.putImageData(data, 0, 0);
-
-  scratchContext.setTransform(1, 0, 0, 1, 0, 0);
-  scratchContext.clearRect(0, 0, scratch.width, scratch.height);
-  scratchContext.imageSmoothingEnabled = true;
-  scratchContext.imageSmoothingQuality = "high";
-  scratchContext.drawImage(maskCanvas, 0, 0, scratch.width, scratch.height);
-  scratchContext.globalCompositeOperation = "source-in";
-  scratchContext.fillStyle = patternFor(image, scratchContext);
-  scratchContext.fillRect(0, 0, scratch.width, scratch.height);
-  scratchContext.globalCompositeOperation = "source-over";
-
-  terrainContext.drawImage(scratch, 0, 0);
-}
-
-/** A raking light from the upper left, computed from the CAPACITY field's own
- *  gradient — the landform, not the current stock. Lighting the live sugar
- *  instead made the mountain change shape as it was eaten, so the middle (where
- *  every settler is standing, stripped to zero) sank into a crater. Lit off
- *  capacity, the massif holds its form and the sugar drains out of it. */
-function relief() {
-  const { width, height } = maskCanvas;
-  const data = maskContext.createImageData(width, height);
-  const at = (x, y) => state.capacity[
-    Math.max(0, Math.min(width - 1, x)) * height + Math.max(0, Math.min(height - 1, y))
+function mix(from, to, factor) {
+  return [
+    from[0] + (to[0] - from[0]) * factor,
+    from[1] + (to[1] - from[1]) * factor,
+    from[2] + (to[2] - from[2]) * factor,
   ];
-  const lx = -0.62, ly = -0.58, lz = 0.53;
-  for (let x = 0; x < width; x += 1) {
-    for (let y = 0; y < height; y += 1) {
-      const dx = (at(x + 1, y) - at(x - 1, y)) / (2 * state.maxCapacity);
-      const dy = (at(x, y + 1) - at(x, y - 1)) / (2 * state.maxCapacity);
-      const scale = 3.1;
-      const length = Math.hypot(-dx * scale, -dy * scale, 1);
-      const shade = (-dx * scale * lx + -dy * scale * ly + lz) / length;
-      const value = Math.max(0, Math.min(255, Math.round(128 + (shade - 0.53) * 340)));
-      const offset = (y * width + x) * 4;
-      data.data[offset] = value;
-      data.data[offset + 1] = value;
-      data.data[offset + 2] = value;
-      data.data[offset + 3] = 255;
-    }
-  }
-  maskContext.putImageData(data, 0, 0);
-  const paint = destination();
-  paint.globalCompositeOperation = "soft-light";
-  paint.imageSmoothingEnabled = true;
-  paint.imageSmoothingQuality = "high";
-  paint.drawImage(maskCanvas, 0, 0, terrain.width, terrain.height);
-  paint.globalCompositeOperation = "source-over";
 }
 
-/** Capacity isolines — the contour read the art direction is named for, and the
- *  thing that keeps the peak legible as a peak once its sugar has been eaten.
- *  Marching squares over the capacity field, one line per whole unit. */
-function contours() {
-  const { width, height } = maskCanvas;
-  const cell = terrain.width / width;
-  const at = (x, y) => state.capacity[
-    Math.max(0, Math.min(width - 1, x)) * height + Math.max(0, Math.min(height - 1, y))
-  ];
-  const paint = destination();
-  paint.lineWidth = Math.max(1, cell * 0.055);
-  paint.lineJoin = "round";
-  for (let level = 1; level <= state.maxCapacity; level += 1) {
-    paint.strokeStyle = `rgba(60,42,22,${0.20 + level * 0.055})`;
-    paint.beginPath();
-    for (let x = 0; x < width - 1; x += 1) {
-      for (let y = 0; y < height - 1; y += 1) {
-        // Corner values of this lattice square, clockwise from top-left.
-        const corners = [at(x, y), at(x + 1, y), at(x + 1, y + 1), at(x, y + 1)];
-        const edges = [];
-        for (let side = 0; side < 4; side += 1) {
-          const a = corners[side];
-          const b = corners[(side + 1) % 4];
-          if ((a >= level) === (b >= level)) continue;
-          const t = (level - a) / (b - a);
-          // Interpolate along the side, in board pixels.
-          const points = [
-            [x + t, y], [x + 1, y + t], [x + 1 - t, y + 1], [x, y + 1 - t],
-          ][side];
-          edges.push([(points[0] + 0.5) * cell, (points[1] + 0.5) * cell]);
-        }
-        for (let edge = 0; edge + 1 < edges.length; edge += 2) {
-          paint.moveTo(edges[edge][0], edges[edge][1]);
-          paint.lineTo(edges[edge + 1][0], edges[edge + 1][1]);
-        }
-      }
-    }
-    paint.stroke();
-  }
-}
-
-function drawLattice(frame) {
-  const cell = terrain.width / frame.width;
-  terrainContext.strokeStyle = "rgba(42,31,18,.26)";
-  terrainContext.lineWidth = 1;
-  terrainContext.beginPath();
-  for (let x = 1; x < frame.width; x += 1) {
-    terrainContext.moveTo(Math.round(x * cell) + 0.5, 0);
-    terrainContext.lineTo(Math.round(x * cell) + 0.5, terrain.height);
-  }
-  for (let y = 1; y < frame.height; y += 1) {
-    terrainContext.moveTo(0, Math.round(y * cell) + 0.5);
-    terrainContext.lineTo(terrain.width, Math.round(y * cell) + 0.5);
-  }
-  terrainContext.stroke();
-}
-
-/** Lift the ground in proportion to CAPACITY, before any sugar is painted.
- *
- *  Height has to carry brightness on its own. The settlers strip the summit
- *  bare, so keying value only to the sugar standing there made the top of the
- *  mountain the DARKEST part of it and the hero object read as a crater. With
- *  the lift, high land looks high even when picked clean, and the sugar reads
- *  as gold lying on top of it. */
-function elevationLift() {
-  const { width, height } = maskCanvas;
-  const data = maskContext.createImageData(width, height);
-  for (let x = 0; x < width; x += 1) {
-    for (let y = 0; y < height; y += 1) {
-      const elevation = state.capacity[x * height + y] / state.maxCapacity;
-      const offset = (y * width + x) * 4;
-      data.data[offset] = 214;
-      data.data[offset + 1] = 178;
-      data.data[offset + 2] = 124;
-      data.data[offset + 3] = Math.round(255 * Math.min(1, elevation ** 0.75) * 0.72);
-    }
-  }
-  maskContext.putImageData(data, 0, 0);
-  const paint = destination();
-  paint.globalCompositeOperation = "screen";
-  paint.imageSmoothingEnabled = true;
-  paint.imageSmoothingQuality = "high";
-  paint.drawImage(maskCanvas, 0, 0, terrain.width, terrain.height);
-  paint.globalCompositeOperation = "source-over";
-}
-
-/* The LANDFORM is a pure function of capacity, which never changes once the
- * episode has been read — so it is built once and cached. It used to be rebuilt
- * on every timestep along with the sugar, and the marching-squares contours plus
- * three full-board composites were a ~100ms stall every 770ms: the jitter. */
-const landform = document.createElement("canvas");
-const landformContext = landform.getContext("2d");
-let landformKey = "";
-
-function buildLandform(frame) {
-  const size = Math.round(BOARD.w * RENDER_SCALE);
-  const key = `${size}:${frame.width}x${frame.height}:${state.maxCapacity}:${frames.length}`;
-  if (key === landformKey) return;
-  landformKey = key;
-  landform.width = landform.height = size;
-  landformContext.setTransform(1, 0, 0, 1, 0, 0);
-  landformContext.clearRect(0, 0, size, size);
-  landformContext.fillStyle = patternFor(art.terrain_barren, landformContext);
-  landformContext.fillRect(0, 0, size, size);
-  const target = terrainContext;
-  // relief/elevationLift/contours draw through the shared terrain context, so
-  // point them at the landform for this one build.
-  drawInto(landformContext, () => { elevationLift(); relief(); contours(); });
-  void target;
-}
-
-/** Run the terrain painters against a different destination canvas. */
-let terrainTarget = null;
-function drawInto(context, paint) {
-  terrainTarget = context;
-  paint();
-  terrainTarget = null;
-}
-function destination() {
-  return terrainTarget ?? terrainContext;
-}
-
-/** The sugar standing on each cell, right now.
- *
- *  This is the single most important thing on the board — it is what both
- *  policies are competing for and what their settlers are standing on to eat.
- *  Blending it as four soft painterly layers made the massif pretty and made
- *  the actual per-cell resource unreadable, so it is drawn as discrete lattice
- *  cells with a quantised amber ramp: crisp squares, one clear step per unit,
- *  exactly how the model is drawn in the literature. */
-const sugarLayer = document.createElement("canvas");
-const sugarContext = sugarLayer.getContext("2d");
-const SUGAR_RAMP = [
-  null,                    // 0 — bare ground shows through
-  [176, 118, 46, 0.62],
-  [214, 158, 58, 0.78],
-  [240, 194, 88, 0.90],
-  [255, 224, 148, 0.97],
-];
-
-function drawSugar(frame) {
-  const { width, height } = frame;
-  if (sugarLayer.width !== width) {
-    sugarLayer.width = width;
-    sugarLayer.height = height;
-  }
-  const image = sugarContext.createImageData(width, height);
-  for (let index = 0; index < frame.cells.length; index += 1) {
-    const sugar = frame.cells[index][0];
-    if (sugar <= 0) continue;
-    const step = SUGAR_RAMP[Math.min(SUGAR_RAMP.length - 1, Math.round(sugar))]
-      ?? SUGAR_RAMP[SUGAR_RAMP.length - 1];
-    if (!step) continue;
-    // cellId = x * height + y (column-major), so decode before writing rows.
-    const offset = ((index % height) * width + Math.floor(index / height)) * 4;
-    image.data[offset] = step[0];
-    image.data[offset + 1] = step[1];
-    image.data[offset + 2] = step[2];
-    image.data[offset + 3] = Math.round(255 * step[3]);
-  }
-  sugarContext.putImageData(image, 0, 0);
+/** The original's two-axis cell colour (gui.py findSugarAndSpiceColors). With
+ *  spice disabled - as in the shipping variant - this collapses to a straight
+ *  white-to-yellow ramp on sugar, which is the familiar image. */
+function cellColor(sugar, spice) {
+  const sugarFactor = state.maxSugar > 0 ? Math.min(1, sugar / state.maxSugar) : 0;
+  const spiceFactor = state.maxSpice > 0 ? Math.min(1, spice / state.maxSpice) : 0;
+  const blend = mix(SUGAR_HEX, SPICE_HEX, 0.5);
+  const top = mix(EMPTY_HEX, SPICE_HEX, spiceFactor);
+  const bottom = mix(SUGAR_HEX, blend, spiceFactor);
+  const final = mix(top, bottom, sugarFactor);
+  return `rgb(${Math.round(final[0])},${Math.round(final[1])},${Math.round(final[2])})`;
 }
 
 function buildTerrain(frame) {
   const size = Math.round(BOARD.w * RENDER_SCALE);
-  if (terrain.width !== size) {
-    terrain.width = terrain.height = size;
-    scratch.width = scratch.height = size;
-    patterns.clear();
-    landformKey = "";
-  }
-  if (maskCanvas.width !== frame.width) {
-    maskCanvas.width = frame.width;
-    maskCanvas.height = frame.height;
-    landformKey = "";
-  }
-  buildLandform(frame);
-  drawSugar(frame);
-
+  if (terrain.width !== size) terrain.width = terrain.height = size;
+  const cell = size / frame.width;
   terrainContext.setTransform(1, 0, 0, 1, 0, 0);
-  terrainContext.clearRect(0, 0, size, size);
-  terrainContext.imageSmoothingEnabled = true;
-  terrainContext.drawImage(landform, 0, 0);
-  // Crisp square cells: the resource read must not be blurred away.
-  terrainContext.imageSmoothingEnabled = false;
-  terrainContext.drawImage(sugarLayer, 0, 0, size, size);
-  terrainContext.imageSmoothingEnabled = true;
-  drawLattice(frame);
+  terrainContext.fillStyle = `rgb(${EMPTY_HEX.join(",")})`;
+  terrainContext.fillRect(0, 0, size, size);
+
+  for (let index = 0; index < frame.cells.length; index += 1) {
+    const [sugar, spice] = frame.cells[index];
+    if (sugar <= 0 && spice <= 0) continue;
+    // cellId = x * height + y (column-major).
+    const x = Math.floor(index / frame.height) * cell;
+    const y = (index % frame.height) * cell;
+    terrainContext.fillStyle = cellColor(sugar, spice);
+    terrainContext.fillRect(x, y, Math.ceil(cell), Math.ceil(cell));
+  }
+
+  terrainContext.strokeStyle = GRID_HEX;
+  terrainContext.lineWidth = Math.max(1, cell * 0.03);
+  terrainContext.beginPath();
+  for (let line = 1; line < frame.width; line += 1) {
+    const at = Math.round(line * cell) + 0.5;
+    terrainContext.moveTo(at, 0);
+    terrainContext.lineTo(at, size);
+  }
+  for (let line = 1; line < frame.height; line += 1) {
+    const at = Math.round(line * cell) + 0.5;
+    terrainContext.moveTo(0, at);
+    terrainContext.lineTo(size, at);
+  }
+  terrainContext.stroke();
 }
 
 // ---------------------------------------------------------------------------
@@ -644,13 +430,13 @@ function drawBoard(frame, previous, t, now) {
   context.fillStyle = C.ground;
   context.fillRect(0, 0, W, H);
 
-  // The board sits slightly proud of the surround so the eye goes to it.
+  // A bright plate seated on the dark broadcast surround by a thin warm mat.
   context.save();
-  context.shadowColor = "rgba(0,0,0,.55)";
-  context.shadowBlur = 26;
-  context.shadowOffsetY = 6;
+  context.shadowColor = "rgba(0,0,0,.5)";
+  context.shadowBlur = 22;
+  context.shadowOffsetY = 5;
   context.fillStyle = C.ink;
-  context.fillRect(BOARD.x, BOARD.y, BOARD.w, BOARD.h);
+  context.fillRect(BOARD.x - 5, BOARD.y - 5, BOARD.w + 10, BOARD.h + 10);
   context.restore();
   context.drawImage(terrain, BOARD.x, BOARD.y, BOARD.w, BOARD.h);
 
@@ -661,41 +447,34 @@ function drawBoard(frame, previous, t, now) {
     if (age >= 1) { motes.splice(index, 1); continue; }
     context.globalAlpha = (1 - age) * 0.85;
     context.strokeStyle = C.loss;
-    context.lineWidth = Math.max(1, cell * 0.16 * (1 - age));
+    context.lineWidth = Math.max(1.2, cell * 0.20 * (1 - age));
     context.beginPath();
     context.arc(mote.px, mote.py, cell * (0.32 + age * 1.05), 0, Math.PI * 2);
     context.stroke();
   }
   context.globalAlpha = 1;
 
-  /* Settlers are DOTS.
-   *
-   * They were painterly meeple sprites for a while. They looked like stickers
-   * pasted on the terrain, they aliased badly when scaled to a ~9px cell, and
-   * they buried the one thing a viewer needs from an agent-based model: where
-   * the population IS and which policy owns it. A flat disc with a warm-ink
-   * outline reads at every size, never aliases, and is how this model has been
-   * drawn since 1996. */
+  /* Settlers are plain filled circles, as in the original renderer
+   * (reference/dtl-python/gui.py draws create_oval with outline=""). Sized by
+   * wealth, and drawn hollow when a settler is within two timesteps of
+   * starving so the die-off is visible before it happens. */
   const bodies = interpolate(previous, frame, t);
-  const radius = cell * 0.30;
-  context.lineWidth = Math.max(0.8, cell * 0.085);
+  const radius = cell * 0.31;
   for (const body of bodies) {
     const seat = SEATS[body.slot] ?? SEATS[0];
-    // Wealth reads as size, within a range that never touches a neighbour.
-    const size = radius * (0.80 + 0.42 * Math.min(1, Math.log10(1 + body.wealth) / 2.4));
+    const size = radius * (0.82 + 0.36 * Math.min(1, Math.log10(1 + body.wealth) / 2.4));
     context.beginPath();
     context.arc(body.px, body.py, size, 0, Math.PI * 2);
     if (body.starving) {
-      // Fewer than two timesteps of food left: hollow, and visibly failing.
-      context.fillStyle = "rgba(20,15,8,.55)";
+      context.fillStyle = "rgba(251,248,240,.72)";
       context.fill();
+      context.lineWidth = Math.max(1, cell * 0.10);
       context.strokeStyle = seat.color;
+      context.stroke();
     } else {
       context.fillStyle = seat.color;
       context.fill();
-      context.strokeStyle = C.ink;
     }
-    context.stroke();
   }
 
   if (state.hoverCell >= 0 && state.hoverCell < frame.cells.length) {
@@ -710,20 +489,6 @@ function drawBoard(frame, previous, t, now) {
     );
   }
 
-  drawVignette();
-}
-
-/** A subtle corner darkening seats the board in the frame. Deliberately gentle:
- *  the read stays orthographic, this is a value gradient, not a rendered desk. */
-function drawVignette() {
-  const gradient = context.createRadialGradient(
-    BOARD.x + BOARD.w / 2, H / 2, BOARD.w * 0.34,
-    BOARD.x + BOARD.w / 2, H / 2, BOARD.w * 0.92,
-  );
-  gradient.addColorStop(0, "rgba(20,16,10,0)");
-  gradient.addColorStop(1, "rgba(12,9,5,.62)");
-  context.fillStyle = gradient;
-  context.fillRect(BOARD.x, BOARD.y, BOARD.w, BOARD.h);
 }
 
 // ---------------------------------------------------------------------------

@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 // Generate the Sugarscape broadcast art batch with nanobanana (Gemini image models).
 //
-// Every prompt carries the SAME locked style sentence from the Phase-0c art-direction
-// lock, so the whole batch coheres. The batch is TERRAIN ONLY: the settlers are drawn
-// as flat discs in the viewer, because painterly agent sprites aliased badly at a ~9px
-// cell and buried the thing an agent-based model has to show - where the population is
-// and which policy owns it.
+// The BOARD is not generated art. reference/dtl-python/gui.py is the oracle for the
+// look - a white field, a grey lattice, white-to-yellow sugar cells and plain coloured
+// dots - and the viewer draws it directly. A generated terrain batch was tried here and
+// removed: it buried the per-cell resource under texture and read as fog.
+//
+// What remains is the one place a painted image genuinely helps: the end-card backdrop.
 //
 //   node tools/generate_art.mjs            # only missing assets
 //   node tools/generate_art.mjs --force    # regenerate everything
@@ -33,26 +34,6 @@ const STYLE = "Painted in the style of a 1996 Santa Fe Institute artificial-life
   "tactile - not glossy, not neon, not digital.";
 
 const assets = [
-  {
-    name: "terrain-barren",
-    prompt: `A seamless top-down texture of exhausted barren ground - VERY DARK cold ` +
-      `charcoal-brown earth, nearly black, dry and cracked, drained of all colour and ` +
-      `all warmth, deep shadow in every crack. It must read as DEPLETED and EMPTY, much ` +
-      `darker than surrounding terrain. No amber, no gold, no yellow anywhere. No ` +
-      `plants, no objects, no creatures, no text. The texture fills the entire square ` +
-      `frame edge to edge with no border and no background showing. ${STYLE}`,
-  },
-  ...[1, 2, 3, 4].map((tier) => ({
-    name: `terrain-sugar-${tier}`,
-    prompt: `A seamless top-down texture of ${[
-      "a thin scattering of coarse amber sugar crystals over dark earth, mostly bare ground showing",
-      "a broken crust of golden sugar granules covering about half the ground",
-      "a thick continuous drift of glittering honey-gold sugar granules, ground barely visible",
-      "a deep dense bank of brilliant pale-honey sugar crystals, luminous and heaped, completely covering the ground",
-    ][tier - 1]}. Granular crystalline texture, no plants, no objects, no creatures, ` +
-      `no text. The texture fills the entire square frame edge to edge with no border ` +
-      `and no background showing. ${STYLE}`,
-  })),
   {
     name: "endcard",
     prompt: `A wide cinematic vista looking down from high altitude onto a vast amber ` +

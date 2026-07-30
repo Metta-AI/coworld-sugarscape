@@ -1,11 +1,18 @@
-/* Sugarscape broadcast — art direction lock:
-   a 1996 Santa Fe Institute artificial-life plate, re-lit as a broadcast. An amber
-   topographic sugar massif under a warm raking light, read from directly above,
-   with two populations of small physical beads swarming it.
+/* Sugarscape broadcast — art direction lock.
 
-   Every neutral is warmed toward the world and NOTHING is pure black or pure white:
-   the signature ink is #2a1f12, the paper is #f6ead2. The terrain owns the warm half
-   of the wheel, so the two competitors take the cool half. */
+   THE BOARD IS THE ORIGINAL. reference/dtl-python/gui.py is vendored in this repo
+   and is the oracle for the LOOK, exactly as the Python model is the oracle for
+   behaviour: a white field, a #c0c0c0 lattice, cells ramping white -> #F2FA00 with
+   sugar and -> #9B4722 with spice, and plain filled circles for agents coloured by
+   decision model from its palette (red, then blue). It is not restyled, because the
+   picture people recognise IS the lattice. An earlier pass invented a warm painterly
+   massif here; it buried the per-cell resource under texture and read as fog.
+
+   THE BROADCAST AROUND IT is a dark warm surround that seats the bright plate and
+   never competes with it: ink #2a1f12, paper #f6ead2, sugar-gold accent #e8a838,
+   nothing pure black or pure white in the chrome. The two seat colours are lifted
+   slightly from the original's palette so one value works both as a dot on the
+   white plate and as a chip on the dark panels. */
 
 @font-face {
   font-family: "Space Grotesk";
