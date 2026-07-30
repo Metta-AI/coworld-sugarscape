@@ -100,7 +100,7 @@
     .dot { width: 10px; height: 10px; border-radius: 50% }
     .chart-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1fr;
       gap: 8px;
     }
     .chart-grid figure { margin: 0; min-width: 0 }
@@ -198,16 +198,16 @@
         </div>
         <div class="chart-grid">
           <figure>
-            <figcaption>Time series</figcaption>
-            <canvas id="series-chart" width="300" height="120"></canvas>
+            <figcaption id="series-caption">Time series</figcaption>
+            <canvas id="series-chart" width="320" height="150"></canvas>
           </figure>
           <figure>
             <figcaption>Wealth histogram</figcaption>
-            <canvas id="histogram" width="300" height="120"></canvas>
+            <canvas id="histogram" width="320" height="150"></canvas>
           </figure>
           <figure>
             <figcaption>Lorenz curve</figcaption>
-            <canvas id="lorenz" width="300" height="120"></canvas>
+            <canvas id="lorenz" width="320" height="150"></canvas>
           </figure>
         </div>
       </section>
@@ -229,6 +229,7 @@ const cellMode = document.querySelector("#cell-mode");
 const agentMode = document.querySelector("#agent-mode");
 const linksToggle = document.querySelector("#links");
 const seriesSelect = document.querySelector("#series");
+const seriesCaption = document.querySelector("#series-caption");
 const seriesChart = document.querySelector("#series-chart");
 const histogram = document.querySelector("#histogram");
 const lorenz = document.querySelector("#lorenz");
@@ -239,9 +240,12 @@ const palette = [
 ];
 const linkColors = {friend: "#8ecae6", mate: "#ff7aa2", loan: "#ffd166"};
 const frames = [];
+const frameIndexes = new Map();
 let frameIndex = -1;
 let playing = true;
 let inspectedCell = -1;
+let observedWealthMaximum = 1;
+let currentStreamId = null;
 
 function hashValue(value) {
   const text = String(value);
@@ -419,21 +423,93 @@ function renderWorld(frame) {
 function clearChart(canvas) {
   const context = canvas.getContext("2d");
   context.clearRect(0, 0, canvas.width, canvas.height);
-  context.strokeStyle = "#343029";
-  context.strokeRect(.5, .5, canvas.width - 1, canvas.height - 1);
   return context;
 }
 
-function drawPolyline(canvas, points, color, maximumX = 1, maximumY = 1) {
+function formatChartValue(value) {
+  const magnitude = Math.abs(value);
+  if (magnitude >= 10000) return value.toExponential(1);
+  if (magnitude >= 1000) return value.toFixed(0);
+  if (magnitude >= 10) return value.toFixed(1);
+  if (magnitude >= .1) return value.toFixed(2);
+  if (magnitude === 0) return "0";
+  return value.toExponential(1);
+}
+
+function chartArea(canvas) {
+  return {
+    left: 42,
+    right: canvas.width - 8,
+    top: 10,
+    bottom: canvas.height - 24,
+  };
+}
+
+function drawChartAxes(canvas, bounds, labels = {}) {
   const context = clearChart(canvas);
+  const area = chartArea(canvas);
+  context.strokeStyle = "#343029";
+  context.lineWidth = 1;
+  context.strokeRect(
+    area.left + .5,
+    area.top + .5,
+    area.right - area.left,
+    area.bottom - area.top,
+  );
+  context.beginPath();
+  context.moveTo(area.left, (area.top + area.bottom) / 2);
+  context.lineTo(area.right, (area.top + area.bottom) / 2);
+  context.strokeStyle = "#24221d";
+  context.stroke();
+  context.fillStyle = "#a89f91";
+  context.font = "9px ui-monospace, SFMono-Regular, Menlo, monospace";
+  context.textBaseline = "middle";
+  context.textAlign = "right";
+  context.fillText(
+    labels.maximumY ?? formatChartValue(bounds.maximumY),
+    area.left - 5,
+    area.top + 2,
+  );
+  context.fillText(
+    labels.minimumY ?? formatChartValue(bounds.minimumY),
+    area.left - 5,
+    area.bottom,
+  );
+  context.textBaseline = "top";
+  context.textAlign = "left";
+  context.fillText(
+    labels.minimumX ?? formatChartValue(bounds.minimumX),
+    area.left,
+    area.bottom + 5,
+  );
+  context.textAlign = "right";
+  context.fillText(
+    labels.maximumX ?? formatChartValue(bounds.maximumX),
+    area.right,
+    area.bottom + 5,
+  );
+  return {context, area};
+}
+
+function chartPoint(area, bounds, point) {
+  const xRange = Math.max(Number.EPSILON, bounds.maximumX - bounds.minimumX);
+  const yRange = Math.max(Number.EPSILON, bounds.maximumY - bounds.minimumY);
+  return {
+    x: area.left + (area.right - area.left) *
+      (point[0] - bounds.minimumX) / xRange,
+    y: area.bottom - (area.bottom - area.top) *
+      (point[1] - bounds.minimumY) / yRange,
+  };
+}
+
+function drawPolyline(canvas, points, color, bounds, labels = {}) {
+  const {context, area} = drawChartAxes(canvas, bounds, labels);
   if (points.length === 0) return;
   context.beginPath();
-  points.forEach(([x, y], index) => {
-    const drawX = 8 + (canvas.width - 16) * x / Math.max(1, maximumX);
-    const drawY = canvas.height - 8 -
-      (canvas.height - 16) * y / Math.max(1e-12, maximumY);
-    if (index === 0) context.moveTo(drawX, drawY);
-    else context.lineTo(drawX, drawY);
+  points.forEach((point, index) => {
+    const position = chartPoint(area, bounds, point);
+    if (index === 0) context.moveTo(position.x, position.y);
+    else context.lineTo(position.x, position.y);
   });
   context.strokeStyle = color;
   context.lineWidth = 2;
@@ -443,38 +519,90 @@ function drawPolyline(canvas, points, color, maximumX = 1, maximumY = 1) {
 function renderSeries() {
   const key = seriesSelect.value;
   const visibleFrames = frames.slice(0, frameIndex + 1);
-  const points = visibleFrames.map((frame, index) => {
+  const points = visibleFrames.map((frame) => {
     const value = key === "population"
       ? frame.agents.length
-      : Number((frame.stats || {})[key] || 0);
-    return [index, value];
+      : Number((frame.stats || {})[key] ?? 0);
+    return [frame.timestep, value];
   });
+  if (points.length === 0) return;
+  const values = points.map((point) => point[1]);
+  const minimum = Math.min(...values);
+  const maximum = Math.max(...values);
+  const padding = maximum === minimum
+    ? Math.max(Math.abs(maximum) * .02, key === "giniCoefficient" ? .01 : 1)
+    : (maximum - minimum) * .08;
+  const bounds = {
+    minimumX: points[0][0],
+    maximumX: Math.max(points[0][0] + 1, points.at(-1)[0]),
+    minimumY: minimum < 0 ? minimum - padding : Math.max(0, minimum - padding),
+    maximumY: maximum + padding,
+  };
+  const selectedLabel =
+    seriesSelect.options[seriesSelect.selectedIndex].textContent;
+  seriesCaption.textContent =
+    `Time series · ${selectedLabel} · ${formatChartValue(values.at(-1))}`;
   drawPolyline(
     seriesChart,
     points,
     "#e2b659",
-    Math.max(1, points.length - 1),
-    Math.max(...points.map((point) => point[1]), 1),
+    bounds,
+    {
+      minimumX: `t${bounds.minimumX}`,
+      maximumX: `t${points.at(-1)[0]}`,
+    },
   );
 }
 
-function renderHistogram(frame) {
-  const context = clearChart(histogram);
-  const wealth = frame.agents.map((agent) => agent.sugar + agent.spice);
-  if (wealth.length === 0) return;
-  const binCount = Math.min(12, Math.max(4, Math.ceil(Math.sqrt(wealth.length))));
-  const maximum = Math.max(...wealth, 1);
+function wealthBins(frame, maximum, binCount = 10) {
   const bins = new Array(binCount).fill(0);
-  for (const value of wealth) {
-    const index = Math.min(binCount - 1, Math.floor(value / maximum * binCount));
+  for (const agent of frame.agents) {
+    const wealth = Math.max(0, agent.sugar + agent.spice);
+    const index = Math.min(
+      binCount - 1,
+      Math.floor(wealth / Math.max(1, maximum) * binCount),
+    );
     bins[index] += 1;
   }
-  const maxBin = Math.max(...bins, 1);
+  return bins;
+}
+
+function observeChartDomains(frame) {
+  for (const agent of frame.agents) {
+    observedWealthMaximum = Math.max(
+      observedWealthMaximum,
+      agent.sugar + agent.spice,
+    );
+  }
+}
+
+function renderHistogram(frame) {
+  const bounds = {
+    minimumX: 0,
+    maximumX: observedWealthMaximum,
+    minimumY: 0,
+    maximumY: 1,
+  };
+  const {context, area} = drawChartAxes(histogram, bounds, {
+    minimumX: "0 wealth",
+    maximumX: `${formatChartValue(observedWealthMaximum)} wealth`,
+    minimumY: "0%",
+    maximumY: "100%",
+  });
+  if (frame.agents.length === 0) return;
+  const bins = wealthBins(frame, observedWealthMaximum);
   bins.forEach((count, index) => {
-    const width = (histogram.width - 16) / binCount;
-    const height = (histogram.height - 16) * count / maxBin;
+    const width = (area.right - area.left) / bins.length;
+    const share = count / frame.agents.length;
+    const height = (area.bottom - area.top) *
+      share;
     context.fillStyle = "#35b9c7";
-    context.fillRect(8 + index * width, histogram.height - 8 - height, width - 1, height);
+    context.fillRect(
+      area.left + index * width,
+      area.bottom - height,
+      Math.max(1, width - 1),
+      height,
+    );
   });
 }
 
@@ -489,11 +617,18 @@ function renderLorenz(frame) {
     cumulative += value;
     points.push([(index + 1) / wealth.length, total > 0 ? cumulative / total : 0]);
   });
-  drawPolyline(lorenz, points, "#e96ba8");
+  const bounds = {minimumX: 0, maximumX: 1, minimumY: 0, maximumY: 1};
+  drawPolyline(lorenz, points, "#e96ba8", bounds, {
+    minimumX: "0% agents",
+    maximumX: "100% agents",
+    minimumY: "0%",
+    maximumY: "100%",
+  });
   const context = lorenz.getContext("2d");
+  const area = chartArea(lorenz);
   context.beginPath();
-  context.moveTo(8, lorenz.height - 8);
-  context.lineTo(lorenz.width - 8, 8);
+  context.moveTo(area.left, area.bottom);
+  context.lineTo(area.right, area.top);
   context.strokeStyle = "#555";
   context.lineWidth = 1;
   context.stroke();
@@ -546,6 +681,29 @@ function selectFrame(index) {
   render();
 }
 
+function recordFrame(frame) {
+  if (currentStreamId !== null && frame.streamId !== currentStreamId) {
+    frames.length = 0;
+    frameIndexes.clear();
+    frameIndex = -1;
+    inspectedCell = -1;
+    observedWealthMaximum = 1;
+  }
+  currentStreamId = frame.streamId;
+  const existingIndex = frameIndexes.get(frame.timestep);
+  if (existingIndex !== undefined) {
+    frames[existingIndex] = frame;
+    if (playing) frameIndex = frames.length - 1;
+    else if (frameIndex === existingIndex) render();
+    return;
+  }
+  observeChartDomains(frame);
+  frameIndexes.set(frame.timestep, frames.length);
+  frames.push(frame);
+  if (playing || frameIndex < 0) frameIndex = frames.length - 1;
+  render();
+}
+
 playButton.addEventListener("click", () => {
   playing = !playing;
   if (playing && frames.length > 0) frameIndex = frames.length - 1;
@@ -589,9 +747,7 @@ function connect() {
     statusElement.textContent = "live";
   });
   socket.addEventListener("message", (event) => {
-    frames.push(JSON.parse(event.data));
-    if (playing || frameIndex < 0) frameIndex = frames.length - 1;
-    render();
+    recordFrame(JSON.parse(event.data));
   });
   socket.addEventListener("close", () => {
     statusElement.textContent = "reconnecting";

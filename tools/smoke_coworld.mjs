@@ -5,6 +5,7 @@ import { spawn } from "node:child_process";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import vm from "node:vm";
 
 const root = resolve(import.meta.dirname, "..");
 const binary = resolve(process.argv[2] ?? join(root, ".build/sugarscape_coworld"));
@@ -68,24 +69,190 @@ function openSocket(path) {
   });
 }
 
+function openCollectingSocket(path, target) {
+  return new Promise((resolveOpen, rejectOpen) => {
+    const socket = new WebSocket(`ws://127.0.0.1:${port}${path}`);
+    socket.addEventListener("message", (event) => {
+      target.push(JSON.parse(event.data));
+    });
+    socket.addEventListener("open", () => resolveOpen(socket), { once: true });
+    socket.addEventListener(
+      "error",
+      () => rejectOpen(new Error(`WebSocket failed: ${path}`)),
+      { once: true },
+    );
+  });
+}
+
 await waitForHealth();
 const playerPage = await fetch(`${baseUrl}/client/player`);
 assert.equal(playerPage.status, 200);
 assert.match(await playerPage.text(), /population-policy socket/);
 const viewerPage = await fetch(`${baseUrl}/client/global`);
 assert.equal(viewerPage.status, 200);
-assert.match(await viewerPage.text(), /Sugarscape Observatory/);
+const viewerHtml = await viewerPage.text();
+assert.match(viewerHtml, /Sugarscape Observatory/);
 
-const globalSocket = await openSocket("/global");
-const playerSocket = await openSocket("/player?slot=0&token=smoke-token");
+const drawnPoints = [];
+const canvasContext = {
+  arc() {},
+  beginPath() {},
+  clearRect() {},
+  fill() {},
+  fillRect() {},
+  fillText() {},
+  lineTo(x, y) { drawnPoints.push([x, y]); },
+  moveTo() {},
+  stroke() {},
+  strokeRect() {},
+};
+function fakeElement(selector = "") {
+  return {
+    addEventListener() {},
+    append() {},
+    checked: false,
+    getBoundingClientRect: () => ({left: 0, top: 0, width: 1, height: 1}),
+    getContext: () => canvasContext,
+    height: 150,
+    max: 0,
+    options: [{textContent: "population"}],
+    replaceChildren() {},
+    selectedIndex: 0,
+    textContent: "",
+    value: selector === "#cell-mode"
+      ? "resources"
+      : selector === "#agent-mode"
+        ? "decisionModel"
+        : selector === "#series"
+          ? "population"
+          : "0",
+    width: 320,
+  };
+}
+class FakeWebSocket {
+  addEventListener() {}
+  close() {}
+}
+const viewerContext = vm.createContext({
+  console,
+  document: {
+    createElement: () => fakeElement(),
+    querySelector: (selector) => fakeElement(selector),
+  },
+  drawnPoints,
+  location: {host: "localhost", protocol: "http:"},
+  Math,
+  Number,
+  setTimeout,
+  WebSocket: FakeWebSocket,
+});
+const viewerScript = viewerHtml.match(/<script>([\s\S]*)<\/script>/)?.[1];
+assert.ok(viewerScript, "viewer script must be embedded");
+vm.runInContext(viewerScript, viewerContext);
+const reconnectState = vm.runInContext(`
+  recordFrame({
+    streamId: "first",
+    timestep: 1,
+    width: 1,
+    height: 1,
+    cells: [[0, 0, 0]],
+    agents: [],
+    links: [],
+    slots: [],
+    stats: {marker: "initial"},
+  });
+  recordFrame({
+    streamId: "first",
+    timestep: 2,
+    width: 1,
+    height: 1,
+    cells: [[0, 0, 0]],
+    agents: [],
+    links: [],
+    slots: [],
+    stats: {marker: "latest"},
+  });
+  recordFrame({
+    streamId: "first",
+    timestep: 1,
+    width: 1,
+    height: 1,
+    cells: [[0, 0, 0]],
+    agents: [],
+    links: [],
+    slots: [],
+    stats: {marker: "replayed"},
+  });
+  JSON.stringify({
+    length: frames.length,
+    timesteps: frames.map((frame) => frame.timestep),
+    marker: frames[0].stats.marker,
+  });
+`, viewerContext);
+assert.deepEqual(JSON.parse(reconnectState), {
+  length: 2,
+  timesteps: [1, 2],
+  marker: "replayed",
+});
+const restartedState = vm.runInContext(`
+  inspectedCell = 99;
+  recordFrame({
+    streamId: "second",
+    timestep: 0,
+    width: 1,
+    height: 1,
+    cells: [[0, 0, 0]],
+    agents: [],
+    links: [],
+    slots: [],
+    stats: {marker: "restarted"},
+  });
+  JSON.stringify({
+    length: frames.length,
+    timesteps: frames.map((frame) => frame.timestep),
+    marker: frames[0].stats.marker,
+    inspectedCell,
+  });
+`, viewerContext);
+assert.deepEqual(JSON.parse(restartedState), {
+  length: 1,
+  timesteps: [0],
+  marker: "restarted",
+  inspectedCell: -1,
+});
+const negativeSeriesPoints = vm.runInContext(`
+  seriesSelect.value = "meanHappiness";
+  recordFrame({
+    streamId: "second",
+    timestep: 1,
+    width: 1,
+    height: 1,
+    cells: [[0, 0, 0]],
+    agents: [],
+    links: [],
+    slots: [],
+    stats: {meanHappiness: -2},
+  });
+  drawnPoints.length = 0;
+  renderSeries();
+  JSON.stringify(drawnPoints);
+`, viewerContext);
+assert.ok(
+  JSON.parse(negativeSeriesPoints).every(
+    ([x, y]) => Number.isFinite(x) && Number.isFinite(y) &&
+      x >= 0 && x <= 320 && y >= 0 && y <= 150,
+  ),
+);
+
 const frames = [];
+const lateFrames = [];
+const globalSocket = await openCollectingSocket("/global", frames);
+const playerSocket = await openSocket("/player?slot=0&token=smoke-token");
 let observations = 0;
 let firstExpected = null;
+let lateGlobalSocket = null;
 
-globalSocket.addEventListener("message", (event) => {
-  frames.push(JSON.parse(event.data));
-});
-playerSocket.addEventListener("message", (event) => {
+playerSocket.addEventListener("message", async (event) => {
   const observation = JSON.parse(event.data);
   assert.equal(observation.type, "observation");
   assert.ok(observation.candidates.length > 0);
@@ -118,6 +285,14 @@ playerSocket.addEventListener("message", (event) => {
       requestId: observation.requestId,
       cell: -999,
     }));
+  } else if (observations === 9) {
+    const lateSocketPromise = openCollectingSocket("/global", lateFrames);
+    playerSocket.send(JSON.stringify({
+      type: "action",
+      requestId: observation.requestId,
+      cell: observation.candidates[0].cell,
+    }));
+    lateGlobalSocket = await lateSocketPromise;
   } else {
     playerSocket.send(JSON.stringify({
       type: "action",
@@ -139,6 +314,11 @@ assert.deepEqual(results.actions_received, [23]);
 assert.deepEqual(results.fallbacks, [1]);
 assert.equal(results.population.length, 1);
 assert.match(results.score_semantics, /final population sugar plus spice/);
+assert.deepEqual(
+  lateFrames.slice(0, 2).map((frame) => frame.timestep),
+  [0, 1],
+);
+lateGlobalSocket?.close();
 
 const replay = JSON.parse(await readFile(replayPath, "utf8"));
 assert.equal(replay.format, "sugarscape.replay.v1");
@@ -149,7 +329,13 @@ assert.ok(Array.isArray(replay.frames[0].links));
 assert.equal(typeof replay.frames[0].agents[0].age, "number");
 assert.equal(typeof replay.frames[0].agents[0].sick, "boolean");
 assert.equal(typeof replay.frames[0].agents[0].movement, "number");
+assert.notEqual(
+  replay.frames[0].stats.meanWealth,
+  replay.frames.at(-1).stats.meanWealth,
+);
 assert.ok(frames.length >= 3);
+assert.equal(typeof frames[0].streamId, "string");
+assert.ok(frames.every((frame) => frame.streamId === frames[0].streamId));
 const firstDecisionFrame = replay.frames.find(
   (frame) => frame.timestep === firstExpected.timestep,
 );
