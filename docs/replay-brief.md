@@ -112,3 +112,42 @@ the payload reference; the viewer is designed from scratch (L51).
 - **The numeric HUD is dataviz.** Colour is held to the population and never repainted;
   numbers wear ink tokens, not the population hue; every score appears with its rank and
   its margin.
+
+## Phase 4 — where the gates stand
+
+Correctness and delivery are green: `coworld certify` passes end to end (including the
+replay-liveness probe of `/client/replay` + `/replay`), the native suite and the coworld
+smoke test pass, the document loads through the proxy harness with a clean console, all
+three failure modes fail visibly, and the control chrome measures 15.7:1 text contrast
+with 24px minimum targets at the 640×360 floor.
+
+**The adversarial aesthetic gate has NOT cleared the >90 bar** — 64/100, then 70/100 after
+the first fix round, then the crater/title/axis fixes above (not yet re-scored). Both
+audits confirmed 9 of 10 AI-default tells PASS on measured evidence, so the failure is not
+"it looks AI-default"; it is specific craft debt. Known open items, ranked:
+
+1. **The 640×360 floor is a linear downscale, not a responsive design.** The rail keeps the
+   same three panels and four feed rows at half scale, so roughly a dozen small labels fall
+   below legibility (chart axis ends, `t0`/`t100`, "lead, in sugar", the settler sublines,
+   "unequal", "36 alive of 64", the feed timestamps). Needs the rail to shed or promote
+   content at the floor rather than scale linearly. The scorebug and board already survive.
+2. **The event feed goes stale.** At t47 the newest row is `t16–38`, because the coalescer
+   merges a long quiet stretch and nothing newer has happened. It should surface the current
+   state (or the standing beat) rather than leaving a panel titled "what just happened"
+   showing something nine timesteps old, and lead changes should not scroll off behind
+   routine starvation.
+3. **The tertiary ink token `#6f6250` measures 3.21:1** on the panel — under AA for body
+   text. Fine for the large numerals it mostly carries, wrong for the small captions.
+4. **The race chart is ~70% empty** — the whole leading half is blank when one population
+   holds the lead throughout, and everything right of the cursor is unused.
+5. **`CARRYING CAPACITY 55` is a bare number** and reads as contradicting the `36 alive of
+   64` caption beneath it; it needs a unit or an explicit "the world supports N" framing.
+6. **The end-card backdrop is a side-elevation painted peak** inside a frame whose board is
+   an orthographic top-down render — two incompatible depictions of the same mountain.
+7. **Contours are present but faint**, and vanish entirely at the embed floor, so the
+   "topographic plate" half of the lock is only partly delivered.
+
+The audit also raised "the board looks static — the resource never visibly changes." That
+one is a **false bug**: total sugar genuinely plateaus after t8 (1034 → 738 → ~730 for the
+rest of the episode). That plateau IS the carrying-capacity result the model is famous for,
+and the per-cell churn underneath it is real and now visible. Do not "fix" it.
