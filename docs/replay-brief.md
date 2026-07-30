@@ -60,8 +60,9 @@ Recorded episode: 32×32, 100 timesteps, 64 agents, two policy populations.
      t≈40 (diffed frame-to-frame; `stats.agentStarvationDeaths` confirms the cause). The
      dead die *far from the mountain* (mean distance 13.4 cells) while survivors sit on it
      (4.7). This is the single loudest beat.
-   - **Lead changes — the race.** 5 of them: B takes the lead at t2 and holds to t62,
-     A takes it, B retakes at t69, A takes it back at t71 and holds. Final margin 81 (3.5%).
+   - **Lead changes — the race.** **4** of them: A leads at t0, B takes it at t2 and holds
+     to t62, A takes it, B retakes at t69, A takes it back at t71 and holds. Final margin
+     81 (3.5%). (An earlier draft said five and then listed four; four is correct.)
    - **The migration.** Agents converge on the sugar mountain. This is the iconic
      Sugarscape image and it is what the board must show.
    - **Emergent selection.** Survivors have better vision (4.0 v 2.9) and lower metabolism
@@ -122,7 +123,7 @@ What `gui.py` actually specifies, and what the viewer now does:
 | Field | `tkinter.Canvas(background="white")` | `#fbf8f0`, warmed a touch off pure white |
 | Cell | `create_rectangle(..., outline="#c0c0c0")` | same, one rect per cell, same lattice colour |
 | Cell fill | `findSugarAndSpiceColors("#F2FA00", "#9B4722")` — a two-axis interpolation from white through sugar-yellow and spice-brown | the same interpolation, ported exactly, so a spice-enabled variant renders faithfully |
-| Agent | `create_oval(fill=color, outline="")` | plain filled circle; sized by wealth, hollow when within two timesteps of starving |
+| Agent | **no agent mark at all** — `lookupFillColor` recolours the whole cell rectangle, so a settler is a solid square that HIDES the sugar under it. (`create_oval` is the network overlay's per-cell shape, not the agent.) | **a deliberate deviation:** a filled dot, sized by wealth, hollow when within one timestep of starving. A dot keeps the resource visible under the swarm — the read this broadcast is built on — and matches Epstein & Axtell's own published plates |
 | Agent colour | `palette[i]` per decision model — `#FA3232` red, `#3232FA` blue | the same order, each hue lifted slightly so one value reads on the white plate AND on the dark chrome |
 
 The broadcast surround keeps its own identity, since the original has no broadcast layer to

@@ -156,22 +156,36 @@ html, body {
   #scrub:focus-visible { outline-color: Highlight; }
 }
 
-/* Failure has to be visible, never a black box. */
+/* Failure has to be visible, never a black box - and it has to look like this
+   product rather than a bare fallback. */
 .notice {
   position: absolute;
-  inset: auto 8% 46%;
+  inset: auto 12% 30%;
   margin: 0;
-  padding: 1.1em 1.4em;
+  padding: 1.4em 1.6em 1.5em;
   border: 1px solid var(--border);
   border-left: 3px solid var(--gold);
-  border-radius: 4px;
+  border-radius: 6px;
   background: var(--panel);
   color: var(--paper);
-  font: 500 clamp(11px, 1.5vw, 17px)/1.5 var(--display);
-  text-align: center;
+  font: 500 clamp(12px, 1.6vw, 19px)/1.5 var(--display);
   backdrop-filter: blur(7px);
 }
+.notice::before {
+  content: "SUGARSCAPE";
+  display: block;
+  margin-bottom: 0.55em;
+  color: var(--muted);
+  font: 700 clamp(9px, 1.05vw, 13px)/1 var(--display);
+  letter-spacing: 0.34em;
+}
+.notice code {
+  font-family: var(--mono);
+  color: var(--gold);
+  overflow-wrap: anywhere;
+}
 .notice:empty { display: none; }
+.controls[hidden] { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .controls { backdrop-filter: none; }
