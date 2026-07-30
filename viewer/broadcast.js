@@ -116,6 +116,14 @@ const state = {
   finished: false,
   maxTimestep: 0,
   maxSugar: 1,
+  // Per-cell sugar CAPACITY, accumulated as the running maximum ever observed.
+  // The frames carry only what a cell holds right now, but the landform has to
+  // persist: without it, the middle of the mountain - which is exactly where
+  // the settlers have eaten everything - renders as a dark crater instead of as
+  // a harvested peak, and the board looks static once the world reaches its
+  // carrying capacity even though cells are being stripped and regrowing.
+  capacity: null,
+  maxCapacity: 1,
   maxWealth: 1,
   startingPopulation: 0,
   lastDrawnIndex: -1,
@@ -265,6 +273,14 @@ function recordFrame(frame) {
     state.startingPopulation = frame.agents.length;
     for (const cell of frame.cells) state.maxSugar = Math.max(state.maxSugar, cell[0]);
   }
+  if (!state.capacity || state.capacity.length !== frame.cells.length) {
+    state.capacity = new Float32Array(frame.cells.length);
+  }
+  for (let cell = 0; cell < frame.cells.length; cell += 1) {
+    const sugar = frame.cells[cell][0];
+    if (sugar > state.capacity[cell]) state.capacity[cell] = sugar;
+    if (sugar > state.maxCapacity) state.maxCapacity = sugar;
+  }
   // maxTimestep is stamped on every frame by the game server so the clock counts
   // to the SCHEDULED end of the match, not to whatever tick this recording
   // happens to stop at. An early extinction then freezes short of the buzzer.
@@ -375,26 +391,26 @@ function layer(frame, image, edge0, edge1) {
   terrainContext.drawImage(scratch, 0, 0);
 }
 
-/** A raking light from the upper left, computed from the sugar field's own
- *  gradient. This is what makes the lattice read as a massif rather than a
- *  heat map — and it is derived from the data, not painted in. */
-function relief(frame) {
-  const { width, height } = frame;
+/** A raking light from the upper left, computed from the CAPACITY field's own
+ *  gradient — the landform, not the current stock. Lighting the live sugar
+ *  instead made the mountain change shape as it was eaten, so the middle (where
+ *  every settler is standing, stripped to zero) sank into a crater. Lit off
+ *  capacity, the massif holds its form and the sugar drains out of it. */
+function relief() {
+  const { width, height } = maskCanvas;
   const data = maskContext.createImageData(width, height);
-  const sugarAt = (x, y) => {
-    const cx = Math.max(0, Math.min(width - 1, x));
-    const cy = Math.max(0, Math.min(height - 1, y));
-    return frame.cells[cx * height + cy][0];
-  };
+  const at = (x, y) => state.capacity[
+    Math.max(0, Math.min(width - 1, x)) * height + Math.max(0, Math.min(height - 1, y))
+  ];
   const lx = -0.62, ly = -0.58, lz = 0.53;
   for (let x = 0; x < width; x += 1) {
     for (let y = 0; y < height; y += 1) {
-      const dx = (sugarAt(x + 1, y) - sugarAt(x - 1, y)) / (2 * state.maxSugar);
-      const dy = (sugarAt(x, y + 1) - sugarAt(x, y - 1)) / (2 * state.maxSugar);
-      const scale = 2.4;
+      const dx = (at(x + 1, y) - at(x - 1, y)) / (2 * state.maxCapacity);
+      const dy = (at(x, y + 1) - at(x, y - 1)) / (2 * state.maxCapacity);
+      const scale = 3.1;
       const length = Math.hypot(-dx * scale, -dy * scale, 1);
       const shade = (-dx * scale * lx + -dy * scale * ly + lz) / length;
-      const value = Math.max(0, Math.min(255, Math.round(128 + (shade - 0.53) * 300)));
+      const value = Math.max(0, Math.min(255, Math.round(128 + (shade - 0.53) * 340)));
       const offset = (y * width + x) * 4;
       data.data[offset] = value;
       data.data[offset + 1] = value;
@@ -408,6 +424,46 @@ function relief(frame) {
   terrainContext.imageSmoothingQuality = "high";
   terrainContext.drawImage(maskCanvas, 0, 0, terrain.width, terrain.height);
   terrainContext.globalCompositeOperation = "source-over";
+}
+
+/** Capacity isolines — the contour read the art direction is named for, and the
+ *  thing that keeps the peak legible as a peak once its sugar has been eaten.
+ *  Marching squares over the capacity field, one line per whole unit. */
+function contours() {
+  const { width, height } = maskCanvas;
+  const cell = terrain.width / width;
+  const at = (x, y) => state.capacity[
+    Math.max(0, Math.min(width - 1, x)) * height + Math.max(0, Math.min(height - 1, y))
+  ];
+  terrainContext.lineWidth = Math.max(1, cell * 0.055);
+  terrainContext.lineJoin = "round";
+  for (let level = 1; level <= state.maxCapacity; level += 1) {
+    terrainContext.strokeStyle = `rgba(60,42,22,${0.20 + level * 0.055})`;
+    terrainContext.beginPath();
+    for (let x = 0; x < width - 1; x += 1) {
+      for (let y = 0; y < height - 1; y += 1) {
+        // Corner values of this lattice square, clockwise from top-left.
+        const corners = [at(x, y), at(x + 1, y), at(x + 1, y + 1), at(x, y + 1)];
+        const edges = [];
+        for (let side = 0; side < 4; side += 1) {
+          const a = corners[side];
+          const b = corners[(side + 1) % 4];
+          if ((a >= level) === (b >= level)) continue;
+          const t = (level - a) / (b - a);
+          // Interpolate along the side, in board pixels.
+          const points = [
+            [x + t, y], [x + 1, y + t], [x + 1 - t, y + 1], [x, y + 1 - t],
+          ][side];
+          edges.push([(points[0] + 0.5) * cell, (points[1] + 0.5) * cell]);
+        }
+        for (let edge = 0; edge + 1 < edges.length; edge += 2) {
+          terrainContext.moveTo(edges[edge][0], edges[edge][1]);
+          terrainContext.lineTo(edges[edge + 1][0], edges[edge + 1][1]);
+        }
+      }
+    }
+    terrainContext.stroke();
+  }
 }
 
 function drawLattice(frame) {
@@ -426,6 +482,34 @@ function drawLattice(frame) {
   terrainContext.stroke();
 }
 
+/** Lift the ground in proportion to CAPACITY, before any sugar is painted.
+ *
+ *  Height has to carry brightness on its own. The settlers strip the summit
+ *  bare, so keying value only to the sugar standing there made the top of the
+ *  mountain the DARKEST part of it and the hero object read as a crater. With
+ *  the lift, high land looks high even when picked clean, and the sugar reads
+ *  as gold lying on top of it. */
+function elevationLift() {
+  const { width, height } = maskCanvas;
+  const data = maskContext.createImageData(width, height);
+  for (let x = 0; x < width; x += 1) {
+    for (let y = 0; y < height; y += 1) {
+      const elevation = state.capacity[x * height + y] / state.maxCapacity;
+      const offset = (y * width + x) * 4;
+      data.data[offset] = 214;
+      data.data[offset + 1] = 178;
+      data.data[offset + 2] = 124;
+      data.data[offset + 3] = Math.round(255 * Math.min(1, elevation ** 0.75) * 0.72);
+    }
+  }
+  maskContext.putImageData(data, 0, 0);
+  terrainContext.globalCompositeOperation = "screen";
+  terrainContext.imageSmoothingEnabled = true;
+  terrainContext.imageSmoothingQuality = "high";
+  terrainContext.drawImage(maskCanvas, 0, 0, terrain.width, terrain.height);
+  terrainContext.globalCompositeOperation = "source-over";
+}
+
 function buildTerrain(frame) {
   const size = Math.round(BOARD.w * RENDER_SCALE);
   if (terrain.width !== size) {
@@ -441,11 +525,17 @@ function buildTerrain(frame) {
   terrainContext.clearRect(0, 0, terrain.width, terrain.height);
   terrainContext.fillStyle = patternFor(art.terrain_barren, terrainContext);
   terrainContext.fillRect(0, 0, terrain.width, terrain.height);
-  layer(frame, art.terrain_sugar_1, 0.04, 0.34);
-  layer(frame, art.terrain_sugar_2, 0.28, 0.56);
-  layer(frame, art.terrain_sugar_3, 0.50, 0.80);
-  layer(frame, art.terrain_sugar_4, 0.74, 1.00);
-  relief(frame);
+  // The landform first, from capacity, so the massif is always there...
+  elevationLift();
+  relief();
+  // ...then the sugar actually standing on it right now, which drains and
+  // regrows. Most cells hold nothing, so the thresholds are tuned to the real
+  // distribution rather than spread evenly over the range.
+  layer(frame, art.terrain_sugar_1, 0.02, 0.26);
+  layer(frame, art.terrain_sugar_2, 0.20, 0.48);
+  layer(frame, art.terrain_sugar_3, 0.42, 0.72);
+  layer(frame, art.terrain_sugar_4, 0.66, 0.98);
+  contours();
   drawLattice(frame);
 }
 
@@ -646,20 +736,28 @@ function scorebug(frame) {
   const rows = ranked(frame);
   const scheduled = state.maxTimestep || frame.timestep;
   const progress = scheduled > 0 ? Math.min(1, frame.timestep / scheduled) : 0;
-  const clockW = 340;
+  const clockW = 320;
   let markup = `<rect x="0" y="0" width="${W}" height="${BUG_H + 18}" fill="url(#bug-scrim)"/>`;
+
+  // Name the broadcast. Without it a first-time viewer can see two populations
+  // and a number going up, but never learns what they are competing FOR.
+  markup += text("SUGARSCAPE", MARGIN + 2, 38, {
+    size: 27, weight: 700, fill: C.paper, spacing: 5.2,
+  });
+  markup += text("two policies farm one sugar mountain · most sugar wins",
+    MARGIN + 2, 66, { size: 16, weight: 500, fill: C.muted });
 
   // Clock — counts to the SCHEDULED end of the match, so an early extinction
   // freezes short of the buzzer instead of always landing on the last tick.
-  markup += panel(MARGIN, 14, clockW, BUG_H);
-  markup += eyebrow("Timestep", MARGIN + 18, 46);
-  markup += text(`${frame.timestep}`, MARGIN + 18, 84, {
+  markup += panel(MARGIN + 476, 14, clockW, BUG_H);
+  markup += eyebrow("Timestep", MARGIN + 494, 46);
+  markup += text(`${frame.timestep}`, MARGIN + 494, 84, {
     size: 40, weight: 600, family: F.mono, fill: C.paper,
   });
-  markup += text(` / ${scheduled}`, MARGIN + 18 + String(frame.timestep).length * 25, 84, {
+  markup += text(` / ${scheduled}`, MARGIN + 494 + String(frame.timestep).length * 25, 84, {
     size: 24, weight: 500, family: F.mono, fill: C.muted,
   });
-  const barX = MARGIN + 178;
+  const barX = MARGIN + 654;
   const barW = clockW - 196;
   markup += `<rect x="${barX}" y="60" width="${barW}" height="9" rx="4.5" fill="rgba(246,234,210,.14)"/>`;
   markup += `<rect x="${barX}" y="60" width="${Math.max(3, barW * progress)}" height="9" rx="4.5" fill="${C.gold}"/>`;
@@ -692,7 +790,7 @@ function scorebug(frame) {
     });
     markup += seatMark(x + 62, 60, row.index, 11);
     if (leader) {
-      markup += `<path d="M ${x + 52} 36 l 5 -11 l 5 7 l 5 -12 l 5 12 l 5 -7 l 5 11 z" `
+      markup += `<path d="M ${x + 52} 32 l 5 -10 l 5 6.5 l 5 -11 l 5 11 l 5 -6.5 l 5 10 z" `
         + `fill="${C.gold}" stroke="${C.ink}" stroke-width="1.4" stroke-linejoin="round"/>`;
     }
     markup += `<clipPath id="chip-${row.index}"><rect x="${x + 84}" y="14" `
@@ -815,23 +913,19 @@ function raceChart(frame, x, y, width, height) {
 
   markup += `<line x1="${left}" y1="${zeroY}" x2="${left + plotW}" y2="${zeroY}" `
     + `stroke="rgba(246,234,210,.42)" stroke-width="1.5"/>`;
-  markup += text(`+${format(peak)}`, left - 10, top + 12, {
-    size: 18, weight: 500, family: F.mono, fill: C.dim, anchor: "end", outline: 2.4,
-  });
+  // Each end of the axis names WHOSE lead it measures. A bare "+120" printed at
+  // both ends made the scale unreadable, and a floating "Population A ahead"
+  // inside the plot read as a claim about the present rather than a label for
+  // that half - so it contradicted the scorebug whenever A was behind.
+  const axisEnd = (slot, baseline) => seatMark(left + 12, baseline - 5, slot, 6)
+    + text(`+${format(peak)}`, left + 26, baseline, {
+      size: 17, weight: 600, family: F.mono, fill: SEATS[slot].color, outline: 2.8,
+    });
+  markup += axisEnd(0, top + 18);
+  markup += axisEnd(1, top + plotH - 8);
   markup += text("level", left - 10, zeroY + 5, {
     size: 18, weight: 500, family: F.mono, fill: C.dim, anchor: "end", outline: 2.4,
   });
-  markup += text(`+${format(peak)}`, left - 10, top + plotH, {
-    size: 18, weight: 500, family: F.mono, fill: C.dim, anchor: "end", outline: 2.4,
-  });
-
-  // Name which half of the plot belongs to whom, so the shading needs no legend.
-  const label = (slot, atY, anchorY) => seatMark(left + 14, atY, slot, 6)
-    + text(`${frame.slots[slot]?.name ?? `Population ${slot + 1}`} ahead`, left + 28, anchorY, {
-      size: 19, weight: 600, fill: SEATS[slot].color, outline: 2.8,
-    });
-  markup += label(0, top + 16, top + 21);
-  markup += label(1, top + plotH - 14, top + plotH - 9);
   markup += text("t0", left, y + height - 16, {
     size: 18, weight: 500, family: F.mono, fill: C.dim, outline: 2.4,
   });
@@ -1021,12 +1115,12 @@ function endCard(frame) {
     + ` wealth ended at a Gini of ${gini.toFixed(2)}.`;
 
   const cardW = 1180;
-  const cardH = 560;
+  const cardH = 580;
   const x = (W - cardW) / 2;
   const y = (H - cardH) / 2;
 
   let markup = `<g class="endcard">`;
-  markup += `<rect x="0" y="0" width="${W}" height="${H}" fill="rgba(10,7,4,.72)"/>`;
+  markup += `<rect x="0" y="0" width="${W}" height="${H}" fill="rgba(10,7,4,.93)"/>`;
   markup += `<clipPath id="endcard-clip"><rect x="${x}" y="${y}" width="${cardW}" height="${cardH}" rx="16"/></clipPath>`;
   markup += `<g clip-path="url(#endcard-clip)">`
     + `<image href="${ART.endcard}" x="${x}" y="${y - 60}" width="${cardW}" height="${cardH + 160}" `
@@ -1036,13 +1130,16 @@ function endCard(frame) {
   markup += `<rect x="${x}" y="${y}" width="${cardW}" height="${cardH}" rx="16" fill="none" `
     + `stroke="${C.gold}" stroke-width="2.5"/>`;
 
-  markup += eyebrow(tie ? "Final — level" : "Final", x + 56, y + 62);
-  markup += seatMark(x + 68, y + 118, winner.index, 21);
-  markup += text(winner.name, x + 104, y + 132, { size: 62, weight: 700, fill: C.paper });
-  markup += text(verdict, x + 56, y + 194, { size: 27, weight: 500, fill: C.gold });
-  markup += text(context, x + 56, y + 234, { size: 22, weight: 500, fill: C.muted });
+  markup += text("SUGARSCAPE", x + 56, y + 54, {
+    size: 21, weight: 700, fill: C.muted, spacing: 4.4,
+  });
+  markup += eyebrow(tie ? "Final — level" : "Final", x + 56, y + 84);
+  markup += seatMark(x + 68, y + 140, winner.index, 21);
+  markup += text(winner.name, x + 104, y + 154, { size: 62, weight: 700, fill: C.paper });
+  markup += text(verdict, x + 56, y + 212, { size: 27, weight: 500, fill: C.gold });
+  markup += text(context, x + 56, y + 250, { size: 22, weight: 500, fill: C.muted });
 
-  let rowY = y + 300;
+  let rowY = y + 306;
   for (const [rank, row] of rows.entries()) {
     const leader = rank === 0 && !tie;
     markup += `<rect x="${x + 56}" y="${rowY}" width="${cardW - 112}" height="66" rx="10" `
