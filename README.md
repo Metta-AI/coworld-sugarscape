@@ -114,6 +114,32 @@ Run the local Coworld protocol/replay test:
 node tools/smoke_coworld.mjs .build/sugarscape_coworld
 ```
 
+Rebuild the browser broadcast after editing anything under `viewer/`. It is
+inlined into the generated `src/sugarscape/viewer.html`, which the binary embeds
+at compile time, so that file is committed and the test suite fails on a stale
+one:
+
+```bash
+python3 tools/build_viewer.py          # regenerate; --check only verifies
+```
+
+Regenerating the vendored assets is needed only when changing the art direction
+or the typefaces. Both write into `src/sugarscape/` and are committed:
+
+```bash
+node tools/vendor_fonts.mjs            # subset woff2 faces
+node tools/generate_art.mjs            # art batch; needs a Gemini API key
+```
+
+Record a full-scale episode to build or verify the viewer against, instead of
+the small certification fixture:
+
+```bash
+node tools/record_replay.mjs .build/replay.json
+.build/sugarscape_coworld --port:8080 --load-replay:.build/replay.json
+# then open http://127.0.0.1:8080/client/replay
+```
+
 Build the production containers:
 
 ```bash

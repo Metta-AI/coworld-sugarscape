@@ -28,10 +28,12 @@ Compatibility covers:
   workflow.
 
 The DTL Tk GUI is a presentation layer, not part of byte-level output
-compatibility. The Coworld browser spectator exposes the core resource grid,
-pollution, selectable agent attributes, social relationships, live statistics,
-wealth histogram, Lorenz curve, and replay controls without changing simulation
-state or random-number consumption.
+compatibility. The Coworld browser spectator presents the canonical resource
+grid, each policy's living agents, the standing on the recorded score axis,
+beats derived by diffing consecutive frames, the canonical aggregate statistics
+including inequality and carrying capacity, and playback controls, without
+changing simulation state or random-number consumption. Everything it draws is a
+function of the published frames.
 
 The upstream desktop GUI, screenshots, profiling hooks, diagnostic debug text,
 and individual command-line configuration override flags are outside the

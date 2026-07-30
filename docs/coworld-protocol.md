@@ -5,7 +5,8 @@
 `GET /healthz` returns `healthy` after the HTTP/WebSocket server is ready.
 Player and global browser pages are available at `/client/player` and
 `/client/global`; the plural `/clients/...` forms are aliases. Replay mode uses
-the same viewer at `/client/replay` or `/clients/replay`.
+the same viewer at `/client/replay` or `/clients/replay`. The spectator
+WebSocket answers on both `/global` and `/replay`.
 
 The standard Bitworld runtime reads configuration and writes artifacts through
 `COGAME_CONFIG_URI`, `COGAME_RESULTS_URI`, `COGAME_SAVE_REPLAY_URI`, and
@@ -81,26 +82,41 @@ canonical simulation.
 
 ## Global and replay sockets
 
-Connect to `GET /global`. A spectator joining an episode in progress first
-receives up to the most recent 300 `sugarscape.frame.v1` frames in order, then
-receives one live frame every configured `frameInterval` timesteps without a
-gap. Frames contain the complete sugar/spice/pollution grid, living agent
-summaries (including display attributes), friend/mate/active-loan links,
-policy-slot metadata, and an immutable snapshot of the canonical aggregate
-statistics. Each streamed frame also carries a server-generated `streamId`.
-The spectator uses it to discard buffered frames when a reconnect reaches a
-new server run, while repeated frames from the same run are deduplicated by
-timestep.
+Connect to `GET /global` or its alias `GET /replay`. Both names serve the same
+stream; `/replay` is the sibling socket a browser derives when the viewer is
+served at `/client/replay`, and the path the Coworld certifier probes for replay
+liveness.
 
-The browser spectator is served at `/client/global` (also `/clients/global`).
-It provides selectable resource and agent-color modes, social-link overlays,
-cell/agent inspection, a live statistic series with timestep and value axes, a
-wealth histogram with a stable observed wealth domain, a normalized Lorenz
-curve, and buffered play/pause/step/scrub controls. The histogram measures each
-living agent's current sugar plus spice; the Lorenz curve compares cumulative
-population share with cumulative wealth share. The player-protocol explainer is
-at `/client/player`. `/client/replay` uses the same viewer while a process
-started with `COGAME_LOAD_REPLAY_URI` publishes the recorded frames.
+A spectator joining a live episode in progress first receives up to the most
+recent 300 `sugarscape.frame.v1` frames in order, then receives one live frame
+every configured `frameInterval` timesteps without a gap. Frames contain the
+complete sugar/spice/pollution grid, living agent summaries (including display
+attributes), friend/mate/active-loan links, policy-slot metadata, the scheduled
+`maxTimestep`, and an immutable snapshot of the canonical aggregate statistics.
+Each streamed frame also carries a server-generated `streamId`. The spectator
+uses it to discard buffered frames when a reconnect reaches a new server run,
+while repeated frames from the same run are deduplicated by timestep.
+
+A process started with `COGAME_LOAD_REPLAY_URI` publishes the whole recording
+into the backlog at once and then keeps serving until it is stopped, so a
+spectator who connects at any later moment still receives every recorded frame.
+Replay mode does not trim the backlog and does not pace the stream; the browser
+owns playback.
+
+The browser viewer is served at `/client/global` and `/client/replay` (with the
+plural `/clients/...` aliases). It is one self-contained document with every
+asset inlined, because the hosted embed is a sandboxed iframe behind a proxy
+that rewrites the base href and cannot reach a CDN. It presents the episode as a
+broadcast: the sugar lattice with each policy's settlers rendered on it, a
+standing on the score axis, a lead chart, an event feed derived by diffing
+consecutive frames, the canonical inequality and carrying-capacity readouts, and
+play/pause/step/scrub/speed controls. It never mutates simulation state or
+consumes randomness. The player-protocol explainer is at `/client/player`.
+
+The viewer is generated from `viewer/` into `src/sugarscape/viewer.html` by
+`tools/build_viewer.py`, which inlines the vendored typefaces and the art batch;
+`coworld.nim` embeds the result with `staticRead`, so the generated file is
+committed and `tools/test_all.sh` fails when it is stale.
 
 Replay artifacts use:
 
