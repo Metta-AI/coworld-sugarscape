@@ -81,18 +81,26 @@ canonical simulation.
 
 ## Global and replay sockets
 
-Connect to `GET /global`. The first message is the latest frame, followed by one
-`sugarscape.frame.v1` JSON frame every configured `frameInterval` timesteps.
-Frames contain the complete sugar/spice/pollution grid, living agent summaries
-(including display attributes), friend/mate/active-loan links, policy-slot
-metadata, and canonical aggregate statistics.
+Connect to `GET /global`. A spectator joining an episode in progress first
+receives up to the most recent 300 `sugarscape.frame.v1` frames in order, then
+receives one live frame every configured `frameInterval` timesteps without a
+gap. Frames contain the complete sugar/spice/pollution grid, living agent
+summaries (including display attributes), friend/mate/active-loan links,
+policy-slot metadata, and an immutable snapshot of the canonical aggregate
+statistics. Each streamed frame also carries a server-generated `streamId`.
+The spectator uses it to discard buffered frames when a reconnect reaches a
+new server run, while repeated frames from the same run are deduplicated by
+timestep.
 
 The browser spectator is served at `/client/global` (also `/clients/global`).
 It provides selectable resource and agent-color modes, social-link overlays,
-cell/agent inspection, a live statistic series, wealth histogram, Lorenz curve,
-and buffered play/pause/step/scrub controls. The player-protocol explainer is at
-`/client/player`. `/client/replay` uses the same viewer while a process started
-with `COGAME_LOAD_REPLAY_URI` publishes the recorded frames.
+cell/agent inspection, a live statistic series with timestep and value axes, a
+wealth histogram with a stable observed wealth domain, a normalized Lorenz
+curve, and buffered play/pause/step/scrub controls. The histogram measures each
+living agent's current sugar plus spice; the Lorenz curve compares cumulative
+population share with cumulative wealth share. The player-protocol explainer is
+at `/client/player`. `/client/replay` uses the same viewer while a process
+started with `COGAME_LOAD_REPLAY_URI` publishes the recorded frames.
 
 Replay artifacts use:
 

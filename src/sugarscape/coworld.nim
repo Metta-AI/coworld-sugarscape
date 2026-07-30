@@ -7,6 +7,7 @@ import
   ./simulation
 
 const
+  FrameHistoryLimit = 300
   HealthPath = "/healthz"
   PlayerPath = "/player"
   GlobalPath = "/global"
@@ -44,7 +45,9 @@ type
     globalSockets: seq[WebSocket]
     actions: Table[int, int]
     pendingRequests: Table[int, PendingRequest]
-    currentFrame: string
+    frameHistory: seq[string]
+    catchupFrames: Table[WebSocket, seq[string]]
+    streamId: string
     nextRequestId: int
 
   ServerThreadArgs = object
@@ -131,7 +134,9 @@ proc initAppState(slots: seq[PolicySlot]) =
   appState.globalSockets = @[]
   appState.actions = initTable[int, int]()
   appState.pendingRequests = initTable[int, PendingRequest]()
-  appState.currentFrame = ""
+  appState.frameHistory = @[]
+  appState.catchupFrames = initTable[WebSocket, seq[string]]()
+  appState.streamId = $epochTime()
   appState.nextRequestId = 1
 
 proc isWebSocketUpgrade(request: Request): bool =
@@ -187,13 +192,34 @@ proc httpHandler(request: Request) =
   elif request.path == GlobalPath and request.httpMethod == "GET" and
       request.isWebSocketUpgrade():
     let websocket = request.upgradeToWebSocket()
-    var frame = ""
+    var history: seq[string]
     {.gcsafe.}:
       withLock appState.lock:
-        appState.globalSockets.add(websocket)
-        frame = appState.currentFrame
-    if frame.len > 0:
-      websocket.send(frame, TextMessage)
+        history = appState.frameHistory & @[]
+        appState.catchupFrames[websocket] = @[]
+    try:
+      while true:
+        for frame in history:
+          websocket.send(frame, TextMessage)
+        {.gcsafe.}:
+          withLock appState.lock:
+            history = appState.catchupFrames[websocket]
+            if history.len == 0:
+              appState.catchupFrames.del(websocket)
+              appState.globalSockets.add(websocket)
+            else:
+              appState.catchupFrames[websocket] = @[]
+        if history.len == 0:
+          break
+    except CatchableError:
+      {.gcsafe.}:
+        withLock appState.lock:
+          appState.catchupFrames.del(websocket)
+      try:
+        websocket.close()
+      except CatchableError:
+        discard
+      return
   elif request.path in PlayerClientPaths and request.httpMethod == "GET":
     request.respondHtml(PlayerHtml)
   elif request.path in GlobalClientPaths and request.httpMethod == "GET":
@@ -204,6 +230,7 @@ proc httpHandler(request: Request) =
     request.respond(404, headers, "not found\n")
 
 proc removeSocket(websocket: WebSocket) =
+  appState.catchupFrames.del(websocket)
   if websocket in appState.socketSlots:
     let slot = appState.socketSlots[websocket]
     appState.socketSlots.del(websocket)
@@ -438,15 +465,21 @@ proc frameJson(
     "agents": agents,
     "links": sim.socialLinksJson(),
     "slots": slotNodes,
-    "stats": sim.runtimeStats,
+    "stats": sim.runtimeStats.copy(),
   }
 
 proc publishFrame(frame: JsonNode) =
-  let body = $frame
+  let streamedFrame = frame.copy()
+  streamedFrame["streamId"] = %appState.streamId
+  let body = $streamedFrame
   var sockets: seq[WebSocket]
   {.gcsafe.}:
     withLock appState.lock:
-      appState.currentFrame = body
+      appState.frameHistory.add(body)
+      if appState.frameHistory.len > FrameHistoryLimit:
+        appState.frameHistory.delete(0)
+      for frames in appState.catchupFrames.mvalues:
+        frames.add(body)
       sockets = appState.globalSockets
   for websocket in sockets:
     try:
