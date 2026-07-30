@@ -121,14 +121,6 @@ const state = {
   maxTimestep: 0,
   maxSugar: 1,
   maxSpice: 0,
-  // Per-cell sugar CAPACITY, accumulated as the running maximum ever observed.
-  // The frames carry only what a cell holds right now, but the landform has to
-  // persist: without it, the middle of the mountain - which is exactly where
-  // the settlers have eaten everything - renders as a dark crater instead of as
-  // a harvested peak, and the board looks static once the world reaches its
-  // carrying capacity even though cells are being stripped and regrowing.
-  capacity: null,
-  maxCapacity: 1,
   maxWealth: 1,
   startingPopulation: 0,
   lastDrawnIndex: -1,
@@ -251,14 +243,6 @@ function recordFrame(frame) {
       state.maxSugar = Math.max(state.maxSugar, cell[0]);
       state.maxSpice = Math.max(state.maxSpice, cell[1]);
     }
-  }
-  if (!state.capacity || state.capacity.length !== frame.cells.length) {
-    state.capacity = new Float32Array(frame.cells.length);
-  }
-  for (let cell = 0; cell < frame.cells.length; cell += 1) {
-    const sugar = frame.cells[cell][0];
-    if (sugar > state.capacity[cell]) state.capacity[cell] = sugar;
-    if (sugar > state.maxCapacity) state.maxCapacity = sugar;
   }
   // maxTimestep is stamped on every frame by the game server so the clock counts
   // to the SCHEDULED end of the match, not to whatever tick this recording
