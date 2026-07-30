@@ -83,13 +83,16 @@ canonical simulation.
 
 Connect to `GET /global`. The first message is the latest frame, followed by one
 `sugarscape.frame.v1` JSON frame every configured `frameInterval` timesteps.
-Frames contain the complete resource grid, living agent summaries, policy-slot
+Frames contain the complete sugar/spice/pollution grid, living agent summaries
+(including display attributes), friend/mate/active-loan links, policy-slot
 metadata, and canonical aggregate statistics.
 
 The browser spectator is served at `/client/global` (also `/clients/global`).
-The player-protocol explainer is at `/client/player`. `/client/replay` uses the
-same viewer while a process started with `COGAME_LOAD_REPLAY_URI` publishes the
-recorded frames.
+It provides selectable resource and agent-color modes, social-link overlays,
+cell/agent inspection, a live statistic series, wealth histogram, Lorenz curve,
+and buffered play/pause/step/scrub controls. The player-protocol explainer is at
+`/client/player`. `/client/replay` uses the same viewer while a process started
+with `COGAME_LOAD_REPLAY_URI` publishes the recorded frames.
 
 Replay artifacts use:
 

@@ -1,4 +1,4 @@
-import std/[algorithm, json, math, strutils, syncio, sysrand]
+import std/[algorithm, json, math, sets, strutils, syncio, sysrand]
 
 import ./agents
 import ./configuration
@@ -70,6 +70,50 @@ proc sugarMetabolism(agent: Agent): float64 =
 
 proc spiceMetabolism(agent: Agent): float64 =
   max(0.0, agent.spiceMetabolism + agent.spiceMetabolismModifier)
+
+proc socialLinksJson*(sim: Simulation): JsonNode =
+  ## Read-only relationships for spectator rendering. This must not mutate
+  ## simulation state or consume random numbers.
+  result = newJArray()
+  var seen = initHashSet[(string, int, int)]()
+  for id in sim.activeAgents:
+    let agent = sim.agents[id]
+    for friend in agent.friends:
+      if sim.agents[friend.agent].alive:
+        let
+          source = min(id, friend.agent)
+          target = max(id, friend.agent)
+          key = ("friend", source, target)
+        if key in seen:
+          continue
+        seen.incl(key)
+        result.add(%*{
+          "source": source,
+          "target": target,
+          "type": "friend",
+        })
+    for mate in agent.mates:
+      if sim.agents[mate].alive:
+        let
+          source = min(id, mate)
+          target = max(id, mate)
+          key = ("mate", source, target)
+        if key in seen:
+          continue
+        seen.incl(key)
+        result.add(%*{
+          "source": source,
+          "target": target,
+          "type": "mate",
+        })
+  for loan in sim.loans:
+    if loan.active and sim.agents[loan.creditor].alive and
+        sim.agents[loan.debtor].alive:
+      result.add(%*{
+        "source": loan.creditor,
+        "target": loan.debtor,
+        "type": "loan",
+      })
 
 proc findCellsInRange(sim: Simulation, agent: Agent): seq[RangeEntry]
 proc isExperimental(sim: Simulation, agent: Agent): bool

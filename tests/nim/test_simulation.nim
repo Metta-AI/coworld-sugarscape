@@ -1,6 +1,6 @@
 import std/[json, unittest]
 
-import sugarscape/[configuration, simulation]
+import sugarscape/[agents, configuration, simulation]
 
 suite "DTL base simulation compatibility":
   test "four asynchronous timesteps match the pinned Python oracle":
@@ -92,3 +92,28 @@ suite "DTL base simulation compatibility":
       check replay.agents[id].cell == first.agents[id].cell
       check replay.agents[id].sugar == first.agents[id].sugar
       check replay.agents[id].spice == first.agents[id].spice
+
+  test "spectator links retain one-sided relationships and deduplicate pairs":
+    let config = loadConfiguration("tests/fixtures/base_small.json")
+    var sim = initSimulation(config)
+    sim.agents[0].friends = @[]
+    sim.agents[3].friends = @[FriendEntry(agent: 0)]
+    sim.agents[0].mates = @[]
+    sim.agents[3].mates = @[0]
+
+    let oneSided = sim.socialLinksJson()
+    check oneSided.len == 2
+    check oneSided[0] == %*{
+      "source": 0,
+      "target": 3,
+      "type": "friend",
+    }
+    check oneSided[1] == %*{
+      "source": 0,
+      "target": 3,
+      "type": "mate",
+    }
+
+    sim.agents[0].friends = @[FriendEntry(agent: 3)]
+    sim.agents[0].mates = @[3]
+    check sim.socialLinksJson().len == 2

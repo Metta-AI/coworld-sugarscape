@@ -5,60 +5,599 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Sugarscape Observatory</title>
   <style>
-    :root { color-scheme: dark; --ink:#f5eddc; --muted:#a89f91; --panel:#171713; --line:#343029; }
-    * { box-sizing:border-box }
-    body { margin:0; background:#0d0d0b; color:var(--ink); font:14px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace }
-    header { display:flex; align-items:baseline; gap:20px; padding:16px 22px; border-bottom:1px solid var(--line) }
-    h1 { margin:0; font:600 18px/1 ui-sans-serif,system-ui; letter-spacing:.08em; text-transform:uppercase }
-    #status { color:#e2b659 }
-    main { display:grid; grid-template-columns:minmax(320px,1fr) 310px; gap:18px; padding:18px; min-height:calc(100vh - 58px) }
-    canvas { width:100%; aspect-ratio:1; image-rendering:pixelated; background:#050504; border:1px solid var(--line) }
-    aside { display:flex; flex-direction:column; gap:14px }
-    section { background:var(--panel); border:1px solid var(--line); padding:14px }
-    h2 { margin:0 0 12px; color:var(--muted); font-size:11px; letter-spacing:.12em; text-transform:uppercase }
-    dl { display:grid; grid-template-columns:1fr auto; gap:7px 14px; margin:0 }
-    dt { color:var(--muted) } dd { margin:0; text-align:right }
-    .legend { display:grid; grid-template-columns:12px 1fr; gap:7px 9px; align-items:center }
-    .dot { width:10px; height:10px; border-radius:50% }
-    @media (max-width:800px) { main { grid-template-columns:1fr } }
+    :root {
+      color-scheme: dark;
+      --ink: #f5eddc;
+      --muted: #a89f91;
+      --panel: #171713;
+      --line: #343029;
+      --accent: #e2b659;
+    }
+    * { box-sizing: border-box }
+    body {
+      margin: 0;
+      background: #0d0d0b;
+      color: var(--ink);
+      font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    header {
+      display: flex;
+      align-items: baseline;
+      gap: 20px;
+      padding: 15px 20px;
+      border-bottom: 1px solid var(--line);
+    }
+    h1 {
+      margin: 0;
+      font: 600 18px/1 ui-sans-serif, system-ui;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    h2 {
+      margin: 0 0 10px;
+      color: var(--muted);
+      font-size: 10px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    button, select, input {
+      border: 1px solid var(--line);
+      background: #11110e;
+      color: var(--ink);
+      font: inherit;
+    }
+    button, select { min-height: 30px; padding: 4px 8px }
+    button { cursor: pointer }
+    button:hover { border-color: var(--accent) }
+    input[type="range"] { accent-color: var(--accent) }
+    label { color: var(--muted) }
+    #status { color: var(--accent) }
+    main {
+      display: grid;
+      grid-template-columns: minmax(440px, 1fr) 340px;
+      gap: 14px;
+      padding: 14px;
+    }
+    .world-pane { min-width: 0 }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .toolbar label { display: flex; gap: 6px; align-items: center }
+    #timeline { flex: 1; min-width: 140px }
+    #world {
+      display: block;
+      width: 100%;
+      aspect-ratio: 1;
+      background: #050504;
+      border: 1px solid var(--line);
+      image-rendering: pixelated;
+      cursor: crosshair;
+    }
+    aside { display: flex; flex-direction: column; gap: 10px }
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      padding: 12px;
+    }
+    dl {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 6px 12px;
+      margin: 0;
+    }
+    dt { color: var(--muted) }
+    dd { margin: 0; text-align: right }
+    .legend {
+      display: grid;
+      grid-template-columns: 12px 1fr;
+      gap: 6px 8px;
+      align-items: center;
+    }
+    .dot { width: 10px; height: 10px; border-radius: 50% }
+    .chart-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .chart-grid figure { margin: 0; min-width: 0 }
+    .chart-grid figcaption {
+      margin-bottom: 4px;
+      color: var(--muted);
+      font-size: 10px;
+      text-transform: uppercase;
+    }
+    .chart-grid canvas {
+      display: block;
+      width: 100%;
+      height: 120px;
+      background: #0d0d0b;
+      border: 1px solid var(--line);
+    }
+    #inspect { min-height: 72px; white-space: pre-wrap }
+    @media (max-width: 900px) {
+      main { grid-template-columns: 1fr }
+      aside { display: grid; grid-template-columns: 1fr 1fr }
+      .wide { grid-column: 1 / -1 }
+    }
+    @media (max-width: 560px) {
+      main { padding: 8px }
+      aside { display: flex }
+      .chart-grid { grid-template-columns: 1fr }
+    }
   </style>
 </head>
 <body>
-  <header><h1>Sugarscape Observatory</h1><span id="status">connecting</span></header>
+  <header>
+    <h1>Sugarscape Observatory</h1>
+    <span id="status">connecting</span>
+  </header>
   <main>
-    <canvas id="world" width="900" height="900"></canvas>
+    <div class="world-pane">
+      <div class="toolbar">
+        <button id="play" type="button">pause</button>
+        <button id="back" type="button" aria-label="Previous frame">−1</button>
+        <button id="forward" type="button" aria-label="Next frame">+1</button>
+        <input id="timeline" type="range" min="0" max="0" value="0"
+          aria-label="Replay frame">
+        <span id="frame-label">frame 0 / 0</span>
+      </div>
+      <div class="toolbar">
+        <label>cells
+          <select id="cell-mode">
+            <option value="resources">sugar + spice</option>
+            <option value="pollution">pollution</option>
+          </select>
+        </label>
+        <label>agents
+          <select id="agent-mode">
+            <option value="decisionModel">decision model</option>
+            <option value="depressed">depression</option>
+            <option value="sick">disease</option>
+            <option value="metabolism">metabolism</option>
+            <option value="movement">movement</option>
+            <option value="race">race</option>
+            <option value="sex">sex</option>
+            <option value="tribe">tribe</option>
+            <option value="vision">vision</option>
+          </select>
+        </label>
+        <label><input id="links" type="checkbox"> social links</label>
+      </div>
+      <canvas id="world" width="900" height="900"></canvas>
+    </div>
     <aside>
-      <section><h2>Episode</h2><dl id="stats"></dl></section>
-      <section><h2>Populations</h2><div class="legend" id="legend"></div></section>
-      <section><h2>Reading the world</h2><p style="color:var(--muted);margin:0">Gold is sugar, violet is spice, and brighter cells hold more resources. Circles are agents, coloured by the policy population that controls their movement.</p></section>
+      <section>
+        <h2>Episode</h2>
+        <dl id="stats"></dl>
+      </section>
+      <section>
+        <h2>Populations</h2>
+        <div class="legend" id="legend"></div>
+      </section>
+      <section>
+        <h2>Inspection</h2>
+        <div id="inspect">Click a cell to inspect it.</div>
+      </section>
+      <section class="wide">
+        <div class="toolbar">
+          <label>series
+            <select id="series">
+              <option value="population">population</option>
+              <option value="meanWealth">mean wealth</option>
+              <option value="giniCoefficient">Gini</option>
+              <option value="meanHappiness">mean happiness</option>
+              <option value="carryingCapacity">carrying capacity</option>
+              <option value="tradeVolume">trade volume</option>
+              <option value="loanVolume">loan volume</option>
+            </select>
+          </label>
+        </div>
+        <div class="chart-grid">
+          <figure>
+            <figcaption>Time series</figcaption>
+            <canvas id="series-chart" width="300" height="120"></canvas>
+          </figure>
+          <figure>
+            <figcaption>Wealth histogram</figcaption>
+            <canvas id="histogram" width="300" height="120"></canvas>
+          </figure>
+          <figure>
+            <figcaption>Lorenz curve</figcaption>
+            <canvas id="lorenz" width="300" height="120"></canvas>
+          </figure>
+        </div>
+      </section>
     </aside>
   </main>
 <script>
-const canvas=document.querySelector("#world"),ctx=canvas.getContext("2d");
-const statusEl=document.querySelector("#status"),statsEl=document.querySelector("#stats"),legendEl=document.querySelector("#legend");
-let frame=null;
-const colors=["#f06449","#35b9c7","#a48be0","#f1c75b","#70c36b","#e96ba8","#5c8ee6","#e08d42"];
-function render(){
-  if(!frame)return;
-  const {width:w,height:h,cells,agents}=frame, sx=canvas.width/w, sy=canvas.height/h;
-  ctx.fillStyle="#050504";ctx.fillRect(0,0,canvas.width,canvas.height);
-  for(let i=0;i<cells.length;i++){const [s,p]=cells[i],x=Math.floor(i/h),y=i%h,m=Math.min(1,(s+p)/10);
-    const r=Math.round(30+190*(s/(s+p||1))*m),b=Math.round(25+170*(p/(s+p||1))*m),g=Math.round(22+75*m);
-    ctx.fillStyle=`rgb(${r},${g},${b})`;ctx.fillRect(x*sx,y*sy,Math.ceil(sx),Math.ceil(sy));
+const world = document.querySelector("#world");
+const worldContext = world.getContext("2d");
+const statusElement = document.querySelector("#status");
+const statsElement = document.querySelector("#stats");
+const legendElement = document.querySelector("#legend");
+const inspectElement = document.querySelector("#inspect");
+const playButton = document.querySelector("#play");
+const backButton = document.querySelector("#back");
+const forwardButton = document.querySelector("#forward");
+const timeline = document.querySelector("#timeline");
+const frameLabel = document.querySelector("#frame-label");
+const cellMode = document.querySelector("#cell-mode");
+const agentMode = document.querySelector("#agent-mode");
+const linksToggle = document.querySelector("#links");
+const seriesSelect = document.querySelector("#series");
+const seriesChart = document.querySelector("#series-chart");
+const histogram = document.querySelector("#histogram");
+const lorenz = document.querySelector("#lorenz");
+
+const palette = [
+  "#f06449", "#35b9c7", "#a48be0", "#f1c75b",
+  "#70c36b", "#e96ba8", "#5c8ee6", "#e08d42",
+];
+const linkColors = {friend: "#8ecae6", mate: "#ff7aa2", loan: "#ffd166"};
+const frames = [];
+let frameIndex = -1;
+let playing = true;
+let inspectedCell = -1;
+
+function hashValue(value) {
+  const text = String(value);
+  let hash = 2166136261;
+  for (const character of text) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
   }
-  for(const a of agents){const x=Math.floor(a.cell/h),y=a.cell%h;ctx.beginPath();ctx.arc((x+.5)*sx,(y+.5)*sy,Math.max(2,Math.min(sx,sy)*.38),0,Math.PI*2);
-    ctx.fillStyle=colors[(a.slot<0?colors.length-1:a.slot)%colors.length];ctx.fill();ctx.strokeStyle="#111";ctx.lineWidth=1;ctx.stroke();
-  }
-  const s=frame.stats||{}, shown=[["timestep",frame.timestep],["population",agents.length],["mean wealth",s.meanWealth],["gini",s.giniCoefficient],["mean happiness",s.meanHappiness],["carrying capacity",s.carryingCapacity]];
-  statsEl.innerHTML=shown.filter(x=>x[1]!==undefined).map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join("");
-  legendEl.innerHTML=(frame.slots||[]).map((slot,i)=>`<span class="dot" style="background:${colors[i%colors.length]}"></span><span>${slot.name||"population "+(i+1)}</span>`).join("");
+  return Math.abs(hash);
 }
-function connect(){
-  const protocol=location.protocol==="https:"?"wss":"ws",socket=new WebSocket(`${protocol}://${location.host}/global`);
-  socket.onopen=()=>statusEl.textContent="live";
-  socket.onmessage=e=>{frame=JSON.parse(e.data);render()};
-  socket.onclose=()=>{statusEl.textContent="reconnecting";setTimeout(connect,1000)};
-  socket.onerror=()=>socket.close();
+
+function categoricalColor(value) {
+  return palette[hashValue(value) % palette.length];
+}
+
+function numericColor(value, maximum) {
+  const ratio = Math.max(0, Math.min(1, Number(value) / Math.max(1, maximum)));
+  const hue = 210 - ratio * 210;
+  return `hsl(${hue} 75% 58%)`;
+}
+
+function agentColor(agent, frame) {
+  const mode = agentMode.value;
+  if (mode === "decisionModel") {
+    return agent.slot >= 0
+      ? palette[agent.slot % palette.length]
+      : categoricalColor(agent.decisionModel);
+  }
+  if (mode === "depressed") return agent.depressed ? "#708090" : "#f1c75b";
+  if (mode === "sick") return agent.sick ? "#b76cff" : "#70c36b";
+  if (mode === "metabolism") {
+    const values = frame.agents.map(
+      (item) => item.sugarMetabolism + item.spiceMetabolism,
+    );
+    return numericColor(
+      agent.sugarMetabolism + agent.spiceMetabolism,
+      Math.max(...values, 1),
+    );
+  }
+  if (mode === "movement" || mode === "vision") {
+    return numericColor(
+      agent[mode],
+      Math.max(...frame.agents.map((item) => item[mode]), 1),
+    );
+  }
+  return categoricalColor(agent[mode]);
+}
+
+function resourceColor(cell) {
+  const [sugar, spice] = cell;
+  const magnitude = Math.min(1, (sugar + spice) / 10);
+  const total = sugar + spice || 1;
+  const red = Math.round(30 + 190 * (sugar / total) * magnitude);
+  const blue = Math.round(25 + 170 * (spice / total) * magnitude);
+  const green = Math.round(22 + 75 * magnitude);
+  return `rgb(${red} ${green} ${blue})`;
+}
+
+function pollutionColor(cell, maximum) {
+  const ratio = Math.max(0, Math.min(1, cell[2] / Math.max(1, maximum)));
+  const value = Math.round(24 + ratio * 210);
+  return `rgb(${value} ${Math.round(value * .72)} ${Math.round(value * .25)})`;
+}
+
+function addDefinition(term, value) {
+  const dt = document.createElement("dt");
+  const dd = document.createElement("dd");
+  dt.textContent = term;
+  dd.textContent = value;
+  statsElement.append(dt, dd);
+}
+
+function renderStats(frame) {
+  statsElement.replaceChildren();
+  const stats = frame.stats || {};
+  const rows = [
+    ["timestep", frame.timestep],
+    ["population", frame.agents.length],
+    ["mean wealth", stats.meanWealth],
+    ["Gini", stats.giniCoefficient],
+    ["mean happiness", stats.meanHappiness],
+    ["carrying capacity", stats.carryingCapacity],
+    ["trade volume", stats.tradeVolume],
+    ["loan volume", stats.loanVolume],
+  ];
+  for (const [term, value] of rows) {
+    if (value !== undefined) addDefinition(term, value);
+  }
+}
+
+function renderLegend(frame) {
+  legendElement.replaceChildren();
+  frame.slots.forEach((slot, index) => {
+    const dot = document.createElement("span");
+    const label = document.createElement("span");
+    dot.className = "dot";
+    dot.style.background = palette[index % palette.length];
+    label.textContent = slot.name || `population ${index + 1}`;
+    legendElement.append(dot, label);
+  });
+}
+
+function agentPosition(frame, agent) {
+  return {
+    x: Math.floor(agent.cell / frame.height),
+    y: agent.cell % frame.height,
+  };
+}
+
+function drawLinks(frame, scaleX, scaleY) {
+  if (!linksToggle.checked) return;
+  const byId = new Map(frame.agents.map((agent) => [agent.id, agent]));
+  worldContext.lineWidth = 1.5;
+  worldContext.globalAlpha = .7;
+  for (const link of frame.links || []) {
+    const source = byId.get(link.source);
+    const target = byId.get(link.target);
+    if (!source || !target) continue;
+    const first = agentPosition(frame, source);
+    const second = agentPosition(frame, target);
+    worldContext.beginPath();
+    worldContext.moveTo((first.x + .5) * scaleX, (first.y + .5) * scaleY);
+    worldContext.lineTo((second.x + .5) * scaleX, (second.y + .5) * scaleY);
+    worldContext.strokeStyle = linkColors[link.type] || "#ddd";
+    worldContext.stroke();
+  }
+  worldContext.globalAlpha = 1;
+}
+
+function renderWorld(frame) {
+  const scaleX = world.width / frame.width;
+  const scaleY = world.height / frame.height;
+  const maxPollution = Math.max(...frame.cells.map((cell) => cell[2]), 1);
+  worldContext.fillStyle = "#050504";
+  worldContext.fillRect(0, 0, world.width, world.height);
+  frame.cells.forEach((cell, index) => {
+    const x = Math.floor(index / frame.height);
+    const y = index % frame.height;
+    worldContext.fillStyle = cellMode.value === "pollution"
+      ? pollutionColor(cell, maxPollution)
+      : resourceColor(cell);
+    worldContext.fillRect(
+      x * scaleX,
+      y * scaleY,
+      Math.ceil(scaleX),
+      Math.ceil(scaleY),
+    );
+  });
+  drawLinks(frame, scaleX, scaleY);
+  for (const agent of frame.agents) {
+    const position = agentPosition(frame, agent);
+    worldContext.beginPath();
+    worldContext.arc(
+      (position.x + .5) * scaleX,
+      (position.y + .5) * scaleY,
+      Math.max(2, Math.min(scaleX, scaleY) * .38),
+      0,
+      Math.PI * 2,
+    );
+    worldContext.fillStyle = agentColor(agent, frame);
+    worldContext.fill();
+    worldContext.strokeStyle = "#111";
+    worldContext.lineWidth = 1;
+    worldContext.stroke();
+  }
+  if (inspectedCell >= 0) {
+    const x = Math.floor(inspectedCell / frame.height);
+    const y = inspectedCell % frame.height;
+    worldContext.strokeStyle = "#fff";
+    worldContext.lineWidth = 2;
+    worldContext.strokeRect(x * scaleX, y * scaleY, scaleX, scaleY);
+  }
+}
+
+function clearChart(canvas) {
+  const context = canvas.getContext("2d");
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.strokeStyle = "#343029";
+  context.strokeRect(.5, .5, canvas.width - 1, canvas.height - 1);
+  return context;
+}
+
+function drawPolyline(canvas, points, color, maximumX = 1, maximumY = 1) {
+  const context = clearChart(canvas);
+  if (points.length === 0) return;
+  context.beginPath();
+  points.forEach(([x, y], index) => {
+    const drawX = 8 + (canvas.width - 16) * x / Math.max(1, maximumX);
+    const drawY = canvas.height - 8 -
+      (canvas.height - 16) * y / Math.max(1e-12, maximumY);
+    if (index === 0) context.moveTo(drawX, drawY);
+    else context.lineTo(drawX, drawY);
+  });
+  context.strokeStyle = color;
+  context.lineWidth = 2;
+  context.stroke();
+}
+
+function renderSeries() {
+  const key = seriesSelect.value;
+  const visibleFrames = frames.slice(0, frameIndex + 1);
+  const points = visibleFrames.map((frame, index) => {
+    const value = key === "population"
+      ? frame.agents.length
+      : Number((frame.stats || {})[key] || 0);
+    return [index, value];
+  });
+  drawPolyline(
+    seriesChart,
+    points,
+    "#e2b659",
+    Math.max(1, points.length - 1),
+    Math.max(...points.map((point) => point[1]), 1),
+  );
+}
+
+function renderHistogram(frame) {
+  const context = clearChart(histogram);
+  const wealth = frame.agents.map((agent) => agent.sugar + agent.spice);
+  if (wealth.length === 0) return;
+  const binCount = Math.min(12, Math.max(4, Math.ceil(Math.sqrt(wealth.length))));
+  const maximum = Math.max(...wealth, 1);
+  const bins = new Array(binCount).fill(0);
+  for (const value of wealth) {
+    const index = Math.min(binCount - 1, Math.floor(value / maximum * binCount));
+    bins[index] += 1;
+  }
+  const maxBin = Math.max(...bins, 1);
+  bins.forEach((count, index) => {
+    const width = (histogram.width - 16) / binCount;
+    const height = (histogram.height - 16) * count / maxBin;
+    context.fillStyle = "#35b9c7";
+    context.fillRect(8 + index * width, histogram.height - 8 - height, width - 1, height);
+  });
+}
+
+function renderLorenz(frame) {
+  const wealth = frame.agents
+    .map((agent) => Math.max(0, agent.sugar + agent.spice))
+    .sort((first, second) => first - second);
+  const total = wealth.reduce((sum, value) => sum + value, 0);
+  const points = [[0, 0]];
+  let cumulative = 0;
+  wealth.forEach((value, index) => {
+    cumulative += value;
+    points.push([(index + 1) / wealth.length, total > 0 ? cumulative / total : 0]);
+  });
+  drawPolyline(lorenz, points, "#e96ba8");
+  const context = lorenz.getContext("2d");
+  context.beginPath();
+  context.moveTo(8, lorenz.height - 8);
+  context.lineTo(lorenz.width - 8, 8);
+  context.strokeStyle = "#555";
+  context.lineWidth = 1;
+  context.stroke();
+}
+
+function renderInspection(frame) {
+  if (inspectedCell < 0) {
+    inspectElement.textContent = "Click a cell to inspect it.";
+    return;
+  }
+  const cell = frame.cells[inspectedCell];
+  const agent = frame.agents.find((item) => item.cell === inspectedCell);
+  const x = Math.floor(inspectedCell / frame.height);
+  const y = inspectedCell % frame.height;
+  const lines = [
+    `cell (${x}, ${y}) · id ${inspectedCell}`,
+    `sugar ${cell[0]} · spice ${cell[1]} · pollution ${cell[2]}`,
+  ];
+  if (agent) {
+    lines.push(
+      `agent ${agent.id} · ${agent.decisionModel} · age ${agent.age}`,
+      `wealth ${agent.sugar + agent.spice} · move ${agent.movement} · vision ${agent.vision}`,
+      `race ${agent.race} · tribe ${agent.tribe} · ${agent.sex || "no sex"}` +
+        `${agent.sick ? " · sick" : ""}${agent.depressed ? " · depressed" : ""}`,
+    );
+  } else {
+    lines.push("unoccupied");
+  }
+  inspectElement.textContent = lines.join("\n");
+}
+
+function render() {
+  if (frameIndex < 0 || !frames[frameIndex]) return;
+  const frame = frames[frameIndex];
+  timeline.max = Math.max(0, frames.length - 1);
+  timeline.value = frameIndex;
+  frameLabel.textContent = `frame ${frameIndex + 1} / ${frames.length}`;
+  playButton.textContent = playing ? "pause" : "play";
+  renderWorld(frame);
+  renderStats(frame);
+  renderLegend(frame);
+  renderInspection(frame);
+  renderSeries();
+  renderHistogram(frame);
+  renderLorenz(frame);
+}
+
+function selectFrame(index) {
+  frameIndex = Math.max(0, Math.min(frames.length - 1, index));
+  render();
+}
+
+playButton.addEventListener("click", () => {
+  playing = !playing;
+  if (playing && frames.length > 0) frameIndex = frames.length - 1;
+  render();
+});
+backButton.addEventListener("click", () => {
+  playing = false;
+  selectFrame(frameIndex - 1);
+});
+forwardButton.addEventListener("click", () => {
+  playing = false;
+  selectFrame(frameIndex + 1);
+});
+timeline.addEventListener("input", () => {
+  playing = false;
+  selectFrame(Number(timeline.value));
+});
+for (const control of [cellMode, agentMode, linksToggle, seriesSelect]) {
+  control.addEventListener("change", render);
+}
+world.addEventListener("click", (event) => {
+  if (frameIndex < 0) return;
+  const frame = frames[frameIndex];
+  const bounds = world.getBoundingClientRect();
+  const x = Math.min(
+    frame.width - 1,
+    Math.floor((event.clientX - bounds.left) / bounds.width * frame.width),
+  );
+  const y = Math.min(
+    frame.height - 1,
+    Math.floor((event.clientY - bounds.top) / bounds.height * frame.height),
+  );
+  inspectedCell = x * frame.height + y;
+  render();
+});
+
+function connect() {
+  const protocol = location.protocol === "https:" ? "wss" : "ws";
+  const socket = new WebSocket(`${protocol}://${location.host}/global`);
+  socket.addEventListener("open", () => {
+    statusElement.textContent = "live";
+  });
+  socket.addEventListener("message", (event) => {
+    frames.push(JSON.parse(event.data));
+    if (playing || frameIndex < 0) frameIndex = frames.length - 1;
+    render();
+  });
+  socket.addEventListener("close", () => {
+    statusElement.textContent = "reconnecting";
+    setTimeout(connect, 1000);
+  });
+  socket.addEventListener("error", () => socket.close());
 }
 connect();
 </script>

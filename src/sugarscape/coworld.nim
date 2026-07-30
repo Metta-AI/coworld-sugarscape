@@ -401,7 +401,7 @@ proc frameJson(
     agents = newJArray()
     slotNodes = newJArray()
   for cell in sim.environment.cells:
-    cells.add(%*[cell.sugar, cell.spice])
+    cells.add(%*[cell.sugar, cell.spice, cell.pollution])
   for id in sim.activeAgents:
     let agent = sim.agents[id]
     agents.add(%*{
@@ -409,8 +409,20 @@ proc frameJson(
       "cell": agent.cell,
       "slot": slots.slotForAgent(agent),
       "decisionModel": agent.decisionModel,
+      "age": agent.age,
       "sugar": agent.sugar,
       "spice": agent.spice,
+      "depressed": agent.depressed,
+      "sick": agent.diseases.len > 0,
+      "sugarMetabolism":
+        max(0.0, agent.sugarMetabolism + agent.sugarMetabolismModifier),
+      "spiceMetabolism":
+        max(0.0, agent.spiceMetabolism + agent.spiceMetabolismModifier),
+      "movement": max(0, agent.movement + int(agent.movementModifier)),
+      "vision": max(0, agent.vision + int(agent.visionModifier)),
+      "race": agent.race,
+      "sex": agent.sex,
+      "tribe": agent.tribe,
     })
   for slot in slots:
     slotNodes.add(%*{
@@ -424,6 +436,7 @@ proc frameJson(
     "height": sim.environment.height,
     "cells": cells,
     "agents": agents,
+    "links": sim.socialLinksJson(),
     "slots": slotNodes,
     "stats": sim.runtimeStats,
   }

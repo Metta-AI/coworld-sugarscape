@@ -144,6 +144,11 @@ const replay = JSON.parse(await readFile(replayPath, "utf8"));
 assert.equal(replay.format, "sugarscape.replay.v1");
 assert.equal(replay.config.seed, 12345);
 assert.deepEqual(replay.frames.map((frame) => frame.timestep), [0, 1, 2, 3]);
+assert.equal(replay.frames[0].cells[0].length, 3);
+assert.ok(Array.isArray(replay.frames[0].links));
+assert.equal(typeof replay.frames[0].agents[0].age, "number");
+assert.equal(typeof replay.frames[0].agents[0].sick, "boolean");
+assert.equal(typeof replay.frames[0].agents[0].movement, "number");
 assert.ok(frames.length >= 3);
 const firstDecisionFrame = replay.frames.find(
   (frame) => frame.timestep === firstExpected.timestep,
