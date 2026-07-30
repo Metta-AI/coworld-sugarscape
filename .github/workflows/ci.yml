@@ -38,8 +38,9 @@ jobs:
         run: python3 tools/build_viewer.py --check
 
   simulation:
-    # The byte-parity suites against the pinned Python oracle. std/* and the
-    # bundled `checksums` only — no vendored packages, so this runs anywhere.
+    # The byte-parity suites against the pinned Python oracle. std/* plus
+    # `checksums`, which is where std/md5 went in Nim 2.x and which is public —
+    # so this job needs no credentials.
     name: DTL byte parity
     runs-on: ubuntu-latest
     steps:
@@ -48,6 +49,8 @@ jobs:
         with:
           nim-version: ${{ env.NIM_VERSION }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Fetch the one public dependency the suites need
+        run: sh tools/fetch_deps.sh checksums
       - name: Compatibility suites
         run: sh tools/test_simulation.sh
 
@@ -78,25 +81,13 @@ jobs:
         if: env.HAS_PACKAGES_TOKEN != 'true'
         run: |
           echo "::warning title=Coworld smoke test skipped::METTA_PACKAGES_TOKEN is not set, so the private bitworld package cannot be fetched. The hosted-embed assertions are UNVERIFIED for this commit."
-      - name: Fetch the pinned dependencies
+      - name: Fetch every pinned dependency
         if: env.HAS_PACKAGES_TOKEN == 'true'
         env:
           TOKEN: ${{ secrets.METTA_PACKAGES_TOKEN }}
         run: |
           git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
-          # nimby.lock is "<name> <version> <url> <commit>". Reproduce the same
-          # nim.cfg nimby writes: packages expose src/, except libcurl, which
-          # puts its module at the repository root.
-          while read -r name version url commit; do
-            [ -n "${name:-}" ] || continue
-            git clone --quiet "$url" "$name"
-            git -C "$name" checkout --quiet "$commit"
-            if [ -d "$name/src" ]; then
-              printf -- '--path:"%s/src"\n' "$name" >> nim.cfg
-            else
-              printf -- '--path:"%s"\n' "$name" >> nim.cfg
-            fi
-          done < nimby.lock
+          sh tools/fetch_deps.sh
       - name: Coworld protocol smoke test
         if: env.HAS_PACKAGES_TOKEN == 'true'
         run: |
