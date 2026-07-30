@@ -855,10 +855,16 @@ function coalesce(list) {
     if (mergeable && previous && previous.kind === "death" && previous.merged) {
       previous.count += event.count;
       previous.until = event.timestep;
+      const tally = new Map(previous.bySlot);
+      for (const [slot, count] of event.bySlot) {
+        tally.set(slot, (tally.get(slot) ?? 0) + count);
+      }
+      previous.bySlot = [...tally.entries()];
       continue;
     }
     rows.push(mergeable
-      ? { ...event, merged: true, since: event.timestep, until: event.timestep }
+      ? { ...event, bySlot: [...event.bySlot], merged: true,
+          since: event.timestep, until: event.timestep }
       : { ...event });
   }
   return rows;
@@ -1288,6 +1294,8 @@ function tick() {
     state.lastDrawnIndex = index;
     onFrameEntered(index, now);
     controls.scrub.value = String(index);
+    const span = Math.max(1, frames.length - 1);
+    controls.scrub.style.setProperty("--played", `${(index / span) * 100}%`);
     // A bare "62" tells a screen-reader user nothing; name the unit and the end.
     controls.scrub.setAttribute(
       "aria-valuetext",

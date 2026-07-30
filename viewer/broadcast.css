@@ -169,8 +169,9 @@ html, body {
 #scrub::-webkit-slider-runnable-track {
   height: 6px;
   border-radius: 999px;
-  background: linear-gradient(var(--track-fill), var(--track-fill)) 0 / var(--played, 0%) 100% no-repeat,
-    rgba(246, 234, 210, 0.22);
+  background:
+    linear-gradient(var(--track-fill), var(--track-fill)) left center / var(--played, 0%) 100% no-repeat,
+    rgba(246, 234, 210, 0.24);
 }
 #scrub::-moz-range-track {
   height: 6px;
