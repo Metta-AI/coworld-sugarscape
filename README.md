@@ -141,11 +141,13 @@ The `/global` WebSocket and browser spectator expose read-only
 `sugarscape.frame.v1` state. The viewer includes resource/pollution modes,
 policy and agent-attribute coloring, social links, inspection, labeled live
 time series, a stable-domain wealth histogram, a normalized Lorenz curve, and
-replay scrubbing. Late spectators receive up to 300 recent frames before live
-updates. Results report each slot's final living population wealth (sugar plus
-spice, truncated to an integer). Replay artifacts contain the effective
-configuration and immutable statistics for all recorded frames without
-consuming model RNG. The complete wire contract is in
+replay scrubbing. Its broadcast-style layout keeps the world dominant while
+making episode metrics, population identity, and analytical context glanceable
+across desktop and narrow screens. Late spectators receive up to 300 recent
+frames before live updates. Results report each slot's final living population
+wealth (sugar plus spice, truncated to an integer). Replay artifacts contain
+the effective configuration and immutable statistics for all recorded frames
+without consuming model RNG. The complete wire contract is in
 [`docs/coworld-protocol.md`](docs/coworld-protocol.md).
 
 ## Performance

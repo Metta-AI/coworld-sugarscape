@@ -7,184 +7,514 @@
   <style>
     :root {
       color-scheme: dark;
-      --ink: #f5eddc;
-      --muted: #a89f91;
-      --panel: #171713;
-      --line: #343029;
-      --accent: #e2b659;
+      --ink: #f7f2e8;
+      --muted: #91a1a8;
+      --faint: #60717a;
+      --canvas: #071014;
+      --panel: rgba(13, 25, 31, .88);
+      --panel-strong: #0f2028;
+      --line: rgba(145, 178, 188, .18);
+      --line-strong: rgba(145, 178, 188, .32);
+      --gold: #f4c15d;
+      --teal: #46d2c4;
+      --coral: #ff785f;
+      --pink: #ff7897;
+      --shadow: 0 22px 60px rgba(0, 0, 0, .28);
     }
     * { box-sizing: border-box }
+    html { background: #071014 }
     body {
       margin: 0;
-      background: #0d0d0b;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 12% -10%, rgba(70, 210, 196, .13), transparent 30rem),
+        radial-gradient(circle at 92% 12%, rgba(244, 193, 93, .11), transparent 34rem),
+        linear-gradient(145deg, #071014 0%, #0a151a 48%, #081116 100%);
       color: var(--ink);
-      font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+      font: 14px/1.45 Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+    }
+    body::before {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      background-image:
+        linear-gradient(rgba(255, 255, 255, .018) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, .018) 1px, transparent 1px);
+      background-size: 42px 42px;
+      content: "";
+      mask-image: linear-gradient(to bottom, black, transparent 75%);
     }
     header {
       display: flex;
-      align-items: baseline;
-      gap: 20px;
-      padding: 15px 20px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      min-height: 86px;
+      padding: 16px clamp(18px, 3vw, 44px);
+      background: rgba(7, 16, 20, .72);
       border-bottom: 1px solid var(--line);
+      backdrop-filter: blur(18px);
+    }
+    .brand { display: grid; gap: 5px }
+    .eyebrow {
+      color: var(--teal);
+      font: 700 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: .18em;
+      text-transform: uppercase;
     }
     h1 {
       margin: 0;
-      font: 600 18px/1 ui-sans-serif, system-ui;
+      font: 650 clamp(22px, 2vw, 30px)/1 ui-sans-serif, system-ui;
+      letter-spacing: -.035em;
+    }
+    h1 span {
+      color: var(--gold);
+      font-weight: 450;
+    }
+    .header-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .header-chip, .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 34px;
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(15, 32, 40, .72);
+      color: var(--muted);
+      font: 700 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
       letter-spacing: .08em;
       text-transform: uppercase;
     }
+    .status-pill::before {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--gold);
+      box-shadow: 0 0 0 4px rgba(244, 193, 93, .11);
+      content: "";
+    }
+    .status-pill[data-state="live"] { color: var(--teal) }
+    .status-pill[data-state="live"]::before {
+      background: var(--teal);
+      box-shadow: 0 0 0 4px rgba(70, 210, 196, .11), 0 0 14px var(--teal);
+    }
     h2 {
-      margin: 0 0 10px;
-      color: var(--muted);
-      font-size: 10px;
-      letter-spacing: .12em;
+      margin: 0;
+      color: var(--ink);
+      font-size: 11px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+    .section-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .section-kicker {
+      color: var(--faint);
+      font: 700 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: .1em;
       text-transform: uppercase;
     }
     button, select, input {
       border: 1px solid var(--line);
-      background: #11110e;
+      background: rgba(5, 13, 17, .84);
       color: var(--ink);
       font: inherit;
+      transition: border-color .16s ease, background .16s ease, transform .16s ease;
     }
-    button, select { min-height: 30px; padding: 4px 8px }
-    button { cursor: pointer }
-    button:hover { border-color: var(--accent) }
-    input[type="range"] { accent-color: var(--accent) }
+    button, select {
+      min-height: 36px;
+      padding: 6px 11px;
+      border-radius: 8px;
+    }
+    button {
+      cursor: pointer;
+      font-weight: 750;
+    }
+    button:hover {
+      transform: translateY(-1px);
+      border-color: rgba(244, 193, 93, .7);
+      background: rgba(244, 193, 93, .08);
+    }
+    button:focus-visible, select:focus-visible, input:focus-visible {
+      outline: 2px solid var(--teal);
+      outline-offset: 2px;
+    }
+    #play {
+      min-width: 96px;
+      border-color: rgba(244, 193, 93, .4);
+      background: linear-gradient(135deg, rgba(244, 193, 93, .19), rgba(244, 193, 93, .07));
+      color: #ffe1a1;
+    }
+    input[type="range"] {
+      height: 4px;
+      border: 0;
+      border-radius: 999px;
+      accent-color: var(--gold);
+      cursor: pointer;
+    }
     label { color: var(--muted) }
-    #status { color: var(--accent) }
     main {
       display: grid;
-      grid-template-columns: minmax(440px, 1fr) 340px;
-      gap: 14px;
-      padding: 14px;
+      grid-template-columns: minmax(520px, 1fr) minmax(360px, 430px);
+      gap: clamp(14px, 1.5vw, 24px);
+      width: min(1760px, 100%);
+      margin: 0 auto;
+      padding: clamp(14px, 2vw, 28px);
     }
-    .world-pane { min-width: 0 }
+    .surface {
+      background: linear-gradient(145deg, rgba(16, 32, 39, .94), rgba(10, 21, 27, .9));
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+    }
+    .world-pane {
+      min-width: 0;
+      padding: clamp(12px, 1.4vw, 20px);
+    }
+    .control-deck {
+      display: grid;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
     .toolbar {
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
       align-items: center;
-      margin-bottom: 10px;
     }
-    .toolbar label { display: flex; gap: 6px; align-items: center }
-    #timeline { flex: 1; min-width: 140px }
+    .transport {
+      display: grid;
+      grid-template-columns: auto minmax(170px, 1fr) auto;
+      gap: 12px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--line);
+    }
+    .button-group { display: flex; gap: 7px }
+    .timeline-wrap {
+      display: grid;
+      grid-template-columns: auto minmax(120px, 1fr);
+      align-items: center;
+      gap: 10px;
+      color: var(--faint);
+      font: 700 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    #timeline { width: 100% }
+    #frame-label {
+      justify-self: end;
+      color: var(--muted);
+      font: 700 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      white-space: nowrap;
+    }
+    .view-controls { justify-content: space-between }
+    .view-options { display: flex; flex-wrap: wrap; gap: 8px }
+    .select-control {
+      display: grid;
+      grid-template-columns: auto auto;
+      align-items: center;
+      gap: 8px;
+      padding-left: 10px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: rgba(5, 13, 17, .5);
+      color: var(--faint);
+      font: 700 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+    }
+    .select-control select {
+      border-width: 0 0 0 1px;
+      border-radius: 0 8px 8px 0;
+    }
+    .toggle-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 36px;
+      padding: 0 11px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: rgba(5, 13, 17, .5);
+      font-size: 12px;
+    }
+    .toggle-control input { accent-color: var(--teal) }
+    .world-shell {
+      position: relative;
+      overflow: hidden;
+      padding: 7px;
+      border: 1px solid var(--line-strong);
+      border-radius: 14px;
+      background: #061014;
+      box-shadow: inset 0 0 40px rgba(0, 0, 0, .35);
+    }
+    .world-caption {
+      position: absolute;
+      z-index: 2;
+      top: 18px;
+      left: 18px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 9px;
+      border: 1px solid rgba(255, 255, 255, .1);
+      border-radius: 7px;
+      background: rgba(3, 10, 13, .72);
+      color: rgba(247, 242, 232, .72);
+      font: 700 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      backdrop-filter: blur(8px);
+      pointer-events: none;
+    }
+    .world-caption::before {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--coral);
+      box-shadow: 0 0 10px var(--coral);
+      content: "";
+    }
     #world {
       display: block;
       width: 100%;
       aspect-ratio: 1;
-      background: #050504;
-      border: 1px solid var(--line);
+      background: var(--canvas);
+      border-radius: 9px;
       image-rendering: pixelated;
       cursor: crosshair;
     }
-    aside { display: flex; flex-direction: column; gap: 10px }
+    aside {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      gap: 12px;
+    }
     section {
-      background: var(--panel);
-      border: 1px solid var(--line);
-      padding: 12px;
+      padding: 15px;
     }
     dl {
       display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 6px 12px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
       margin: 0;
     }
-    dt { color: var(--muted) }
-    dd { margin: 0; text-align: right }
+    .metric {
+      display: grid;
+      gap: 5px;
+      min-width: 0;
+      padding: 10px;
+      border: 1px solid rgba(145, 178, 188, .12);
+      border-radius: 10px;
+      background: rgba(4, 12, 16, .48);
+    }
+    dt {
+      overflow: hidden;
+      color: var(--faint);
+      font: 700 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: .06em;
+      text-overflow: ellipsis;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    dd {
+      margin: 0;
+      color: var(--ink);
+      font: 720 clamp(17px, 1.4vw, 22px)/1 ui-sans-serif, system-ui;
+      letter-spacing: -.025em;
+    }
     .legend {
       display: grid;
-      grid-template-columns: 12px 1fr;
-      gap: 6px 8px;
+      grid-template-columns: 10px 1fr;
+      gap: 8px 10px;
       align-items: center;
+      color: var(--muted);
+      font-size: 12px;
     }
-    .dot { width: 10px; height: 10px; border-radius: 50% }
+    .dot {
+      width: 9px;
+      height: 9px;
+      border: 2px solid rgba(255, 255, 255, .28);
+      border-radius: 50%;
+      box-shadow: 0 0 12px currentColor;
+    }
+    .inspection-card { flex: 0 0 auto }
+    #inspect {
+      min-height: 58px;
+      color: var(--muted);
+      font: 11px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+      white-space: pre-wrap;
+    }
+    .analysis-card { min-height: 0 }
+    .analysis-card .section-heading { margin-bottom: 10px }
     .chart-grid {
       display: grid;
       grid-template-columns: 1fr;
-      gap: 8px;
+      gap: 10px;
     }
-    .chart-grid figure { margin: 0; min-width: 0 }
+    .chart-grid figure {
+      overflow: hidden;
+      margin: 0;
+      min-width: 0;
+      padding: 10px;
+      border: 1px solid rgba(145, 178, 188, .13);
+      border-radius: 11px;
+      background: rgba(4, 12, 16, .45);
+    }
     .chart-grid figcaption {
-      margin-bottom: 4px;
+      margin-bottom: 8px;
       color: var(--muted);
-      font-size: 10px;
+      font: 700 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: .07em;
       text-transform: uppercase;
     }
     .chart-grid canvas {
       display: block;
       width: 100%;
-      height: 120px;
-      background: #0d0d0b;
-      border: 1px solid var(--line);
+      height: 116px;
+      background: linear-gradient(180deg, rgba(9, 24, 29, .8), rgba(4, 12, 16, .82));
+      border: 1px solid rgba(145, 178, 188, .1);
+      border-radius: 7px;
     }
-    #inspect { min-height: 72px; white-space: pre-wrap }
-    @media (max-width: 900px) {
+    .series-control { margin-left: auto }
+    @media (max-width: 1100px) {
       main { grid-template-columns: 1fr }
-      aside { display: grid; grid-template-columns: 1fr 1fr }
-      .wide { grid-column: 1 / -1 }
+      aside {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .analysis-card { grid-column: 1 / -1 }
+      .chart-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) }
     }
-    @media (max-width: 560px) {
-      main { padding: 8px }
+    @media (max-width: 720px) {
+      body { overflow-x: hidden }
+      header {
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+      }
+      .header-chip { display: none }
+      .header-meta { margin-left: auto }
+      main { grid-template-columns: minmax(0, 1fr); padding: 10px }
+      .world-pane { padding: 10px }
+      .transport { grid-template-columns: minmax(0, 1fr) auto }
+      .timeline-wrap { grid-column: 1 / -1; grid-row: 2 }
+      .view-controls { align-items: stretch }
+      .view-options, .select-control { width: 100% }
+      .select-control { grid-template-columns: 64px 1fr }
+      .select-control select { width: 100% }
+      section { min-width: 0 }
+      .section-heading { flex-wrap: wrap }
+      .section-kicker { display: none }
+      .series-control { margin-left: 0 }
       aside { display: flex }
       .chart-grid { grid-template-columns: 1fr }
+    }
+    @media (max-width: 460px) {
+      .eyebrow { display: none }
+      header { min-height: 68px; padding: 14px }
+      h1 { font-size: 21px }
+      #frame-label { display: none }
+      dl { grid-template-columns: 1fr 1fr }
+      .button-group { width: 100% }
+      #play { flex: 1 }
     }
   </style>
 </head>
 <body>
   <header>
-    <h1>Sugarscape Observatory</h1>
-    <span id="status">connecting</span>
+    <div class="brand">
+      <span class="eyebrow">Complex adaptive systems</span>
+      <h1>Sugarscape <span>Observatory</span></h1>
+    </div>
+    <div class="header-meta">
+      <span class="header-chip" id="headline-timestep">timestep —</span>
+      <span class="status-pill" id="status" data-state="connecting">connecting</span>
+    </div>
   </header>
   <main>
-    <div class="world-pane">
-      <div class="toolbar">
-        <button id="play" type="button">pause</button>
-        <button id="back" type="button" aria-label="Previous frame">−1</button>
-        <button id="forward" type="button" aria-label="Next frame">+1</button>
-        <input id="timeline" type="range" min="0" max="0" value="0"
-          aria-label="Replay frame">
-        <span id="frame-label">frame 0 / 0</span>
+    <div class="world-pane surface">
+      <div class="control-deck">
+        <div class="transport">
+          <div class="button-group">
+            <button id="play" type="button">Ⅱ Pause</button>
+            <button id="back" type="button" aria-label="Previous frame">−1</button>
+            <button id="forward" type="button" aria-label="Next frame">+1</button>
+          </div>
+          <label class="timeline-wrap">
+            <span>History</span>
+            <input id="timeline" type="range" min="0" max="0" value="0"
+              aria-label="Replay frame">
+          </label>
+          <span id="frame-label">frame 0 / 0</span>
+        </div>
+        <div class="toolbar view-controls">
+          <div class="view-options">
+            <label class="select-control"><span>Cells</span>
+              <select id="cell-mode">
+                <option value="resources">sugar + spice</option>
+                <option value="pollution">pollution</option>
+              </select>
+            </label>
+            <label class="select-control"><span>Agents</span>
+              <select id="agent-mode">
+                <option value="decisionModel">decision model</option>
+                <option value="depressed">depression</option>
+                <option value="sick">disease</option>
+                <option value="metabolism">metabolism</option>
+                <option value="movement">movement</option>
+                <option value="race">race</option>
+                <option value="sex">sex</option>
+                <option value="tribe">tribe</option>
+                <option value="vision">vision</option>
+              </select>
+            </label>
+          </div>
+          <label class="toggle-control">
+            <input id="links" type="checkbox"> social links
+          </label>
+        </div>
       </div>
-      <div class="toolbar">
-        <label>cells
-          <select id="cell-mode">
-            <option value="resources">sugar + spice</option>
-            <option value="pollution">pollution</option>
-          </select>
-        </label>
-        <label>agents
-          <select id="agent-mode">
-            <option value="decisionModel">decision model</option>
-            <option value="depressed">depression</option>
-            <option value="sick">disease</option>
-            <option value="metabolism">metabolism</option>
-            <option value="movement">movement</option>
-            <option value="race">race</option>
-            <option value="sex">sex</option>
-            <option value="tribe">tribe</option>
-            <option value="vision">vision</option>
-          </select>
-        </label>
-        <label><input id="links" type="checkbox"> social links</label>
+      <div class="world-shell">
+        <div class="world-caption" id="world-timestep">resource field · t—</div>
+        <canvas id="world" width="900" height="900"></canvas>
       </div>
-      <canvas id="world" width="900" height="900"></canvas>
     </div>
     <aside>
-      <section>
-        <h2>Episode</h2>
+      <section class="surface">
+        <div class="section-heading">
+          <h2>Episode pulse</h2>
+          <span class="section-kicker">Live telemetry</span>
+        </div>
         <dl id="stats"></dl>
       </section>
-      <section>
-        <h2>Populations</h2>
+      <section class="surface">
+        <div class="section-heading">
+          <h2>Populations</h2>
+          <span class="section-kicker">Agent cohorts</span>
+        </div>
         <div class="legend" id="legend"></div>
       </section>
-      <section>
-        <h2>Inspection</h2>
+      <section class="surface inspection-card">
+        <div class="section-heading">
+          <h2>Inspection</h2>
+          <span class="section-kicker">Cell detail</span>
+        </div>
         <div id="inspect">Click a cell to inspect it.</div>
       </section>
-      <section class="wide">
-        <div class="toolbar">
-          <label>series
+      <section class="surface analysis-card">
+        <div class="section-heading">
+          <h2>World telemetry</h2>
+          <label class="select-control series-control"><span>Series</span>
             <select id="series">
               <option value="population">population</option>
               <option value="meanWealth">mean wealth</option>
@@ -202,11 +532,11 @@
             <canvas id="series-chart" width="320" height="150"></canvas>
           </figure>
           <figure>
-            <figcaption>Wealth histogram</figcaption>
+            <figcaption>Wealth distribution</figcaption>
             <canvas id="histogram" width="320" height="150"></canvas>
           </figure>
           <figure>
-            <figcaption>Lorenz curve</figcaption>
+            <figcaption>Equality profile</figcaption>
             <canvas id="lorenz" width="320" height="150"></canvas>
           </figure>
         </div>
@@ -217,6 +547,8 @@
 const world = document.querySelector("#world");
 const worldContext = world.getContext("2d");
 const statusElement = document.querySelector("#status");
+const headlineTimestep = document.querySelector("#headline-timestep");
+const worldTimestep = document.querySelector("#world-timestep");
 const statsElement = document.querySelector("#stats");
 const legendElement = document.querySelector("#legend");
 const inspectElement = document.querySelector("#inspect");
@@ -235,8 +567,8 @@ const histogram = document.querySelector("#histogram");
 const lorenz = document.querySelector("#lorenz");
 
 const palette = [
-  "#f06449", "#35b9c7", "#a48be0", "#f1c75b",
-  "#70c36b", "#e96ba8", "#5c8ee6", "#e08d42",
+  "#ff785f", "#46d2c4", "#aa8cff", "#f4c15d",
+  "#78d78b", "#ff7897", "#66a6ff", "#f39b59",
 ];
 const linkColors = {friend: "#8ecae6", mate: "#ff7aa2", loan: "#ffd166"};
 const frames = [];
@@ -298,28 +630,38 @@ function resourceColor(cell) {
   const [sugar, spice] = cell;
   const magnitude = Math.min(1, (sugar + spice) / 10);
   const total = sugar + spice || 1;
-  const red = Math.round(30 + 190 * (sugar / total) * magnitude);
-  const blue = Math.round(25 + 170 * (spice / total) * magnitude);
-  const green = Math.round(22 + 75 * magnitude);
+  const sugarShare = sugar / total;
+  const spiceShare = spice / total;
+  const red = Math.round(10 + magnitude * (210 * sugarShare + 34 * spiceShare));
+  const green = Math.round(18 + magnitude * (126 * sugarShare + 150 * spiceShare));
+  const blue = Math.round(23 + magnitude * (30 * sugarShare + 164 * spiceShare));
   return `rgb(${red} ${green} ${blue})`;
 }
 
 function pollutionColor(cell, maximum) {
   const ratio = Math.max(0, Math.min(1, cell[2] / Math.max(1, maximum)));
-  const value = Math.round(24 + ratio * 210);
-  return `rgb(${value} ${Math.round(value * .72)} ${Math.round(value * .25)})`;
+  const red = Math.round(12 + ratio * 190);
+  const green = Math.round(20 + ratio * 64);
+  const blue = Math.round(27 + ratio * 125);
+  return `rgb(${red} ${green} ${blue})`;
 }
 
 function addDefinition(term, value) {
+  const metric = document.createElement("div");
   const dt = document.createElement("dt");
   const dd = document.createElement("dd");
+  metric.className = "metric";
   dt.textContent = term;
   dd.textContent = value;
-  statsElement.append(dt, dd);
+  metric.append(dt, dd);
+  statsElement.append(metric);
 }
 
 function renderStats(frame) {
   statsElement.replaceChildren();
+  headlineTimestep.textContent = `timestep ${frame.timestep}`;
+  const field = cellMode.value === "pollution" ? "pollution" : "resource";
+  worldTimestep.textContent = `${field} field · t${frame.timestep}`;
   const stats = frame.stats || {};
   const rows = [
     ["timestep", frame.timestep],
@@ -338,6 +680,15 @@ function renderStats(frame) {
 
 function renderLegend(frame) {
   legendElement.replaceChildren();
+  if (frame.slots.length === 0) {
+    const dot = document.createElement("span");
+    const label = document.createElement("span");
+    dot.className = "dot";
+    dot.style.background = palette[5];
+    label.textContent = "Autonomous agents";
+    legendElement.append(dot, label);
+    return;
+  }
   frame.slots.forEach((slot, index) => {
     const dot = document.createElement("span");
     const label = document.createElement("span");
@@ -394,9 +745,24 @@ function renderWorld(frame) {
       Math.ceil(scaleY),
     );
   });
+  if (Math.min(scaleX, scaleY) >= 10) {
+    worldContext.beginPath();
+    for (let x = 1; x < frame.width; x += 1) {
+      worldContext.moveTo(x * scaleX, 0);
+      worldContext.lineTo(x * scaleX, world.height);
+    }
+    for (let y = 1; y < frame.height; y += 1) {
+      worldContext.moveTo(0, y * scaleY);
+      worldContext.lineTo(world.width, y * scaleY);
+    }
+    worldContext.strokeStyle = "rgba(235, 248, 250, .055)";
+    worldContext.lineWidth = 1;
+    worldContext.stroke();
+  }
   drawLinks(frame, scaleX, scaleY);
   for (const agent of frame.agents) {
     const position = agentPosition(frame, agent);
+    const color = agentColor(agent, frame);
     worldContext.beginPath();
     worldContext.arc(
       (position.x + .5) * scaleX,
@@ -405,18 +771,34 @@ function renderWorld(frame) {
       0,
       Math.PI * 2,
     );
-    worldContext.fillStyle = agentColor(agent, frame);
+    worldContext.shadowColor = color;
+    worldContext.shadowBlur = Math.max(5, Math.min(scaleX, scaleY) * .28);
+    worldContext.fillStyle = color;
     worldContext.fill();
-    worldContext.strokeStyle = "#111";
-    worldContext.lineWidth = 1;
+    worldContext.shadowBlur = 0;
+    worldContext.strokeStyle = "rgba(4, 12, 16, .85)";
+    worldContext.lineWidth = 1.5;
     worldContext.stroke();
+    worldContext.beginPath();
+    worldContext.arc(
+      (position.x + .39) * scaleX,
+      (position.y + .39) * scaleY,
+      Math.max(1, Math.min(scaleX, scaleY) * .08),
+      0,
+      Math.PI * 2,
+    );
+    worldContext.fillStyle = "rgba(255, 255, 255, .62)";
+    worldContext.fill();
   }
   if (inspectedCell >= 0) {
     const x = Math.floor(inspectedCell / frame.height);
     const y = inspectedCell % frame.height;
-    worldContext.strokeStyle = "#fff";
-    worldContext.lineWidth = 2;
+    worldContext.shadowColor = "#f4c15d";
+    worldContext.shadowBlur = 10;
+    worldContext.strokeStyle = "#f4c15d";
+    worldContext.lineWidth = 2.5;
     worldContext.strokeRect(x * scaleX, y * scaleY, scaleX, scaleY);
+    worldContext.shadowBlur = 0;
   }
 }
 
@@ -448,7 +830,7 @@ function chartArea(canvas) {
 function drawChartAxes(canvas, bounds, labels = {}) {
   const context = clearChart(canvas);
   const area = chartArea(canvas);
-  context.strokeStyle = "#343029";
+  context.strokeStyle = "#2a3b47";
   context.lineWidth = 1;
   context.strokeRect(
     area.left + .5,
@@ -459,9 +841,9 @@ function drawChartAxes(canvas, bounds, labels = {}) {
   context.beginPath();
   context.moveTo(area.left, (area.top + area.bottom) / 2);
   context.lineTo(area.right, (area.top + area.bottom) / 2);
-  context.strokeStyle = "#24221d";
+  context.strokeStyle = "#192a32";
   context.stroke();
-  context.fillStyle = "#a89f91";
+  context.fillStyle = "#91a1a8";
   context.font = "9px ui-monospace, SFMono-Regular, Menlo, monospace";
   context.textBaseline = "middle";
   context.textAlign = "right";
@@ -545,7 +927,7 @@ function renderSeries() {
   drawPolyline(
     seriesChart,
     points,
-    "#e2b659",
+    "#f4c15d",
     bounds,
     {
       minimumX: `t${bounds.minimumX}`,
@@ -596,7 +978,7 @@ function renderHistogram(frame) {
     const share = count / frame.agents.length;
     const height = (area.bottom - area.top) *
       share;
-    context.fillStyle = "#35b9c7";
+    context.fillStyle = "#46d2c4";
     context.fillRect(
       area.left + index * width,
       area.bottom - height,
@@ -618,7 +1000,7 @@ function renderLorenz(frame) {
     points.push([(index + 1) / wealth.length, total > 0 ? cumulative / total : 0]);
   });
   const bounds = {minimumX: 0, maximumX: 1, minimumY: 0, maximumY: 1};
-  drawPolyline(lorenz, points, "#e96ba8", bounds, {
+  drawPolyline(lorenz, points, "#ff7897", bounds, {
     minimumX: "0% agents",
     maximumX: "100% agents",
     minimumY: "0%",
@@ -629,7 +1011,7 @@ function renderLorenz(frame) {
   context.beginPath();
   context.moveTo(area.left, area.bottom);
   context.lineTo(area.right, area.top);
-  context.strokeStyle = "#555";
+  context.strokeStyle = "#52616a";
   context.lineWidth = 1;
   context.stroke();
 }
@@ -666,7 +1048,7 @@ function render() {
   timeline.max = Math.max(0, frames.length - 1);
   timeline.value = frameIndex;
   frameLabel.textContent = `frame ${frameIndex + 1} / ${frames.length}`;
-  playButton.textContent = playing ? "pause" : "play";
+  playButton.textContent = playing ? "Ⅱ Pause" : "▶ Play";
   renderWorld(frame);
   renderStats(frame);
   renderLegend(frame);
@@ -745,12 +1127,14 @@ function connect() {
   const socket = new WebSocket(`${protocol}://${location.host}/global`);
   socket.addEventListener("open", () => {
     statusElement.textContent = "live";
+    statusElement.dataset.state = "live";
   });
   socket.addEventListener("message", (event) => {
     recordFrame(JSON.parse(event.data));
   });
   socket.addEventListener("close", () => {
     statusElement.textContent = "reconnecting";
+    statusElement.dataset.state = "reconnecting";
     setTimeout(connect, 1000);
   });
   socket.addEventListener("error", () => socket.close());

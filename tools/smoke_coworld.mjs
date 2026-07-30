@@ -92,8 +92,11 @@ const viewerPage = await fetch(`${baseUrl}/client/global`);
 assert.equal(viewerPage.status, 200);
 const viewerHtml = await viewerPage.text();
 assert.match(viewerHtml, /Sugarscape Observatory/);
+assert.match(viewerHtml, /World telemetry/);
+assert.match(viewerHtml, /class="world-pane surface"/);
 
 const drawnPoints = [];
+const createdElements = [];
 const canvasContext = {
   arc() {},
   beginPath() {},
@@ -111,6 +114,7 @@ function fakeElement(selector = "") {
     addEventListener() {},
     append() {},
     checked: false,
+    dataset: {},
     getBoundingClientRect: () => ({left: 0, top: 0, width: 1, height: 1}),
     getContext: () => canvasContext,
     height: 150,
@@ -118,6 +122,7 @@ function fakeElement(selector = "") {
     options: [{textContent: "population"}],
     replaceChildren() {},
     selectedIndex: 0,
+    style: {},
     textContent: "",
     value: selector === "#cell-mode"
       ? "resources"
@@ -135,8 +140,13 @@ class FakeWebSocket {
 }
 const viewerContext = vm.createContext({
   console,
+  createdElements,
   document: {
-    createElement: () => fakeElement(),
+    createElement: () => {
+      const element = fakeElement();
+      createdElements.push(element);
+      return element;
+    },
     querySelector: (selector) => fakeElement(selector),
   },
   drawnPoints,
@@ -149,6 +159,24 @@ const viewerContext = vm.createContext({
 const viewerScript = viewerHtml.match(/<script>([\s\S]*)<\/script>/)?.[1];
 assert.ok(viewerScript, "viewer script must be embedded");
 vm.runInContext(viewerScript, viewerContext);
+const displayState = vm.runInContext(`
+  createdElements.length = 0;
+  addDefinition("Gini", 0.089);
+  cellMode.value = "pollution";
+  renderStats({
+    timestep: 7,
+    agents: [],
+    stats: {},
+  });
+  JSON.stringify({
+    metricValue: String(createdElements[2].textContent),
+    worldCaption: worldTimestep.textContent,
+  });
+`, viewerContext);
+assert.deepEqual(JSON.parse(displayState), {
+  metricValue: "0.089",
+  worldCaption: "pollution field · t7",
+});
 const reconnectState = vm.runInContext(`
   recordFrame({
     streamId: "first",
