@@ -623,7 +623,11 @@ proc runCoworld*(runtimeConfig: RuntimeConfig) =
       sim.doTimestep(policy)
       if sim.timestep mod coworldConfig.frameInterval == 0 or
           sim.timestep == sim.maxTimestep:
-        let frame = sim.frameJson(appState.slots)
+        var liveSlots: seq[PolicySlot]
+        {.gcsafe.}:
+          withLock appState.lock:
+            liveSlots = appState.slots & @[]
+        let frame = sim.frameJson(liveSlots)
         frames.add(frame)
         frame.publishFrame()
     runtimeConfig.writeResults(sim.buildResults())

@@ -29,8 +29,6 @@ const C = {
   border: "#4a3620",
   panel: "rgba(20,15,8,.86)",
   gold: "#e8a838",         // sugar — the world's own accent
-  peak: "#ffd97a",
-  live: "#7bd88f",
   loss: "#e2703a",
 };
 
@@ -93,10 +91,13 @@ function animFactor(speed) {
   return Math.max(1 / Math.max(speed, 0.05), 1 / ANIM_MAX);
 }
 
+/** How long to hold each timestep. The walk between two timesteps is the beat
+ *  and must always play in full, so the dwell is the capped walk plus a pause
+ *  to read it. Because animation is capped at ANIM_MAX, raising the speed past
+ *  that point shortens the walk no further and only the pause remains constant
+ *  - which is what stops a fast replay from becoming unreadable. */
 function frameDwellMs(speed) {
-  // The walk between two timesteps is the beat; it must always play in full.
-  const walk = BASE_FRAME_MS * animFactor(speed);
-  return Math.max(BASE_FRAME_MS / speed, walk + READ_PAUSE);
+  return BASE_FRAME_MS * animFactor(speed) + READ_PAUSE;
 }
 
 // ---------------------------------------------------------------------------
@@ -139,6 +140,10 @@ const state = {
   stingerUntil: 0,
   stinger: null,
   holdUntil: 0,
+  truncated: false,
+  // Whether the very first timestep was seen. A spectator joining past the
+  // server's live backlog cap has not, so "N of M survived" would be a fiction.
+  sawStart: false,
   // The overlay scales with the stage, so at the 640x360 embed everything in the
   // rail shrinks by two thirds and a dozen small labels fall under 7px. Below
   // this width the rail sheds detail and sizes up instead of scaling down.
@@ -167,6 +172,7 @@ function measureDensity() {
 
 const FRAME_FORMAT = "sugarscape.frame.v1";
 let rejectedFormat = false;
+let rejectedShape = false;
 
 /** The server stamps a format on every frame. Checking only that `cells` is an
  *  array let a future shape through to throw on every tick behind a fully
@@ -184,9 +190,24 @@ function isRenderableFrame(frame) {
     && Array.isArray(frame.slots) && Array.isArray(frame.cells[0])
     && Number.isFinite(frame.width) && Number.isFinite(frame.height)
     && Number.isFinite(frame.timestep);
-  // A frame with no policy slots has no standing to draw, and every panel that
-  // reads rows[0] would throw and wipe the whole overlay.
-  return shaped && frame.slots.length > 0;
+  // Say WHICH way it was unusable. Letting these fall through to the silence
+  // timer told an operator debugging a slot-config bug that nothing was being
+  // sent, when five frames a second were arriving and being discarded.
+  if (!shaped) {
+    if (!rejectedShape) {
+      rejectedShape = true;
+      fail("This episode is sending frames this viewer cannot read.");
+    }
+    return false;
+  }
+  if (frame.slots.length === 0) {
+    if (!rejectedShape) {
+      rejectedShape = true;
+      fail("This episode declares no policy populations, so there is no standing to show.");
+    }
+    return false;
+  }
+  return true;
 }
 
 /** A seat's colours. The manifest permits up to 16 populations while the
@@ -307,7 +328,16 @@ function recordFrame(frame) {
       if (events[index].index === existing) events.splice(index, 1);
     }
     deriveEvents(existing);
+    // The world's scale is derived from the frames too, so a replacement has to
+    // refresh it: replacing a frame that carried spice used to leave the score
+    // still labelled "sugar".
+    for (const cell of frame.cells) {
+      if (cell[0] > state.maxSugar) state.maxSugar = cell[0];
+      if (cell[1] > state.maxSpice) state.maxSpice = cell[1];
+    }
+    state.maxWealth = Math.max(1, ...wealthSeries.flatMap((point) => point.scores));
     standingsSignature = "";
+    terrainShown = null;
     return;
   }
 
@@ -319,9 +349,11 @@ function recordFrame(frame) {
   // live episode past the server's backlog cap never sees frame zero, and would
   // otherwise normalise the whole colour ramp against a partly-eaten world.
   // The artifact path overrides both from config, which is authoritative.
-  // On the socket path there is no config to read, and a spectator joining past
-  // the server's backlog cap never sees frame zero - so take the largest
-  // population ever observed rather than the first one seen.
+  if (frame.timestep === 0) state.sawStart = true;
+  // Only frame zero, or the config on the artifact path, can say how many
+  // settlers the episode began with. A spectator joining past the server's live
+  // backlog cap has neither, and taking the largest population seen would print
+  // "32 of 36 survived" for an episode that started with 64.
   state.startingPopulation = Math.max(state.startingPopulation, frame.agents.length);
   for (const cell of frame.cells) {
     if (cell[0] > state.maxSugar) state.maxSugar = cell[0];
@@ -360,11 +392,17 @@ function resetStream() {
   state.maxSpice = 0;
   state.maxTimestep = 0;
   state.startingPopulation = 0;
+  state.sawStart = false;
   state.stinger = null;
   state.stingerUntil = 0;
   state.holdUntil = 0;
   terrainShown = null;
+  pendingBeat = null;
   state.finished = false;
+  state.truncated = false;
+  rejectedFormat = false;
+  rejectedShape = false;
+  notice.textContent = "";
   state.lastDrawnIndex = -1;
   spokenKey = "";
   spokenVerdict = false;
@@ -397,6 +435,7 @@ const EMPTY_HEX = [251, 248, 240];    // the original's white, warmed a touch
 const GRID_HEX = "#c6c4bd";           // gui.py cell outline #c0c0c0, warmed a shade
 
 let terrainShown = null;
+let pendingBeat = null;
 const terrain = document.createElement("canvas");
 const terrainContext = terrain.getContext("2d");
 
@@ -696,10 +735,21 @@ function scorebug(frame) {
   // FINAL belongs to where the CURSOR is, not to whether the stream has ended:
   // scrubbing back into the middle of a finished episode is mid-match again.
   const atEnd = state.finished && currentIndex() >= frames.length - 1;
-  markup += text(atEnd ? "FINAL" : `${Math.round(progress * 100)}%`, barX + barW, 46, {
-    size: T(16), weight: 700, family: F.mono, anchor: "end",
-    fill: atEnd ? C.gold : C.muted, spacing: 1.4,
-  });
+  markup += text(
+    state.truncated ? "CUT SHORT" : atEnd ? "FINAL" : `${Math.round(progress * 100)}%`,
+    barX + barW, 46,
+    {
+      size: T(16), weight: 700, family: F.mono, anchor: "end",
+      fill: state.truncated ? C.loss : atEnd ? C.gold : C.muted, spacing: 1.4,
+    },
+  );
+  if (state.truncated) {
+    markup += text(
+      `stream ended at t${frames.at(-1).timestep} of ${scheduled} — no result`,
+      MARGIN + 2, 92,
+      { size: T(16), weight: 600, fill: C.loss },
+    );
+  }
 
   // Standing — the score axis is total living wealth; population rides along as
   // the secondary figure because the visible race and the win metric differ.
@@ -1097,8 +1147,10 @@ function emergence(frame, x, y, width, height) {
       gini > 0.4 ? "a few settlers hold almost all of it"
         : gini > 0.28 ? "the richest hold most of it"
           : "spread fairly evenly"],
-    ["Survivors", `${population}`,
-      lost > 0 ? `of ${state.startingPopulation} · ${lost} lost` : `of ${state.startingPopulation}`],
+    ["Settlers alive", `${population}`,
+      state.sawStart
+        ? (lost > 0 ? `of ${state.startingPopulation} · ${lost} lost` : `of ${state.startingPopulation}`)
+        : "joined mid-episode"],
   ];
   let readY = curveY + (state.compact ? 22 : 26);
   for (const [label, value, note] of rows) {
@@ -1167,7 +1219,9 @@ function endCard(frame) {
     : gini > 0.28
       ? ` The richest of them ended up holding most of the ${resourceName()}.`
       : ` What they held ended up spread fairly evenly.`;
-  const context = `${survivors} of ${state.startingPopulation} settlers survived.${spread}`;
+  const context = state.sawStart
+    ? `${survivors} of ${state.startingPopulation} settlers survived.${spread}`
+    : `${survivors} settlers still standing.${spread}`;
 
   const cardW = state.compact ? 1500 : 1180;
   const cardH = 580;
@@ -1301,11 +1355,12 @@ let markedLeads = -1;
  *  changes, at the quarter marks, and at the finish. The picture is hidden from
  *  assistive technology, so this text is the whole broadcast and it has to carry
  *  everything the panels do, not a subset of it. */
-function speak(frame, index) {
+function speak(frame) {
   const atEnd = state.finished && currentIndex() >= frames.length - 1;
   if (atEnd) {
     if (spokenVerdict) return;
     spokenVerdict = true;
+    commentary.textContent = "";
     const rows = ranked(frame);
     const margin = rows[0].score - (rows[1]?.score ?? 0);
     const changes = events.filter((event) => event.kind === "lead").length;
@@ -1314,8 +1369,10 @@ function speak(frame, index) {
         + `${format(rows[0].score)} ${resourceName()}.`
       : `Final. ${rows[0].name} wins with ${format(rows[0].score)} ${resourceName()}, `
         + `${format(margin)} ahead of ${rows[1]?.name ?? "the field"}.`)
-      + ` ${frame.agents.length} of ${state.startingPopulation} settlers survived`
-      + `, after ${changes} lead change${changes === 1 ? "" : "s"}.`;
+      + (state.sawStart
+      ? ` ${frame.agents.length} of ${state.startingPopulation} settlers survived,`
+      : ` ${frame.agents.length} settlers still standing,`)
+      + ` after ${changes} lead change${changes === 1 ? "" : "s"}.`;
     return;
   }
   spokenVerdict = false;
@@ -1327,7 +1384,6 @@ function speak(frame, index) {
   const key = `${beatKey}|${quarter}`;
   if (key === spokenKey) return;
   spokenKey = key;
-  void index;
 
   const rows = ranked(frame);
   const stats = frame.stats ?? {};
@@ -1346,7 +1402,9 @@ function speak(frame, index) {
   commentary.textContent = `Timestep ${frame.timestep} of ${state.maxTimestep || frame.timestep}.`
     + ` ${standing}.${beatText}`
     + ` ${changes} lead change${changes === 1 ? "" : "s"} so far.`
-    + ` ${frame.agents.length} settlers alive of ${state.startingPopulation}, ${lost} lost.`
+    + (state.sawStart
+      ? ` ${frame.agents.length} settlers alive of ${state.startingPopulation}, ${lost} lost.`
+      : ` ${frame.agents.length} settlers alive.`)
     + ` Inequality, as a Gini coefficient, ${gini.toFixed(3)}.`
     + " A hollow settler on the board has less than one timestep of food left.";
 }
@@ -1373,12 +1431,11 @@ function onFrameEntered(index, now) {
       }
     }
     // A lead change is the loudest beat in this match; a die-off only earns the
-    // stinger when it is big enough to matter.
+    // stinger when it is big enough to matter. Queued, not fired: the beat has
+    // to wait for the settlers to arrive, or it announces "Beta moves ahead"
+    // over a scorebug that still crowns Alpha.
     if (event.kind === "lead" || (event.kind === "death" && event.count >= 3)) {
-      if (!state.stinger || event.kind === "lead") {
-        state.stinger = event;
-        state.stingerUntil = now + STINGER_MS * animFactor(state.speed);
-      }
+      if (!pendingBeat || event.kind === "lead") pendingBeat = event;
     }
   }
 }
@@ -1459,9 +1516,16 @@ function tick() {
   // The HUD reads the same frame the board is showing. Rendering frame N's
   // scores while the settlers were still walking in from N-1 put the clock, the
   // harvested lattice and the scoreboard a full timestep ahead of the bodies.
+  // Release the queued beat only once the board and the standings have caught
+  // up to the frame it describes.
+  if (pendingBeat && settled) {
+    state.stinger = pendingBeat;
+    state.stingerUntil = now + STINGER_MS * animFactor(state.speed);
+    pendingBeat = null;
+  }
   drawHud(terrainFrame, settled ? index : index - 1);
   drawBeats(frame, now);
-  speak(terrainFrame, settled ? index : index - 1);
+  speak(terrainFrame);
 }
 
 // ---------------------------------------------------------------------------
@@ -1543,6 +1607,16 @@ function connect() {
     return;
   }
   let idleTimer = 0;
+  /** An episode is over when the stream has reached the timestep the RULES
+   *  schedule - never merely because it went quiet, and never merely because
+   *  the socket closed. A live match spends seconds per timestep waiting on
+   *  policy decisions (6.4s on the shipped config), so a silence heuristic
+   *  declared FINAL after frame zero and reset the cursor forever. And a
+   *  stream cut short mid-delivery would name whoever happened to be ahead as
+   *  the winner - on the reference replay, cutting at frame 50 crowned the
+   *  population that actually loses by 81. */
+  const complete = () => frames.length > 0 && state.maxTimestep > 0
+    && frames.at(-1).timestep >= state.maxTimestep;
   // A socket can open and never speak - an episode with no recorded frames does
   // exactly that. Without this the canvas is never touched and the embed is the
   // ground colour, forever, with nothing said.
@@ -1554,9 +1628,18 @@ function connect() {
   const markFinished = () => {
     if (frames.length === 0) return;
     state.live = false;
-    state.finished = true;
+    if (complete()) {
+      state.finished = true;
+      state.truncated = false;
+      return;
+    }
+    // Everything that arrived stays watchable; only the verdict is withheld.
+    state.truncated = true;
+    state.finished = false;
   };
-  socket.addEventListener("open", ready);
+  // Not on open: a socket that connects and then fails to deliver anything
+  // would show a lit play button and a scrubber over an empty board.
+  socket.addEventListener("open", () => { notice.textContent = ""; });
   socket.addEventListener("message", (event) => {
     let frame;
     try {
@@ -1567,12 +1650,15 @@ function connect() {
     }
     if (!isRenderableFrame(frame)) return;
     clearTimeout(silence);
-    if (frames.length === 0) state.live = true;
+    if (frames.length === 0) { state.live = true; ready(); }
     recordFrame(frame);
     // The server streams recorded frames back to back and then goes quiet; a
     // pause means the episode is over and playback should own the timeline.
     clearTimeout(idleTimer);
+    // Only a stream that has reached the scheduled end can settle into
+    // playback; a quiet live match is still a live match.
     idleTimer = setTimeout(() => {
+      if (!complete()) return;
       markFinished();
       state.cursor = 0;
       setPlaying(!reducedMotion);
@@ -1623,7 +1709,10 @@ async function loadArtifact(url) {
   if (configuredSugar > 0) state.maxSugar = configuredSugar;
   if (configuredSpice > 0) state.maxSpice = configuredSpice;
   const configuredAgents = Number(payload.config?.startingAgents ?? 0);
-  if (configuredAgents > 0) state.startingPopulation = configuredAgents;
+  if (configuredAgents > 0) {
+    state.startingPopulation = configuredAgents;
+    state.sawStart = true;
+  }
   for (const frame of payload.frames) recordFrame(frame);
   ready();
   state.finished = true;

@@ -105,6 +105,7 @@ assert.doesNotMatch(viewerHtml, /<(script|link)[^>]+\b(src|href)="(?!data:)/);
 
 // Drive the real viewer script in a sandbox with a DOM stub, so the derived
 // broadcast model is covered without a browser.
+const viewerTimers = { interval: null, pending: [] };
 const gradient = { addColorStop() {} };
 const pattern = { setTransform() {} };
 const canvasContext = new Proxy({
@@ -117,13 +118,20 @@ const canvasContext = new Proxy({
   set: () => true,
 });
 function fakeElement() {
+  const classes = new Set();
   return new Proxy({
+    classList: {
+      add: (name) => classes.add(name),
+      remove: (name) => classes.delete(name),
+      toggle: (name, on) => (on ? classes.add(name) : classes.delete(name)),
+      contains: (name) => classes.has(name),
+    },
+    style: { setProperty() {}, removeProperty() {}, getPropertyValue: () => "" },
     getContext: () => canvasContext,
     getBoundingClientRect: () => ({ left: 0, top: 0, width: 1, height: 1 }),
     querySelector: () => fakeElement(),
     setAttribute() {},
     addEventListener() {},
-    style: {},
     width: 0,
     height: 0,
     value: "0",
@@ -150,9 +158,12 @@ const viewerContext = vm.createContext({
   performance: { now: () => 0 },
   URLSearchParams,
   fetch: () => Promise.reject(new Error("no network in the sandbox")),
-  setInterval: () => 0,
-  setTimeout: () => 0,
-  clearTimeout: () => {},
+  // Real timers, driven by hand below. Stubbing these to no-ops made every
+  // timer-based path - the silence timeout, the idle settle, the end-card hold -
+  // structurally invisible to this suite.
+  setInterval: (fn) => { viewerTimers.interval = fn; return 1; },
+  setTimeout: (fn, delay) => { viewerTimers.pending.push({ fn, delay }); return viewerTimers.pending.length; },
+  clearTimeout: (id) => { if (id) viewerTimers.pending[id - 1] = null; },
 });
 const viewerScript = viewerHtml.match(/<script>([\s\S]*)<\/script>/)?.[1];
 assert.ok(viewerScript, "viewer script must be embedded");
@@ -278,6 +289,68 @@ assert.equal(
   40,
   "the new stream's own maxTimestep must replace the old one",
 );
+
+// EVERY overlay panel must render for every population count the manifest
+// permits. Nothing here used to call the markup functions at all, which is
+// exactly how a raw palette index shipped and blanked the whole HUD on a
+// five-population match while the suite stayed green.
+for (const seats of [1, 2, 3, 5, 16]) {
+  const rendered = vm.runInContext(`
+    (() => {
+      const wide = ${sandboxFrame(4, [])};
+      wide.slots = Array.from({ length: ${seats} }, (_, i) => ({ name: \`Population \${i}\` }));
+      wide.agents = wide.slots.map((_, i) => (${settler.toString()})(i, i, i % 4, 5 + i));
+      resetStream();
+      recordFrame(wide);
+      drawHud(wide, 0);
+      drawBeats(wide, 0);
+      state.finished = true;
+      state.cursor = 0;
+      drawBeats(wide, 0);
+      return standingsLayer.innerHTML.length + ":" + beatsLayer.innerHTML.length;
+    })()
+  `, viewerContext);
+  const [standing, beats] = rendered.split(":").map(Number);
+  assert.ok(standing > 0, `${seats} populations must render a standings overlay`);
+  assert.ok(beats > 0, `${seats} populations must render an end card`);
+}
+
+// The playback engine itself: nothing used to drive tick(), which is where the
+// end-card off-by-one lived.
+const playback = JSON.parse(vm.runInContext(`
+  resetStream();
+  for (let step = 0; step <= 40; step += 1) {
+    recordFrame(${sandboxFrame("step", "[settler(1, 0, 0, step)]").replace('"step"', "step").replace('"[settler(1, 0, 0, step)]"', "[{ id: 1, slot: 0, cell: 0, sugar: step, spice: 0, age: 1, decisionModel: 'p0', sugarMetabolism: 1, spiceMetabolism: 0, movement: 1, vision: 1, depressed: false, sick: false, race: -1, sex: 'male', tribe: -1 }]")});
+  }
+  state.finished = true;
+  state.playing = false;
+  state.cursor = frames.length - 1;
+  tick();
+  const atEndText = beatsLayer.innerHTML;
+  state.cursor = 0;
+  tick();
+  JSON.stringify({
+    endCardAtLast: /FINAL/.test(atEndText),
+    endCardScore: (atEndText.match(/>(\\d+)</g) || []).join(","),
+    noCardAtStart: !/FINAL/.test(beatsLayer.innerHTML),
+  });
+`, viewerContext));
+assert.ok(playback.endCardAtLast, "the end card must appear on the final frame");
+assert.ok(playback.noCardAtStart, "and must not appear after scrubbing back to the start");
+assert.ok(playback.endCardScore.includes("40"),
+  `the end card must show the FINAL frame's score, got ${playback.endCardScore}`);
+
+// A stream that stops short must not crown anyone.
+const truncated = JSON.parse(vm.runInContext(`
+  resetStream();
+  for (let step = 0; step <= 10; step += 1) {
+    recordFrame(Object.assign(${sandboxFrame(0, [])}, { timestep: step, maxTimestep: 40 }));
+  }
+  JSON.stringify({ scheduled: state.maxTimestep, last: frames.at(-1).timestep });
+`, viewerContext));
+assert.equal(truncated.scheduled, 40);
+assert.ok(truncated.last < truncated.scheduled,
+  "a stream stopping at t10 of 40 is incomplete and must never read FINAL");
 
 // Speed must collapse dead time between timesteps, never the walk itself.
 const tempo = JSON.parse(vm.runInContext(`
