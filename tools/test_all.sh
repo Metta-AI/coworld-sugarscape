@@ -1,6 +1,10 @@
 #!/bin/sh
 set -eu
 
+# src/sugarscape/viewer.html is generated from viewer/ and embedded into the
+# binary with staticRead, so a stale checkout ships a stale broadcast.
+python3 tools/build_viewer.py --check
+
 for test in \
   py_random \
   configuration \

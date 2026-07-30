@@ -91,157 +91,159 @@ assert.match(await playerPage.text(), /population-policy socket/);
 const viewerPage = await fetch(`${baseUrl}/client/global`);
 assert.equal(viewerPage.status, 200);
 const viewerHtml = await viewerPage.text();
-assert.match(viewerHtml, /Sugarscape Observatory/);
+// The replay is served at /client/replay and the live spectator at
+// /client/global, from the same document.
+const replayPage = await fetch(`${baseUrl}/client/replay`);
+assert.equal(replayPage.status, 200);
+assert.equal(await replayPage.text(), viewerHtml);
+// Nothing may be fetched from outside the document: the hosted embed is a
+// sandboxed iframe behind a proxy that cannot reach a CDN, and any separate
+// sub-resource 404s under the rewritten base href.
+assert.match(viewerHtml, /<base href="\/">/);
+assert.doesNotMatch(viewerHtml, /https?:\/\/(fonts|cdn|unpkg|jsdelivr)/);
+assert.doesNotMatch(viewerHtml, /<(script|link)[^>]+\b(src|href)="(?!data:)/);
 
-const drawnPoints = [];
-const canvasContext = {
-  arc() {},
-  beginPath() {},
-  clearRect() {},
-  fill() {},
-  fillRect() {},
-  fillText() {},
-  lineTo(x, y) { drawnPoints.push([x, y]); },
-  moveTo() {},
-  stroke() {},
-  strokeRect() {},
-};
-function fakeElement(selector = "") {
-  return {
-    addEventListener() {},
-    append() {},
-    checked: false,
-    getBoundingClientRect: () => ({left: 0, top: 0, width: 1, height: 1}),
+// Drive the real viewer script in a sandbox with a DOM stub, so the derived
+// broadcast model is covered without a browser.
+const gradient = { addColorStop() {} };
+const pattern = { setTransform() {} };
+const canvasContext = new Proxy({
+  createRadialGradient: () => gradient,
+  createPattern: () => pattern,
+  createImageData: (width, height) => ({ data: new Uint8ClampedArray(width * height * 4) }),
+  measureText: () => ({ width: 0 }),
+}, {
+  get: (target, key) => (key in target ? target[key] : () => {}),
+  set: () => true,
+});
+function fakeElement() {
+  return new Proxy({
     getContext: () => canvasContext,
-    height: 150,
-    max: 0,
-    options: [{textContent: "population"}],
-    replaceChildren() {},
-    selectedIndex: 0,
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 1, height: 1 }),
+    querySelector: () => fakeElement(),
+    setAttribute() {},
+    addEventListener() {},
+    style: {},
+    width: 0,
+    height: 0,
+    value: "0",
+    max: "0",
+    innerHTML: "",
     textContent: "",
-    value: selector === "#cell-mode"
-      ? "resources"
-      : selector === "#agent-mode"
-        ? "decisionModel"
-        : selector === "#series"
-          ? "population"
-          : "0",
-    width: 320,
-  };
-}
-class FakeWebSocket {
-  addEventListener() {}
-  close() {}
+  }, {
+    get: (target, key) => (key in target ? target[key] : () => {}),
+    set: (target, key, value) => { target[key] = value; return true; },
+  });
 }
 const viewerContext = vm.createContext({
   console,
   document: {
     createElement: () => fakeElement(),
-    querySelector: (selector) => fakeElement(selector),
+    getElementById: () => fakeElement(),
+    querySelector: () => fakeElement(),
   },
-  drawnPoints,
-  location: {host: "localhost", protocol: "http:"},
-  Math,
-  Number,
-  setTimeout,
-  WebSocket: FakeWebSocket,
+  // Never resolves, so boot() stops at asset loading and the playback timer
+  // never starts - the sandbox only needs the pure model below.
+  Image: class { set src(_value) {} },
+  WebSocket: class { addEventListener() {} close() {} },
+  DOMMatrix: class { translate() { return this; } scale() { return this; } },
+  location: { host: "localhost", protocol: "http:", pathname: "/client/global", search: "" },
+  performance: { now: () => 0 },
+  URLSearchParams,
+  fetch: () => Promise.reject(new Error("no network in the sandbox")),
+  setInterval: () => 0,
+  setTimeout: () => 0,
+  clearTimeout: () => {},
 });
 const viewerScript = viewerHtml.match(/<script>([\s\S]*)<\/script>/)?.[1];
 assert.ok(viewerScript, "viewer script must be embedded");
 vm.runInContext(viewerScript, viewerContext);
-const reconnectState = vm.runInContext(`
-  recordFrame({
-    streamId: "first",
-    timestep: 1,
-    width: 1,
-    height: 1,
-    cells: [[0, 0, 0]],
-    agents: [],
+
+// The socket must be derived from the page's OWN path. Under the Observatory
+// proxy the document is served at <prefix>/client/replay and the socket lives
+// at the sibling <prefix>/replay; an absolute path resolves off the prefix and
+// black-screens the embed.
+const socketUrls = JSON.parse(vm.runInContext(`
+  JSON.stringify([
+    "/client/replay",
+    "/client/global",
+    "/clients/replay",
+    "/v2/coworlds/abc/proxy/client/replay",
+  ].map((path) => { location.pathname = path; return socketUrl(); }));
+`, viewerContext));
+assert.deepEqual(socketUrls, [
+  "ws://localhost/replay",
+  "ws://localhost/global",
+  "ws://localhost/replay",
+  "ws://localhost/v2/coworlds/abc/proxy/replay",
+]);
+
+function sandboxFrame(timestep, agents, extra = {}) {
+  return JSON.stringify({
+    streamId: "smoke",
+    timestep,
+    maxTimestep: 40,
+    width: 2,
+    height: 2,
+    cells: [[1, 0, 0], [2, 0, 0], [0, 0, 0], [4, 0, 0]],
+    agents,
     links: [],
-    slots: [],
-    stats: {marker: "initial"},
+    slots: [{ name: "Alpha" }, { name: "Beta" }],
+    stats: { giniCoefficient: 0.3, carryingCapacity: 4 },
+    ...extra,
   });
-  recordFrame({
-    streamId: "first",
-    timestep: 2,
-    width: 1,
-    height: 1,
-    cells: [[0, 0, 0]],
-    agents: [],
-    links: [],
-    slots: [],
-    stats: {marker: "latest"},
-  });
-  recordFrame({
-    streamId: "first",
-    timestep: 1,
-    width: 1,
-    height: 1,
-    cells: [[0, 0, 0]],
-    agents: [],
-    links: [],
-    slots: [],
-    stats: {marker: "replayed"},
-  });
-  JSON.stringify({
-    length: frames.length,
-    timesteps: frames.map((frame) => frame.timestep),
-    marker: frames[0].stats.marker,
-  });
-`, viewerContext);
-assert.deepEqual(JSON.parse(reconnectState), {
-  length: 2,
-  timesteps: [1, 2],
-  marker: "replayed",
+}
+const settler = (id, slot, cell, sugar) => ({
+  id, slot, cell, sugar, spice: 0, age: 1, decisionModel: `p${slot}`,
+  sugarMetabolism: 1, spiceMetabolism: 0, movement: 1, vision: 1,
+  depressed: false, sick: false, race: -1, sex: "male", tribe: -1,
 });
-const restartedState = vm.runInContext(`
-  inspectedCell = 99;
-  recordFrame({
-    streamId: "second",
-    timestep: 0,
-    width: 1,
-    height: 1,
-    cells: [[0, 0, 0]],
-    agents: [],
-    links: [],
-    slots: [],
-    stats: {marker: "restarted"},
-  });
+
+const model = JSON.parse(vm.runInContext(`
+  recordFrame(${sandboxFrame(0, [settler(1, 0, 0, 10), settler(2, 1, 1, 4)])});
+  recordFrame(${sandboxFrame(1, [settler(1, 0, 0, 11), settler(2, 1, 1, 5)])});
+  // Beta overtakes and Alpha's settler starves in the same timestep.
+  recordFrame(${sandboxFrame(2, [settler(2, 1, 1, 30)])});
+  // A repeat of a timestep already seen must update in place, not append.
+  recordFrame(${sandboxFrame(2, [settler(2, 1, 1, 31)])});
   JSON.stringify({
-    length: frames.length,
+    frames: frames.length,
     timesteps: frames.map((frame) => frame.timestep),
-    marker: frames[0].stats.marker,
-    inspectedCell,
+    scheduledEnd: state.maxTimestep,
+    standing: ranked(frames.at(-1)).map((row) => [row.name, row.score]),
+    events: events.map((event) => [event.timestep, event.kind, event.count ?? event.name]),
   });
-`, viewerContext);
-assert.deepEqual(JSON.parse(restartedState), {
-  length: 1,
-  timesteps: [0],
-  marker: "restarted",
-  inspectedCell: -1,
-});
-const negativeSeriesPoints = vm.runInContext(`
-  seriesSelect.value = "meanHappiness";
-  recordFrame({
-    streamId: "second",
-    timestep: 1,
-    width: 1,
-    height: 1,
-    cells: [[0, 0, 0]],
-    agents: [],
-    links: [],
-    slots: [],
-    stats: {meanHappiness: -2},
+`, viewerContext));
+assert.deepEqual(model.timesteps, [0, 1, 2]);
+assert.equal(model.frames, 3);
+// The clock counts to the configured limit, not to the last recorded timestep.
+assert.equal(model.scheduledEnd, 40);
+assert.deepEqual(model.standing, [["Beta", 31], ["Alpha", 0]]);
+// Beats are derived by diffing frames: a death and a lead change at t2.
+assert.deepEqual(model.events, [[2, "death", 1], [2, "lead", "Beta"]]);
+
+// A stream from a new server run resets rather than interleaving.
+const afterRestart = JSON.parse(vm.runInContext(`
+  recordFrame(${sandboxFrame(0, [settler(9, 0, 0, 1)], { streamId: "second" })});
+  JSON.stringify({ frames: frames.length, events: events.length });
+`, viewerContext));
+assert.deepEqual(afterRestart, { frames: 1, events: 0 });
+
+// Speed must collapse dead time between timesteps, never the walk itself.
+const tempo = JSON.parse(vm.runInContext(`
+  JSON.stringify({
+    animAtOne: animFactor(1),
+    animAtFour: animFactor(4),
+    dwellAtOne: frameDwellMs(1),
+    dwellAtFour: frameDwellMs(4),
   });
-  drawnPoints.length = 0;
-  renderSeries();
-  JSON.stringify(drawnPoints);
-`, viewerContext);
+`, viewerContext));
+assert.equal(tempo.animAtOne, 1);
+assert.equal(tempo.animAtFour, 0.5, "motion is capped at 2x real time");
+assert.ok(tempo.dwellAtFour < tempo.dwellAtOne, "speed shortens the dwell");
 assert.ok(
-  JSON.parse(negativeSeriesPoints).every(
-    ([x, y]) => Number.isFinite(x) && Number.isFinite(y) &&
-      x >= 0 && x <= 320 && y >= 0 && y <= 150,
-  ),
+  tempo.dwellAtFour >= tempo.animAtFour * 620,
+  "the dwell is floored to the length of the walk it has to show",
 );
 
 const frames = [];
@@ -344,21 +346,67 @@ const firstAgent = firstDecisionFrame.agents.find(
 );
 assert.equal(firstAgent.cell, firstExpected.cell);
 
+// Replay mode is a SERVER: it must publish the recording and then KEEP
+// SERVING. It used to exit seconds after boot, so a spectator who opened the
+// viewer a moment later - and the certifier's own replay-liveness probe - found
+// nothing listening.
+const replayPort = port + 1;
 const replayChild = spawn(binary, [
   "--host:127.0.0.1",
-  `--port:${port + 1}`,
+  `--port:${replayPort}`,
   `--load-replay:${replayPath}`,
 ], { stdio: ["ignore", "pipe", "pipe"] });
 let replayOutput = "";
 replayChild.stdout.on("data", (chunk) => { replayOutput += chunk; });
 replayChild.stderr.on("data", (chunk) => { replayOutput += chunk; });
-const replayExitCode = await new Promise((resolveExit) => {
-  replayChild.on("exit", resolveExit);
+replayChild.on("exit", (code) => {
+  throw new Error(`replay server exited early with ${code}:\n${replayOutput}`);
 });
-assert.equal(replayExitCode, 0, replayOutput);
+
+const replayBase = `http://127.0.0.1:${replayPort}`;
+for (let attempt = 0; attempt < 200; attempt += 1) {
+  try {
+    if ((await fetch(`${replayBase}/healthz`)).ok) break;
+  } catch {
+    // still starting
+  }
+  await new Promise((wait) => setTimeout(wait, 20));
+}
+// Well past the point where publishing has finished.
+await new Promise((wait) => setTimeout(wait, 1500));
+assert.equal((await fetch(`${replayBase}/healthz`)).status, 200, replayOutput);
+assert.equal((await fetch(`${replayBase}/client/replay`)).status, 200);
+
+// Both socket names serve the recording: /global is the spectator stream and
+// /replay is what the Coworld certifier probes for replay liveness.
+for (const path of ["/global", "/replay"]) {
+  const received = [];
+  const socket = new WebSocket(`ws://127.0.0.1:${replayPort}${path}`);
+  await new Promise((resolveOpen, rejectOpen) => {
+    socket.addEventListener("open", resolveOpen, { once: true });
+    socket.addEventListener("error", () => rejectOpen(
+      new Error(`replay socket ${path} refused the upgrade`),
+    ), { once: true });
+  });
+  await new Promise((wait) => {
+    socket.addEventListener("message", (event) => received.push(JSON.parse(event.data)));
+    setTimeout(wait, 400);
+  });
+  socket.close();
+  // A late joiner still receives the WHOLE episode, not a trimmed tail.
+  assert.deepEqual(
+    received.map((frame) => frame.timestep),
+    replay.frames.map((frame) => frame.timestep),
+    `socket ${path} must replay every recorded frame to a late spectator`,
+  );
+  assert.equal(received[0].maxTimestep, replay.config.timesteps);
+}
+
+replayChild.removeAllListeners("exit");
+replayChild.kill();
 
 console.log(
   `Coworld smoke passed: ${observations} observations, ` +
   `${results.actions_received[0]} actions, ${results.fallbacks[0]} fallback, ` +
-  `${replay.frames.length} replay frames`,
+  `${replay.frames.length} replay frames, replay server stayed up`,
 );
