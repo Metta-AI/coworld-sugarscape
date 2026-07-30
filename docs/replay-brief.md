@@ -22,20 +22,29 @@ Every claim below is traced to engine source or to a recorded full-scale episode
   against the k8s proxy, and data-URI assets are correct (the static-bundle CSP
   inversion for fonts/media does not apply here).
 
-## 0r — Depth target, extracted from the reference (Agricogla)
+## 0r — Depth target, and where it misled this build
 
 Measured from `packages/cogweb/games/agricogla/src/client/animation/` so this build has
 a concrete bar rather than a vibe.
 
-| Dimension | Agricogla reference | Sugarscape target |
+> **⚠️ The art-batch row was WRONG for this game, and following it cost a day.** The depth
+> bar is derived from Agricogla, which had no prior visual identity — so "~35–45 rendered
+> pieces, a themed dashboard is NOT done" is the right bar there. Sugarscape is a **port of
+> an existing simulation whose renderer is vendored in this repo**. Generated terrain art
+> displaced a rendering people recognise, buried the per-cell resource under texture, and
+> read as fog. **For a port, fidelity to the original look IS the depth.** The art batch was
+> generated, shipped, and then removed; the viewer now carries no images at all and the
+> served document went from 738 KB to 115 KB. Every other row below transferred fine.
+
+| Dimension | Agricogla reference | What Sugarscape actually needed |
 |---|---|---|
-| Art batch | 18 rendered PNGs (5 tiles, 12 tokens, wordmark), inlined as data-URIs, team-recolored in code | ~18: 5 sugar-tier grain tiles ×2 variants, barren base, settler bead (1 base → 2 populations × 2 states via HSV recolor), death mote, end-card backdrop |
+| Art batch | 18 rendered PNGs (5 tiles, 12 tokens, wordmark), inlined as data-URIs, team-recolored in code | **none** — the board is ported from `reference/dtl-python/gui.py`; a drawn lattice, not an illustrated one |
 | Skeleton | one `<svg>` at `H=1180`, `W=round(H*16/9)`, `TOP_INSET = MARGIN + 74` derived from `BUG_H=58` | one 1920×1080 stage: canvas board + SVG HUD overlay in the same coordinate space, `TOP_INSET` derived from `BUG_H` |
 | Scorebug | rank (mono) · identity dot · name (display, clipped) · score 30px · leader crown + `▲ +margin` | same, on the wealth axis, population as the secondary |
-| Choreography | walk-in → work → fly-home arc → gain pop → spotlight, effect-on-arrival (`revealDelayMs`) | agents walk (interpolated) → arrive → harvest flash → starvation stagger → death mote rises |
+| Choreography | walk-in → work → fly-home arc → gain pop → spotlight, effect-on-arrival (`revealDelayMs`) | settlers interpolate between timesteps (they jump several cells, so without it they teleport); a starving settler goes hollow before it dies; death leaves an expanding ring |
 | Timing levers | `animFactor = max(1/speed, 1/2)`; `turnDwellMs = max(BASE/speed, beat)`, `BASE_TURN_MS=2600`, `READ_PAUSE=600` | same two levers, ported: motion capped at 2× real time, frame dwell floored to the walk length |
-| Ambient life | ~8 desynced loops (bob, roam, sway, smoke, glow, pulse), all `/ var(--speed)`, all killed by `prefers-reduced-motion` | terrain shimmer on regrowth, agent idle bob, slow light drift — desynced per agent, speed-aware, reduced-motion safe |
-| Beat FX | ~10 keyframes (`chip-pop`, `gain-pop`, `curtain`, `roundbeat`, `endcard`, `stamp-pop`…), all `calc(Xs / var(--beat-speed,1))` | lead-change stinger, death callout, era curtain, hold-on end card — same speed-aware pattern |
+| Ambient life | ~8 desynced loops (bob, roam, sway, smoke, glow, pulse), all `/ var(--speed)`, all killed by `prefers-reduced-motion` | **none, deliberately** — the lattice is a scientific plate and idle motion on it is noise; the movement in this game is the swarm itself |
+| Beat FX | ~10 keyframes (`chip-pop`, `gain-pop`, `curtain`, `roundbeat`, `endcard`, `stamp-pop`…), all `calc(Xs / var(--beat-speed,1))` | lead-change stinger, die-off callout, hold-on end card — speed-aware, in a beats layer kept SEPARATE from the standings layer so rebuilding one never restarts the other's animation |
 
 ## 0 — The replay brief (each bullet traced to engine truth)
 
