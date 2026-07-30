@@ -140,41 +140,78 @@ copy: warm near-black ground, ink `#2a1f12`, paper `#f6ead2`, one sugar-gold acc
 `#e8a838` taken from the world's own resource, mono restricted to tabular numbers, and a
 redundant shape per seat so the read never depends on hue alone.
 
+### The plate stays light — a decision, with the measurement that argues against it
+
+A parallel session measured the plate and filed `docs/palette-handoff.md` proposing that the
+ground be **inverted to warm near-black**, keeping `gui.py`'s blend structure but moving the
+zero end to `#1d1811` and lifting spice to `#cb3760`. Its measurement is correct and worth
+recording, because it is the strongest argument against the lock above:
+
+- **Full sugar `#F2FA00` against an empty cell `#FBF8F0` is 1.07:1.** That is not "shallow
+  cells are low contrast" — it is the sugar axis carrying *no* luminance signal at all, end
+  to end. The whole ramp is chroma.
+- The spice axis is the opposite: `#9B4722` against the same empty cell is 6.0:1.
+
+**The plate stays light anyway, and the reason is arithmetic, not taste.** No single
+background satisfies both ramps. Sugar is very light and spice is very dark, so pushing the
+empty cell down far enough for sugar to reach 3:1 (about L = 0.244, a mid warm brown) drops
+spice to 1.78:1. Inverting all the way to `#1d1811` buys sugar its luminance and spends
+spice's. There is no ground colour that gives both 3:1 while keeping the two hues, and the
+two hues are what makes the picture Sugarscape.
+
+Given that, the tie is broken by the two things that are not arithmetic. The owner rejected
+an invented art direction once already, in those words — *"this doesn't look like what james
+showed me the original game was like"* — and `.harness/screenshots/palette-proposal.png`
+renders both plates side by side from the same frame of the real recording: on the light
+plate the two sugar massifs, the two spice massifs and the carved trails of eaten cells all
+separate cleanly; the inverted plate reads as a crimson heatmap and loses the eaten trails
+into the ground.
+
+What the handoff was right about, and what has been taken from it:
+
+- **The board key now draws BOTH ramps.** It taught the yellow of sugar while most of the
+  shipped board is the rust of spice — the dominant colour on the plate was the one thing
+  the legend did not explain.
+- **Every settler carries an ink ring.** A bare dot was separated from the terrain by hue
+  alone, on the one channel the terrain already uses — a red settler on rust spice. The ring
+  makes it structural, at any resource depth and under any colour-vision deficiency.
+- `resourceName()` and the two-axis `cellColor` branch are live for the first time and were
+  checked at both densities.
+
+The open task on the board is left open rather than closed: inverting the plate is a
+product decision the owner has already ruled on once, and it is theirs to reverse.
+
 ## Phase 4 — where the gates stand
 
-Correctness and delivery are green: `coworld certify` passes end to end (including the
-replay-liveness probe of `/client/replay` + `/replay`), the native suite and the coworld
-smoke test pass, the document loads through the proxy harness with a clean console, all
-three failure modes fail visibly, and the control chrome measures 15.7:1 text contrast
-with 24px minimum targets at the 640×360 floor.
+Green, and verified by looking rather than by status code:
 
-**The adversarial aesthetic gate has NOT cleared the >90 bar** — 64/100, then 70/100 after
-the first fix round, then the crater/title/axis fixes above (not yet re-scored). Both
-audits confirmed 9 of 10 AI-default tells PASS on measured evidence, so the failure is not
-"it looks AI-default"; it is specific craft debt. Known open items, ranked:
+- **`tools/test_all.sh`** — viewer staleness, the 7 byte-parity suites against the pinned
+  Python oracle, and the coworld smoke test. That last one now also pins the transport's
+  timestep units, the feed's ledger arithmetic, the density ramp and the larger-text
+  control, the live reduced-motion listener, and focus movement on failure. The ledger
+  assertion was mutation-checked: deleting the summary row fails it.
+- **CI runs it.** `.github/workflows/ci.yml` — the viewer-staleness and byte-parity jobs on
+  every push and pull request with no credentials, and the hosted-embed job behind the
+  private `bitworld` package, which says loudly in its own step when it could not run.
+- **`coworld certify`** — all ten steps, including the `/client/replay` + `/replay`
+  liveness probe.
+- **Looked at, through the proxy harness, at 1280×720 and the 640×360 embed floor**: early
+  game, mid-game, the end card, and the larger-text ramp. Console clean; the whole app is
+  one network request.
 
-1. **The 640×360 floor is a linear downscale, not a responsive design.** The rail keeps the
-   same three panels and four feed rows at half scale, so roughly a dozen small labels fall
-   below legibility (chart axis ends, `t0`/`t100`, "lead, in sugar", the settler sublines,
-   "unequal", "36 alive of 64", the feed timestamps). Needs the rail to shed or promote
-   content at the floor rather than scale linearly. The scorebug and board already survive.
-2. **The event feed goes stale.** At t47 the newest row is `t16–38`, because the coalescer
-   merges a long quiet stretch and nothing newer has happened. It should surface the current
-   state (or the standing beat) rather than leaving a panel titled "what just happened"
-   showing something nine timesteps old, and lead changes should not scroll off behind
-   routine starvation.
-3. **The tertiary ink token `#6f6250` measures 3.21:1** on the panel — under AA for body
-   text. Fine for the large numerals it mostly carries, wrong for the small captions.
-4. **The race chart is ~70% empty** — the whole leading half is blank when one population
-   holds the lead throughout, and everything right of the cursor is unused.
-5. **`CARRYING CAPACITY 55` is a bare number** and reads as contradicting the `36 alive of
-   64` caption beneath it; it needs a unit or an explicit "the world supports N" framing.
-6. **The end-card backdrop is a side-elevation painted peak** inside a frame whose board is
-   an orthographic top-down render — two incompatible depictions of the same mountain.
-7. **Contours are present but faint**, and vanish entirely at the embed floor, so the
-   "topographic plate" half of the lock is only partly delivered.
+Craft debt that remains, ranked:
 
-The audit also raised "the board looks static — the resource never visibly changes." That
-one is a **false bug**: total sugar genuinely plateaus after t8 (1034 → 738, then 711–765 for the
-rest of the episode, closing at 763). That plateau IS the carrying-capacity result the model is famous for,
-and the per-cell churn underneath it is real and now visible. Do not "fix" it.
+1. **`1.4.4 Resize Text` cannot be met the way the success criterion describes it.** The
+   broadcast is set in SVG user units inside an embed whose aspect ratio the host fixes, so
+   a larger default font size cannot reach it and there is no reflow to fall back on. Full
+   page zoom does scale the whole thing, text included, with nothing lost; the larger-text
+   control is the in-product mechanism on top of that. Stated, not claimed as passing.
+2. **The board's resource ramp is chroma-only on the sugar axis** — see the decision above.
+   A viewer with severe colour-vision deficiency reads the settlers, the lattice and every
+   panel, but not the depth of the sugar under them.
+3. **The wrap estimate is a character count, not a measurement.** `wrap()` assumes 0.52em
+   average advance rather than measuring the glyphs, so a name of unusual width could still
+   break a line early or late on the end card.
+4. **The dense ramp is five fixed steps.** It is right for 640×360 and for the larger-text
+   control at full size; it has not been tuned for the sizes in between, which simply take
+   the full-size ramp.

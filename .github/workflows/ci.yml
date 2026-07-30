@@ -1,0 +1,105 @@
+name: CI
+
+# tools/test_all.sh has been the gate for this repo since the port landed and
+# nothing ran it. It is split here into what a stock runner can do and what needs
+# credentials, so the parts that can always run always do — a suite that only
+# executes when someone remembers to type it is not a gate.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NIM_VERSION: "2.2.6"
+
+jobs:
+  viewer:
+    # The generated viewer is embedded with staticRead, so a checkout whose
+    # src/sugarscape/viewer.html does not match viewer/ ships a stale broadcast
+    # and nothing at runtime would say so. No toolchain needed to catch it.
+    name: Viewer is built and self-contained
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Viewer sources parse
+        run: node --check viewer/broadcast.js
+      - name: Generated viewer matches viewer/ and pulls no external asset
+        run: python3 tools/build_viewer.py --check
+
+  simulation:
+    # The byte-parity suites against the pinned Python oracle. std/* and the
+    # bundled `checksums` only — no vendored packages, so this runs anywhere.
+    name: DTL byte parity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jiro4989/setup-nim-action@v2
+        with:
+          nim-version: ${{ env.NIM_VERSION }}
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Compatibility suites
+        run: sh tools/test_simulation.sh
+
+  coworld:
+    # The hosted-embed assertions — socket derivation under the proxy prefix, no
+    # external sub-resource, replay-server lifetime, late-joiner backlog. These
+    # need `bitworld`, which is private, so on a fork or without the token the
+    # job SAYS SO in its own step rather than quietly reporting green.
+    name: Coworld protocol and hosted embed
+    runs-on: ubuntu-latest
+    env:
+      # `secrets` is not a context step-level `if` can read; a job-level env var
+      # derived from it is.
+      HAS_PACKAGES_TOKEN: ${{ secrets.METTA_PACKAGES_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: jiro4989/setup-nim-action@v2
+        with:
+          nim-version: ${{ env.NIM_VERSION }}
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Say when the private dependency is unavailable
+        if: env.HAS_PACKAGES_TOKEN != 'true'
+        run: |
+          echo "::warning title=Coworld smoke test skipped::METTA_PACKAGES_TOKEN is not set, so the private bitworld package cannot be fetched. The hosted-embed assertions are UNVERIFIED for this commit."
+      - name: Fetch the pinned dependencies
+        if: env.HAS_PACKAGES_TOKEN == 'true'
+        env:
+          TOKEN: ${{ secrets.METTA_PACKAGES_TOKEN }}
+        run: |
+          git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
+          # nimby.lock is "<name> <version> <url> <commit>". Reproduce the same
+          # nim.cfg nimby writes: packages expose src/, except libcurl, which
+          # puts its module at the repository root.
+          while read -r name version url commit; do
+            [ -n "${name:-}" ] || continue
+            git clone --quiet "$url" "$name"
+            git -C "$name" checkout --quiet "$commit"
+            if [ -d "$name/src" ]; then
+              printf -- '--path:"%s/src"\n' "$name" >> nim.cfg
+            else
+              printf -- '--path:"%s"\n' "$name" >> nim.cfg
+            fi
+          done < nimby.lock
+      - name: Coworld protocol smoke test
+        if: env.HAS_PACKAGES_TOKEN == 'true'
+        run: |
+          nim c -d:release --opt:speed --nimcache:/tmp/nimcache \
+            --path:src -o:/tmp/sugarscape_coworld src/sugarscape_coworld.nim
+          node tools/smoke_coworld.mjs /tmp/sugarscape_coworld

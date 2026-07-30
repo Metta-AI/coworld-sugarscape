@@ -62,6 +62,7 @@
   --border: #4a3620;
   --panel: rgba(20, 15, 8, 0.86);
   --gold: #e8a838;
+  --gold-wash: rgba(232, 168, 56, 0.16);
   --track-fill: #e8a838;
   --track-bed: #4a4034;
   --display: "Space Grotesk", "Avenir Next", "Segoe UI", system-ui, sans-serif;
@@ -153,7 +154,15 @@ html, body {
   font: 600 clamp(11px, 1vw, 14px)/1 var(--mono);
   cursor: pointer;
 }
-.controls button:hover { background: rgba(232, 168, 56, 0.16); }
+.controls button:hover { background: var(--gold-wash); }
+/* The larger-text switch is a toggle, so it has to LOOK toggled — aria-pressed
+   alone is invisible to everyone not using assistive technology. */
+.controls button[aria-pressed="true"] {
+  border-color: var(--gold);
+  background: var(--gold-wash);
+  color: var(--gold);
+}
+#text-size b { font-weight: 700; font-size: 1.24em; }
 /* A real outline, not only a box-shadow: forced-colors mode drops shadows, and
    a focus ring that disappears there is no focus ring. */
 .controls button:focus-visible {
@@ -201,9 +210,12 @@ html, body {
   border-radius: 50%;
   background: var(--gold);
 }
+/* 24, not the 20 this used to carry: SC 2.5.8 measures the TARGET, and Firefox
+   renders this thumb at exactly the size given. WebKit needs the negative
+   margin to centre a thumb taller than its track; Gecko centres it itself. */
 #scrub::-moz-range-thumb {
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   border: 2px solid var(--ink);
   border-radius: 50%;
   background: var(--gold);
@@ -249,6 +261,12 @@ html, body {
   color: var(--gold);
   overflow-wrap: anywhere;
 }
+/* fail() moves the focus here, so the ring has to be real and visible — it is
+   the only thing on screen at that point. */
+.notice:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+}
 .notice:empty { display: none; }
 .controls[hidden] { display: none; }
 /* Under the end card the scrim dims everything else; a full-brightness scrubber
@@ -283,12 +301,24 @@ html, body {
       <button id="step-forward" type="button" aria-label="Next timestep">
         <span aria-hidden="true">&#9654;&#124;</span>
       </button>
+      <!-- The range's units are TIMESTEPS, so min/max/value and the announced
+           valuetext all speak the same number. -->
       <input id="scrub" type="range" min="0" max="0" value="0" step="1"
              aria-label="Timestep" aria-valuetext="timestep 0">
       <button id="speed" type="button" aria-label="Playback speed, 1&times;">1&times;</button>
+      <!-- The broadcast is drawn in SVG user units inside a fixed 16:9 embed, so
+           a larger default font size cannot reach it and there is no reflow to
+           fall back on. This is the in-product mechanism instead. -->
+      <button id="text-size" type="button" aria-pressed="false"
+              aria-label="Larger text, off"
+              title="Larger text — sets the broadcast in a bigger type ramp and drops the finer annotations to make room">
+        <span aria-hidden="true">A<b>A</b></span>
+      </button>
     </div>
 
-    <p class="notice" id="notice" role="alert"></p>
+    <!-- tabindex so a failure can take the focus with it when it takes the
+         transport away; see fail(). -->
+    <p class="notice" id="notice" role="alert" tabindex="-1"></p>
   </div>
 
   <!-- The broadcast as text: standings, clock and the latest beat, announced
@@ -316,7 +346,10 @@ html, body {
  */
 
 // ---------------------------------------------------------------------------
-// Theme — the Phase-0c art-direction lock, as tokens. No inline hex below.
+// Theme — the Phase-0c art-direction lock, as tokens. Every colour the viewer
+// paints comes from this block or from the gui.py port's own named constants
+// (SUGAR_HEX / SPICE_HEX / EMPTY_HEX / GRID_HEX); nothing below writes a colour
+// literal inline.
 // ---------------------------------------------------------------------------
 
 const C = {
@@ -329,6 +362,27 @@ const C = {
   panel: "rgba(20,15,8,.86)",
   gold: "#e8a838",         // sugar — the world's own accent
   loss: "#e2703a",
+  // Translucent surfaces, kept here rather than inline so the whole art
+  // direction is still one block. Alpha is the point of each of these: they sit
+  // over the board or over another panel and must let it through.
+  card: "rgba(31,24,14,.985)",     // the end card's plate
+  cardScrim: "rgba(10,7,4,.965)",  // full-stage dim behind the end card
+  stingerBack: "rgba(16,12,6,.93)",
+  rowBack: "rgba(20,15,8,.72)",    // a result row inside the card
+  wash: "rgba(246,234,210,.04)",   // the Lorenz square's fill
+  hairline: "rgba(246,234,210,.12)",
+  hairlineSoft: "rgba(246,234,210,.16)",
+  guide: "rgba(246,234,210,.22)",  // the equality diagonal
+  axis: "rgba(246,234,210,.42)",   // the chart's baseline, the strongest rule
+  trackBed: "rgba(246,234,210,.14)",
+  bugScrimTop: "rgba(12,9,5,.92)",
+  bugScrimEnd: "rgba(12,9,5,0)",
+  // Board-side values. The mat's shadow is warm rather than pure black, the
+  // mote is the loss hue held dark enough to sit on the bright plate, and the
+  // hollow is the plate's own paper so a starving settler reads as an OUTLINE.
+  mat: "rgba(20,12,4,.5)",
+  mote: "#a8321a",
+  hollow: "rgba(251,248,240,.9)",
 };
 
 // The original assigns palette colours to decision models in order
@@ -337,11 +391,19 @@ const C = {
 // Each hue is lifted slightly from the source so the same colour is legible
 // BOTH as a dot on the white plate and as a chip on the dark broadcast panels,
 // and each carries a redundant shape so the read never depends on hue alone.
+//
+// `text` is the third value and it exists for one measured reason: every label
+// in the overlay is painted over a fat C.ink halo so it survives the board, and
+// against that halo (#2a1f12) the CHIP colours measure 4.69:1 and 4.40:1 — the
+// blue is below AA and the red has no margin. The text variants are lifted until
+// both clear 4.5:1 on the halo, which is the tightest background either meets.
 const SEATS = [
-  { color: "#f5504a", board: "#c22318" },   // gui.py palette[0] #FA3232
-  { color: "#5a7cff", board: "#2340c4" },   // gui.py palette[1] #3232FA
-  { color: "#6bd47f", board: "#1c7038" },   // palette[2] #32FA32
-  { color: "#52d6e8", board: "#0d6f7e" },   // palette[3] #32FAFA
+  // #f5504a on ink 4.69:1 -> #ff6b60 5.80:1
+  { color: "#f5504a", board: "#c22318", text: "#ff6b60" },   // gui.py palette[0] #FA3232
+  // #5a7cff on ink 4.40:1 (FAILS AA) -> #6b8bff 5.19:1
+  { color: "#5a7cff", board: "#2340c4", text: "#6b8bff" },   // gui.py palette[1] #3232FA
+  { color: "#6bd47f", board: "#1c7038", text: "#6bd47f" },   // palette[2] #32FA32, 8.7:1
+  { color: "#52d6e8", board: "#0d6f7e", text: "#52d6e8" },   // palette[3] #32FAFA, 9.3:1
 ];
 
 const F = { display: "Space Grotesk", mono: "IBM Plex Mono" };
@@ -373,8 +435,29 @@ RAIL.h = H - TOP_INSET - MARGIN;
 // The board's motion IS the product, so reduced motion does not disable it -
 // it stops the replay auto-advancing, snaps between timesteps instead of
 // interpolating, and drops the death rings. The viewer can still step and scrub.
-const reducedMotion = typeof matchMedia === "function"
-  && matchMedia("(prefers-reduced-motion: reduce)").matches;
+//
+// Read LIVE, not once at load. The preference is changed while pages are open -
+// by a system accessibility toggle, by a browser setting, by an OS switching
+// theme on a schedule - and a viewer that sampled it at boot kept animating for
+// the rest of the session for someone who had just asked it to stop.
+const motionQuery = typeof matchMedia === "function"
+  ? matchMedia("(prefers-reduced-motion: reduce)")
+  : null;
+let reducedMotion = Boolean(motionQuery && motionQuery.matches);
+if (motionQuery) {
+  const onMotionChange = (event) => {
+    reducedMotion = event.matches;
+    // Honour it immediately rather than at the next beat: if it just went on,
+    // stop advancing; if it just went off, resume.
+    if (frames.length > 0) setPlaying(!reducedMotion);
+  };
+  // Safari before 14 has no addEventListener on a MediaQueryList.
+  if (typeof motionQuery.addEventListener === "function") {
+    motionQuery.addEventListener("change", onMotionChange);
+  } else if (typeof motionQuery.addListener === "function") {
+    motionQuery.addListener(onMotionChange);
+  }
+}
 
 const ANIM_MAX = 3;
 const BASE_FRAME_MS = 620;
@@ -415,6 +498,7 @@ const controls = {
   forward: document.getElementById("step-forward"),
   scrub: document.getElementById("scrub"),
   speed: document.getElementById("speed"),
+  text: document.getElementById("text-size"),
 };
 
 const frames = [];
@@ -447,12 +531,59 @@ const state = {
   // rail shrinks by two thirds and a dozen small labels fall under 7px. Below
   // this width the rail sheds detail and sizes up instead of scaling down.
   compact: false,
+  // The viewer's own "larger text" switch, which forces the compact ramp at any
+  // size. See LARGE_TEXT below.
+  largeText: false,
 };
 
-/** Scale a type size for the current density. Compact mode pairs this with
- *  DROPPING content — sizing up alone would just overflow the panels. */
+/* Density.
+ *
+ * The whole broadcast is drawn in a 1920-unit stage that is letterboxed into the
+ * embed, so a stage unit is 1/3 of a CSS pixel at the 640x360 floor. A label set
+ * at 18 units renders at SIX pixels there. Scaling every size by a constant did
+ * not fix it: 18 x 1.28 is still 7.7px, and pushing the constant high enough to
+ * clear 11px blew the panels apart because the BIG type grew by the same factor.
+ *
+ * So compact does not scale — it SWITCHES RAMPS. Four steps, chosen so the
+ * smallest lands at 11.3 CSS px at the floor and the hierarchy between them
+ * survives, with everything below the caption step collapsing INTO it. The
+ * panels pay for that in content, not in overflow: compact drops the Lorenz
+ * curve, the chart's axis annotations, the crown, a feed row, and the scorebug's
+ * secondary line, and shortens population names to their last word.
+ *
+ *   caption 34u = 11.3px · label 40u = 13.3px · body 52u = 17.3px · figure 76u = 25.3px
+ */
+const COMPACT_RAMP = [
+  [18, 34],        // caption   11.3px
+  [22, 40],        // label     13.3px
+  [30, 52],        // body      17.3px
+  [44, 66],        // figure    22.0px
+  [Infinity, 92],  // hero      30.7px
+];
+
+/** Map a type size onto the current density's ramp. */
 function T(size) {
-  return state.compact ? Math.round(size * 1.28) : size;
+  if (!dense()) return size;
+  for (const [limit, mapped] of COMPACT_RAMP) if (size <= limit) return mapped;
+  return size;
+}
+
+/** Geometry that must stay proportional to the stage — a swatch, a dot radius, a
+ *  rule's width. These do NOT take the type ramp: floored to 34 units a 6-unit
+ *  dot becomes a blob that eats the label beside it. */
+function G(size) {
+  return dense() ? size * 1.34 : size;
+}
+
+/** The advance to leave after a run of text set at `size`. The overlay lays its
+ *  legend out by hand, so this has to track the REAL type size — a fixed
+ *  per-character advance overlapped every label the moment the ramp changed. */
+function advance(content, size) {
+  return content.length * size * 0.56;
+}
+
+function dense() {
+  return state.compact || state.largeText;
 }
 
 function measureDensity() {
@@ -460,6 +591,36 @@ function measureDensity() {
   const compact = width > 0 && width < 900;
   if (compact === state.compact) return;
   state.compact = compact;
+  standingsSignature = "";
+  beatsSignature = "";
+}
+
+/* Larger text.
+ *
+ * WCAG 1.4.4 asks that text scale to 200% without loss. Full-page zoom does
+ * scale this broadcast — the stage is letterboxed into the viewport, so zooming
+ * the host page magnifies the whole thing, text included, with nothing lost. But
+ * TEXT-ONLY resizing (a larger default font size) cannot reach type expressed in
+ * SVG user units, and the embed's aspect ratio is fixed by the host, so there is
+ * no reflow to fall back on. This switch is the in-product mechanism instead: it
+ * forces the compact ramp at any size, which is a ~1.5x type increase, and it is
+ * remembered for the session. The trade is stated on the button's own title. */
+const LARGE_TEXT = "sugarscape.broadcast.largeText";
+
+function setLargeText(on) {
+  state.largeText = on;
+  controls.text.setAttribute("aria-pressed", on ? "true" : "false");
+  controls.text.setAttribute(
+    "aria-label",
+    on ? "Larger text, on" : "Larger text, off",
+  );
+  try {
+    if (on) sessionStorage.setItem(LARGE_TEXT, "1");
+    else sessionStorage.removeItem(LARGE_TEXT);
+  } catch (error) {
+    // A sandboxed iframe can deny storage entirely; the toggle still works, it
+    // just does not persist. Never let that throw and take the overlay with it.
+  }
   standingsSignature = "";
   beatsSignature = "";
 }
@@ -539,6 +700,14 @@ function standings(frame) {
   }
   for (const row of rows) row.score = Math.trunc(row.wealth);
   return rows;
+}
+
+/** True when the head of the episode was never delivered. The game server keeps
+ *  a bounded backlog for live spectators, so joining a long episode late yields
+ *  a stream that opens partway through — every total derived from "since the
+ *  start" is then a window, and the broadcast has to say which. */
+function joinedLate() {
+  return !state.sawStart && frames.length > 0 && frames[0].timestep > 0;
 }
 
 function ranked(frame) {
@@ -675,7 +844,7 @@ function recordFrame(frame) {
   });
 
   deriveEvents(index);
-  controls.scrub.max = String(Math.max(0, frames.length - 1));
+  syncScrub();
   if (state.live && state.playing) state.cursor = frames.length - 1;
 }
 
@@ -708,6 +877,9 @@ function resetStream() {
   markedLeads = -1;
   standingsSignature = "";
   beatsSignature = "";
+  controls.scrub.min = "0";
+  controls.scrub.max = "0";
+  controls.scrub.value = "0";
 }
 
 // ---------------------------------------------------------------------------
@@ -849,7 +1021,7 @@ function drawBoard(frame, previous, t, now) {
 
   // A bright plate seated on the dark broadcast surround by a thin warm mat.
   context.save();
-  context.shadowColor = "rgba(0,0,0,.5)";
+  context.shadowColor = C.mat;
   context.shadowBlur = 22;
   context.shadowOffsetY = 5;
   context.fillStyle = C.ink;
@@ -863,7 +1035,7 @@ function drawBoard(frame, previous, t, now) {
     const age = (now - mote.born) / (MOTE_MS * animFactor(state.speed));
     if (age >= 1) { motes.splice(index, 1); continue; }
     context.globalAlpha = (1 - age) * 0.85;
-    context.strokeStyle = "#a8321a";   // the loss hue, dark enough for the plate
+    context.strokeStyle = C.mote;
     context.lineWidth = Math.max(1.4, cell * 0.22 * (1 - age));
     context.beginPath();
     context.arc(mote.px, mote.py, cell * (0.32 + age * 1.05), 0, Math.PI * 2);
@@ -884,13 +1056,19 @@ function drawBoard(frame, previous, t, now) {
    * left, so the die-off is visible just before it happens. */
   const bodies = interpolate(previous, frame, t);
   const radius = cell * 0.31;
+  // A settler is red or blue and so is the ground it stands on - sugar ramps to
+  // yellow, spice to rust - so a bare dot separated by HUE ALONE, which is the
+  // one channel the terrain already uses. The ring makes it structural: every
+  // settler carries the surround's own ink, so it reads as a body on a plate at
+  // any resource depth and under any colour-vision deficiency.
+  const ring = Math.max(0.8, cell * 0.07);
   for (const body of bodies) {
     const seat = seatOf(body.slot);
     const size = radius * (0.82 + 0.36 * Math.min(1, Math.log10(1 + body.wealth) / 2.4));
     context.beginPath();
     context.arc(body.px, body.py, size, 0, Math.PI * 2);
     if (body.starving) {
-      context.fillStyle = "rgba(251,248,240,.9)";
+      context.fillStyle = C.hollow;
       context.fill();
       context.lineWidth = Math.max(1.2, cell * 0.12);
       context.strokeStyle = seat.board;
@@ -898,6 +1076,9 @@ function drawBoard(frame, previous, t, now) {
     } else {
       context.fillStyle = seat.board;
       context.fill();
+      context.lineWidth = ring;
+      context.strokeStyle = C.ink;
+      context.stroke();
     }
   }
 
@@ -944,6 +1125,30 @@ function text(content, x, y, options = {}) {
     + `stroke-linejoin="round">${escapeText(content)}</text>`;
 }
 
+/** Break a sentence into lines that fit `width` stage units at `size`.
+ *
+ *  SVG has no automatic wrapping and the end card's verdict is a full sentence —
+ *  at 27 units a hundred characters is 1,400 units wide against a 1,068-unit
+ *  plate, so the result ran off the card and the fix has to be measured rather
+ *  than eyeballed. The 0.52em estimate is conservative for Space Grotesk's mixed
+ *  case; erring narrow costs a line break, erring wide costs an overflow. */
+function wrap(content, width, size) {
+  const limit = Math.max(8, Math.floor(width / (size * 0.52)));
+  const lines = [];
+  let line = "";
+  for (const word of String(content).split(/\s+/)) {
+    const candidate = line ? `${line} ${word}` : word;
+    if (candidate.length <= limit || !line) {
+      line = candidate;
+      continue;
+    }
+    lines.push(line);
+    line = word;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
 function eyebrow(content, x, y) {
   return text(content.toUpperCase(), x, y, {
     size: T(21), weight: 700, fill: C.muted, spacing: T(21) > 24 ? 2.0 : 2.6, outline: 3,
@@ -973,26 +1178,41 @@ function boardKey(frame) {
   const y = TOP_INSET + KEY_H - 12;
   let x = BOARD.x + 2;
   let markup = "";
-  const swatchW = T(13);
-  for (let step = 0; step <= 4; step += 1) {
-    markup += `<rect x="${x + step * (swatchW + 2)}" y="${y - swatchW + 2}" `
-      + `width="${swatchW}" height="${swatchW}" fill="${cellColor(step / 4 * state.maxSugar, 0)}" `
-      + `stroke="${GRID_HEX}" stroke-width="0.8"/>`;
+  const size = T(17);
+  const dot = G(6);
+  const gap = G(20);
+  const swatchW = G(13);
+  const style = { size, weight: 600, fill: C.muted, outline: 2.6 };
+  // One ramp per resource the world actually carries. The shipped config seeds
+  // BOTH sugar and spice peaks, so most of the plate is the rust of spice while
+  // the key taught only the yellow of sugar — the dominant colour on the board
+  // was the one thing the legend did not explain.
+  const ramps = [["sugar", (t) => cellColor(t * state.maxSugar, 0)]];
+  if (state.maxSpice > 0) ramps.push(["spice", (t) => cellColor(0, t * state.maxSpice)]);
+  for (const [label, ramp] of ramps) {
+    for (let step = 0; step <= 4; step += 1) {
+      markup += `<rect x="${x + step * (swatchW + 2)}" y="${y - swatchW + 2}" `
+        + `width="${swatchW}" height="${swatchW}" fill="${ramp(step / 4)}" `
+        + `stroke="${GRID_HEX}" stroke-width="0.8"/>`;
+    }
+    x += 5 * (swatchW + 2) + 8;
+    markup += text(label, x, y, style);
+    // Advance by the REAL type size. A fixed per-character step was tuned
+    // against one ramp and overlapped every label the moment the other was in
+    // force. The trailing gap is proportional too, or the key reads as one run
+    // of words the moment the ramp grows.
+    x += advance(label, size) + gap;
   }
-  x += 5 * (swatchW + 2) + 8;
-  markup += text("sugar", x, y, { size: T(17), weight: 600, fill: C.muted, outline: 2.6 });
-  x += T(17) * 3.4 + 14;
   frame.slots.forEach((slot, index) => {
-    markup += `<circle cx="${x}" cy="${y - T(6)}" r="${T(6)}" fill="${seatOf(index).color}"/>`;
-    const label = slot.name || `Population ${index + 1}`;
-    markup += text(label, x + T(10), y, { size: T(17), weight: 600, fill: C.muted, outline: 2.6 });
-    x += T(10) + label.length * T(8.6) + 16;
+    markup += `<circle cx="${x}" cy="${y - dot}" r="${dot}" fill="${seatOf(index).color}"/>`;
+    const full = slot.name || `Population ${index + 1}`;
+    const label = dense() ? full.split(/\s+/).at(-1) : full;
+    markup += text(label, x + dot + G(7), y, style);
+    x += dot + G(7) + advance(label, size) + gap;
   });
-  markup += `<circle cx="${x}" cy="${y - T(6)}" r="${T(6)}" fill="none" `
-    + `stroke="${C.muted}" stroke-width="${T(2.2)}"/>`;
-  markup += text("about to starve", x + T(10), y, {
-    size: T(17), weight: 600, fill: C.muted, outline: 2.6,
-  });
+  markup += `<circle cx="${x}" cy="${y - dot}" r="${dot}" fill="none" `
+    + `stroke="${C.muted}" stroke-width="${G(2.2)}"/>`;
+  markup += text("about to starve", x + dot + G(7), y, style);
   return markup;
 }
 
@@ -1000,54 +1220,87 @@ function scorebug(frame) {
   const rows = ranked(frame);
   const scheduled = state.maxTimestep || frame.timestep;
   const progress = scheduled > 0 ? Math.min(1, frame.timestep / scheduled) : 0;
-  const clockW = 320;
+  const big = dense();
   let markup = `<rect x="0" y="0" width="${W}" height="${BUG_H + 18}" fill="url(#bug-scrim)"/>`;
+
+  // FINAL belongs to where the CURSOR is, not to whether the stream has ended:
+  // scrubbing back into the middle of a finished episode is mid-match again.
+  const atEnd = state.finished && currentIndex() >= frames.length - 1;
+  const stateLabel = state.truncated ? "CUT SHORT"
+    : atEnd ? "FINAL" : `${Math.round(progress * 100)}%`;
+  const stateFill = state.truncated ? C.loss : atEnd ? C.gold : C.muted;
 
   // Name the broadcast. Without it a first-time viewer can see two populations
   // and a number going up, but never learns what they are competing FOR.
-  markup += text("SUGARSCAPE", MARGIN + 2, 38, {
-    size: 27, weight: 700, fill: C.paper, spacing: 5.2,
+  markup += text("SUGARSCAPE", MARGIN + 2, big ? 48 : 38, {
+    size: T(27), weight: 700, fill: C.paper, spacing: big ? 4.2 : 5.2,
   });
   markup += text(
     // Not "one mountain": configuration.nim re-seats an out-of-range peak to a
     // RANDOM in-range coordinate, so how many massifs a world has is a property
     // of the seed, not of the config. Do not assert what the board can show.
-    state.compact
-      ? `${frame.slots.length} populations · most ${resourceName()} wins`
+    big
+      ? `most ${resourceName()} wins`
       : `${frame.slots.length} populations forage one lattice · most ${resourceName()} wins`,
-    MARGIN + 2, 66, { size: T(16), weight: 500, fill: C.muted });
+    MARGIN + 2, big ? 88 : 66, { size: T(16), weight: 500, fill: C.muted });
 
   // Clock — counts to the SCHEDULED end of the match, so an early extinction
   // freezes short of the buzzer instead of always landing on the last tick.
-  markup += panel(MARGIN + 476, 14, clockW, BUG_H);
-  markup += eyebrow("Timestep", MARGIN + 494, 46);
-  markup += text(`${frame.timestep}`, MARGIN + 494, 84, {
-    size: 40, weight: 600, family: F.mono, fill: C.paper,
-  });
-  markup += text(` / ${scheduled}`, MARGIN + 494 + String(frame.timestep).length * 25, 84, {
-    size: T(24), weight: 500, family: F.mono, fill: C.muted,
-  });
-  const barX = MARGIN + 654;
-  const barW = clockW - 196;
-  markup += `<rect x="${barX}" y="60" width="${barW}" height="9" rx="4.5" fill="rgba(246,234,210,.14)"/>`;
-  markup += `<rect x="${barX}" y="60" width="${Math.max(3, barW * progress)}" height="9" rx="4.5" fill="${C.gold}"/>`;
-  // FINAL belongs to where the CURSOR is, not to whether the stream has ended:
-  // scrubbing back into the middle of a finished episode is mid-match again.
-  const atEnd = state.finished && currentIndex() >= frames.length - 1;
-  markup += text(
-    state.truncated ? "CUT SHORT" : atEnd ? "FINAL" : `${Math.round(progress * 100)}%`,
-    barX + barW, 46,
-    {
+  //
+  // The band is 92 units tall and the dense ramp sets the figure at 66, which
+  // leaves no room to stack an eyebrow above it or run a progress bar beside it.
+  // So dense states the fraction on one line and lets the transport's own played
+  // track carry the bar — it already did, at both densities.
+  const clockX = big ? MARGIN + 400 : MARGIN + 476;
+  const clockW = big ? 490 : 320;
+  markup += panel(clockX, 14, clockW, BUG_H);
+  if (big) {
+    markup += text(`${frame.timestep} / ${scheduled}`, clockX + 20, 72, {
+      size: T(40), weight: 600, family: F.mono, fill: C.paper,
+    });
+    markup += text(stateLabel, clockX + clockW - 20, 72, {
       size: T(16), weight: 700, family: F.mono, anchor: "end",
-      fill: state.truncated ? C.loss : atEnd ? C.gold : C.muted, spacing: 1.4,
-    },
-  );
-  if (state.truncated) {
-    markup += text(
-      `stream ended at t${frames.at(-1).timestep} of ${scheduled} — no result`,
-      MARGIN + 2, 92,
-      { size: T(16), weight: 600, fill: C.loss },
-    );
+      fill: stateFill, spacing: 1.4,
+    });
+  } else {
+    markup += eyebrow("Timestep", clockX + 18, 46);
+    markup += text(`${frame.timestep}`, clockX + 18, 84, {
+      size: 40, weight: 600, family: F.mono, fill: C.paper,
+    });
+    // Mono advances at ~0.6em, so the fraction's offset is read off the size
+    // rather than off a constant tuned for one of them.
+    markup += text(` / ${scheduled}`,
+      clockX + 18 + String(frame.timestep).length * 40 * 0.6, 84, {
+        size: T(24), weight: 500, family: F.mono, fill: C.muted,
+      });
+    const barX = clockX + 178;
+    const barW = clockW - 196;
+    markup += `<rect x="${barX}" y="60" width="${barW}" height="9" rx="4.5" fill="${C.trackBed}"/>`;
+    markup += `<rect x="${barX}" y="60" width="${Math.max(3, barW * progress)}" `
+      + `height="9" rx="4.5" fill="${C.gold}"/>`;
+    markup += text(stateLabel, barX + barW, 46, {
+      size: T(16), weight: 700, family: F.mono, anchor: "end",
+      fill: stateFill, spacing: 1.4,
+    });
+  }
+  // Dense has no room for the second line, and CUT SHORT already stands in the
+  // clock; the spoken broadcast carries the full sentence at both densities.
+  //
+  // Two different mutilations, and BOTH used to be silent about the timeline.
+  // The server keeps a bounded live backlog, so a spectator who joins a long
+  // episode late is handed a stream whose first frame is not t0 — the transport
+  // then scrubs a window while looking exactly like a whole match. Say so.
+  if (!big) {
+    const note = state.truncated
+      ? `stream ended at t${frames.at(-1).timestep} of ${scheduled} — no result`
+      : joinedLate()
+        ? `joined at t${frames[0].timestep} — earlier timesteps were not delivered`
+        : "";
+    if (note) {
+      markup += text(note, MARGIN + 2, 92, {
+        size: T(16), weight: 600, fill: state.truncated ? C.loss : C.muted,
+      });
+    }
   }
 
   // Standing — the score axis is total living wealth; population rides along as
@@ -1068,39 +1321,51 @@ function scorebug(frame) {
     markup += `<rect x="${x}" y="14" width="${chipW}" height="${BUG_H}" rx="10" `
       + `fill="${C.panel}" stroke="${leader ? C.gold : C.border}" `
       + `stroke-width="${leader ? 2.5 : 1.5}"/>`;
-    markup += text(`${rank + 1}`, x + 26, 70, {
+    markup += text(`${rank + 1}`, x + (big ? 30 : 26), big ? 66 : 70, {
       size: T(30), weight: 600, family: F.mono, fill: C.dim, anchor: "middle",
     });
-    markup += seatMark(x + 62, 60, row.index, 11);
+    markup += seatMark(x + (big ? 76 : 62), big ? 58 : 60, row.index, big ? 15 : 11);
     // The crown is a 3px smudge at the embed floor; the gold border and the rank
     // numeral already say the same thing there.
-    if (leader && !state.compact) {
+    if (leader && !big) {
       markup += `<path d="M ${x + 52} 32 l 5 -10 l 5 6.5 l 5 -11 l 5 11 l 5 -6.5 l 5 10 z" `
         + `fill="${C.gold}" stroke="${C.ink}" stroke-width="1.4" stroke-linejoin="round"/>`;
     }
-    markup += `<clipPath id="chip-${row.index}"><rect x="${x + 84}" y="14" `
-      + `width="${chipW - 250}" height="${BUG_H}"/></clipPath>`;
+    // Dense drops the secondary line rather than shrinking it — the population
+    // count is still on the emergence panel and in the spoken standing — and
+    // shortens the name, because a 92-unit chip cannot hold two dense lines.
+    const nameX = x + (big ? 104 : 84);
+    const nameW = chipW - (big ? 300 : 250);
+    const name = big ? row.name.split(/\s+/).at(-1) : row.name;
+    markup += `<clipPath id="chip-${row.index}"><rect x="${nameX}" y="14" `
+      + `width="${nameW}" height="${BUG_H}"/></clipPath>`;
     markup += `<g clip-path="url(#chip-${row.index})">`
-      + text(row.name, x + 84, 52, {
-        size: 25, weight: 700, fill: leader ? C.paper : C.paper, spacing: 0.3,
+      + text(name, nameX, big ? 70 : 52, {
+        size: T(25), weight: 700, fill: C.paper, spacing: 0.3,
       })
       + `</g>`;
-    markup += text(
-      `${row.population} settler${row.population === 1 ? "" : "s"} · ${resourceName()}`,
-      x + 84, 78,
-      { size: T(20), weight: 500, family: F.mono, fill: C.muted },
-    );
+    if (!big) {
+      // Just the headcount. It used to carry "· sugar + spice" as well, and on
+      // the shipped dual-resource config that ran 27 characters of mono type
+      // straight under the margin figure anchored at the chip's other end — the
+      // two collided on every frame. The masthead already names what wins.
+      markup += text(
+        `${row.population} settler${row.population === 1 ? "" : "s"}`,
+        nameX, 78,
+        { size: T(20), weight: 500, family: F.mono, fill: C.muted },
+      );
+    }
     // White at the same size out-punches gold, so the LOSING number was winning
     // the eye. The leader is gold and bright; everyone else steps back.
-    markup += text(format(row.score), x + chipW - 20, 62, {
+    markup += text(format(row.score), x + chipW - 20, big ? 58 : 62, {
       size: T(40), weight: 700, family: F.mono, anchor: "end",
       fill: leader ? C.gold : C.muted,
     });
     markup += text(
       margin === 0 ? "level" : margin > 0 ? `+${format(margin)}` : `\u2212${format(-margin)}`,
-      x + chipW - 20, 84,
+      x + chipW - 20, big ? 96 : 84,
       {
-        size: T(16) + 4, weight: 700, family: F.mono, anchor: "end",
+        size: big ? T(16) : T(16) + 4, weight: 700, family: F.mono, anchor: "end",
         fill: margin > 0 ? C.gold : C.muted,
       },
     );
@@ -1119,22 +1384,34 @@ function scorebug(frame) {
  *  timestep and renders each lead change as a visible crossing. Three or more
  *  populations fall back to absolute lines, where a single gap is meaningless. */
 function raceChart(frame, x, y, width, height) {
+  const big = dense();
   const scheduled = state.maxTimestep || 1;
-  const top = y + 46;
-  const plotH = height - 76;
-  const left = x + 62;
+  const top = y + (big ? 62 : 46);
+  const plotH = height - (big ? 84 : 76);
+  // The gutter has to hold the axis figure, which is set on the ramp: at 34
+  // units "+2,334" is 122 units wide and a 62-unit gutter pushed it clean off
+  // the panel's left edge.
+  const left = x + (big ? 138 : 62);
   const plotW = width - left + x - 18;
   const scaleX = (timestep) => left + (timestep / scheduled) * plotW;
   const visible = wealthSeries.filter((point) => point.timestep <= frame.timestep);
   const leadCount = events.filter((event) => event.kind === "lead"
     && event.timestep <= frame.timestep).length;
+  const axis = {
+    size: T(18), weight: 500, family: F.mono, fill: C.dim, anchor: "end", outline: 2.4,
+  };
 
   let markup = panel(x, y, width, height);
-  markup += eyebrow(state.compact ? `Lead, in ${resourceName()}` : "The race", x + 18, y + 26);
+  markup += eyebrow(big ? `Lead, in ${resourceName()}` : "The race", x + 18, y + (big ? 34 : 26));
+  // The dense eyebrow names the unit because the bottom annotations are dropped,
+  // and at 34 units it is already 508 units wide — the long form of this count
+  // then ran the two headings into each other with nothing between them.
   markup += text(
-    leadCount === 0 ? "no lead change yet"
-      : `${leadCount} lead change${leadCount === 1 ? "" : "s"}`,
-    x + width - 18, y + 26,
+    big
+      ? `${leadCount} change${leadCount === 1 ? "" : "s"}`
+      : leadCount === 0 ? "no lead change yet"
+        : `${leadCount} lead change${leadCount === 1 ? "" : "s"}`,
+    x + width - 18, y + (big ? 34 : 26),
     { size: T(15), weight: 600, family: F.mono, fill: C.gold, anchor: "end", spacing: 1 },
   );
 
@@ -1142,24 +1419,26 @@ function raceChart(frame, x, y, width, height) {
     // Absolute wealth lines — the general case.
     const scaleY = (score) => top + plotH - (score / state.maxWealth) * plotH;
     markup += `<line x1="${left}" y1="${top + plotH}" x2="${left + plotW}" y2="${top + plotH}" `
-      + `stroke="rgba(246,234,210,.16)" stroke-width="1"/>`;
-    markup += text(format(state.maxWealth), left - 10, top + 6, {
-      size: T(18), weight: 500, family: F.mono, fill: C.dim, anchor: "end", outline: 2.4,
-    });
+      + `stroke="${C.hairlineSoft}" stroke-width="1"/>`;
+    markup += text(format(state.maxWealth), left - 10, top + 6, axis);
     frame.slots.forEach((_, slot) => {
       const points = visible
         .map((point) => `${scaleX(point.timestep).toFixed(1)},${scaleY(point.scores[slot] ?? 0).toFixed(1)}`)
         .join(" ");
       if (!points) return;
+      const step = T(17) * 1.5;
       markup += `<polyline points="${points}" fill="none" stroke="${seatOf(slot).color}" `
         + `stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`;
-      markup += seatMark(left + 14, top + 16 + slot * 26, slot, 6)
-        + text(frame.slots[slot]?.name ?? `Population ${slot + 1}`, left + 28, top + 21 + slot * 26,
-          { size: T(17), weight: 600, fill: seatOf(slot).color, outline: 2.8 });
+      // The label is paper over the seat's dot, not the seat colour as ink: the
+      // chip hues measure 4.4-4.7:1 against the halo every label is painted on,
+      // so `text` is the lifted variant and the dot carries the identity.
+      markup += seatMark(left + 14, top + step * 0.62 + slot * step, slot, G(6))
+        + text(frame.slots[slot]?.name ?? `Population ${slot + 1}`,
+          left + 28 + G(6), top + step * 0.62 + slot * step + T(17) * 0.34,
+          { size: T(17), weight: 600, fill: seatOf(slot).text, outline: 2.8 });
     });
-    markup += text("total wealth", left + plotW / 2, top + plotH + 26, {
-      size: T(18), weight: 500, family: F.mono, fill: C.dim, anchor: "middle", outline: 2.4,
-    });
+    markup += text("total wealth", left + plotW / 2, top + plotH + T(18) + 8,
+      { ...axis, anchor: "middle" });
     return markup;
   }
 
@@ -1212,13 +1491,9 @@ function raceChart(frame, x, y, width, height) {
   flush();
 
   markup += `<line x1="${left}" y1="${baseY}" x2="${left + plotW}" y2="${baseY}" `
-    + `stroke="rgba(246,234,210,.42)" stroke-width="1.5"/>`;
-  markup += text(`+${format(peak)}`, left - 10, top + 12, {
-    size: T(18), weight: 500, family: F.mono, fill: C.dim, anchor: "end", outline: 2.4,
-  });
-  markup += text("level", left - 10, baseY + 5, {
-    size: T(18), weight: 500, family: F.mono, fill: C.dim, anchor: "end", outline: 2.4,
-  });
+    + `stroke="${C.axis}" stroke-width="1.5"/>`;
+  markup += text(`+${format(peak)}`, left - 10, top + T(18) * 0.7, axis);
+  markup += text("level", left - 10, baseY + T(18) * 0.28, axis);
 
   // Who currently holds it, stated in words at the head of the band.
   const last = visible.at(-1);
@@ -1226,79 +1501,120 @@ function raceChart(frame, x, y, width, height) {
     const lead = (last.scores[0] ?? 0) - (last.scores[1] ?? 0);
     const leader = lead === 0 ? -1 : (lead > 0 ? 0 : 1);
     const headY = scaleY(lead);
-    markup += `<circle cx="${scaleX(last.timestep)}" cy="${headY}" r="6" `
+    markup += `<circle cx="${scaleX(last.timestep)}" cy="${headY}" r="${G(6)}" `
       + `fill="${leader < 0 ? C.muted : seatOf(leader).color}" stroke="${C.ink}" stroke-width="1.8"/>`;
+    // The lifted `text` variant, not the chip colour: measured against the ink
+    // halo this label is painted on, the blue chip is 4.40:1 and fails AA.
+    // Shortened at the dense ramp: the full name runs under the band's own peak,
+    // and the scorebug two panels up has just said which population it is.
+    const holder = frame.slots[leader]?.name ?? `Population ${leader + 1}`;
     markup += text(
-      leader < 0 ? "level" : `${frame.slots[leader]?.name ?? `Population ${leader + 1}`} ahead`,
-      left + 14, top + 20,
-      { size: T(19), weight: 700, fill: leader < 0 ? C.muted : seatOf(leader).color, outline: 3 },
+      leader < 0 ? "level" : `${big ? holder.split(/\s+/).at(-1) : holder} ahead`,
+      left + 14, top + T(19),
+      { size: T(19), weight: 700, fill: leader < 0 ? C.muted : seatOf(leader).text, outline: 3 },
     );
   }
 
   // At the embed floor these land under 7px, so the chart keeps its shape and
   // its headline count and drops the annotations rather than printing a smear.
-  if (!state.compact) {
-    markup += text("t0", left, y + height - 16, {
-      size: 18, weight: 500, family: F.mono, fill: C.dim, outline: 2.4,
-    });
-    markup += text(`t${scheduled}`, left + plotW, y + height - 16, {
-      size: 18, weight: 500, family: F.mono, fill: C.dim, anchor: "end", outline: 2.4,
-    });
-    markup += text(`lead, in ${resourceName()}`, left + plotW / 2, y + height - 16, {
-      size: 18, weight: 500, family: F.mono, fill: C.dim, anchor: "middle", outline: 2.4,
-    });
+  if (!big) {
+    markup += text("t0", left, y + height - 16, { ...axis, anchor: "start" });
+    markup += text(`t${scheduled}`, left + plotW, y + height - 16, axis);
+    markup += text(`lead, in ${resourceName()}`, left + plotW / 2, y + height - 16,
+      { ...axis, anchor: "middle" });
   }
   return markup;
 }
 
-/** Once the die-off settles, deaths arrive one at a time and a raw feed becomes
- *  five identical rows. Runs of small losses are merged into one line that
- *  carries the whole stretch, so every row in the feed earns its space; a lead
- *  change or a real mass starvation always stands on its own. */
-function coalesce(list) {
-  const rows = [];
+/** Fold a run of older beats into ONE row that accounts for all of them.
+ *
+ *  This is what makes the panel a ledger rather than a window. Every beat the
+ *  feed does not show individually is inside this row's totals, so adding the
+ *  visible rows up gives the same loss the emergence panel prints two panels
+ *  below — which it did not before, with nothing on screen to reconcile them. */
+function summarise(list) {
+  const bySlot = new Map();
+  let count = 0;
+  let cause = "lost";
+  let leads = 0;
   for (const event of list) {
-    const previous = rows.at(-1);
-    const mergeable = event.kind === "death" && event.count < 3;
-    if (mergeable && previous && previous.kind === "death" && previous.merged) {
-      previous.count += event.count;
-      previous.until = event.timestep;
-      const tally = new Map(previous.bySlot);
-      for (const [slot, count] of event.bySlot) {
-        tally.set(slot, (tally.get(slot) ?? 0) + count);
-      }
-      previous.bySlot = [...tally.entries()];
+    if (event.kind === "lead") {
+      leads += 1;
       continue;
     }
-    rows.push(mergeable
-      ? { ...event, bySlot: [...event.bySlot], merged: true,
-          since: event.timestep, until: event.timestep }
-      : { ...event });
+    count += event.count;
+    cause = event.cause ?? cause;
+    for (const [slot, tally] of event.bySlot) {
+      bySlot.set(slot, (bySlot.get(slot) ?? 0) + tally);
+    }
+  }
+  return {
+    index: list[0].index,
+    kind: "summary",
+    timestep: list[0].timestep,
+    since: list[0].timestep,
+    until: list.at(-1).timestep,
+    count,
+    cause,
+    leads,
+    bySlot: [...bySlot.entries()],
+  };
+}
+
+/** Choose the feed's rows: newest beats one to a row, everything older folded
+ *  into ONE summary that accounts for it.
+ *
+ *  The old rule merged runs of small losses wherever they fell, which was
+ *  exactly backwards — the longer and duller the die-off, the fewer rows it
+ *  produced, so on the shipped config the panel sat almost empty at t36 with a
+ *  single line in it, and what it did show did not add up to the loss printed
+ *  two panels below. Newest-first, so the freshest beat is at the top. */
+function feedRows(seen, slots) {
+  if (seen.length === 0 || slots <= 0) return [];
+  const keyOf = (event) => `${event.index}:${event.kind}`;
+  const lastLead = [...seen].reverse().find((event) => event.kind === "lead");
+  let rows = seen.slice(-slots).reverse();
+  // A lead change is the beat this match is about; guarantee the most recent one
+  // a row even when routine starvation would push it out.
+  if (lastLead && !rows.some((event) => event.kind === "lead")) {
+    rows = [...rows.slice(0, Math.max(0, slots - 1)), { ...lastLead }];
+  }
+  let shown = new Set(rows.map(keyOf));
+  if (seen.some((event) => !shown.has(keyOf(event)))) {
+    // Give the oldest row up to the summary that will account for it.
+    rows = rows.slice(0, Math.max(0, slots - 1));
+    shown = new Set(rows.map(keyOf));
+    rows.push(summarise(seen.filter((event) => !shown.has(keyOf(event)))));
   }
   return rows;
 }
 
 function eventFeed(frame, x, y, width, height) {
+  const big = dense();
   let markup = panel(x, y, width, height);
-  markup += eyebrow("What just happened", x + 18, y + 26);
-  if (!state.compact) {
+  const headY = y + (big ? 34 : 26);
+  markup += eyebrow("What just happened", x + 18, headY);
+  if (!big) {
     // A hollow settler is a state a viewer can see and could not decode.
     markup += `<circle cx="${x + width - 232}" cy="${y + 20}" r="6" fill="none" `
       + `stroke="${C.muted}" stroke-width="2.2"/>`;
-    markup += text("hollow = about to starve", x + width - 218, y + 26, {
-      size: 17, weight: 500, fill: C.dim, outline: 2.4,
+    markup += text("hollow = about to starve", x + width - 218, headY, {
+      size: T(17), weight: 500, fill: C.dim, outline: 2.4,
     });
   }
 
   const seen = events.filter((event) => event.timestep <= frame.timestep);
-  const limit = state.compact ? 3 : 4;
-  // Keep the most recent lead change even when routine starvation would push it
-  // out: a lead change is the beat this match is actually about.
-  const lastLead = [...seen].reverse().find((event) => event.kind === "lead");
+  const limit = big ? 3 : 4;
 
-  let rowY = y + 58;
-  const rowStep = state.compact ? 64 : 54;
-  const indent = state.compact ? 124 : 128;
+  let rowY = y + (big ? 72 : 58);
+  const rowStep = big ? 72 : 54;
+  // The stamp column has to hold the WIDEST stamp, which is the summary row's
+  // range - "t6-29" at the dense ramp is 95 units and ran straight into the
+  // accent rule. And the rule itself sat 12 units clear of its row's text, four
+  // CSS pixels at the embed floor, so the two read as one glyph.
+  const indent = big ? 210 : 128;
+  const barGap = big ? 40 : 16;
+  const barW = big ? 6 : 4;
 
   // A live row, always. Without it the panel could sit on a beat from nine
   // timesteps ago under a heading that promises the present.
@@ -1307,30 +1623,28 @@ function eventFeed(frame, x, y, width, height) {
   const quiet = seen.length === 0
     || frame.timestep - (seen.at(-1).until ?? seen.at(-1).timestep) > 8;
   let slots = limit;
+  const stampY = big ? 34 : 15;
   if (quiet) {
-    markup += text(`t${frame.timestep}`, x + 18, rowY + 15, {
+    markup += text(`t${frame.timestep}`, x + 18, rowY + stampY, {
       size: T(19), weight: 600, family: F.mono, fill: C.gold,
     });
-    markup += `<rect x="${x + indent - 16}" y="${rowY - 2}" width="4" height="${T(24)}" rx="2" `
+    markup += `<rect x="${x + indent - barGap}" y="${rowY - 2}" width="${barW}" height="${T(24)}" rx="2" `
       + `fill="${C.muted}"/>`;
     markup += text(
-      state.compact
+      // Not "the mountain": the shipped config seeds four peaks, two of sugar
+      // and two of spice, so how many massifs a world has is a property of the
+      // seed. The lattice is the thing every configuration has.
+      big
         ? `${frame.agents.length} settlers foraging`
-        : `${frame.agents.length} settlers still foraging the mountain`,
-      x + indent, rowY + 16,
+        : `${frame.agents.length} settlers still foraging the lattice`,
+      x + indent, rowY + (big ? 36 : 16),
       { size: T(25), weight: 500, fill: C.paper },
     );
     rowY += rowStep;
     slots -= 1;
   }
 
-  // Take the newest beats, then guarantee the most recent lead change a slot —
-  // rescuing it and THEN trimming the list sliced off the row just rescued,
-  // exactly when the feed was quiet and it was the only thing worth showing.
-  let recent = coalesce(seen).slice(-slots).reverse();
-  if (lastLead && !recent.some((event) => event.kind === "lead")) {
-    recent = [...recent.slice(0, Math.max(0, slots - 1)), { ...lastLead }];
-  }
+  const recent = feedRows(seen, slots);
 
   if (recent.length === 0 && !quiet) {
     markup += text("The settlers spread out across the lattice.", x + 18, y + 62, {
@@ -1341,18 +1655,18 @@ function eventFeed(frame, x, y, width, height) {
 
   for (const event of recent) {
     const fresh = (event.until ?? event.timestep) === frame.timestep;
-    const stamp = event.merged && event.until > event.since
+    const stamp = event.kind === "summary" && event.until > event.since
       ? `t${event.since}–${event.until}`
       : `t${event.timestep}`;
-    markup += text(stamp, x + 18, rowY + 15, {
+    markup += text(stamp, x + 18, rowY + stampY, {
       size: T(19), weight: 600, family: F.mono, fill: fresh ? C.gold : C.dim,
     });
-    if (event.kind === "death") {
-      markup += `<rect x="${x + indent - 16}" y="${rowY - 2}" width="4" height="${T(24)}" rx="2" fill="${C.dim}"/>`;
+    if (event.kind === "death" || event.kind === "summary") {
+      markup += `<rect x="${x + indent - barGap}" y="${rowY - 2}" width="${barW}" height="${T(24)}" rx="2" fill="${C.dim}"/>`;
       // No flavour text: an earlier version asserted the losses were at the
       // mountain's edge, which nothing here computes and which the recording
       // does not actually support for the runs it was printed on.
-      const shorten = (name) => (state.compact ? name.split(/\s+/).at(-1) : name);
+      const shorten = (name) => (big ? name.split(/\s+/).at(-1) : name);
       const detail = event.bySlot
           .filter(([slot]) => slot >= 0)
           .map(([slot, count]) => `${count} ${shorten(frame.slots[slot]?.name ?? `slot ${slot}`)}`)
@@ -1363,22 +1677,31 @@ function eventFeed(frame, x, y, width, height) {
       const line = named.length === 1
         ? `${event.count} ${shorten(frame.slots[named[0][0]]?.name ?? "")} ${event.cause ?? "lost"}`
         : `${event.count} ${event.cause ?? "lost"}${detail ? ` — ${detail}` : ""}`;
+      // The summary row says how many lead changes are inside it, so a viewer
+      // can see the panel is accounting for beats it is not naming.
+      const folded = event.kind === "summary" && event.leads > 0
+        ? `${line}${event.count > 0 ? " · " : ""}`
+          + `${event.leads} lead change${event.leads === 1 ? "" : "s"}`
+        : line;
       markup += text(
-        line,
-        x + indent, rowY + 16,
+        event.count === 0 && event.kind === "summary"
+          ? `${event.leads} lead change${event.leads === 1 ? "" : "s"}`
+          : folded,
+        x + indent, rowY + (big ? 36 : 16),
         { size: T(25), weight: 500, fill: fresh ? C.paper : C.muted },
       );
     } else {
-      markup += `<rect x="${x + indent - 16}" y="${rowY - 2}" width="4" height="${T(24)}" rx="2" `
+      markup += `<rect x="${x + indent - barGap}" y="${rowY - 2}" width="${barW}" height="${T(24)}" rx="2" `
         + `fill="${seatOf(event.slot).color}"/>`;
       markup += text(
         `${event.name} takes the lead`,
-        x + indent, rowY + 16,
+        x + indent, rowY + (big ? 36 : 16),
         { size: T(25), weight: 700, fill: fresh ? C.paper : C.muted },
       );
     }
     rowY += rowStep;
   }
+
   return markup;
 }
 
@@ -1388,12 +1711,13 @@ function eventFeed(frame, x, y, width, height) {
  *  average of the headcount with a ceil() ratchet, so presenting it as a ceiling
  *  the world imposes was simply false.) */
 function emergence(frame, x, y, width, height) {
+  const big = dense();
   const stats = frame.stats ?? {};
   const gini = Number(stats.giniCoefficient ?? 0);
   const population = frame.agents.length;
 
   let markup = panel(x, y, width, height);
-  markup += eyebrow("Nobody programmed this", x + 18, y + 26);
+  markup += eyebrow("Nobody programmed this", x + 18, y + (big ? 34 : 26));
 
   // Lorenz curve — the signature Sugarscape chart, drawn from the live agents.
   const curveX = x + 18;
@@ -1403,16 +1727,16 @@ function emergence(frame, x, y, width, height) {
   const size = Math.max(40, height - 44 - 40 - 18);
   // The Lorenz curve is the signature chart but the first thing to go at the
   // embed floor: unlabelled and 60px wide it carries nothing a viewer can read.
-  const showCurve = !state.compact;
+  const showCurve = !big;
   const wealth = frame.agents
     .map((agent) => Math.max(0, agent.sugar + agent.spice))
     .sort((first, second) => first - second);
   const total = wealth.reduce((sum, value) => sum + value, 0);
   if (showCurve) {
     markup += `<rect x="${curveX}" y="${curveY}" width="${size}" height="${size}" `
-      + `fill="rgba(246,234,210,.04)" stroke="rgba(246,234,210,.12)" stroke-width="1"/>`;
+      + `fill="${C.wash}" stroke="${C.hairline}" stroke-width="1"/>`;
     markup += `<line x1="${curveX}" y1="${curveY + size}" x2="${curveX + size}" y2="${curveY}" `
-      + `stroke="rgba(246,234,210,.22)" stroke-width="1" stroke-dasharray="4 4"/>`;
+      + `stroke="${C.guide}" stroke-width="1" stroke-dasharray="4 4"/>`;
   }
   if (showCurve && total > 0) {
     let cumulative = 0;
@@ -1428,16 +1752,17 @@ function emergence(frame, x, y, width, height) {
   }
   if (showCurve) {
     markup += text("poorest → richest", curveX + size / 2, curveY + size + 24,
-      { size: 17, weight: 500, family: F.mono, fill: C.dim, anchor: "middle", outline: 2.4 });
+      { size: T(17), weight: 500, family: F.mono, fill: C.dim, anchor: "middle", outline: 2.4 });
   }
 
   // Two readouts, not three: the live population is already on both scorebug
-  // chips, so repeating it as "survivors" only crowded the panel. Pairing it
-  // with the capacity instead is the reading that means something - the world
-  // deciding how many settlers it will carry. The capacity is phrased rather
-  // than printed bare, because "57" beside "38 alive of 64" read as a
-  // contradiction rather than as a ceiling.
-  const readX = state.compact ? curveX : curveX + size + 26;
+  // chips, so repeating it as "survivors" only crowded the panel.
+  //
+  // Dense stacks nothing: at 66 units a figure with a label above and a note
+  // below is 150 units tall, and two of those do not fit a rail that has already
+  // given its height to the race and the feed. The rail is 932 units WIDE, so
+  // dense turns the readouts through ninety degrees and sets them side by side,
+  // with notes short enough to hold a half-column.
   // Net change, not a death count - the engine can also add agents - so this
   // is deliberately labelled 'lost' rather than asserting a cause.
   const lost = Math.max(0, state.startingPopulation - population);
@@ -1445,13 +1770,34 @@ function emergence(frame, x, y, width, height) {
     ["Inequality", gini.toFixed(3),
       gini > 0.4 ? "a few settlers hold almost all of it"
         : gini > 0.28 ? "the richest hold most of it"
-          : "spread fairly evenly"],
+          : "spread fairly evenly",
+      gini > 0.4 ? "a few hold nearly all"
+        : gini > 0.28 ? "the richest hold most"
+          : "spread evenly"],
     ["Settlers alive", `${population}`,
+      state.sawStart
+        ? (lost > 0 ? `of ${state.startingPopulation} · ${lost} lost` : `of ${state.startingPopulation}`)
+        : "joined mid-episode",
       state.sawStart
         ? (lost > 0 ? `of ${state.startingPopulation} · ${lost} lost` : `of ${state.startingPopulation}`)
         : "joined mid-episode"],
   ];
-  let readY = curveY + (state.compact ? 22 : 26);
+  if (big) {
+    const column = (width - 36) / rows.length;
+    rows.forEach(([label, value, , shortNote], index) => {
+      const readX = curveX + index * column;
+      markup += text(label.toUpperCase(), readX, y + 78, {
+        size: T(18), weight: 700, fill: C.muted, spacing: 1.8, outline: 2.6,
+      });
+      markup += text(value, readX, y + 140, {
+        size: T(40), weight: 600, family: F.mono, fill: C.paper,
+      });
+      markup += text(shortNote, readX, y + 178, { size: T(19), weight: 500, fill: C.dim });
+    });
+    return markup;
+  }
+  const readX = curveX + size + 26;
+  let readY = curveY + 26;
   for (const [label, value, note] of rows) {
     markup += text(label.toUpperCase(), readX, readY, {
       size: T(18), weight: 700, fill: C.muted, spacing: 1.8, outline: 2.6,
@@ -1462,7 +1808,7 @@ function emergence(frame, x, y, width, height) {
     markup += text(note, readX, readY + T(62), {
       size: T(19), weight: 500, fill: C.dim,
     });
-    readY += state.compact ? 124 : 96;
+    readY += 96;
   }
   return markup;
 }
@@ -1472,16 +1818,19 @@ function stinger() {
   const width = 720;
   const x = BOARD.x + (BOARD.w - width) / 2;
   const y = BOARD.y + BOARD.h * 0.36;
-  const color = event.kind === "lead" ? seatOf(event.slot).color : C.loss;
+  // The rule and the border take the CHIP colour; the headline takes the lifted
+  // `text` variant, which is the one measured against the card behind it.
+  const rule = event.kind === "lead" ? seatOf(event.slot).color : C.loss;
+  const ink = event.kind === "lead" ? seatOf(event.slot).text : C.loss;
   const headline = event.kind === "lead" ? "LEAD CHANGE" : "DIE-OFF";
   const detail = event.kind === "lead"
     ? `${event.name} moves ahead by ${format(event.margin)}`
     : `${event.count} settlers starved this timestep`;
   return `<g class="stinger">`
-    + `<rect x="${x}" y="${y}" width="${width}" height="118" rx="12" fill="rgba(16,12,6,.93)" `
-    + `stroke="${color}" stroke-width="2.5"/>`
-    + `<rect x="${x}" y="${y}" width="7" height="118" rx="3.5" fill="${color}"/>`
-    + text(headline, x + 34, y + 50, { size: 30, weight: 700, fill: color, spacing: 3.2 })
+    + `<rect x="${x}" y="${y}" width="${width}" height="118" rx="12" fill="${C.stingerBack}" `
+    + `stroke="${rule}" stroke-width="2.5"/>`
+    + `<rect x="${x}" y="${y}" width="7" height="118" rx="3.5" fill="${rule}"/>`
+    + text(headline, x + 34, y + 50, { size: 30, weight: 700, fill: ink, spacing: 3.2 })
     + text(detail, x + 34, y + 90, { size: 24, weight: 500, fill: C.paper })
     + `</g>`;
 }
@@ -1522,48 +1871,95 @@ function endCard(frame) {
     ? `${survivors} of ${state.startingPopulation} settlers survived.${spread}`
     : `${survivors} settlers still standing.${spread}`;
 
-  const cardW = state.compact ? 1500 : 1180;
-  const cardH = 580;
+  /* The card is SIZED FROM ITS CONTENT.
+   *
+   * It used to be a fixed 580 units with every baseline hard-coded against that.
+   * A two-line verdict — which is what a lively match produces — pushed the
+   * second result row and the closing caption straight through the bottom edge,
+   * and the dense ramp did it every time. So the wrap is measured first, the
+   * plate is sized to hold it, and every baseline is a running cursor. */
+  const big = dense();
+  const pad = 56;
+  const cardW = big ? 1560 : 1180;
+  const inner = cardW - pad * 2;
+  const nameSize = T(62);
+  const verdictSize = T(27);
+  const contextSize = T(22);
+  const footSize = T(20);
+  const verdictLines = wrap(verdict, inner, verdictSize);
+  const contextLines = wrap(context, inner, contextSize);
+  const rowH = big ? 84 : 66;
+  const rowStep = rowH + 12;
+
+  const eyebrowStep = big ? 52 : 40;
+  const verdictH = verdictLines.length * verdictSize * 1.3;
+  const contextH = contextLines.length * contextSize * 1.34;
+  const rowsH = rows.length * rowStep;
+  const cardH = Math.min(H - 56, Math.max(big ? 620 : 520,
+    52 + eyebrowStep + nameSize * 0.92 + 22 + verdictH + 14 + contextH
+    + 34 + rowsH + 34 + footSize * 0.8 + 34));
   const x = (W - cardW) / 2;
   const y = (H - cardH) / 2;
 
   let markup = `<g class="endcard">`;
-  markup += `<rect x="0" y="0" width="${W}" height="${H}" fill="rgba(10,7,4,.965)"/>`;
+  markup += `<rect x="0" y="0" width="${W}" height="${H}" fill="${C.cardScrim}"/>`;
   markup += `<rect x="${x}" y="${y}" width="${cardW}" height="${cardH}" rx="16" `
-    + `fill="rgba(31,24,14,.985)"/>`;
+    + `fill="${C.card}"/>`;
   markup += `<rect x="${x}" y="${y}" width="${cardW}" height="${cardH}" rx="16" fill="none" `
     + `stroke="${C.gold}" stroke-width="2.5"/>`;
 
-  markup += text("SUGARSCAPE", x + 56, y + 54, {
-    size: T(24), weight: 700, fill: C.paper, spacing: 5.0,
+  let cursor = y + 52;
+  markup += text("SUGARSCAPE", x + pad, cursor, {
+    size: T(24), weight: 700, fill: C.paper, spacing: big ? 4.2 : 5.0,
   });
-  markup += eyebrow(tie ? "Final — level" : "Final", x + 56, y + 84);
-  markup += seatMark(x + 68, y + 140, winner.index, 21);
-  markup += text(winner.name, x + 104, y + 154, { size: T(62), weight: 700, fill: C.paper });
-  markup += text(verdict, x + 56, y + 212, { size: T(27), weight: 500, fill: C.gold });
-  markup += text(context, x + 56, y + 250, { size: T(22), weight: 500, fill: C.muted });
+  cursor += eyebrowStep;
+  markup += eyebrow(tie ? "Final — level" : "Final", x + pad, cursor);
 
-  let rowY = y + 306;
+  cursor += nameSize * 0.92;
+  markup += seatMark(x + pad + G(12), cursor - nameSize * 0.22, winner.index, G(21));
+  markup += text(winner.name, x + pad + G(48), cursor, {
+    size: nameSize, weight: 700, fill: C.paper,
+  });
+
+  cursor += 22;
+  for (const line of verdictLines) {
+    cursor += verdictSize * 1.3;
+    markup += text(line, x + pad, cursor, { size: verdictSize, weight: 500, fill: C.gold });
+  }
+  cursor += 14;
+  for (const line of contextLines) {
+    cursor += contextSize * 1.34;
+    markup += text(line, x + pad, cursor, { size: contextSize, weight: 500, fill: C.muted });
+  }
+
+  // The rows sit under whatever the sentences needed, and are pushed to the foot
+  // when a short verdict leaves the plate at its minimum height.
+  const footY = y + cardH - footSize * 0.8 - 26;
+  let rowY = Math.max(cursor + 34, footY - footSize - 34 - rowsH);
   for (const [rank, row] of rows.entries()) {
     const leader = rank === 0 && !tie;
-    markup += `<rect x="${x + 56}" y="${rowY}" width="${cardW - 112}" height="66" rx="10" `
-      + `fill="rgba(20,15,8,.72)" stroke="${leader ? C.gold : C.border}" stroke-width="${leader ? 2 : 1.4}"/>`;
-    markup += text(`${rank + 1}`, x + 92, rowY + 44, {
-      size: 28, weight: 600, family: F.mono, fill: C.dim, anchor: "middle",
+    markup += `<rect x="${x + pad}" y="${rowY}" width="${inner}" height="${rowH}" rx="10" `
+      + `fill="${C.rowBack}" stroke="${leader ? C.gold : C.border}" stroke-width="${leader ? 2 : 1.4}"/>`;
+    markup += text(`${rank + 1}`, x + pad + 36, rowY + rowH * 0.66, {
+      size: T(28), weight: 600, family: F.mono, fill: C.dim, anchor: "middle",
     });
-    markup += seatMark(x + 134, rowY + 33, row.index, 12);
-    markup += text(row.name, x + 162, rowY + 42, { size: T(28), weight: 700, fill: C.paper });
-    markup += text(`${row.population} alive`, x + cardW - 250, rowY + 42, {
-      size: 20, weight: 500, family: F.mono, fill: C.muted, anchor: "end",
+    markup += seatMark(x + pad + G(78), rowY + rowH * 0.5, row.index, G(12));
+    markup += text(row.name, x + pad + G(106), rowY + rowH * 0.64, {
+      size: T(28), weight: 700, fill: C.paper,
     });
-    markup += text(format(row.score), x + cardW - 92, rowY + 44, {
+    markup += text(`${row.population} alive`, x + cardW - pad - G(194), rowY + rowH * 0.64, {
+      size: T(20), weight: 500, family: F.mono, fill: C.muted, anchor: "end",
+    });
+    markup += text(format(row.score), x + cardW - pad - 36, rowY + rowH * 0.66, {
       size: T(34), weight: 700, family: F.mono, fill: leader ? C.gold : C.paper, anchor: "end",
     });
-    rowY += 78;
+    rowY += rowStep;
   }
   markup += text(
-    `Score is all the ${resourceName()} still held by a population's living settlers.`,
-    x + 56, y + cardH - 26, { size: T(20), weight: 500, fill: C.muted });
+    big
+      ? `Score is all the ${resourceName()} still held by living settlers.`
+      : `Score is all the ${resourceName()} still held by a population's living settlers.`,
+    x + pad, footY, { size: footSize, weight: 500, fill: C.muted });
   markup += `</g>`;
   return markup;
 }
@@ -1571,8 +1967,8 @@ function endCard(frame) {
 function defs() {
   return `<defs>
     <linearGradient id="bug-scrim" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="rgba(12,9,5,.92)"/>
-      <stop offset="1" stop-color="rgba(12,9,5,0)"/>
+      <stop offset="0" stop-color="${C.bugScrimTop}"/>
+      <stop offset="1" stop-color="${C.bugScrimEnd}"/>
     </linearGradient>
   </defs>
   <style>
@@ -1623,8 +2019,11 @@ function drawHud(frame, index) {
   standingsSignature = signature;
 
   const railGap = 22;
-  const raceH = state.compact ? 288 : 330;
-  const feedH = state.compact ? 300 : 300;
+  // Dense gives its extra height to the two panels a first-time viewer reads —
+  // the race and the beats — and turns the emergence readouts sideways into the
+  // strip that is left. See emergence().
+  const raceH = dense() ? 380 : 330;
+  const feedH = dense() ? 320 : 300;
   const emergenceH = RAIL.h - raceH - feedH - railGap * 2;
   let markup = raceChart(frame, RAIL.x, RAIL.y, RAIL.w, raceH);
   markup += eventFeed(frame, RAIL.x, RAIL.y + raceH + railGap, RAIL.w, feedH);
@@ -1704,12 +2103,55 @@ function speak(frame) {
     + (state.sawStart
       ? ` ${frame.agents.length} settlers alive of ${state.startingPopulation}, ${lost} lost.`
       : ` ${frame.agents.length} settlers alive.`)
+    + (joinedLate()
+      ? ` This stream was joined at timestep ${frames[0].timestep};`
+        + " earlier timesteps were not delivered."
+      : "")
     + ` Inequality, as a Gini coefficient, ${gini.toFixed(3)}.`
     + " A hollow settler on the board has less than one timestep of food left.";
 }
 
 function currentIndex() {
   return Math.max(0, Math.min(frames.length - 1, Math.floor(state.cursor)));
+}
+
+/* The transport speaks in TIMESTEPS, not frame indices.
+ *
+ * The range used to carry indices while its aria-valuetext announced timesteps,
+ * so anything that fell back to valuenow/valuemax - and plenty does - read a
+ * different number from the one being spoken, on a control whose whole job is to
+ * say where you are. The two axes are not interchangeable either: a recording
+ * that skips, or a live spectator who joined at t40, has frame 0 at a timestep
+ * that is not zero. So the range's own min/max/value are timesteps and the
+ * played track is measured on the same axis. */
+function syncScrub() {
+  if (frames.length === 0) return;
+  controls.scrub.min = String(frames[0].timestep);
+  controls.scrub.max = String(frames.at(-1).timestep);
+}
+
+function played(index) {
+  const first = frames[0]?.timestep ?? 0;
+  const last = frames.at(-1)?.timestep ?? first;
+  const span = Math.max(1, last - first);
+  return Math.min(1, Math.max(0, ((frames[index]?.timestep ?? first) - first) / span));
+}
+
+/** The nearest recorded frame to a timestep. Nearest, not exact: a recording is
+ *  allowed to skip, and the range steps by one. */
+function indexOfTimestep(timestep) {
+  const exact = frameIndexByTimestep.get(timestep);
+  if (exact !== undefined) return exact;
+  let best = 0;
+  let bestGap = Infinity;
+  for (let index = 0; index < frames.length; index += 1) {
+    const gap = Math.abs(frames[index].timestep - timestep);
+    if (gap < bestGap) {
+      bestGap = gap;
+      best = index;
+    }
+  }
+  return best;
 }
 
 function onFrameEntered(index, now) {
@@ -1767,22 +2209,24 @@ function tick() {
   if (index !== state.lastDrawnIndex) {
     state.lastDrawnIndex = index;
     onFrameEntered(index, now);
-    controls.scrub.value = String(index);
-    const span = Math.max(1, frames.length - 1);
-    controls.scrub.style.setProperty("--played", `${(index / span) * 100}%`);
+    controls.scrub.value = String(frames[index].timestep);
+    controls.scrub.style.setProperty("--played", `${played(index) * 100}%`);
     // Mark the lead changes on the timeline itself, so the shape of the match is
     // visible from the transport and not only from the chart.
     if (markedLeads !== events.length) {
       markedLeads = events.length;
       const marks = events
         .filter((event) => event.kind === "lead")
-        .map((event) => (event.index / span) * 100);
+        .map((event) => played(event.index) * 100);
       controls.scrub.style.setProperty("--marks", marks.length === 0
         ? "none"
         : marks.map((at) => `linear-gradient(${C.gold}, ${C.gold}) ${at}% 0 / 2px 100% no-repeat`)
           .join(", "));
     }
     // A bare "62" tells a screen-reader user nothing; name the unit and the end.
+    // The range's OWN min/max/value are timesteps too (see syncScrub) — they used
+    // to be frame indices, so any assistive technology that fell back to
+    // valuenow read a different number from the one valuetext announced.
     controls.scrub.setAttribute(
       "aria-valuetext",
       `timestep ${frames[index].timestep} of `
@@ -1851,7 +2295,8 @@ controls.play.addEventListener("click", () => {
 });
 controls.back.addEventListener("click", () => seek(Math.floor(state.cursor) - 1));
 controls.forward.addEventListener("click", () => seek(Math.floor(state.cursor) + 1));
-controls.scrub.addEventListener("input", () => seek(Number(controls.scrub.value)));
+controls.scrub.addEventListener("input", () => seek(indexOfTimestep(Number(controls.scrub.value))));
+controls.text.addEventListener("click", () => setLargeText(!state.largeText));
 controls.speed.addEventListener("click", () => {
   state.speed = SPEEDS[(SPEEDS.indexOf(state.speed) + 1) % SPEEDS.length];
   controls.speed.innerHTML = `${state.speed}&times;`;
@@ -1872,7 +2317,14 @@ function fail(message, detail = "") {
   notice.innerHTML = escapeText(message)
     + (shown ? ` <code>${escapeText(shown)}</code>` : "")
     + '<span class="hint">Reload to try again.</span>';
+  // Take the transport away and MOVE THE FOCUS with it. A keyboard user standing
+  // on the play button when the stream died was left focused on an element that
+  // had just been hidden: the focus ring vanished, tabbing restarted from the
+  // top of the document, and the message that had replaced the controls was
+  // never reached. role="alert" announces it; this makes it findable.
+  const hadFocus = controls.container.contains(document.activeElement);
   controls.container.hidden = true;
+  if (hadFocus || document.activeElement === document.body) notice.focus();
 }
 
 function ready() {
@@ -2022,6 +2474,13 @@ async function loadArtifact(url) {
 
 async function boot() {
   setPlaying(!reducedMotion);
+  let remembered = false;
+  try {
+    remembered = sessionStorage.getItem(LARGE_TEXT) === "1";
+  } catch (error) {
+    // Storage denied by the embed's sandbox; start from the default.
+  }
+  setLargeText(remembered);
   lastTick = performance.now();
   // A timer, not requestAnimationFrame: a backgrounded or headless tab throttles
   // rAF to a few frames a second and starves the interpolation. 16ms rather

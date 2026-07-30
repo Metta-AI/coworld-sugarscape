@@ -52,6 +52,7 @@
   --border: #4a3620;
   --panel: rgba(20, 15, 8, 0.86);
   --gold: #e8a838;
+  --gold-wash: rgba(232, 168, 56, 0.16);
   --track-fill: #e8a838;
   --track-bed: #4a4034;
   --display: "Space Grotesk", "Avenir Next", "Segoe UI", system-ui, sans-serif;
@@ -143,7 +144,15 @@ html, body {
   font: 600 clamp(11px, 1vw, 14px)/1 var(--mono);
   cursor: pointer;
 }
-.controls button:hover { background: rgba(232, 168, 56, 0.16); }
+.controls button:hover { background: var(--gold-wash); }
+/* The larger-text switch is a toggle, so it has to LOOK toggled — aria-pressed
+   alone is invisible to everyone not using assistive technology. */
+.controls button[aria-pressed="true"] {
+  border-color: var(--gold);
+  background: var(--gold-wash);
+  color: var(--gold);
+}
+#text-size b { font-weight: 700; font-size: 1.24em; }
 /* A real outline, not only a box-shadow: forced-colors mode drops shadows, and
    a focus ring that disappears there is no focus ring. */
 .controls button:focus-visible {
@@ -191,9 +200,12 @@ html, body {
   border-radius: 50%;
   background: var(--gold);
 }
+/* 24, not the 20 this used to carry: SC 2.5.8 measures the TARGET, and Firefox
+   renders this thumb at exactly the size given. WebKit needs the negative
+   margin to centre a thumb taller than its track; Gecko centres it itself. */
 #scrub::-moz-range-thumb {
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   border: 2px solid var(--ink);
   border-radius: 50%;
   background: var(--gold);
@@ -238,6 +250,12 @@ html, body {
   font-family: var(--mono);
   color: var(--gold);
   overflow-wrap: anywhere;
+}
+/* fail() moves the focus here, so the ring has to be real and visible — it is
+   the only thing on screen at that point. */
+.notice:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
 }
 .notice:empty { display: none; }
 .controls[hidden] { display: none; }

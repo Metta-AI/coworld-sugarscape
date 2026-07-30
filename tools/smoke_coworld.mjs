@@ -117,9 +117,18 @@ const canvasContext = new Proxy({
   get: (target, key) => (key in target ? target[key] : () => {}),
   set: () => true,
 });
-function fakeElement() {
+// Elements are MEMOISED BY ID. Handing out a fresh stub per lookup made every
+// attribute the viewer sets - the scrub's announced value, the toggle's pressed
+// state, where a failure puts the focus - unobservable from here.
+const elements = new Map();
+const stageBox = { width: 1600 };
+function fakeElement(id = "") {
   const classes = new Set();
+  const attributes = new Map();
   return new Proxy({
+    id,
+    attributes,
+    focused: 0,
     classList: {
       add: (name) => classes.add(name),
       remove: (name) => classes.delete(name),
@@ -128,13 +137,19 @@ function fakeElement() {
     },
     style: { setProperty() {}, removeProperty() {}, getPropertyValue: () => "" },
     getContext: () => canvasContext,
-    getBoundingClientRect: () => ({ left: 0, top: 0, width: 1, height: 1 }),
-    querySelector: () => fakeElement(),
-    setAttribute() {},
+    // The stage's width is what chooses the density ramp, so the suite has to be
+    // able to move it.
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: stageBox.width, height: 1 }),
+    querySelector: (selector) => elementFor(selector.replace(/^#/, "")),
+    setAttribute: (name, value) => attributes.set(name, String(value)),
+    getAttribute: (name) => (attributes.has(name) ? attributes.get(name) : null),
     addEventListener() {},
+    focus() { this.focused += 1; },
+    contains: () => false,
     width: 0,
     height: 0,
     value: "0",
+    min: "0",
     max: "0",
     innerHTML: "",
     textContent: "",
@@ -143,12 +158,39 @@ function fakeElement() {
     set: (target, key, value) => { target[key] = value; return true; },
   });
 }
+function elementFor(id) {
+  if (!elements.has(id)) elements.set(id, fakeElement(id));
+  return elements.get(id);
+}
+// A session-storage stub that can also be made to THROW, which is what a
+// sandboxed iframe with storage denied actually does.
+const storage = new Map();
+const sessionStorageStub = {
+  denied: false,
+  getItem(key) {
+    if (sessionStorageStub.denied) throw new Error("storage denied");
+    return storage.has(key) ? storage.get(key) : null;
+  },
+  setItem(key, value) {
+    if (sessionStorageStub.denied) throw new Error("storage denied");
+    storage.set(key, String(value));
+  },
+  removeItem(key) {
+    if (sessionStorageStub.denied) throw new Error("storage denied");
+    storage.delete(key);
+  },
+};
+// A media query the suite can flip, so the reduced-motion LISTENER is covered
+// rather than only the value it happened to have at load.
+const motion = { matches: false, listeners: [] };
 const viewerContext = vm.createContext({
   console,
   document: {
     createElement: () => fakeElement(),
-    getElementById: () => fakeElement(),
-    querySelector: () => fakeElement(),
+    getElementById: (id) => elementFor(id),
+    querySelector: (selector) => elementFor(selector.replace(/^#/, "")),
+    activeElement: null,
+    body: null,
   },
   // The sandbox exercises the pure model; setInterval is stubbed out below so
   // playback never starts.
@@ -157,6 +199,12 @@ const viewerContext = vm.createContext({
   location: { host: "localhost", protocol: "http:", pathname: "/client/global", search: "" },
   performance: { now: () => 0 },
   URLSearchParams,
+  sessionStorage: sessionStorageStub,
+  matchMedia: (query) => ({
+    media: query,
+    get matches() { return motion.matches; },
+    addEventListener: (name, fn) => motion.listeners.push(fn),
+  }),
   fetch: () => Promise.reject(new Error("no network in the sandbox")),
   // Real timers, driven by hand below. Stubbing these to no-ops made every
   // timer-based path - the silence timeout, the idle settle, the end-card hold -
@@ -165,6 +213,13 @@ const viewerContext = vm.createContext({
   setTimeout: (fn, delay) => { viewerTimers.pending.push({ fn, delay }); return viewerTimers.pending.length; },
   clearTimeout: (id) => { if (id) viewerTimers.pending[id - 1] = null; },
 });
+viewerContext.fireMotionChange = (matches) => {
+  motion.matches = matches;
+  for (const listener of motion.listeners) listener({ matches });
+};
+viewerContext.setStageWidth = (width) => { stageBox.width = width; };
+viewerContext.denyStorage = (denied) => { sessionStorageStub.denied = denied; };
+viewerContext.elementFor = elementFor;
 const viewerScript = viewerHtml.match(/<script>([\s\S]*)<\/script>/)?.[1];
 assert.ok(viewerScript, "viewer script must be embedded");
 vm.runInContext(viewerScript, viewerContext);
@@ -375,6 +430,167 @@ assert.ok(
   tempo.dwellAtFour >= tempo.animAtFour * 620,
   "the dwell is floored to the length of the walk it has to show",
 );
+
+/* The transport announces TIMESTEPS, and its own min/max/value are timesteps.
+ *
+ * They used to be frame INDICES while aria-valuetext said timestep, so anything
+ * falling back to valuenow read a different number from the one spoken - and on
+ * a stream that does not begin at zero the two axes are not even parallel. */
+const transport = JSON.parse(vm.runInContext(`
+  resetStream();
+  for (let step = 20; step <= 30; step += 1) {
+    recordFrame(Object.assign(${sandboxFrame(0, [])}, {
+      timestep: step, maxTimestep: 40,
+      agents: [{ id: 1, slot: 0, cell: 0, sugar: step, spice: 0, age: 1,
+        decisionModel: 'p0', sugarMetabolism: 1, spiceMetabolism: 0, movement: 1,
+        vision: 1, depressed: false, sick: false, race: -1, sex: 'male', tribe: -1 }],
+    }));
+  }
+  state.playing = false;
+  state.cursor = 4;
+  tick();
+  const scrub = document.getElementById("scrub");
+  JSON.stringify({
+    min: scrub.min,
+    max: scrub.max,
+    value: scrub.value,
+    valuetext: scrub.getAttribute("aria-valuetext"),
+    seekMid: (() => { seek(indexOfTimestep(27)); return frames[currentIndex()].timestep; })(),
+    seekMissing: (() => { seek(indexOfTimestep(99)); return frames[currentIndex()].timestep; })(),
+    joinedLate: joinedLate(),
+  });
+`, viewerContext));
+assert.equal(transport.min, "20", "the range's floor is the first timestep delivered");
+assert.equal(transport.max, "30", "and its ceiling the last");
+assert.equal(transport.value, "24", "its value is a timestep, not a frame index");
+assert.equal(transport.valuetext, "timestep 24 of 40",
+  "and what it announces must be the same number it carries");
+assert.equal(transport.seekMid, 27, "seeking by timestep lands on that timestep");
+assert.equal(transport.seekMissing, 30, "and an unrecorded one snaps to the nearest frame");
+// A spectator handed a stream that starts at t20 of a 40-timestep match has been
+// cut off at the HEAD by the server's live backlog cap. Nothing used to say so,
+// and every "of 64 survived" total silently became a window.
+assert.ok(transport.joinedLate, "a stream that does not start at t0 must be flagged");
+const lateNotice = vm.runInContext(`
+  drawHud(frames.at(-1), frames.length - 1); standingsLayer.innerHTML;
+`, viewerContext);
+assert.match(lateNotice, /joined at t20/,
+  "and the overlay must say the earlier timesteps were never delivered");
+assert.match(
+  vm.runInContext("speak(frames.at(-1)); document.getElementById('commentary').textContent",
+    viewerContext),
+  /joined at timestep 20/,
+  "the spoken broadcast must carry it too",
+);
+
+/* The event feed is a LEDGER, not a window.
+ *
+ * Its rows used to sum to fewer deaths than the count the emergence panel
+ * printed two panels below, with nothing on screen to reconcile them. Every beat
+ * the feed does not name individually is now inside a summary row's totals. */
+const ledger = JSON.parse(vm.runInContext(`
+  resetStream();
+  const living = (count, step) => Array.from({ length: count }, (_, index) => ({
+    id: index, slot: index % 2, cell: index % 4, sugar: step, spice: 0, age: 1,
+    decisionModel: 'p' + (index % 2), sugarMetabolism: 1, spiceMetabolism: 0,
+    movement: 1, vision: 1, depressed: false, sick: false, race: -1,
+    sex: 'male', tribe: -1,
+  }));
+  // Thirty timesteps, one settler lost on each of the last twenty: far more
+  // beats than the feed has rows.
+  for (let step = 0; step <= 30; step += 1) {
+    recordFrame(Object.assign(${sandboxFrame(0, [])}, {
+      timestep: step, maxTimestep: 40,
+      agents: living(Math.max(4, 24 - Math.max(0, step - 10)), step),
+      stats: { giniCoefficient: 0.3, agentStarvationDeaths: 1 },
+    }));
+  }
+  const total = events.reduce((sum, e) => sum + (e.kind === "death" ? e.count : 0), 0);
+  drawHud(frames.at(-1), frames.length - 1);
+  JSON.stringify({
+    total,
+    deaths: events.filter((e) => e.kind === "death").length,
+    // Every row width the panel actually renders, at both densities.
+    rows: [4, 3].map((slots) => feedRows(events, slots)
+      .map((row) => (row.kind === "lead" ? 0 : row.count))),
+    leads: [4, 3].map((slots) => feedRows(events, slots)
+      .reduce((sum, row) => sum + (row.kind === "lead" ? 1 : row.leads ?? 0), 0)),
+    counts: [4, 3].map((slots) => feedRows(events, slots).length),
+  });
+`, viewerContext));
+assert.ok(ledger.deaths > 6,
+  `the fixture must produce more beats than the feed has rows, got ${ledger.deaths}`);
+for (const [index, rows] of ledger.rows.entries()) {
+  assert.equal(
+    rows.reduce((sum, value) => sum + value, 0),
+    ledger.total,
+    `the feed's rows must account for every loss: ${rows} vs ${ledger.total}`,
+  );
+  assert.ok(ledger.counts[index] > 1,
+    "and the panel must be full whenever there is more than one beat to show");
+}
+
+/* Density is a RAMP SWITCH, not a scale factor, and the viewer's own larger-text
+ * control forces it at any size. */
+const density = JSON.parse(vm.runInContext(`
+  setStageWidth(1600); state.largeText = false; measureDensity();
+  const base = [17, 25, 40].map((size) => T(size));
+  setStageWidth(640); measureDensity();
+  const floor = [17, 25, 40].map((size) => T(size));
+  setStageWidth(1600); measureDensity();
+  setLargeText(true);
+  const forced = [17, 25, 40].map((size) => T(size));
+  const pressed = document.getElementById("text-size").getAttribute("aria-pressed");
+  setLargeText(false);
+  JSON.stringify({ base, floor, forced, pressed, off: [17, 25, 40].map((s) => T(s)) });
+`, viewerContext));
+assert.deepEqual(density.base, [17, 25, 40], "at full size the ramp is the design's own sizes");
+// 34 stage units is 11.3 CSS px once the 1920-unit stage is letterboxed into a
+// 640px embed. Below that the rail was printing six-pixel type.
+assert.ok(density.floor.every((size) => size >= 34),
+  `no type may fall below 34 units at the embed floor, got ${density.floor}`);
+assert.ok(density.floor[0] < density.floor[1] && density.floor[1] < density.floor[2],
+  `the floor ramp must keep its hierarchy, got ${density.floor}`);
+assert.deepEqual(density.forced, density.floor,
+  "the larger-text control must reach the same ramp at full size");
+assert.equal(density.pressed, "true", "and report its state to assistive technology");
+assert.deepEqual(density.off, density.base, "turning it off must restore the design's sizes");
+// A sandboxed iframe can refuse storage outright; the toggle must still work.
+assert.doesNotThrow(
+  () => vm.runInContext("denyStorage(true); setLargeText(true); setLargeText(false); denyStorage(false);",
+    viewerContext),
+  "denied session storage must not take the toggle - or the overlay - down",
+);
+
+// Reduced motion is read LIVE. Sampling it once at load left the replay
+// animating for the rest of the session for someone who had just asked it to
+// stop.
+const motionResponse = JSON.parse(vm.runInContext(`
+  state.playing = true;
+  fireMotionChange(true);
+  const stopped = state.playing;
+  fireMotionChange(false);
+  JSON.stringify({ stopped, resumed: state.playing });
+`, viewerContext));
+assert.equal(motionResponse.stopped, false,
+  "turning reduced motion ON must stop the replay advancing");
+assert.equal(motionResponse.resumed, true, "and turning it off must resume it");
+
+// A failure takes the transport away, so it has to take the focus with it -
+// otherwise a keyboard user is left standing on a hidden button and never
+// reaches the message that replaced it.
+const failure = JSON.parse(vm.runInContext(`
+  document.getElementById("notice").focused = 0;
+  fail("The episode stream closed before sending any frames.");
+  JSON.stringify({
+    hidden: document.getElementById("controls").hidden === true,
+    focused: document.getElementById("notice").focused,
+    text: document.getElementById("notice").innerHTML,
+  });
+`, viewerContext));
+assert.ok(failure.hidden, "a failure must hide the transport");
+assert.equal(failure.focused, 1, "and move the focus to the message");
+assert.match(failure.text, /Reload to try again/);
 
 const frames = [];
 const lateFrames = [];
