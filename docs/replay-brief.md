@@ -42,54 +42,69 @@ a concrete bar rather than a vibe.
 | Skeleton | one `<svg>` at `H=1180`, `W=round(H*16/9)`, `TOP_INSET = MARGIN + 74` derived from `BUG_H=58` | one 1920×1080 stage: canvas board + SVG HUD overlay in the same coordinate space, `TOP_INSET` derived from `BUG_H` |
 | Scorebug | rank (mono) · identity dot · name (display, clipped) · score 30px · leader crown + `▲ +margin` | same, on the wealth axis, population as the secondary |
 | Choreography | walk-in → work → fly-home arc → gain pop → spotlight, effect-on-arrival (`revealDelayMs`) | settlers interpolate between timesteps (they jump several cells, so without it they teleport); a starving settler goes hollow before it dies; death leaves an expanding ring |
-| Timing levers | `animFactor = max(1/speed, 1/2)`; `turnDwellMs = max(BASE/speed, beat)`, `BASE_TURN_MS=2600`, `READ_PAUSE=600` | same two levers, ported: motion capped at 2× real time, frame dwell floored to the walk length |
+| Timing levers | `animFactor = max(1/speed, 1/2)`; `turnDwellMs = max(BASE/speed, beat)`, `BASE_TURN_MS=2600`, `READ_PAUSE=600` | same two levers, ported: motion capped at 3× real time (`ANIM_MAX`), frame dwell floored to the walk length |
 | Ambient life | ~8 desynced loops (bob, roam, sway, smoke, glow, pulse), all `/ var(--speed)`, all killed by `prefers-reduced-motion` | **none, deliberately** — the lattice is a scientific plate and idle motion on it is noise; the movement in this game is the swarm itself |
 | Beat FX | ~10 keyframes (`chip-pop`, `gain-pop`, `curtain`, `roundbeat`, `endcard`, `stamp-pop`…), all `calc(Xs / var(--beat-speed,1))` | lead-change stinger, die-off callout, hold-on end card — speed-aware, in a beats layer kept SEPARATE from the standings layer so rebuilding one never restarts the other's animation |
 
 ## 0 — The replay brief (each bullet traced to engine truth)
 
-Recorded episode: 32×32, 100 timesteps, 64 agents, two policy populations.
+Recorded episode: 32×32, 100 timesteps, 64 agents, two policy populations, sugar AND
+spice. **Re-measured against `.build/replay.json` after the shipped variant changed.**
+An earlier revision of this section described the single-resource world the variant used
+to run, and every figure in it was wrong once `config.json` gained spice and grid-scaled
+peaks — under a heading promising each bullet was traced to a recording. The numbers below
+were recomputed from all 101 frames of the current one.
 
 1. **Standing axis — total living wealth (sugar + spice) per population.**
    `coworld.nim buildResults` scores `int(totalWealth)` over each slot's living agents,
    and `docs/coworld-protocol.md` confirms it. **Running ≠ win:** population count is the
-   visible race (16 v 16 at the end) but the SCORE is wealth (2334 v 2253). The scorebug
+   visible race (20 v 20 at the end) but the SCORE is wealth (5,994 v 4,894). The scorebug
    goes on wealth; population rides as the secondary figure.
 2. **Dramatic beats**, ranked by what actually happened in the recording:
-   - **Starvation deaths — the crush.** 32 of 64 agents die, all starvation (diffed
-     frame-to-frame; `stats.agentStarvationDeaths` confirms the cause). 28 of them go
-     before t40; the last four straggle in at t61, t64, t79 and t82. The dead die *far
-     from the sugar* — mean **13.07** cells to the nearest configured peak — while
-     survivors sit on it at **3.90**. (Metric: Euclidean distance in lattice cells to the
-     nearer of the two peaks in the recorded `environmentSugarPeaks`.) This is the single
-     loudest beat.
-   - **Lead changes — the race.** **4** of them: A leads at t0, B takes it at t2 and holds
-     to t62, A takes it, B retakes at t69, A takes it back at t71 and holds. Final margin
-     81 (3.5%). (An earlier draft said five and then listed four; four is correct.)
-   - **The migration.** Agents converge on the sugar mountain. This is the iconic
-     Sugarscape image and it is what the board must show.
-   - **Emergent selection.** Survivors have better vision (4.0 v 2.9) and lower metabolism
-     (2.19 v 2.81) than the dead. Nobody programmed that — it emerges.
-   - **Inequality.** Gini climbs 0.215 → 0.40, settling ~0.35; final wealth spread 1 → 287,
-     top 5 agents hold 31%. The founding result of the model.
+   - **Starvation deaths — the crush.** 24 of 64 agents die, all starvation (diffed
+     frame-to-frame; `stats.agentStarvationDeaths` confirms the cause). They fall on 21
+     separate timesteps between t6 and t75, 13 of them by t40, and never more than two in
+     one timestep. That shape is why the feed folds: a raw row per beat is 21 rows of
+     "1 settler starved", and the drama is the accumulation, not any single one.
+   - **Lead changes — the race.** **Zero.** B leads from t0 and never gives it up, closing
+     1,100 ahead (18.4%). No frame is tied. This matters for the design more than it looks:
+     the beat the broadcast is built to catch does not occur in the reference recording, so
+     every lead-change path — the stinger, the transport's gold marks, the chart's spell
+     bands, the end card's "won from behind" arc — is exercised only by the test suite.
+   - **The migration.** Agents converge on the resource. Sugar and spice sit on CROSSED
+     diagonals (`environmentSugarPeaks` `[[22,10,4],[10,22,4]]`, `environmentSpicePeaks`
+     `[[10,10,4],[22,22,4]]`), so a settler needing both cannot camp on one summit. This is
+     the iconic Sugarscape image and it is what the board must show.
+   - **Emergent selection.** Survivors have better vision (3.60 v 3.17) and markedly lower
+     metabolism (sugar 2.15 v 3.08, spice 2.10 v 3.17) than the dead, measured on their t0
+     endowments. Nobody programmed that — it emerges.
+   - **Inequality.** Gini climbs 0.140 → 0.299 at its peak and settles at 0.267; final
+     wealth spread 8 → 517, top five agents hold 21%. The founding result of the model.
+     Note the shipped world lands BELOW the viewer's 0.28 "richest hold most" threshold at
+     the buzzer, so the end card's spread sentence reads "spread fairly evenly" — correct,
+     and a reminder that those thresholds are the viewer's editorial line, not the engine's.
 3. **Board — a single shared 32×32 lattice.** `environment.nim cellId = x * height + y`
    (column-major; the incumbent viewer decodes this correctly). Cells carry
-   `[sugar, spice, pollution]`.
+   `[sugar, spice, pollution]`. Both resources peak at 4; 868 of 1,024 cells carry spice at
+   t0. Total sugar falls 2,297 → 1,860 and settles at 1,984; spice 2,298 → 1,850 → 2,021.
+   That plateau IS the carrying-capacity result, and the per-cell churn under it is real —
+   an audit once called the board "static" on the strength of the totals. Do not "fix" it.
 
-   **How many mountains a world has is a property of the SEED, not the config** — an
-   earlier draft of this brief got that wrong and a masthead string was built on it.
-   `environmentSugarPeaks` defaults to `[[35,15,4],[15,35,4]]`, both out of range on a
-   32-wide grid, and `configuration.nim:137-141` does **not** clamp or superpose them: it
-   **replaces** each out-of-range coordinate with `rng.randomInteger(0, width-1)`. In the
-   recorded episode they were re-seated to `[[15,17,4],[14,15,4]]` — 2.24 cells apart,
-   which is why that world has one massif. Another seed can put them anywhere. Render the
-   snapshot, and never assert the terrain's shape in copy.
+   **Do not assert the terrain's shape in copy** — but the reason is no longer the one an
+   earlier revision gave. That revision said the massif count was "a property of the SEED",
+   because `configuration.nim:138-141` REPLACES an out-of-range peak coordinate with a
+   random in-range one and the old defaults `[[35,15,4],[15,35,4]]` were both out of range
+   on a 32-wide grid. The shipped `config.json` now pins all four peaks inside the grid, so
+   that branch never fires and the terrain is fully determined by the config. The rule
+   survives on its own merits: the viewer renders whatever lattice it is handed, and a
+   variant may configure any number of peaks.
 4. **Readable entities — agents and sugar.** Per agent the frame carries id, cell, slot,
    age, sugar, spice, metabolism, movement, vision, sex, race, tribe, sick, depressed.
-   In the shipping variant **spice, pollution, social links, disease, depression, trade,
-   reproduction, races and tribes are all inert** (verified zero/absent across all 101
-   frames). Rendering controls for them is what makes the incumbent read as a lab tool.
-   The live signals are: position, wealth, metabolism, vision, age, and slot.
+   Spice is LIVE in the shipping variant (this changed; an earlier revision called it
+   inert). Still inert, verified absent across all 101 frames: pollution, social links,
+   disease, depression, trade, reproduction (24 deaths, **zero** births), races and tribes.
+   Rendering controls for those is what makes the incumbent read as a lab tool. The live
+   signals are: position, wealth, sugar, spice, metabolism, vision, age, and slot.
 5. **Who is "you" — the two policy slots.** `slots[]` carries the submitted display names
    ("Population A"/"Population B"). Agents map to a slot by `decisionModel`. Every agent on
    screen belongs to a named competitor; there is no unowned population in this variant.
@@ -102,8 +117,8 @@ Recorded episode: 32×32, 100 timesteps, 64 agents, two policy populations.
 | 2 | `coworld certify` requires a `/replay` WebSocket when no static bundle is declared (`runner.py replay_session_path`) | `coworld.nim` serves the spectator WS only at `/global`; `/replay` 404s | **P0, certification fails** |
 | 3 | Score = total living wealth per slot | No score is shown anywhere; the "Populations" panel is a bare colour legend with no numbers | **P0, North Star fail** |
 | 4 | The match is 100 scheduled timesteps | No clock, no progress toward the end | P1 |
-| 5 | 32 agents starve; the lead changes 4 times | No event feed, no callouts, no end card, no winner | P1 |
-| 6 | Spice, pollution, links, disease, depression, race, tribe are all inert in the shipping variant | 9 agent-colour modes, 2 cell modes and a links toggle, most of which render nothing | P2, misleads the viewer |
+| 5 | 24 agents starve across 21 timesteps; the lead never changes | No event feed, no callouts, no end card, no winner | P1 |
+| 6 | Pollution, links, disease, depression, race and tribe are inert in the shipping variant (spice is not) | 9 agent-colour modes, 2 cell modes and a links toggle, most of which render nothing | P2, misleads the viewer |
 | 7 | The embed is 16:9 and can be 640×360 | `grid-template-columns: minmax(440px,1fr) 340px` + a square board + three 120px charts | P1, unreadable at the embed floor |
 | 8 | `cellId = x*height + y` | `x = floor(cell/height), y = cell % height` | correct — not a bug |
 

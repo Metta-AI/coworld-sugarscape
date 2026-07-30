@@ -40,10 +40,13 @@ const C = {
   cardScrim: "rgba(10,7,4,.965)",  // full-stage dim behind the end card
   stingerBack: "rgba(16,12,6,.93)",
   rowBack: "rgba(20,15,8,.72)",    // a result row inside the card
-  wash: "rgba(246,234,210,.04)",   // the Lorenz square's fill
-  hairline: "rgba(246,234,210,.12)",
+  wash: "rgba(246,234,210,.07)",   // the Lorenz square's fill
+  hairline: "rgba(246,234,210,.34)",
   hairlineSoft: "rgba(246,234,210,.16)",
-  guide: "rgba(246,234,210,.22)",  // the equality diagonal
+  // The equality diagonal is the whole POINT of a Lorenz chart - without it the
+  // gold curve is an unreferenced squiggle - and it measured 1.84:1. C.muted is
+  // 6.7:1 on the panel; a non-text graphic needs 3.
+  guide: "#a8977c",               // the equality diagonal
   axis: "rgba(246,234,210,.42)",   // the chart's baseline, the strongest rule
   trackBed: "rgba(246,234,210,.14)",
   bugScrimTop: "rgba(12,9,5,.92)",
@@ -91,10 +94,24 @@ const MARGIN = 30;
 const BUG_H = 92;
 const TOP_INSET = BUG_H + 22;
 const KEY_H = 34;
-const BOARD = { x: MARGIN, y: TOP_INSET + KEY_H, w: H - TOP_INSET - KEY_H - MARGIN,
-  h: H - TOP_INSET - KEY_H - MARGIN };
+/* The transport gets its OWN LANE.
+ *
+ * The floating pill is laid out in CSS percentages of the stage; the board is
+ * laid out here in stage units; the two were never reconciled, so the pill sat
+ * ON the board — two lattice rows at 1280, and THREE at 640, where its pixel
+ * floors bite while the board scales down. The compact variant occluded more of
+ * the primary read surface than the full-size one.
+ *
+ * 104 units is what the pill needs at the embed floor: a 24px minimum target
+ * plus padding and border is ~34 CSS px, and 34/360 of a 1080-unit stage is 102.
+ * Reserving it costs the board 11% of its height everywhere and buys back every
+ * row of the lattice. The CSS lane below is derived from the same constant.
+ */
+const TRANSPORT_H = 104;
+const BOARD_SIZE = H - TOP_INSET - KEY_H - MARGIN - TRANSPORT_H;
+const BOARD = { x: MARGIN, y: TOP_INSET + KEY_H, w: BOARD_SIZE, h: BOARD_SIZE };
 const RAIL = { x: BOARD.x + BOARD.w + 26, y: TOP_INSET, w: W - (BOARD.x + BOARD.w + 26) - MARGIN };
-RAIL.h = H - TOP_INSET - MARGIN;
+RAIL.h = H - TOP_INSET - MARGIN - TRANSPORT_H;
 
 // ---------------------------------------------------------------------------
 // Tempo — two independent levers (the Agricogla model).
@@ -118,9 +135,11 @@ let reducedMotion = Boolean(motionQuery && motionQuery.matches);
 if (motionQuery) {
   const onMotionChange = (event) => {
     reducedMotion = event.matches;
-    // Honour it immediately rather than at the next beat: if it just went on,
-    // stop advancing; if it just went off, resume.
-    if (frames.length > 0) setPlaying(!reducedMotion);
+    // ONE direction only. Turning the preference on stops the replay at once,
+    // which is the whole point. Turning it off used to force-START playback -
+    // over an explicit pause, for anyone whose OS flips the setting on a
+    // schedule. Resuming is the viewer's decision, not the media query's.
+    if (reducedMotion && frames.length > 0) setPlaying(false);
   };
   // Safari before 14 has no addEventListener on a MediaQueryList.
   if (typeof motionQuery.addEventListener === "function") {
@@ -257,13 +276,59 @@ function dense() {
   return state.compact || state.largeText;
 }
 
+/* Where the two ramps meet.
+ *
+ * This was a bare `width < 900`, and it was a CLIFF rather than a floor: one
+ * pixel above it the sparse ramp applied raw, so a 901-unit stage printed the
+ * smallest label at 7.0 CSS px - worse than the 640 floor the compact ramp was
+ * built to cure, and squarely in the 900-1300 band most article embeds live in.
+ *
+ * The threshold is not a taste call, it is arithmetic. The smallest size the
+ * sparse ramp carries is MIN_SPARSE units on a 1920-unit stage, so it clears
+ * MIN_TYPE_PX only once the stage is MIN_SPARSE / MIN_TYPE_PX * 1920 wide.
+ * Below that width the compact ramp takes over, which is always LARGER, never
+ * smaller. Both sides of the switch are legible; only the content differs.
+ */
+const MIN_TYPE_PX = 11;
+const MIN_SPARSE = 18;
+const DENSE_BELOW = Math.ceil((MIN_TYPE_PX / MIN_SPARSE) * W);   // 1174
+
 function measureDensity() {
   const width = document.getElementById("stage").getBoundingClientRect().width;
-  const compact = width > 0 && width < 900;
+  const compact = width > 0 && width < DENSE_BELOW;
   if (compact === state.compact) return;
   state.compact = compact;
+  syncLargeText();
   standingsSignature = "";
   beatsSignature = "";
+}
+
+/** Reflect the switch honestly, INCLUDING when it can do nothing.
+ *
+ *  Below DENSE_BELOW the compact ramp is already in force and is already the
+ *  largest this viewer has, so pressing the button changed not one pixel — while
+ *  it still reported `aria-pressed="true"` and announced "Larger text, on". A
+ *  control that announces a state change it cannot deliver is worse than no
+ *  control. It says so instead, and the name leads with the visible glyphs so
+ *  speech input can reach it (SC 2.5.3); the state comes from aria-pressed
+ *  alone, rather than being announced twice. */
+function syncLargeText() {
+  const inert = state.compact;
+  controls.text.disabled = inert;
+  controls.text.setAttribute("aria-pressed", state.largeText ? "true" : "false");
+  controls.text.setAttribute(
+    "aria-label",
+    inert
+      ? "AA, larger text — already at the largest size this embed can show"
+      : "AA, larger text",
+  );
+  controls.text.setAttribute(
+    "title",
+    inert
+      ? "This embed is already showing the largest type this viewer has."
+      : "Larger text — sets the broadcast in a bigger type ramp and drops the"
+        + " finer annotations to make room",
+  );
 }
 
 /* Larger text.
@@ -280,11 +345,7 @@ const LARGE_TEXT = "sugarscape.broadcast.largeText";
 
 function setLargeText(on) {
   state.largeText = on;
-  controls.text.setAttribute("aria-pressed", on ? "true" : "false");
-  controls.text.setAttribute(
-    "aria-label",
-    on ? "Larger text, on" : "Larger text, off",
-  );
+  syncLargeText();
   try {
     if (on) sessionStorage.setItem(LARGE_TEXT, "1");
     else sessionStorage.removeItem(LARGE_TEXT);
@@ -425,22 +486,50 @@ function deriveEvents(index) {
     });
   }
 
-  const before = ranked(previous);
+  /* A lead change is measured against the last frame that HAD a leader.
+   *
+   * Comparing adjacent frames and suppressing whenever either was tied dropped
+   * the change entirely when the lead passed THROUGH a tie: A ahead, level, B
+   * ahead emitted nothing, because ranked()'s slot-index tiebreak keeps A first
+   * through the tie and the frame where B pulls ahead is compared against a tied
+   * one and suppressed. The chart's count, the transport's gold marks and the
+   * end card's "won from behind" arc all under-reported. Scanning back to the
+   * last unambiguous leader costs a short walk over wealthSeries, which is
+   * already computed, and gets the transit right. */
   const after = ranked(frame);
-  // ranked() breaks ties by slot index, so a momentary tie would otherwise
-  // "change" the leader twice against a leader who never actually lost it.
-  const tied = (after.length > 1 && after[0].score === after[1].score)
-    || (before.length > 1 && before[0].score === before[1].score);
-  if (!tied && before[0] && after[0] && before[0].index !== after[0].index) {
+  const leader = leaderOf(wealthSeries[index]?.scores);
+  if (leader < 0) return;
+  let previousLeader = -1;
+  for (let step = index - 1; step >= 0; step -= 1) {
+    const candidate = leaderOf(wealthSeries[step]?.scores);
+    if (candidate >= 0) {
+      previousLeader = candidate;
+      break;
+    }
+  }
+  if (previousLeader >= 0 && previousLeader !== leader) {
     events.push({
       index,
       timestep: frame.timestep,
       kind: "lead",
-      slot: after[0].index,
-      name: after[0].name,
+      slot: leader,
+      name: frame.slots[leader]?.name ?? `Population ${leader + 1}`,
       margin: after[0].score - (after[1]?.score ?? 0),
     });
   }
+}
+
+/** Which slot leads on these scores, or -1 when nothing does. A tie has no
+ *  leader: ranked() breaks ties by slot index, and treating that as a result
+ *  invented two lead changes around a leader who never lost it. */
+function leaderOf(scores) {
+  if (!Array.isArray(scores) || scores.length === 0) return -1;
+  let best = 0;
+  for (let slot = 1; slot < scores.length; slot += 1) {
+    if (scores[slot] > scores[best]) best = slot;
+  }
+  const shared = scores.some((score, slot) => slot !== best && score === scores[best]);
+  return shared ? -1 : best;
 }
 
 function recordFrame(frame) {
@@ -484,19 +573,36 @@ function recordFrame(frame) {
   frames.push(frame);
   const index = frames.length - 1;
 
-  // Take the running maximum rather than frame zero's: a spectator joining a
-  // live episode past the server's backlog cap never sees frame zero, and would
-  // otherwise normalise the whole colour ramp against a partly-eaten world.
-  // The artifact path overrides both from config, which is authoritative.
   if (frame.timestep === 0) state.sawStart = true;
-  // Only frame zero, or the config on the artifact path, can say how many
-  // settlers the episode began with. A spectator joining past the server's live
-  // backlog cap has neither, and taking the largest population seen would print
-  // "32 of 36 survived" for an episode that started with 64.
-  state.startingPopulation = Math.max(state.startingPopulation, frame.agents.length);
-  for (const cell of frame.cells) {
-    if (cell[0] > state.maxSugar) state.maxSugar = cell[0];
-    if (cell[1] > state.maxSpice) state.maxSpice = cell[1];
+  /* The world's SCALE comes from the server, not from the window in hand.
+   *
+   * Both of these used to be inferred - a running maximum over whatever cells
+   * and agents had arrived - under a comment claiming that solved the
+   * partly-eaten-world problem. It did not; it normalised against a partly-eaten
+   * world with extra steps, and the population line was strictly worse: it took
+   * the largest headcount ever SEEN, which is the exact "32 of 36 survived"
+   * fiction the comment beside it warned about, and which any variant with
+   * reproduction turns from latent into wrong. The server stamps
+   * environmentMaxSugar, environmentMaxSpice and startingAgents on every frame
+   * now, so read them; the inference is only a fallback for an older server, and
+   * it no longer claims to have seen the start. */
+  const declaredSugar = Number(frame.environmentMaxSugar ?? 0);
+  const declaredSpice = Number(frame.environmentMaxSpice ?? 0);
+  if (declaredSugar > 0) state.maxSugar = declaredSugar;
+  if (declaredSpice > 0) state.maxSpice = Math.max(state.maxSpice, declaredSpice);
+  const declaredAgents = Number(frame.startingAgents ?? 0);
+  if (declaredAgents > 0) {
+    state.startingPopulation = declaredAgents;
+  } else if (frame.timestep === 0 || state.startingPopulation === 0) {
+    // No declaration: frame zero is authoritative, and anything else is a guess
+    // that must not be presented as a denominator - see sawStart.
+    state.startingPopulation = frame.agents.length;
+  }
+  if (declaredSugar <= 0 || declaredSpice <= 0) {
+    for (const cell of frame.cells) {
+      if (declaredSugar <= 0 && cell[0] > state.maxSugar) state.maxSugar = cell[0];
+      if (declaredSpice <= 0 && cell[1] > state.maxSpice) state.maxSpice = cell[1];
+    }
   }
   // maxTimestep is stamped on every frame by the game server so the clock counts
   // to the SCHEDULED end of the match, not to whatever tick this recording
@@ -683,7 +789,11 @@ function interpolate(previous, frame, t) {
 }
 
 function drawBoard(frame, previous, t, now) {
-  const cell = BOARD.w / frame.width;
+  // One cell size for both axes is only right for a SQUARE world.
+  // initEnvironment takes independent width and height, and gui.py computes its
+  // site height and width separately, so a 64x32 world filled the top half of
+  // the plate and a 32x64 one ran off the bottom.
+  const cell = Math.min(BOARD.w / frame.width, BOARD.h / frame.height);
 
   context.setTransform(RENDER_SCALE, 0, 0, RENDER_SCALE, 0, 0);
   context.clearRect(0, 0, W, H);
@@ -732,7 +842,17 @@ function drawBoard(frame, previous, t, now) {
   // one channel the terrain already uses. The ring makes it structural: every
   // settler carries the surround's own ink, so it reads as a body on a plate at
   // any resource depth and under any colour-vision deficiency.
-  const ring = Math.max(0.8, cell * 0.07);
+  // A PAPER ring, not an ink one.
+  //
+  // A red settler on the spice peak measured 1.07:1 against the ground it stood
+  // on, and the ink ring meant to separate them is itself only 2.55:1 there. The
+  // plate's own paper is the one value that contrasts with every cell the ramp
+  // can produce: 15.6:1 against full spice, 1.9:1 against bare sugar but backed
+  // by the dot's own colour underneath it. A first attempt paired it with an
+  // inner ink ring at cell*0.13 and the pair swallowed the body - at the embed
+  // floor the settlers read as white asterisks. The ring has to stay thin
+  // enough that the seat colour is still what you see.
+  const ring = Math.max(1, cell * 0.075);
   for (const body of bodies) {
     const seat = seatOf(body.slot);
     const size = radius * (0.82 + 0.36 * Math.min(1, Math.log10(1 + body.wealth) / 2.4));
@@ -748,7 +868,7 @@ function drawBoard(frame, previous, t, now) {
       context.fillStyle = seat.board;
       context.fill();
       context.lineWidth = ring;
-      context.strokeStyle = C.ink;
+      context.strokeStyle = C.paper;
       context.stroke();
     }
   }
@@ -773,6 +893,14 @@ function format(value) {
  *  inert in most variants, so saying "sugar plus spice" over a board with no
  *  spice on it is worse than saying what a viewer can see. One source, used by
  *  the masthead, the chart caption and the end card, so they cannot disagree. */
+/** Total wealth held by everything alive. Used to tell an engine gini SENTINEL
+ *  (0 for an empty world, 1 for a destitute one) from a real measurement. */
+function wealthTotal(frame) {
+  let total = 0;
+  for (const agent of frame.agents) total += agent.sugar + agent.spice;
+  return total;
+}
+
 function resourceName() {
   return state.maxSpice > 0 ? "sugar + spice" : "sugar";
 }
@@ -820,6 +948,14 @@ function wrap(content, width, size) {
   return lines;
 }
 
+/** "a" or "an" for a spoken number. `an 18.4% margin`, not `a 18.4% margin` -
+ *  8, 11 and 18 are the leading forms that take "an", and this string is the
+ *  largest sentence on the finish card. */
+function article(value) {
+  const digits = String(value).replace(/[^0-9]/g, "");
+  return /^(8|11|18)/.test(digits) ? "an" : "a";
+}
+
 function eyebrow(content, x, y) {
   return text(content.toUpperCase(), x, y, {
     size: T(21), weight: 700, fill: C.muted, spacing: T(21) > 24 ? 2.0 : 2.6, outline: 3,
@@ -849,7 +985,7 @@ function boardKey(frame) {
   const y = TOP_INSET + KEY_H - 12;
   let x = BOARD.x + 2;
   let markup = "";
-  const size = T(17);
+  const size = T(18);
   const dot = G(6);
   const gap = G(20);
   const swatchW = G(13);
@@ -874,10 +1010,23 @@ function boardKey(frame) {
     // of words the moment the ramp grows.
     x += advance(label, size) + gap;
   }
+  // A WIDTH BUDGET. This accumulated x with no measurement against the plate, so
+  // it terminated 16 units inside the board's right edge with the shipped names
+  // and ran clean off it with anything longer — and the names come from the
+  // manifest, not from here. Shorten until the run fits.
+  const rightEdge = BOARD.x + BOARD.w;
+  const tailWidth = dot + G(7) + advance("about to starve", size) + gap;
+  const budget = (rightEdge - x - tailWidth) / Math.max(1, frame.slots.length);
   frame.slots.forEach((slot, index) => {
     markup += `<circle cx="${x}" cy="${y - dot}" r="${dot}" fill="${seatOf(index).color}"/>`;
     const full = slot.name || `Population ${index + 1}`;
-    const label = dense() ? full.split(/\s+/).at(-1) : full;
+    let label = dense() ? full.split(/\s+/).at(-1) : full;
+    if (advance(label, size) + dot + G(7) + gap > budget) {
+      label = full.split(/\s+/).at(-1);
+    }
+    while (label.length > 1 && advance(label, size) + dot + G(7) + gap > budget) {
+      label = `${label.slice(0, -2)}…`;
+    }
     markup += text(label, x + dot + G(7), y, style);
     x += dot + G(7) + advance(label, size) + gap;
   });
@@ -897,8 +1046,11 @@ function scorebug(frame) {
   // FINAL belongs to where the CURSOR is, not to whether the stream has ended:
   // scrubbing back into the middle of a finished episode is mid-match again.
   const atEnd = state.finished && currentIndex() >= frames.length - 1;
-  const stateLabel = state.truncated ? "CUT SHORT"
-    : atEnd ? "FINAL" : `${Math.round(progress * 100)}%`;
+  // No percentage. On a 100-timestep match "62 / 100", a filled bar and "62%"
+  // are three encodings of one number, two of them the same digits, in the
+  // scarcest space on the frame. The fraction and the bar stay; the badge now
+  // only carries what the fraction cannot say.
+  const stateLabel = state.truncated ? "CUT SHORT" : atEnd ? "FINAL" : "";
   const stateFill = state.truncated ? C.loss : atEnd ? C.gold : C.muted;
 
   // Name the broadcast. Without it a first-time viewer can see two populations
@@ -910,10 +1062,12 @@ function scorebug(frame) {
     // Not "one mountain": configuration.nim re-seats an out-of-range peak to a
     // RANDOM in-range coordinate, so how many massifs a world has is a property
     // of the seed, not of the config. Do not assert what the board can show.
+    // Measured, not eyeballed: at 18 units the old "populations forage one
+    // lattice" wording ran 524 units against a clock panel starting at 506.
     big
       ? `most ${resourceName()} wins`
-      : `${frame.slots.length} populations forage one lattice · most ${resourceName()} wins`,
-    MARGIN + 2, big ? 88 : 66, { size: T(16), weight: 500, fill: C.muted });
+      : `${frame.slots.length} populations, one lattice · most ${resourceName()} wins`,
+    MARGIN + 2, big ? 88 : 66, { size: T(18), weight: 500, fill: C.muted });
 
   // Clock — counts to the SCHEDULED end of the match, so an early extinction
   // freezes short of the buzzer instead of always landing on the last tick.
@@ -929,10 +1083,12 @@ function scorebug(frame) {
     markup += text(`${frame.timestep} / ${scheduled}`, clockX + 20, 72, {
       size: T(40), weight: 600, family: F.mono, fill: C.paper,
     });
-    markup += text(stateLabel, clockX + clockW - 20, 72, {
-      size: T(16), weight: 700, family: F.mono, anchor: "end",
-      fill: stateFill, spacing: 1.4,
-    });
+    if (stateLabel) {
+      markup += text(stateLabel, clockX + clockW - 20, 72, {
+        size: T(18), weight: 700, family: F.mono, anchor: "end",
+        fill: stateFill, spacing: 1.4,
+      });
+    }
   } else {
     markup += eyebrow("Timestep", clockX + 18, 46);
     markup += text(`${frame.timestep}`, clockX + 18, 84, {
@@ -949,10 +1105,12 @@ function scorebug(frame) {
     markup += `<rect x="${barX}" y="60" width="${barW}" height="9" rx="4.5" fill="${C.trackBed}"/>`;
     markup += `<rect x="${barX}" y="60" width="${Math.max(3, barW * progress)}" `
       + `height="9" rx="4.5" fill="${C.gold}"/>`;
-    markup += text(stateLabel, barX + barW, 46, {
-      size: T(16), weight: 700, family: F.mono, anchor: "end",
-      fill: stateFill, spacing: 1.4,
-    });
+    if (stateLabel) {
+      markup += text(stateLabel, barX + barW, 46, {
+        size: T(18), weight: 700, family: F.mono, anchor: "end",
+        fill: stateFill, spacing: 1.4,
+      });
+    }
   }
   // Dense has no room for the second line, and CUT SHORT already stands in the
   // clock; the spoken broadcast carries the full sentence at both densities.
@@ -969,15 +1127,24 @@ function scorebug(frame) {
         : "";
     if (note) {
       markup += text(note, MARGIN + 2, 92, {
-        size: T(16), weight: 600, fill: state.truncated ? C.loss : C.muted,
+        size: T(18), weight: 600, fill: state.truncated ? C.loss : C.muted,
       });
     }
   }
 
   // Standing — the score axis is total living wealth; population rides along as
   // the secondary figure because the visible race and the win metric differ.
-  const chipW = 470;
+  /* The chip strip IS the rail's column.
+   *
+   * chipW was a hardcoded 470, so the strip landed 22 units left of RAIL.x: the
+   * right edges lined up and the left edges missed, on a layout whose entire
+   * structure is two hard vertical axes. Deriving it from the rail makes the
+   * miss impossible, and the clamp keeps a sixteen-population match from
+   * printing chips too narrow to hold a name.
+   */
   const gap = 14;
+  const chipW = Math.max(210,
+    (RAIL.w - gap * (rows.length - 1)) / rows.length);
   const total = rows.length * chipW + (rows.length - 1) * gap;
   let x = W - MARGIN - total;
   rows.forEach((row, rank) => {
@@ -1006,7 +1173,7 @@ function scorebug(frame) {
     // count is still on the emergence panel and in the spoken standing — and
     // shortens the name, because a 92-unit chip cannot hold two dense lines.
     const nameX = x + (big ? 104 : 84);
-    const nameW = chipW - (big ? 300 : 250);
+    const nameW = Math.max(60, chipW - (big ? 300 : 250));
     const name = big ? row.name.split(/\s+/).at(-1) : row.name;
     markup += `<clipPath id="chip-${row.index}"><rect x="${nameX}" y="14" `
       + `width="${nameW}" height="${BUG_H}"/></clipPath>`;
@@ -1036,7 +1203,7 @@ function scorebug(frame) {
       margin === 0 ? "level" : margin > 0 ? `+${format(margin)}` : `\u2212${format(-margin)}`,
       x + chipW - 20, big ? 96 : 84,
       {
-        size: big ? T(16) : T(16) + 4, weight: 700, family: F.mono, anchor: "end",
+        size: big ? T(18) : T(20), weight: 700, family: F.mono, anchor: "end",
         fill: margin > 0 ? C.gold : C.muted,
       },
     );
@@ -1073,7 +1240,7 @@ function raceChart(frame, x, y, width, height) {
   };
 
   let markup = panel(x, y, width, height);
-  markup += eyebrow(big ? `Lead, in ${resourceName()}` : "The race", x + 18, y + (big ? 34 : 26));
+  markup += eyebrow(big ? `Lead, in ${resourceName()}` : "The race", x + 18, y + (big ? 46 : 26));
   // The dense eyebrow names the unit because the bottom annotations are dropped,
   // and at 34 units it is already 508 units wide — the long form of this count
   // then ran the two headings into each other with nothing between them.
@@ -1082,8 +1249,8 @@ function raceChart(frame, x, y, width, height) {
       ? `${leadCount} change${leadCount === 1 ? "" : "s"}`
       : leadCount === 0 ? "no lead change yet"
         : `${leadCount} lead change${leadCount === 1 ? "" : "s"}`,
-    x + width - 18, y + (big ? 34 : 26),
-    { size: T(15), weight: 600, family: F.mono, fill: C.gold, anchor: "end", spacing: 1 },
+    x + width - 18, y + (big ? 46 : 26),
+    { size: T(18), weight: 600, family: F.mono, fill: C.gold, anchor: "end", spacing: 1 },
   );
 
   if (frame.slots.length !== 2) {
@@ -1097,7 +1264,7 @@ function raceChart(frame, x, y, width, height) {
         .map((point) => `${scaleX(point.timestep).toFixed(1)},${scaleY(point.scores[slot] ?? 0).toFixed(1)}`)
         .join(" ");
       if (!points) return;
-      const step = T(17) * 1.5;
+      const step = T(18) * 1.5;
       markup += `<polyline points="${points}" fill="none" stroke="${seatOf(slot).color}" `
         + `stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`;
       // The label is paper over the seat's dot, not the seat colour as ink: the
@@ -1105,8 +1272,8 @@ function raceChart(frame, x, y, width, height) {
       // so `text` is the lifted variant and the dot carries the identity.
       markup += seatMark(left + 14, top + step * 0.62 + slot * step, slot, G(6))
         + text(frame.slots[slot]?.name ?? `Population ${slot + 1}`,
-          left + 28 + G(6), top + step * 0.62 + slot * step + T(17) * 0.34,
-          { size: T(17), weight: 600, fill: seatOf(slot).text, outline: 2.8 });
+          left + 28 + G(6), top + step * 0.62 + slot * step + T(18) * 0.34,
+          { size: T(18), weight: 600, fill: seatOf(slot).text, outline: 2.8 });
     });
     markup += text("total wealth", left + plotW / 2, top + plotH + T(18) + 8,
       { ...axis, anchor: "middle" });
@@ -1179,11 +1346,24 @@ function raceChart(frame, x, y, width, height) {
     // Shortened at the dense ramp: the full name runs under the band's own peak,
     // and the scorebug two panels up has just said which population it is.
     const holder = frame.slots[leader]?.name ?? `Population ${leader + 1}`;
-    markup += text(
-      leader < 0 ? "level" : `${big ? holder.split(/\s+/).at(-1) : holder} ahead`,
-      left + 14, top + T(19),
-      { size: T(19), weight: 700, fill: leader < 0 ? C.muted : seatOf(leader).text, outline: 3 },
-    );
+    /* Put the label where the band ISN'T.
+     *
+     * It was pinned to the plot's top-left, and `peak` is the running maximum,
+     * so whenever the current lead IS the maximum - the normal case for a lead
+     * that grows - the band head reaches exactly `top` and the label sat on its
+     * own fill at 3.32:1, with the head dot landing inside the glyphs. The band
+     * always starts at the baseline on the left, so when the head is close, drop
+     * to the foot of the plot, which is empty by construction.
+     */
+    const caption = leader < 0
+      ? "level"
+      : `${big ? holder.split(/\s+/).at(-1) : holder} ahead`;
+    const size = T(19);
+    const clash = scaleX(last.timestep) < left + 14 + advance(caption, size) + 24
+      && headY < top + size * 1.6;
+    markup += text(caption, left + 14, clash ? baseY - 14 : top + size, {
+      size, weight: 700, fill: leader < 0 ? C.muted : seatOf(leader).text, outline: 3,
+    });
   }
 
   // At the embed floor these land under 7px, so the chart keeps its shape and
@@ -1244,33 +1424,39 @@ function feedRows(seen, slots) {
   if (seen.length === 0 || slots <= 0) return [];
   const keyOf = (event) => `${event.index}:${event.kind}`;
   const lastLead = [...seen].reverse().find((event) => event.kind === "lead");
-  let rows = seen.slice(-slots).reverse();
+  /* Reserve the summary's row FIRST, then fill what is left.
+   *
+   * This used to append the rescued lead change and only then slice to
+   * `slots - 1` to make room for the summary — which removed the row it had just
+   * rescued, every time, at both densities. The ledger still balanced, because
+   * the summary counts the lead it swallowed, so the test stayed green while the
+   * panel's declared priority was dead code.
+   */
+  const needsSummary = seen.length > slots;
+  const room = needsSummary ? slots - 1 : slots;
+  let rows = seen.slice(-room).reverse();
   // A lead change is the beat this match is about; guarantee the most recent one
   // a row even when routine starvation would push it out.
-  if (lastLead && !rows.some((event) => event.kind === "lead")) {
-    rows = [...rows.slice(0, Math.max(0, slots - 1)), { ...lastLead }];
+  if (lastLead && room > 0 && !rows.some((event) => event.kind === "lead")) {
+    rows = [...rows.slice(0, room - 1), { ...lastLead }];
   }
-  let shown = new Set(rows.map(keyOf));
-  if (seen.some((event) => !shown.has(keyOf(event)))) {
-    // Give the oldest row up to the summary that will account for it.
-    rows = rows.slice(0, Math.max(0, slots - 1));
-    shown = new Set(rows.map(keyOf));
-    rows.push(summarise(seen.filter((event) => !shown.has(keyOf(event)))));
-  }
+  const shown = new Set(rows.map(keyOf));
+  const rest = seen.filter((event) => !shown.has(keyOf(event)));
+  if (rest.length > 0) rows.push(summarise(rest));
   return rows;
 }
 
 function eventFeed(frame, x, y, width, height) {
   const big = dense();
   let markup = panel(x, y, width, height);
-  const headY = y + (big ? 34 : 26);
+  const headY = y + (big ? 46 : 26);
   markup += eyebrow("What just happened", x + 18, headY);
   if (!big) {
     // A hollow settler is a state a viewer can see and could not decode.
     markup += `<circle cx="${x + width - 232}" cy="${y + 20}" r="6" fill="none" `
       + `stroke="${C.muted}" stroke-width="2.2"/>`;
     markup += text("hollow = about to starve", x + width - 218, headY, {
-      size: T(17), weight: 500, fill: C.dim, outline: 2.4,
+      size: T(18), weight: 500, fill: C.dim, outline: 2.4,
     });
   }
 
@@ -1388,7 +1574,7 @@ function emergence(frame, x, y, width, height) {
   const population = frame.agents.length;
 
   let markup = panel(x, y, width, height);
-  markup += eyebrow("Nobody programmed this", x + 18, y + (big ? 34 : 26));
+  markup += eyebrow("Nobody programmed this", x + 18, y + (big ? 46 : 26));
 
   // Lorenz curve — the signature Sugarscape chart, drawn from the live agents.
   const curveX = x + 18;
@@ -1423,7 +1609,7 @@ function emergence(frame, x, y, width, height) {
   }
   if (showCurve) {
     markup += text("poorest → richest", curveX + size / 2, curveY + size + 24,
-      { size: T(17), weight: 500, family: F.mono, fill: C.dim, anchor: "middle", outline: 2.4 });
+      { size: T(18), weight: 500, family: F.mono, fill: C.dim, anchor: "middle", outline: 2.4 });
   }
 
   // Two readouts, not three: the live population is already on both scorebug
@@ -1437,14 +1623,16 @@ function emergence(frame, x, y, width, height) {
   // Net change, not a death count - the engine can also add agents - so this
   // is deliberately labelled 'lost' rather than asserting a cause.
   const lost = Math.max(0, state.startingPopulation - population);
+  // The engine SENTINELS this: giniCoefficient is 0 when nobody is alive and 1
+  // when the living hold nothing (simulation.nim). Glossing 0 as "spread fairly
+  // evenly" printed a contented sentence over an extinct world.
+  const spread = population === 0 ? ["no settlers left", "none left"]
+    : wealthTotal(frame) === 0 ? ["nobody holds anything", "nothing held"]
+      : gini > 0.4 ? ["a few settlers hold almost all of it", "a few hold nearly all"]
+        : gini > 0.28 ? ["the richest hold most of it", "the richest hold most"]
+          : ["spread fairly evenly", "spread evenly"];
   const rows = [
-    ["Inequality", gini.toFixed(3),
-      gini > 0.4 ? "a few settlers hold almost all of it"
-        : gini > 0.28 ? "the richest hold most of it"
-          : "spread fairly evenly",
-      gini > 0.4 ? "a few hold nearly all"
-        : gini > 0.28 ? "the richest hold most"
-          : "spread evenly"],
+    ["Inequality", population === 0 ? "\u2014" : gini.toFixed(3), spread[0], spread[1]],
     ["Settlers alive", `${population}`,
       state.sawStart
         ? (lost > 0 ? `of ${state.startingPopulation} · ${lost} lost` : `of ${state.startingPopulation}`)
@@ -1457,13 +1645,13 @@ function emergence(frame, x, y, width, height) {
     const column = (width - 36) / rows.length;
     rows.forEach(([label, value, , shortNote], index) => {
       const readX = curveX + index * column;
-      markup += text(label.toUpperCase(), readX, y + 78, {
+      markup += text(label.toUpperCase(), readX, y + 88, {
         size: T(18), weight: 700, fill: C.muted, spacing: 1.8, outline: 2.6,
       });
-      markup += text(value, readX, y + 140, {
+      markup += text(value, readX, y + 142, {
         size: T(40), weight: 600, family: F.mono, fill: C.paper,
       });
-      markup += text(shortNote, readX, y + 178, { size: T(19), weight: 500, fill: C.dim });
+      markup += text(shortNote, readX, y + 172, { size: T(19), weight: 500, fill: C.dim });
     });
     return markup;
   }
@@ -1486,7 +1674,7 @@ function emergence(frame, x, y, width, height) {
 
 function stinger() {
   const event = state.stinger;
-  const width = 720;
+  const width = Math.min(BOARD.w - 24, dense() ? 860 : 720);
   const x = BOARD.x + (BOARD.w - width) / 2;
   const y = BOARD.y + BOARD.h * 0.36;
   // The rule and the border take the CHIP colour; the headline takes the lifted
@@ -1494,15 +1682,31 @@ function stinger() {
   const rule = event.kind === "lead" ? seatOf(event.slot).color : C.loss;
   const ink = event.kind === "lead" ? seatOf(event.slot).text : C.loss;
   const headline = event.kind === "lead" ? "LEAD CHANGE" : "DIE-OFF";
+  // The cause the ENGINE reported, and the right plural. This said "starved" for
+  // every die-off - which deathCause()'s own docstring calls out as wrong the
+  // moment aging, combat or disease is enabled - and printed "1 settlers".
   const detail = event.kind === "lead"
     ? `${event.name} moves ahead by ${format(event.margin)}`
-    : `${event.count} settlers starved this timestep`;
+    : `${event.count} settler${event.count === 1 ? "" : "s"} `
+      + `${event.cause ?? "lost"} this timestep`;
+  // The one element whose whole job is to INTERRUPT, and it was the only draw
+  // function with no density branch: raw 30 and 24 units, which is 10.0 and 8.0
+  // CSS px at the embed floor - the smallest type in the product, on the
+  // callout. It takes the ramp like everything else now, and the plate is sized
+  // from the type rather than pinned at 118 units.
+  const headSize = T(30);
+  const detailSize = T(24);
+  const height = headSize + detailSize + 54;
   return `<g class="stinger">`
-    + `<rect x="${x}" y="${y}" width="${width}" height="118" rx="12" fill="${C.stingerBack}" `
+    + `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="12" fill="${C.stingerBack}" `
     + `stroke="${rule}" stroke-width="2.5"/>`
-    + `<rect x="${x}" y="${y}" width="7" height="118" rx="3.5" fill="${rule}"/>`
-    + text(headline, x + 34, y + 50, { size: 30, weight: 700, fill: ink, spacing: 3.2 })
-    + text(detail, x + 34, y + 90, { size: 24, weight: 500, fill: C.paper })
+    + `<rect x="${x}" y="${y}" width="7" height="${height}" rx="3.5" fill="${rule}"/>`
+    + text(headline, x + 34, y + headSize + 16, {
+      size: headSize, weight: 700, fill: ink, spacing: 3.2,
+    })
+    + text(detail, x + 34, y + headSize + detailSize + 30, {
+      size: detailSize, weight: 500, fill: C.paper,
+    })
     + `</g>`;
 }
 
@@ -1530,8 +1734,11 @@ function endCard(frame) {
       : ` ${leadChanges} lead change${leadChanges === 1 ? "" : "s"} along the way.`;
   const verdict = tie
     ? `${winner.name} and ${runnerUp.name} finish level on ${format(winner.score)}.${arc}`
-    : `${winner.name} finishes ${format(margin)} ahead of ${runnerUp?.name ?? "the field"}`
-      + ` — a ${((margin / Math.max(1, winner.score)) * 100).toFixed(1)}% margin.${arc}`;
+    : (() => {
+      const share = ((margin / Math.max(1, winner.score)) * 100).toFixed(1);
+      return `${winner.name} finishes ${format(margin)} ahead of `
+        + `${runnerUp?.name ?? "the field"} — ${article(share)} ${share}% margin.${arc}`;
+    })();
   // Gated, not asserted: the same sentence used to print at any Gini.
   const spread = gini > 0.4
     ? ` A few of them ended up holding almost all the ${resourceName()}.`
@@ -1690,11 +1897,16 @@ function drawHud(frame, index) {
   standingsSignature = signature;
 
   const railGap = 22;
-  // Dense gives its extra height to the two panels a first-time viewer reads —
-  // the race and the beats — and turns the emergence readouts sideways into the
-  // strip that is left. See emergence().
-  const raceH = dense() ? 380 : 330;
-  const feedH = dense() ? 320 : 300;
+  /* The rail's three panels, re-proportioned after the transport took its lane.
+   *
+   * These were tuned against a 936-unit rail; reserving TRANSPORT_H left 832 and
+   * the emergence panel absorbed the whole difference, so its Lorenz square and
+   * its readouts printed on top of each other. Dense still gives its extra
+   * height to the two panels a first-time viewer reads — the race and the beats
+   * — and turns the readouts sideways into the strip that is left.
+   */
+  const raceH = dense() ? 320 : 280;
+  const feedH = dense() ? 278 : 250;
   const emergenceH = RAIL.h - raceH - feedH - railGap * 2;
   let markup = raceChart(frame, RAIL.x, RAIL.y, RAIL.w, raceH);
   markup += eventFeed(frame, RAIL.x, RAIL.y + raceH + railGap, RAIL.w, feedH);
@@ -1714,6 +1926,7 @@ const commentary = document.getElementById("commentary");
 const verdictLine = document.getElementById("verdict");
 let spokenKey = "";
 let spokenVerdict = false;
+let spokenLegend = false;
 let markedLeads = -1;
 
 /** Say what the picture shows, at a pace a screen reader can actually consume.
@@ -1726,6 +1939,22 @@ let markedLeads = -1;
  *  everything the panels do, not a subset of it. */
 function speak(frame) {
   const atEnd = state.finished && currentIndex() >= frames.length - 1;
+  /* A stream that stopped short is the loudest thing on the picture and used to
+   * be SILENT here. The scorebug prints CUT SHORT in the loss colour and a
+   * second line saying why; speak() had no branch for it, and because a
+   * truncated stream never sets `finished`, the assertive verdict never fired
+   * either. An assistive-technology user got an ordinary running commentary
+   * that simply stopped. */
+  if (state.truncated && currentIndex() >= frames.length - 1) {
+    if (spokenVerdict) return;
+    spokenVerdict = true;
+    commentary.textContent = "";
+    verdictLine.textContent =
+      `This episode was cut short at timestep ${frames.at(-1).timestep} of `
+      + `${state.maxTimestep || frames.at(-1).timestep}. There is no result. `
+      + `${standingSentence(frame)}`;
+    return;
+  }
   if (atEnd) {
     if (spokenVerdict) return;
     spokenVerdict = true;
@@ -1733,15 +1962,24 @@ function speak(frame) {
     const rows = ranked(frame);
     const margin = rows[0].score - (rows[1]?.score ?? 0);
     const changes = events.filter((event) => event.kind === "lead").length;
+    const share = ((margin / Math.max(1, rows[0].score)) * 100).toFixed(1);
+    const stats = frame.stats ?? {};
+    const gini = Number(stats.giniCoefficient ?? 0);
+    // Carry what the CARD carries: the margin as a share, the arc, and the
+    // plain-language spread — the card's whole point is that a Gini is not a
+    // sentence, and speaking the bare coefficient threw that away.
     verdictLine.textContent = (margin === 0
       ? `Final. ${rows.map((row) => row.name).join(" and ")} finish level on `
         + `${format(rows[0].score)} ${resourceName()}.`
       : `Final. ${rows[0].name} wins with ${format(rows[0].score)} ${resourceName()}, `
-        + `${format(margin)} ahead of ${rows[1]?.name ?? "the field"}.`)
+        + `${format(margin)} ahead of ${rows[1]?.name ?? "the field"} — `
+        + `${article(share)} ${share} percent margin.`)
       + (state.sawStart
       ? ` ${frame.agents.length} of ${state.startingPopulation} settlers survived,`
       : ` ${frame.agents.length} settlers still standing,`)
-      + ` after ${changes} lead change${changes === 1 ? "" : "s"}.`;
+      + ` after ${changes} lead change${changes === 1 ? "" : "s"}.`
+      + ` ${spreadSentence(frame, gini)}`
+      + ` Score is all the ${resourceName()} still held by a population's living settlers.`;
     return;
   }
   spokenVerdict = false;
@@ -1754,13 +1992,9 @@ function speak(frame) {
   if (key === spokenKey) return;
   spokenKey = key;
 
-  const rows = ranked(frame);
   const stats = frame.stats ?? {};
   const gini = Number(stats.giniCoefficient ?? 0);
-  const standing = rows
-    .map((row, rank) => `${rank + 1}. ${row.name}, ${format(row.score)} ${resourceName()},`
-      + ` ${row.population} settler${row.population === 1 ? "" : "s"}`)
-    .join(". ");
+  const standing = standingSentence(frame).replace(/\.$/, "");
   const beatText = !beat ? ""
     : beat.kind === "lead" ? ` At timestep ${beat.timestep}, ${beat.name} took the lead.`
       : ` At timestep ${beat.timestep}, ${beat.count} settler`
@@ -1778,8 +2012,32 @@ function speak(frame) {
       ? ` This stream was joined at timestep ${frames[0].timestep};`
         + " earlier timesteps were not delivered."
       : "")
-    + ` Inequality, as a Gini coefficient, ${gini.toFixed(3)}.`
-    + " A hollow settler on the board has less than one timestep of food left.";
+    + ` Inequality, as a Gini coefficient, ${gini.toFixed(3)}: `
+    + `${spreadSentence(frame, gini).replace(/^./, (c) => c.toLowerCase())}`
+    // Said ONCE, on the first announcement. It was appended to every one of
+    // them, so a screen-reader user heard the same static sentence after every
+    // beat for the length of the episode, and again on every loop.
+    + (spokenLegend ? "" : (spokenLegend = true,
+      " A hollow settler has less than one timestep of food left."));
+}
+
+/** The standing, as a sentence. One source, so the running commentary and the
+ *  cut-short notice cannot describe the same frame differently. */
+function standingSentence(frame) {
+  return ranked(frame)
+    .map((row, rank) => `${rank + 1}. ${row.name}, ${format(row.score)} ${resourceName()},`
+      + ` ${row.population} settler${row.population === 1 ? "" : "s"}`)
+    .join(". ") + ".";
+}
+
+/** The inequality reading in words rather than as a coefficient — the whole
+ *  point of the panel, and it was being spoken as a bare number. */
+function spreadSentence(frame, gini) {
+  if (frame.agents.length === 0) return "No settlers are left.";
+  if (wealthTotal(frame) === 0) return "None of them hold anything.";
+  if (gini > 0.4) return `A few of them hold almost all the ${resourceName()}.`;
+  if (gini > 0.28) return `The richest of them hold most of the ${resourceName()}.`;
+  return "What they hold is spread fairly evenly.";
 }
 
 function currentIndex() {
@@ -1891,7 +2149,11 @@ function tick() {
         .map((event) => played(event.index) * 100);
       controls.scrub.style.setProperty("--marks", marks.length === 0
         ? "none"
-        : marks.map((at) => `linear-gradient(${C.gold}, ${C.gold}) ${at}% 0 / 2px 100% no-repeat`)
+        // INK, not gold. The marks were stacked over the gold played fill in the
+        // same gold, so every lead change went invisible at the instant the
+        // cursor passed it - the only ones you could see were the ones that had
+        // not happened yet. Ink reads on the gold fill AND on the track bed.
+        : marks.map((at) => `linear-gradient(${C.ink}, ${C.ink}) ${at}% 0 / 3px 100% no-repeat`)
           .join(", "));
     }
     // A bare "62" tells a screen-reader user nothing; name the unit and the end.
@@ -1988,11 +2250,21 @@ function fail(message, detail = "") {
   notice.innerHTML = escapeText(message)
     + (shown ? ` <code>${escapeText(shown)}</code>` : "")
     + '<span class="hint">Reload to try again.</span>';
-  // Take the transport away and MOVE THE FOCUS with it. A keyboard user standing
-  // on the play button when the stream died was left focused on an element that
-  // had just been hidden: the focus ring vanished, tabbing restarted from the
-  // top of the document, and the message that had replaced the controls was
-  // never reached. role="alert" announces it; this makes it findable.
+  // KEEP the transport if there is anything to play.
+  //
+  // It used to be hidden unconditionally, and only ready() restores it - which
+  // fires once, on the first frame. So a server that bumped its format at frame
+  // 50 of 100 left the board auto-playing behind the notice with no play, no
+  // scrub, no step and no way back: fifty good frames still on screen and no
+  // longer watchable. A failure with frames in hand is a failure of the STREAM,
+  // not of the recording.
+  if (frames.length > 0) return;
+  // Nothing to play. Take the transport away and MOVE THE FOCUS with it. A
+  // keyboard user standing on the play button when the stream died was left
+  // focused on an element that had just been hidden: the focus ring vanished,
+  // tabbing restarted from the top of the document, and the message that had
+  // replaced the controls was never reached. role="alert" announces it; this
+  // makes it findable.
   const hadFocus = controls.container.contains(document.activeElement);
   controls.container.hidden = true;
   if (hadFocus || document.activeElement === document.body) notice.focus();
@@ -2037,8 +2309,15 @@ function connect() {
    *  stream cut short mid-delivery would name whoever happened to be ahead as
    *  the winner - on the reference replay, cutting at frame 50 crowned the
    *  population that actually loses by 81. */
-  const complete = () => frames.length > 0 && state.maxTimestep > 0
-    && frames.at(-1).timestep >= state.maxTimestep;
+  // The server stamps `final` on the last frame it will ever send, which is the
+  // only way to know an episode ended by EXTINCTION: that stops the run loop
+  // early, writes the results, and then just goes quiet, so a viewer waiting for
+  // maxTimestep sat pinned in live mode forever with a progress percentage on a
+  // match that was over. maxTimestep stays as the fallback for a server too old
+  // to stamp it.
+  const complete = () => frames.length > 0
+    && (frames.at(-1).final === true
+      || (state.maxTimestep > 0 && frames.at(-1).timestep >= state.maxTimestep));
   // A socket can open and never speak - an episode with no recorded frames does
   // exactly that. Without this the canvas is never touched and the embed is the
   // ground colour, forever, with nothing said.
@@ -2070,8 +2349,14 @@ function connect() {
       fail("The episode stream sent a frame this viewer could not read.");
       return;
     }
-    if (!isRenderableFrame(frame)) return;
+    // Clear the silence timer for a REJECTED frame too. It only cleared on the
+    // accepted path, so twelve seconds after telling an operator exactly which
+    // format it could not read, the viewer replaced that with "not sending any
+    // frames" - while five a second were arriving and being discarded. The
+    // comment on isRenderableFrame claims this was fixed; it was not, only
+    // delayed.
     clearTimeout(silence);
+    if (!isRenderableFrame(frame)) return;
     if (frames.length === 0) { state.live = true; ready(); }
     recordFrame(frame);
     // The server streams recorded frames back to back and then goes quiet; a
@@ -2135,9 +2420,32 @@ async function loadArtifact(url) {
     state.startingPopulation = configuredAgents;
     state.sawStart = true;
   }
-  for (const frame of payload.frames) recordFrame(frame);
+  // VALIDATE EVERY FRAME. This path used to check the envelope and then hand the
+  // frames straight to recordFrame, so the socket path's entire guard was simply
+  // absent from the documented alternative: one malformed frame gave a
+  // ground-coloured stage, no message, no controls, and a TypeError every 16 ms
+  // for the life of the tab. isRenderableFrame says which way it was unusable.
+  const usable = [];
+  for (const frame of payload.frames) {
+    if (!isRenderableFrame(frame)) break;
+    usable.push(frame);
+  }
+  if (usable.length === 0) {
+    // isRenderableFrame has already put the specific reason on screen.
+    if (!rejectedFormat && !rejectedShape) fail("This replay has no frames this viewer can read.", url);
+    return;
+  }
+  for (const frame of usable) recordFrame(frame);
   ready();
-  state.finished = true;
+  // A recording that goes bad partway is still watchable up to that point, and
+  // saying so is better than throwing the whole thing away — but it must not be
+  // crowned, for the same reason a truncated stream is not.
+  if (usable.length < payload.frames.length) {
+    state.truncated = true;
+    state.finished = false;
+  } else {
+    state.finished = true;
+  }
   state.live = false;
   state.cursor = 0;
   setPlaying(!reducedMotion);
@@ -2166,4 +2474,10 @@ async function boot() {
   if (frames.length > 0) ready();
 }
 
-boot();
+// Never let boot reject into the void. It was called bare, so anything that
+// escaped it became an unhandled rejection: the console got a stack and the
+// viewer got a silent ground-coloured stage, which is the one outcome this
+// whole file is built to prevent.
+boot().catch((error) => {
+  fail("This viewer could not start.", String(error && error.message ? error.message : error));
+});

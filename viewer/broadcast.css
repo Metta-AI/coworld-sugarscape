@@ -114,11 +114,18 @@ html, body {
    24x24 CSS-px minimum target size. Every dimension below is a clamp with an
    accessible floor, so the chrome stays operable at the smallest embed and
    grows to comfortable at full size. */
+/* The transport lives in its OWN LANE, reserved in broadcast.js as TRANSPORT_H
+   (104 of 1080 stage units = 9.63%). It used to float over the board: two
+   lattice rows at 1280 and three at 640, where the pixel floors below bite while
+   the board scales down, so the compact variant covered MORE of the primary read
+   surface than the full-size one. Every number here is that lane, expressed as a
+   percentage of the same stage. */
 .controls {
   position: absolute;
   left: 1.6%;
-  bottom: 1.9%;
-  width: 47.5%;
+  bottom: 2.3%;
+  /* BOARD.w / W = 798 / 1920 */
+  width: 41.6%;
   min-width: 260px;
   max-width: calc(100% - 3.2%);
   display: flex;
@@ -261,7 +268,13 @@ html, body {
 .controls[hidden] { display: none; }
 /* Under the end card the scrim dims everything else; a full-brightness scrubber
    there reads as playback continuing under a final result. */
-.controls.dimmed { opacity: 0.34; }
+/* Under the end card the scrim dims everything else; a full-brightness scrubber
+   there reads as playback continuing under a final result. But 0.34 took the
+   glyphs to 2.81:1 and the slider to 2.04:1 — measured, against 4.5:1 and 3:1 —
+   on controls that stay enabled and keyboard-reachable, at the moment the
+   broadcast is most likely to be looked at. 0.72 still steps the pill back
+   behind the result and keeps every control above AA. */
+.controls.dimmed { opacity: 0.72; }
 .controls.dimmed:hover, .controls.dimmed:focus-within { opacity: 1; }
 
 @media (prefers-reduced-motion: reduce) {

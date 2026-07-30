@@ -5,6 +5,10 @@ set -eu
 # binary with staticRead, so a stale checkout ships a stale broadcast.
 python3 tools/build_viewer.py --check
 
+# The viewer's own model, driven headlessly against the generated document.
+# Needs no toolchain and no server, which is why CI can run it on every push.
+node tools/test_viewer.mjs
+
 # The byte-parity suites. Split into their own script because they need nothing
 # but a stock Nim distribution, so CI can run them without the private
 # `bitworld` package (see .github/workflows/ci.yml).

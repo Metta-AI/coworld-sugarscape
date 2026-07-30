@@ -469,6 +469,16 @@ proc frameJson(
     # configured limit rather than toward whatever timestep this recording
     # happens to stop at. An early extinction then visibly finishes short.
     "maxTimestep": sim.maxTimestep,
+    # The world's SCALE, stamped on every frame for the same reason.
+    #
+    # A spectator joining past the live backlog cap never sees frame zero, so the
+    # viewer was inferring these from whatever window it was handed: the colour
+    # ramp normalised against a partly-eaten lattice, and - worse - a window that
+    # happened to hold no spice made it call the score "sugar" when buildResults
+    # sums sugar AND spice. The server knows all three; it should say all three.
+    "environmentMaxSugar": sim.config["environmentMaxSugar"].getInt(),
+    "environmentMaxSpice": sim.config["environmentMaxSpice"].getInt(),
+    "startingAgents": sim.config["startingAgents"].getInt(),
     "width": sim.environment.width,
     "height": sim.environment.height,
     "cells": cells,
@@ -613,21 +623,32 @@ proc runCoworld*(runtimeConfig: RuntimeConfig) =
       sim = initSimulation(normalized)
       frames = newJArray()
     let initialFrame = sim.frameJson(coworldConfig.slots)
+    initialFrame["final"] = %false
     frames.add(initialFrame)
     initialFrame.publishFrame()
     coworldConfig.waitForPlayers()
     let policy = coworldConfig.populationPolicy()
-    while sim.timestep < sim.maxTimestep and
+    # An episode ends when it reaches the scheduled buzzer OR when the last
+    # settler dies, and the two used to be indistinguishable to a spectator.
+    # The viewer can only call a stream complete by reaching maxTimestep, so an
+    # extinction - which stops this loop early, writes results, and then just
+    # goes quiet - left the broadcast pinned in live mode forever: no playback,
+    # no end card, and a progress percentage on a match that was over. Nothing
+    # in the payload said "that was the last one", so say it.
+    proc running(sim: Simulation): bool =
+      sim.timestep < sim.maxTimestep and
         (sim.activeAgents.len > 0 or
-          sim.config["keepAlivePostExtinction"].getBool()):
+          sim.config["keepAlivePostExtinction"].getBool())
+    while sim.running():
       sim.doTimestep(policy)
       if sim.timestep mod coworldConfig.frameInterval == 0 or
-          sim.timestep == sim.maxTimestep:
+          sim.timestep == sim.maxTimestep or not sim.running():
         var liveSlots: seq[PolicySlot]
         {.gcsafe.}:
           withLock appState.lock:
             liveSlots = appState.slots & @[]
         let frame = sim.frameJson(liveSlots)
+        frame["final"] = %(not sim.running())
         frames.add(frame)
         frame.publishFrame()
     runtimeConfig.writeResults(sim.buildResults())

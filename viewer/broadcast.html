@@ -39,9 +39,11 @@
       <!-- The broadcast is drawn in SVG user units inside a fixed 16:9 embed, so
            a larger default font size cannot reach it and there is no reflow to
            fall back on. This is the in-product mechanism instead. -->
-      <button id="text-size" type="button" aria-pressed="false"
-              aria-label="Larger text, off"
-              title="Larger text — sets the broadcast in a bigger type ramp and drops the finer annotations to make room">
+      <!-- The accessible name leads with the visible "AA" so speech input can
+           reach it, and the pressed state is carried by aria-pressed alone
+           rather than restated in the name. broadcast.js keeps both in sync and
+           disables the control where it cannot help. -->
+      <button id="text-size" type="button" aria-pressed="false" aria-label="AA, larger text">
         <span aria-hidden="true">A<b>A</b></span>
       </button>
     </div>

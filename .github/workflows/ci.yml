@@ -24,6 +24,7 @@ jobs:
     # and nothing at runtime would say so. No toolchain needed to catch it.
     name: Viewer is built and self-contained
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -36,6 +37,8 @@ jobs:
         run: node --check viewer/broadcast.js
       - name: Generated viewer matches viewer/ and pulls no external asset
         run: python3 tools/build_viewer.py --check
+      - name: Viewer model
+        run: node tools/test_viewer.mjs
 
   simulation:
     # The byte-parity suites against the pinned Python oracle. std/* plus
@@ -43,6 +46,7 @@ jobs:
     # so this job needs no credentials.
     name: DTL byte parity
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: jiro4989/setup-nim-action@v2
@@ -61,6 +65,7 @@ jobs:
     # job SAYS SO in its own step rather than quietly reporting green.
     name: Coworld protocol and hosted embed
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       # `secrets` is not a context step-level `if` can read; a job-level env var
       # derived from it is.
@@ -79,8 +84,14 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Say when the private dependency is unavailable
         if: env.HAS_PACKAGES_TOKEN != 'true'
+        # A ::warning annotation is not a gate. This job used to emit one and
+        # then conclude SUCCESS, so a pull request from a fork merged with the
+        # entire hosted-embed contract unverified and a green tick beside it.
+        # Neutral is the honest conclusion: not a failure of the change, not a
+        # claim that anything was checked.
         run: |
           echo "::warning title=Coworld smoke test skipped::METTA_PACKAGES_TOKEN is not set, so the private bitworld package cannot be fetched. The hosted-embed assertions are UNVERIFIED for this commit."
+          exit 78
       - name: Fetch every pinned dependency
         if: env.HAS_PACKAGES_TOKEN == 'true'
         env:
