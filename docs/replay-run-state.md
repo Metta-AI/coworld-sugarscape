@@ -38,6 +38,29 @@ two-axis interpolation, agents as plain filled circles coloured red-then-blue by
 decision model. Served document went 738 KB → ~138 KB; there is no image
 pipeline at all. Details and the corrected art-direction lock: `docs/replay-brief.md` §0c.
 
+## Two sessions are working this branch — read this before touching the plate
+
+The owner has two sessions open on this worktree at once. Both are editing
+`viewer/broadcast.js`, in the same place, and their work composes rather than
+conflicts. If you are one of them, this section is the handshake.
+
+- **"Fix sugar/spice flicker"** owns `grainCloud`, `grainStream`, the tile/strip
+  sheet's keying, and the plate crossfade (`SETTLE_MS`, `terrainBlend`,
+  `showTerrain`, the two `terrain` buffers).
+- **"Add motion to the grains"** owns the stir loop (`GRAIN_PHASES`, `stirAt`,
+  `stirTerrain`, the baked phase strips) and the surround (`drawGround`, the
+  horizon and dust colours).
+
+**The invariant that binds the two: a grain's HOME never moves between
+timesteps.** The stir orbits a grain around its home and the home comes from
+`grainCloud`, which is keyed by (variant, resource) and never by the amount in
+the cell. Anything that reseeds a home per timestep — including a well-meant
+"vary the scatter with the amount" — puts the flicker straight back.
+
+Rebuild the whole path after either of you edits, or the replay the owner is
+watching keeps showing the other one's last build: `build_viewer.py`, then the
+Nim binary, then restart 18400 AND the preview on 18402 (cycle below).
+
 ## Verification state — all green
 
 - `tools/test_all.sh` — viewer staleness check, 7 Nim byte-parity suites, and the
@@ -49,6 +72,20 @@ pipeline at all. Details and the corrected art-direction lock: `docs/replay-brie
   floor: console clean, one network request for the whole app.
 - `build_viewer.py` fails the build if the document would fetch anything
   external. Verified by injecting a CDN script.
+- The flicker fix, measured in the running viewer against the old seeding on the
+  same recorded frames (t40 → t41, 222 of 1,024 cells change amount):
+
+  | | old | new |
+  |---|---|---|
+  | cell pixels changed by a +1 regrowth | 79% | 29% — the new grains themselves |
+  | by a +2 regrowth | 83% | 50% |
+  | by a harvest, 3,3 → 0,0 | 95% | 93%, and now drained over 380ms |
+  | whole plate | 19.0% | 13.6% |
+
+  The dissolve was sampled live mid-playback: `0 → 0.025 → 0.088 → … → 0.987 → 1`
+  over ~12 drawn frames per beat, holding at 1 between them, and reading 1 flat
+  after a scrub. Costs: 8.1ms of one-time sheet build, 0.57ms per plate
+  composite, +0.03ms on a drawn frame against a 16ms tick.
 
 ## How to run it
 

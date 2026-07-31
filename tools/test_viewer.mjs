@@ -487,6 +487,173 @@ for (const [index, rows] of ledger.rows.entries()) {
     "and the panel must be full whenever there is more than one beat to show");
 }
 
+/* A cell that loses a unit must LOSE THAT UNIT'S GRAINS, not re-scatter its
+ * whole cloud.
+ *
+ * The grain positions used to be seeded from the cell's contents, so 4 -> 3
+ * sugar threw away every grain in the cell and drew a different cloud - and
+ * re-threw the spice with it, off the same running seed. Regrow rate 1 against
+ * a max of 4 changes a quarter of the board every timestep, so a quarter of the
+ * plate re-scattered every beat and the resource read as flicker. */
+const grains = JSON.parse(vm.runInContext(`
+  const four = grainCloud(grainStream(3, 0), 4 * PARTICLES_PER_UNIT);
+  JSON.stringify({
+    nested: JSON.stringify(grainCloud(grainStream(3, 0), 3 * PARTICLES_PER_UNIT))
+      === JSON.stringify(four.slice(0, 3 * PARTICLES_PER_UNIT)),
+    sugarVsSpice: JSON.stringify(grainCloud(grainStream(3, 1), 4 * PARTICLES_PER_UNIT))
+      === JSON.stringify(four),
+    variants: TILE_VARIANTS,
+    distinct: new Set(Array.from({ length: TILE_VARIANTS }, (_, variant) =>
+      JSON.stringify(grainCloud(grainStream(variant, 0), PARTICLES_PER_UNIT)))).size,
+    spread: four.every(([x, y]) => x >= 0 && x < 1 && y >= 0 && y < 1),
+  });
+`, viewerContext));
+assert.ok(grains.nested,
+  "the cloud for N units must be the cloud for N-1 plus one more handful");
+assert.ok(!grains.sugarVsSpice, "sugar and spice must draw from separate streams");
+assert.ok(grains.variants >= 8,
+  `a nested cloud has no amount to vary the arrangement, so it needs variants: ${grains.variants}`);
+assert.equal(grains.distinct, grains.variants, "and every variant must actually differ");
+assert.ok(grains.spread, "grains lie inside the cell they belong to");
+
+/* The plate DISSOLVES between timesteps while the replay runs, and CUTS
+ * whenever the viewer asked for a particular state - a scrub, a step, a pause,
+ * reduced motion, or the first frame of a stream, which has nothing to dissolve
+ * from. */
+const settle = JSON.parse(vm.runInContext(`
+  const frameA = ${sandboxFrame(0, [])};
+  const frameB = ${sandboxFrame(1, [])};
+  resetStream(); recordFrame(frameA); recordFrame(frameB);
+  state.speed = 1;
+  showTerrain(frameA, false, 1000);
+  const first = terrainBlend(1000);
+  showTerrain(frameB, true, 1000);
+  const opening = terrainBlend(1000);
+  const middle = terrainBlend(1000 + SETTLE_MS / 2);
+  const done = terrainBlend(1000 + SETTLE_MS);
+  const later = terrainBlend(1000 + SETTLE_MS * 4);
+  showTerrain(frameA, false, 2000);
+  JSON.stringify({ first, opening, middle, done, later, cut: terrainBlend(2000),
+    withinDwell: SETTLE_MS < frameDwellMs(1) });
+`, viewerContext));
+assert.equal(settle.first, 1, "the first plate of a stream is shown whole");
+assert.equal(settle.opening, 0, "a dissolve starts on the plate being left");
+assert.ok(settle.middle > 0 && settle.middle < 1, `and eases across it: ${settle.middle}`);
+assert.equal(settle.done, 1, "and lands exactly on the new plate");
+assert.equal(settle.later, 1, "and stays there");
+assert.equal(settle.cut, 1, "a scrub, a step or a pause cuts straight to the state asked for");
+assert.ok(settle.withinDwell,
+  "a dissolve must finish inside one dwell, or the next harvest cuts it off");
+
+/* THE SAND KEEPS ITS OWN CLOCK.
+ *
+ * The stir is the wind, not the replay. It goes on blowing while the transport is
+ * paused, it does NOT speed up when playback does — every other motion on this
+ * stage is scaled by animFactor and this one must not be, or the world would look
+ * windier at 4x — and it stops dead for a viewer who asked for reduced motion,
+ * which also stops the plate being repainted at all. */
+const stir = JSON.parse(vm.runInContext(`
+  fireMotionChange(false);
+  const step = GRAIN_PERIOD_MS / GRAIN_PHASES;
+  state.speed = 1;
+  const one = stirAt(step) - stirAt(0);
+  const part = stirAt(step * 0.4) - stirAt(0);
+  const loop = stirAt(GRAIN_PERIOD_MS) - stirAt(0);
+  state.speed = 4;
+  const fast = stirAt(step) - stirAt(0);
+  state.speed = 1;
+  fireMotionChange(true);
+  const reduced = [stirAt(0), stirAt(step * 7), stirAt(GRAIN_PERIOD_MS * 3)];
+  fireMotionChange(false);
+  JSON.stringify({ one, part, loop, fast, reduced, phases: GRAIN_PHASES });
+`, viewerContext));
+assert.equal(stir.one, 1, "one step of the clock is one frame of the loop");
+assert.equal(stir.part, 0, "and part of a step is none of one");
+assert.equal(stir.loop, stir.phases, "a period is exactly one time round");
+assert.equal(stir.fast, 1, "the wind does not blow harder at 4x; it is not the clock");
+assert.deepEqual(stir.reduced, [0, 0, 0],
+  "reduced motion freezes the sand, which also stops the plate being repainted");
+
+/* A CELL IS A TORUS, not a box with margins.
+ *
+ * Inseting the grain homes so no orbit could reach an edge was the first attempt
+ * at containing the loop, and it printed a two-pixel dark gutter around all 1,024
+ * cells — the woven-mesh artefact the sand cloud exists to avoid. A grain that
+ * leaves one edge re-enters at the opposite one instead. */
+const wrapped = JSON.parse(vm.runInContext(`
+  JSON.stringify({
+    plain: [0, 3.5, 37.9].map((value) => Number(wrapInto(value, 38).toFixed(4))),
+    over: Number(wrapInto(39.5, 38).toFixed(4)),
+    under: Number(wrapInto(-1.5, 38).toFixed(4)),
+    bounded: [-970.2, -0.001, 0, 37.999, 200.7]
+      .every((value) => wrapInto(value, 38) >= 0 && wrapInto(value, 38) < 38),
+  });
+`, viewerContext));
+assert.deepEqual(wrapped.plain, [0, 3.5, 37.9], "a grain inside the cell does not move");
+assert.equal(wrapped.over, 1.5, "one that orbits off the right edge comes back on the left");
+assert.equal(wrapped.under, 36.5, "and the other way round");
+assert.ok(wrapped.bounded, "no orbit, however far out, lands outside the cell");
+
+/* AND THE STIR ARRIVES AS A RIPPLE.
+ *
+ * Every cell showing the same frame of the loop makes the whole plate twitch at
+ * once, which reads as a fault rather than as weather. The frame a cell shows is
+ * offset by where it stands, so a crest travels the diagonal instead — down and
+ * to the left, the same way the haze in the surround blows. One wind. */
+const ripple = JSON.parse(vm.runInContext(`
+  JSON.stringify({
+    neighbours: grainColumn(0, 4, 4) !== grainColumn(0, 5, 4),
+    wavelength: grainColumn(0, 4, 4) === grainColumn(0, 4 + GRAIN_WAVELENGTH, 4),
+    diagonal: grainColumn(0, 4, 4) === grainColumn(0, 5, 5),
+    downwind: grainColumn(GRAIN_RIPPLE, 3, 4) === grainColumn(0, 4, 4)
+      && grainColumn(GRAIN_RIPPLE, 4, 5) === grainColumn(0, 4, 4),
+    upwind: grainColumn(GRAIN_RIPPLE, 5, 4) !== grainColumn(0, 4, 4),
+    bounded: Array.from({ length: 64 }, (unused, cell) => grainColumn(7, cell, 3))
+      .every((column) => Number.isInteger(column) && column >= 0 && column < GRAIN_PHASES),
+  });
+`, viewerContext));
+assert.ok(ripple.neighbours, "two cells side by side do not turn over together");
+assert.ok(ripple.wavelength, "a wavelength away they do; that is what makes it a wave");
+assert.ok(ripple.diagonal, "crests lie along x - y, so it is one wave and not two");
+assert.ok(ripple.downwind, "and it MOVES: a step of the clock walks the crest left and down");
+assert.ok(ripple.upwind, "not into the wind");
+assert.ok(ripple.bounded, "every cell indexes a real frame of the loop");
+
+/* The sheet is keyed by RESOURCE and AMOUNT, and every strip carries the loop.
+ *
+ * Keyed by the (sugar, spice) PAIR it stored every combination of two clouds that
+ * never interact — 200 tiles on the shipped 4/4 board to say what 8 strips say —
+ * and there is no room for 24 frames of each on top of that. */
+const sheet = JSON.parse(vm.runInContext(`
+  const heldSugar = state.maxSugar;
+  const heldSpice = state.maxSpice;
+  state.maxSugar = 4;
+  state.maxSpice = 3;
+  grainSheet.key = "";
+  buildGrainSheet(38);
+  const strip = grainStrip(0, 4, 0);
+  const out = JSON.stringify({
+    size: grainSheet.size,
+    sugar: grainSheet.strips[0].filter(Boolean).length,
+    spice: grainSheet.strips[1].filter(Boolean).length,
+    width: strip.width,
+    height: strip.height,
+    nothingForNothing: grainStrip(0, 0, 0) === undefined,
+    variants: TILE_VARIANTS,
+    phases: GRAIN_PHASES,
+  });
+  state.maxSugar = heldSugar;
+  state.maxSpice = heldSpice;
+  grainSheet.key = "";
+  out;
+`, viewerContext));
+assert.equal(sheet.sugar, 4 * sheet.variants, "one strip per sugar amount, per variant");
+assert.equal(sheet.spice, 3 * sheet.variants, "and per spice amount, which need not match it");
+assert.equal(sheet.size, 38, "the strip is built for the cell size it was asked for");
+assert.equal(sheet.width, 38 * sheet.phases, "and lays the whole loop out along it");
+assert.equal(sheet.height, 38, "one cell tall");
+assert.ok(sheet.nothingForNothing, "an empty cell has no strip; it is left as bare plate");
+
 /* Density is a RAMP SWITCH, not a scale factor, and the viewer's own larger-text
  * control forces it at any size. */
 const density = JSON.parse(vm.runInContext(`
