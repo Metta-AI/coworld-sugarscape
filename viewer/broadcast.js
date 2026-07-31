@@ -19,7 +19,7 @@
 // ---------------------------------------------------------------------------
 // Theme — the Phase-0c art-direction lock, as tokens. Every colour the viewer
 // paints comes from this block or from the gui.py port's own named constants
-// (SUGAR_HEX / SPICE_HEX / EMPTY_HEX / GRID_HEX); nothing below writes a colour
+// (SUGAR_HEX / SPICE_HEX / PLATE_HEX / GRID_HEX); nothing below writes a colour
 // literal inline.
 // ---------------------------------------------------------------------------
 
@@ -52,11 +52,10 @@ const C = {
   bugScrimTop: "rgba(12,9,5,.92)",
   bugScrimEnd: "rgba(12,9,5,0)",
   // Board-side values. The mat's shadow is warm rather than pure black, the
-  // mote is the loss hue held dark enough to sit on the bright plate, and the
-  // hollow is the plate's own paper so a starving settler reads as an OUTLINE.
+  // The plate is dark now, so its edge cannot be carried by luminance against a
+  // dark surround: the mat is a lit warm rule rather than a shadow.
   mat: "rgba(20,12,4,.5)",
-  mote: "#a8321a",
-  hollow: "rgba(251,248,240,.9)",
+  edge: "#5c452a",
 };
 
 // The original assigns palette colours to decision models in order
@@ -66,18 +65,21 @@ const C = {
 // BOTH as a dot on the white plate and as a chip on the dark broadcast panels,
 // and each carries a redundant shape so the read never depends on hue alone.
 //
-// `text` is the third value and it exists for one measured reason: every label
-// in the overlay is painted over a fat C.ink halo so it survives the board, and
-// against that halo (#2a1f12) the CHIP colours measure 4.69:1 and 4.40:1 — the
-// blue is below AA and the red has no margin. The text variants are lifted until
-// both clear 4.5:1 on the halo, which is the tightest background either meets.
+// `text` is the second value, for the places a seat colour carries INK rather
+// than filling a shape — the chart's pole label and the stinger's headline,
+// which sit on the lead band itself where the chip hues measure 3.3-3.6:1. The
+// chips themselves are used only as fills, where they are not text at all.
+// (An earlier note here claimed the C.ink halo behind every label was the
+// binding background. It is not: at three stage units the halo is a sub-pixel
+// rim, and the surface underneath is the panel — darker than the ink, so the
+// chips already cleared AA there. The lift is for the band.)
 const SEATS = [
   // #f5504a on ink 4.69:1 -> #ff6b60 5.80:1
-  { color: "#f5504a", board: "#c22318", text: "#ff6b60" },   // gui.py palette[0] #FA3232
+  { color: "#f5504a", text: "#ff6b60" },   // gui.py palette[0] #FA3232
   // #5a7cff on ink 4.40:1 (FAILS AA) -> #6b8bff 5.19:1
-  { color: "#5a7cff", board: "#2340c4", text: "#6b8bff" },   // gui.py palette[1] #3232FA
-  { color: "#6bd47f", board: "#1c7038", text: "#6bd47f" },   // palette[2] #32FA32, 8.7:1
-  { color: "#52d6e8", board: "#0d6f7e", text: "#52d6e8" },   // palette[3] #32FAFA, 9.3:1
+  { color: "#5a7cff", text: "#6b8bff" },   // gui.py palette[1] #3232FA
+  { color: "#6bd47f", text: "#6bd47f" },   // palette[2] #32FA32, 8.7:1
+  { color: "#52d6e8", text: "#52d6e8" },   // palette[3] #32FAFA, 9.3:1
 ];
 
 const F = { display: "Space Grotesk", mono: "IBM Plex Mono" };
@@ -677,73 +679,159 @@ function resetStream() {
  * texture, read as fog, and looked nothing like the model anyone recognises.
  * The lattice IS the picture; it does not want scenery. */
 
-const SUGAR_HEX = [242, 250, 0];      // #F2FA00, from gui.py
-const SPICE_HEX = [155, 71, 34];      // #9B4722, from gui.py
-const EMPTY_HEX = [251, 248, 240];    // the original's white, warmed a touch
-const GRID_HEX = "#c6c4bd";           // gui.py cell outline #c0c0c0, warmed a shade
+const SUGAR_HEX = "#f2fa00";          // gui.py #F2FA00, unchanged
+// gui.py's #9B4722 measures 2.78:1 as a grain on the plate below; lifted just
+// far enough to clear 3:1 while staying the same rust, and kept well off the
+// seat red so a settler never reads as a heap of spice.
+const SPICE_HEX = "#c05a2c";
+const PLATE_HEX = "#1d1811";          // the field the grains lie on; NEVER pure black
+const GRID_HEX = "#332a1e";           // one step up from the plate
 
 let terrainShown = null;
 let pendingBeat = null;
 const terrain = document.createElement("canvas");
 const terrainContext = terrain.getContext("2d");
 
-function mix(from, to, factor) {
-  return [
-    from[0] + (to[0] - from[0]) * factor,
-    from[1] + (to[1] - from[1]) * factor,
-    from[2] + (to[2] - from[2]) * factor,
-  ];
-}
-
-/** The original's two-axis cell colour (gui.py findSugarAndSpiceColors). With
- *  spice disabled - as in the shipping variant - this collapses to a straight
- *  white-to-yellow ramp on sugar, which is the familiar image. */
-function cellColor(sugar, spice) {
-  const sugarFactor = state.maxSugar > 0 ? Math.min(1, sugar / state.maxSugar) : 0;
-  const spiceFactor = state.maxSpice > 0 ? Math.min(1, spice / state.maxSpice) : 0;
-  const blend = mix(SUGAR_HEX, SPICE_HEX, 0.5);
-  const top = mix(EMPTY_HEX, SPICE_HEX, spiceFactor);
-  const bottom = mix(SUGAR_HEX, blend, spiceFactor);
-  const final = mix(top, bottom, sugarFactor);
-  return `rgb(${Math.round(final[0])},${Math.round(final[1])},${Math.round(final[2])})`;
+/* Deterministic grain placement.
+ *
+ * Positions have to be STABLE across timesteps or the whole plate boils: a
+ * settler eats one unit of sugar and the other three jump to new corners. So
+ * every grain's offset comes from a hash of its cell and its index, not from
+ * Math.random - the same grain sits in the same place for the whole episode, and
+ * a cell losing resource simply loses its LAST grains.
+ */
+function grainOffset(cellIndex, slot, axis) {
+  let hash = (cellIndex * 73856093) ^ (slot * 19349663) ^ (axis * 83492791);
+  hash = Math.imul(hash ^ (hash >>> 15), 2246822507);
+  hash = Math.imul(hash ^ (hash >>> 13), 3266489909);
+  return ((hash ^ (hash >>> 16)) >>> 0) / 4294967296;
 }
 
 function buildTerrain(frame) {
   const size = Math.round(BOARD.w * RENDER_SCALE);
   if (terrain.width !== size) terrain.width = terrain.height = size;
-  const cell = size / frame.width;
+  const cell = size / Math.max(frame.width, frame.height);
   terrainContext.setTransform(1, 0, 0, 1, 0, 0);
+  terrainContext.clearRect(0, 0, terrain.width, terrain.height);
 
-  // The lattice is drawn as the GAPS between cells, not as a separate stroke
-  // pass. Stroking one line per column at Math.round(i * cell) + 0.5 put the
-  // lines at fractional positions, so their weight swung with subpixel phase and
-  // the board moired into a plaid at the embed floor. Filling the field with the
-  // lattice colour and insetting each cell by a fixed hairline gives a perfectly
-  // even grid at any scale.
-  // At the embed floor a cell is under 10 CSS px, so a hairline lands on a
-  // fraction of a device pixel: a third of the lines drop out and the survivors
-  // carry three different weights, which is the plaid. Below that size the
-  // lattice is simply not drawn - the flat cell blocks already read as a grid,
-  // and a grid you cannot render evenly is worse than none.
-  const hairline = state.compact ? 0 : Math.max(1, Math.round(cell * 0.05));
-  terrainContext.fillStyle = hairline > 0 ? GRID_HEX : `rgb(${EMPTY_HEX.join(",")})`;
-  terrainContext.fillRect(0, 0, size, size);
+  /* No lattice. The GRAINS are the lattice now.
+   *
+   * A drawn grid made sense when a cell was one flat rectangle and the lines
+   * were the only thing separating two similar fills. Over a field of packed
+   * grains it is a second grid at a second pitch laid over the first, and the
+   * plate read as a halftone screen rather than as terrain. Each cell's grains
+   * cluster inside their own square with a gap at the edges, so the cell
+   * structure is still there to be counted — it is simply drawn by the thing
+   * being measured instead of by scaffolding around it.
+   */
+  const hairline = Math.max(1, cell * 0.08);
+  terrainContext.fillStyle = PLATE_HEX;
+  terrainContext.fillRect(0, 0, cell * frame.width, cell * frame.height);
 
+  /* Resource is DENSITY, not shade.
+   *
+   * Each cell used to be one flat rectangle interpolated between white, sugar
+   * yellow and spice rust - gui.py's own model. It carried the quantity in
+   * CHROMA alone: full sugar against an empty cell measures 1.07:1, so the ramp
+   * that is the whole point of the picture had no luminance signal end to end,
+   * and a viewer with any colour-vision deficiency read a flat field. Drawing
+   * one grain per unit held puts the quantity in a channel that survives
+   * greyscale, a projector and a phone in sunlight: you can COUNT it. A cell
+   * with four sugar is four yellow grains; a cell holding four of each is eight;
+   * an eaten cell is bare plate. Sugar and spice keep their own hues, so the
+   * crossed diagonals still read at a glance.
+   */
+  /* PACKED, on a sub-grid — not scattered.
+   *
+   * A first attempt placed each grain at a free position anywhere in its cell
+   * and made them small enough not to collide. The result was noise: the two
+   * sugar massifs and the two spice massifs, which the shaded plate showed at a
+   * glance, dissolved into an even speckle, because at that size the eye cannot
+   * integrate density from scattered dots.
+   *
+   * Packing them fixes it. Each cell is a sub-grid with one slot per unit the
+   * world can hold, and the grains nearly touch, so a full cell reads as almost
+   * solid colour and an eaten one as bare plate — the coverage difference IS the
+   * regional brightness, and the massifs come back. The slot order is a cheap
+   * per-cell bijection so neighbouring cells do not fill in lockstep and screen
+   * into a moiré, and a fixed order means a cell losing resource loses its LAST
+   * grains rather than reshuffling every one of them.
+   */
+  const slots = Math.max(1, Math.round(state.maxSugar) + Math.round(state.maxSpice));
+  const perAxis = Math.max(1, Math.ceil(Math.sqrt(slots)));
+  const total = perAxis * perAxis;
+  const pitch = (cell - hairline) / perAxis;
+  const grain = Math.max(1, pitch * 0.92);
+  /* The two resources fill from OPPOSITE CORNERS.
+   *
+   * Interleaving them through one shuffled order put a yellow grain beside a
+   * rust one in every cell, so every region averaged to the same muddy
+   * yellow-orange and Sugarscape's crossed diagonals — sugar on one pair of
+   * quadrants, spice on the other — could not be seen at all. Sugar packs from
+   * the top-left in raster order and spice from the bottom-right in reverse, so
+   * a sugar-rich cell is a yellow clump, a spice-rich one a rust clump, and a
+   * cell holding both shows the split. Region colour follows region composition,
+   * which is the read the whole board exists for.
+   */
+  /* Each resource grows as a CLUMP from its own corner, ordered by distance.
+   *
+   * Filling the sub-grid in raster order made every cell lay its first three
+   * grains along its top row, and because neighbouring cells hold similar
+   * amounts they all did it together — the board struck into continuous
+   * horizontal yellow bands that swamped the terrain underneath. Ordering the
+   * seats by distance from the corner grows a compact blob instead, so the only
+   * thing that varies across the plate is how much of each cell is covered,
+   * which is the quantity.
+   */
+  const seatsFromCorner = (far) => {
+    const order = [];
+    for (let sy = 0; sy < perAxis; sy += 1) {
+      for (let sx = 0; sx < perAxis; sx += 1) {
+        const dx = far ? perAxis - 1 - sx : sx;
+        const dy = far ? perAxis - 1 - sy : sy;
+        order.push([sy * perAxis + sx, dx * dx + dy * dy]);
+      }
+    }
+    order.sort((first, second) => first[1] - second[1] || first[0] - second[0]);
+    return order.map((entry) => entry[0]);
+  };
+  const sugarSeats = seatsFromCorner(false);
+  const spiceSeats = seatsFromCorner(true);
+  const jitter = (pitch - grain) * 0.6;
+  const place = (index, seat, slot, colour) => {
+    terrainContext.fillStyle = colour;
+    const x = Math.floor(index / frame.height) * cell;
+    const y = (index % frame.height) * cell;
+    terrainContext.fillRect(
+      x + (seat % perAxis) * pitch + (grainOffset(index, slot, 0) - 0.5) * jitter,
+      y + Math.floor(seat / perAxis) * pitch + (grainOffset(index, slot, 1) - 0.5) * jitter,
+      grain, grain);
+  };
   for (let index = 0; index < frame.cells.length; index += 1) {
     const [sugar, spice] = frame.cells[index];
-    // cellId = x * height + y (column-major).
-    const x = Math.round(Math.floor(index / frame.height) * cell);
-    const y = Math.round((index % frame.height) * cell);
-    const right = Math.round((Math.floor(index / frame.height) + 1) * cell);
-    const bottom = Math.round((index % frame.height + 1) * cell);
-    terrainContext.fillStyle = cellColor(sugar, spice);
-    terrainContext.fillRect(x, y, right - x - hairline, bottom - y - hairline);
+    if (sugar <= 0 && spice <= 0) continue;
+    // A bitmask, so spice never lands on a seat sugar already took when a cell
+    // holds more than the sub-grid can seat.
+    let taken = 0;
+    let slot = 0;
+    for (let grainIndex = 0; grainIndex < Math.round(sugar) && slot < total; grainIndex += 1) {
+      const seat = sugarSeats[grainIndex];
+      if (seat === undefined) break;
+      taken |= 1 << seat;
+      place(index, seat, slot, SUGAR_HEX);
+      slot += 1;
+    }
+    for (let grainIndex = 0, placed = 0; grainIndex < spiceSeats.length
+      && placed < Math.round(spice) && slot < total; grainIndex += 1) {
+      const seat = spiceSeats[grainIndex];
+      if (taken & (1 << seat)) continue;
+      taken |= 1 << seat;
+      place(index, seat, slot, SPICE_HEX);
+      slot += 1;
+      placed += 1;
+    }
   }
 }
-
-// ---------------------------------------------------------------------------
-// Board
-// ---------------------------------------------------------------------------
 
 function cellPosition(frame, cell) {
   return { x: Math.floor(cell / frame.height), y: cell % frame.height };
@@ -801,12 +889,14 @@ function drawBoard(frame, previous, t, now) {
   context.fillRect(0, 0, W, H);
 
   // A bright plate seated on the dark broadcast surround by a thin warm mat.
+  // A dark plate on a dark surround has no luminance edge of its own, so the
+  // mat is drawn as a lit warm rule. The shadow still seats it.
   context.save();
   context.shadowColor = C.mat;
   context.shadowBlur = 22;
   context.shadowOffsetY = 5;
-  context.fillStyle = C.ink;
-  context.fillRect(BOARD.x - 5, BOARD.y - 5, BOARD.w + 10, BOARD.h + 10);
+  context.fillStyle = C.edge;
+  context.fillRect(BOARD.x - 2, BOARD.y - 2, BOARD.w + 4, BOARD.h + 4);
   context.restore();
   context.drawImage(terrain, BOARD.x, BOARD.y, BOARD.w, BOARD.h);
 
@@ -816,7 +906,7 @@ function drawBoard(frame, previous, t, now) {
     const age = (now - mote.born) / (MOTE_MS * animFactor(state.speed));
     if (age >= 1) { motes.splice(index, 1); continue; }
     context.globalAlpha = (1 - age) * 0.85;
-    context.strokeStyle = C.mote;
+    context.strokeStyle = C.loss;
     context.lineWidth = Math.max(1.4, cell * 0.22 * (1 - age));
     context.beginPath();
     context.arc(mote.px, mote.py, cell * (0.32 + age * 1.05), 0, Math.PI * 2);
@@ -842,16 +932,14 @@ function drawBoard(frame, previous, t, now) {
   // one channel the terrain already uses. The ring makes it structural: every
   // settler carries the surround's own ink, so it reads as a body on a plate at
   // any resource depth and under any colour-vision deficiency.
-  // A PAPER ring, not an ink one.
+  // An INK ring, now that the plate is dark.
   //
   // A red settler on the spice peak measured 1.07:1 against the ground it stood
   // on, and the ink ring meant to separate them is itself only 2.55:1 there. The
-  // plate's own paper is the one value that contrasts with every cell the ramp
-  // can produce: 15.6:1 against full spice, 1.9:1 against bare sugar but backed
-  // by the dot's own colour underneath it. A first attempt paired it with an
-  // inner ink ring at cell*0.13 and the pair swallowed the body - at the embed
-  // floor the settlers read as white asterisks. The ring has to stay thin
-  // enough that the seat colour is still what you see.
+  // seat colours are the brightest things on the plate now, and the ring's job
+  // is to hold them off the grains they stand among rather than off a bright
+  // field. Keep it thin: a first attempt at cell*0.13 swallowed the body and the
+  // settlers read as asterisks at the embed floor.
   const ring = Math.max(1, cell * 0.075);
   for (const body of bodies) {
     const seat = seatOf(body.slot);
@@ -859,16 +947,21 @@ function drawBoard(frame, previous, t, now) {
     context.beginPath();
     context.arc(body.px, body.py, size, 0, Math.PI * 2);
     if (body.starving) {
-      context.fillStyle = C.hollow;
+      // Hollow means EMPTY, so it has to be the plate showing through. Filling
+      // it with paper was right on a white field and is the brightest blob on
+      // screen on a dark one — the exact opposite of the meaning.
+      context.fillStyle = PLATE_HEX;
       context.fill();
       context.lineWidth = Math.max(1.2, cell * 0.12);
-      context.strokeStyle = seat.board;
+      context.strokeStyle = seat.color;
       context.stroke();
     } else {
-      context.fillStyle = seat.board;
+      // seat.color, not seat.board: the board variants were darkened to sit on a
+      // white field and disappear into this one.
+      context.fillStyle = seat.color;
       context.fill();
       context.lineWidth = ring;
-      context.strokeStyle = C.paper;
+      context.strokeStyle = C.ink;
       context.stroke();
     }
   }
@@ -994,15 +1087,28 @@ function boardKey(frame) {
   // BOTH sugar and spice peaks, so most of the plate is the rust of spice while
   // the key taught only the yellow of sugar — the dominant colour on the board
   // was the one thing the legend did not explain.
-  const ramps = [["sugar", (t) => cellColor(t * state.maxSugar, 0)]];
-  if (state.maxSpice > 0) ramps.push(["spice", (t) => cellColor(0, t * state.maxSpice)]);
-  for (const [label, ramp] of ramps) {
-    for (let step = 0; step <= 4; step += 1) {
-      markup += `<rect x="${x + step * (swatchW + 2)}" y="${y - swatchW + 2}" `
-        + `width="${swatchW}" height="${swatchW}" fill="${ramp(step / 4)}" `
+  // The key has to teach what the board actually encodes. It used to show a
+  // colour ramp because the board WAS a colour ramp; the board is grain density
+  // now, so the swatches count grains — none, one, two, three, four.
+  const ramps = [["sugar", SUGAR_HEX, state.maxSugar]];
+  if (state.maxSpice > 0) ramps.push(["spice", SPICE_HEX, state.maxSpice]);
+  for (const [label, grainColour, peak] of ramps) {
+    const steps = Math.max(1, Math.min(4, Math.round(peak)));
+    for (let step = 0; step <= steps; step += 1) {
+      const cellX = x + step * (swatchW + 2);
+      markup += `<rect x="${cellX}" y="${y - swatchW + 2}" `
+        + `width="${swatchW}" height="${swatchW}" fill="${PLATE_HEX}" `
         + `stroke="${GRID_HEX}" stroke-width="0.8"/>`;
+      const perAxis = Math.max(1, Math.ceil(Math.sqrt(Math.max(1, steps))));
+      const pitch = (swatchW - 2) / perAxis;
+      const grain = pitch * 0.9;
+      for (let index = 0; index < step; index += 1) {
+        markup += `<rect x="${cellX + 1 + (index % perAxis) * pitch}" `
+          + `y="${y - swatchW + 3 + Math.floor(index / perAxis) * pitch}" `
+          + `width="${grain}" height="${grain}" fill="${grainColour}"/>`;
+      }
     }
-    x += 5 * (swatchW + 2) + 8;
+    x += (steps + 1) * (swatchW + 2) + 8;
     markup += text(label, x, y, style);
     // Advance by the REAL type size. A fixed per-character step was tuned
     // against one ramp and overlapped every label the moment the other was in

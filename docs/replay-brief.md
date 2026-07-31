@@ -155,46 +155,60 @@ copy: warm near-black ground, ink `#2a1f12`, paper `#f6ead2`, one sugar-gold acc
 `#e8a838` taken from the world's own resource, mono restricted to tabular numbers, and a
 redundant shape per seat so the read never depends on hue alone.
 
-### The plate stays light — a decision, with the measurement that argues against it
+### The plate inverted, and resource became density — by request
 
-A parallel session measured the plate and filed `docs/palette-handoff.md` proposing that the
-ground be **inverted to warm near-black**, keeping `gui.py`'s blend structure but moving the
-zero end to `#1d1811` and lifting spice to `#cb3760`. Its measurement is correct and worth
-recording, because it is the strongest argument against the lock above:
+The owner asked for two changes to the board: **change the white background**, and
+**make sugar and spice densely packed particles rather than fully-shaded tiles.**
+Both are now in, and together they settle a measurement that had been sitting
+unresolved in this document.
 
-- **Full sugar `#F2FA00` against an empty cell `#FBF8F0` is 1.07:1.** That is not "shallow
-  cells are low contrast" — it is the sugar axis carrying *no* luminance signal at all, end
-  to end. The whole ramp is chroma.
-- The spice axis is the opposite: `#9B4722` against the same empty cell is 6.0:1.
+A parallel session had filed `docs/palette-handoff.md` proposing the inversion,
+with the measurement that argued for it:
 
-**The plate stays light anyway, and the reason is arithmetic, not taste.** No single
-background satisfies both ramps. Sugar is very light and spice is very dark, so pushing the
-empty cell down far enough for sugar to reach 3:1 (about L = 0.244, a mid warm brown) drops
-spice to 1.78:1. Inverting all the way to `#1d1811` buys sugar its luminance and spends
-spice's. There is no ground colour that gives both 3:1 while keeping the two hues, and the
-two hues are what makes the picture Sugarscape.
+- **Full sugar `#F2FA00` against an empty cell `#FBF8F0` is 1.07:1.** Not "low
+  contrast" — the sugar axis carried *no* luminance signal at all, end to end.
+- The spice axis was the opposite: `#9B4722` on the same cell is 6.0:1.
+- No single background fixes both. Sugar is very light and spice very dark, so
+  pushing the empty cell down far enough for sugar to reach 3:1 drops spice to
+  1.78:1. That is why an earlier revision of this section concluded the plate had
+  to stay light and the chroma-only ramp had to be accepted.
 
-Given that, the tie is broken by the two things that are not arithmetic. The owner rejected
-an invented art direction once already, in those words — *"this doesn't look like what james
-showed me the original game was like"* — and `.harness/screenshots/palette-proposal.png`
-renders both plates side by side from the same frame of the real recording: on the light
-plate the two sugar massifs, the two spice massifs and the carved trails of eaten cells all
-separate cleanly; the inverted plate reads as a crimson heatmap and loses the eaten trails
-into the ground.
+**The particle model dissolves that trade entirely**, which is the part neither
+the handoff nor this document had seen. Quantity is no longer carried by a
+colour at all: it is carried by HOW MANY GRAINS ARE THERE. One grain per unit
+held, packed on a per-cell sub-grid. A cell with four sugar is four yellow
+grains; one holding four of each is eight; an eaten cell is bare plate. That
+survives greyscale, achromatopsia, a projector and a phone in sunlight — none of
+which the ramp did — and it can be counted rather than estimated. The two hues
+now only have to say *which* resource, not *how much*, so they are free to be
+chosen for separation instead of for a ramp.
 
-What the handoff was right about, and what has been taken from it:
+What it took to get there, since two attempts read badly and are worth recording:
 
-- **The board key now draws BOTH ramps.** It taught the yellow of sugar while most of the
-  shipped board is the rust of spice — the dominant colour on the plate was the one thing
-  the legend did not explain.
-- **Every settler carries an ink ring.** A bare dot was separated from the terrain by hue
-  alone, on the one channel the terrain already uses — a red settler on rust spice. The ring
-  makes it structural, at any resource depth and under any colour-vision deficiency.
-- `resourceName()` and the two-axis `cellColor` branch are live for the first time and were
-  checked at both densities.
+- **Scattered grains are noise.** Placing each grain anywhere in its cell, small
+  enough not to collide, dissolved the two sugar massifs and the two spice
+  massifs into an even speckle — at that size the eye cannot integrate density
+  from scattered dots. They have to PACK.
+- **Raster order bands the board.** Filling the sub-grid left-to-right made every
+  cell lay its first grains along its top row, and because neighbouring cells
+  hold similar amounts they did it together: continuous horizontal stripes across
+  the whole plate. Each resource now grows as a clump ordered by distance from
+  its own corner — sugar from one, spice from the other — so a sugar-rich cell is
+  a yellow clump, a spice-rich one a rust clump, and region colour follows region
+  composition. That is what brings the crossed diagonals back.
+- **The lattice had to go.** A drawn grid over a field of grains is a second grid
+  at a second pitch, and the plate read as a halftone screen. The grains cluster
+  inside their own cell with a gap at the edges, so the cell structure is drawn
+  by the thing being measured rather than by scaffolding around it.
 
-The open task on the board is left open rather than closed: inverting the plate is a
-product decision the owner has already ruled on once, and it is theirs to reverse.
+Knock-on changes the inversion forces, all applied: settlers take the bright
+`seat.color` (the `board` variants were darkened for a white field and vanished
+on this one) and carry an ink ring; the starving marker fills with the plate
+rather than with paper, or a hollow settler becomes the brightest object on the
+board; the death mote lifts to `C.loss`; the board key counts grains instead of
+showing a colour ramp; the plate's edge is a lit warm rule, because a dark plate
+on a dark surround has no luminance boundary of its own. `cellColor` and its
+two-axis interpolation are deleted rather than left dormant.
 
 ## Phase 4 — where the gates stand
 
