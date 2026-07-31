@@ -2,8 +2,8 @@
 
    THE BOARD IS A DARK PLATE OF PACKED GRAINS. reference/dtl-python/gui.py is
    vendored in this repo and remains the oracle for the game's IDENTITY — the
-   shared lattice, sugar yellow #F2FA00, spice rust, agents coloured red then
-   blue by decision model — but not for its rendering model, which was a white
+   shared lattice, its two resources, agents coloured red then blue by decision
+   model — but not for its rendering model, which was a white
    field of flat interpolated tiles. Two measured reasons it changed, and one
    asked for:
 
@@ -14,11 +14,17 @@
    2. A near-white plate inside a #14100a surround is a glare sandwich: the
       brightest thing on the broadcast was bare ground.
 
-   So resource is DENSITY. One grain per unit held, packed on a per-cell
-   sub-grid, sugar clumping from one corner and spice from the other — a full
-   cell is nearly solid, an eaten one is bare plate, and you can count it. The
-   quantity now survives every channel the colour ramp lost it in, and the
-   crossed diagonals of the shipped config read at a glance.
+   So resource is DENSITY: a dense mass of fine particles whose local
+   concentration is the local amount — spice blown across a dune, not counters
+   stacked in a square. The quantity now survives every channel the colour ramp
+   lost it in, and the drifts run across cell boundaries the way real ones would.
+
+   3. The two hues were 4.7:1 apart in LUMINANCE (#F2FA00 at L=0.872 against
+      #9B4722 at L=0.115), so at equal coverage the yellow simply looked like
+      more and the eye read a sugar majority the board did not have. Sugar is a
+      warm white and spice a lit amber now — L=0.800 against L=0.478, close
+      enough that equal masses read as equal masses. Hue says WHICH; density
+      says how much.
 
    THE BROADCAST AROUND IT is a dark warm surround that seats the plate and never
    competes with it: ink #2a1f12, paper #f6ead2, sugar-gold accent #e8a838,

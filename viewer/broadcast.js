@@ -679,11 +679,17 @@ function resetStream() {
  * texture, read as fog, and looked nothing like the model anyone recognises.
  * The lattice IS the picture; it does not want scenery. */
 
-const SUGAR_HEX = "#f2fa00";          // gui.py #F2FA00, unchanged
-// gui.py's #9B4722 measures 2.78:1 as a grain on the plate below; lifted just
-// far enough to clear 3:1 while staying the same rust, and kept well off the
-// seat red so a settler never reads as a heap of spice.
-const SPICE_HEX = "#c05a2c";
+/* The two resources are matched for BRIGHTNESS, not just separated by hue.
+ *
+ * gui.py's #F2FA00 sugar and #9B4722 spice measure L=0.872 and L=0.115 — a 4.7:1
+ * luminance gap between the two things the viewer is being asked to compare. At
+ * equal coverage the yellow simply looked like more, so the eye read a sugar
+ * majority on a board that did not have one. Sugar is a warm white and spice a
+ * lit amber now: L=0.800 against L=0.478, a 1.5:1 gap, close enough that equal
+ * masses read as equal masses. Hue says WHICH resource; density says how much.
+ */
+const SUGAR_HEX = "#f4ecdb";          // warm white; NEVER pure
+const SPICE_HEX = "#f0a63c";          // the amber of the spice itself
 const PLATE_HEX = "#1d1811";          // the field the grains lie on; NEVER pure black
 const GRID_HEX = "#332a1e";           // one step up from the plate
 
@@ -692,19 +698,86 @@ let pendingBeat = null;
 const terrain = document.createElement("canvas");
 const terrainContext = terrain.getContext("2d");
 
-/* Deterministic grain placement.
+/* A SAND CLOUD, not a grid of countable grains.
  *
- * Positions have to be STABLE across timesteps or the whole plate boils: a
- * settler eats one unit of sugar and the other three jump to new corners. So
- * every grain's offset comes from a hash of its cell and its index, not from
- * Math.random - the same grain sits in the same place for the whole episode, and
- * a cell losing resource simply loses its LAST grains.
+ * Resource is drawn as a dense mass of fine particles whose local density is the
+ * local amount — the way spice looks blown across a dune rather than the way
+ * counters look stacked in a square. Two earlier attempts are worth recording
+ * because neither is obviously wrong until you look at it:
+ *
+ *   - One grain per unit, scattered anywhere in the cell, small enough not to
+ *     collide. At that size the eye cannot integrate density from isolated dots,
+ *     so the two sugar massifs and the two spice massifs dissolved into an even
+ *     speckle. The picture lost its terrain entirely.
+ *   - One grain per unit, PACKED on a per-cell sub-grid. Legible, and countable,
+ *     but it read as a halftone screen: a regular pitch inside a regular pitch,
+ *     which is a printing artefact rather than a landscape. Filling that
+ *     sub-grid in raster order also struck continuous horizontal bands across
+ *     the whole plate, because neighbouring cells hold similar amounts and so
+ *     laid their first grains along the same row together.
+ *
+ * So: many particles per unit, scattered across the WHOLE cell with no inset, so
+ * neighbouring cells merge into one continuous field and the drifts run across
+ * cell boundaries the way real ones would. Local density carries the quantity,
+ * which is a channel that survives greyscale, colour-vision deficiency, a
+ * projector and a phone in sunlight — none of which the original's chroma ramp
+ * did.
+ *
+ * Drawn once into a small sheet of TILES rather than particle-by-particle every
+ * timestep: a full board is 1,024 cells holding up to eight units each, and at
+ * the density that reads as a cloud that is a quarter of a million fills per
+ * timestep. One tile per (sugar, spice) pair, three variants of each so the
+ * repeat is not visible, built once per board size and then blitted.
  */
-function grainOffset(cellIndex, slot, axis) {
-  let hash = (cellIndex * 73856093) ^ (slot * 19349663) ^ (axis * 83492791);
+const PARTICLES_PER_UNIT = 26;
+const TILE_VARIANTS = 3;
+const grainSheet = { key: "", tiles: [] };
+
+/** A deterministic value in [0,1) from three integers. Positions must be stable
+ *  across timesteps or the whole plate boils when one settler eats one unit. */
+function grainOffset(a, b, c) {
+  let hash = (a * 73856093) ^ (b * 19349663) ^ (c * 83492791);
   hash = Math.imul(hash ^ (hash >>> 15), 2246822507);
   hash = Math.imul(hash ^ (hash >>> 13), 3266489909);
   return ((hash ^ (hash >>> 16)) >>> 0) / 4294967296;
+}
+
+function buildGrainSheet(cellPx) {
+  const maxSugar = Math.max(0, Math.round(state.maxSugar));
+  const maxSpice = Math.max(0, Math.round(state.maxSpice));
+  const key = `${cellPx}:${maxSugar}:${maxSpice}`;
+  if (grainSheet.key === key) return;
+  grainSheet.key = key;
+  grainSheet.tiles = [];
+  const size = Math.max(2, Math.ceil(cellPx));
+  const particle = Math.max(1, size * 0.075);
+  for (let sugar = 0; sugar <= maxSugar; sugar += 1) {
+    for (let spice = 0; spice <= maxSpice; spice += 1) {
+      for (let variant = 0; variant < TILE_VARIANTS; variant += 1) {
+        const tile = document.createElement("canvas");
+        tile.width = size;
+        tile.height = size;
+        const tileContext = tile.getContext("2d");
+        let seed = (sugar * 31 + spice) * TILE_VARIANTS + variant;
+        for (const [units, colour] of [[sugar, SUGAR_HEX], [spice, SPICE_HEX]]) {
+          tileContext.fillStyle = colour;
+          const count = Math.round(units * PARTICLES_PER_UNIT);
+          for (let index = 0; index < count; index += 1) {
+            seed += 1;
+            // Grains vary in size. A single particle size reads as television
+            // static; sand does not have one grade, and the variation is what
+            // makes the mass look blown rather than generated.
+            const grade = particle * (0.65 + grainOffset(seed, index, 2) * 0.95);
+            tileContext.fillRect(
+              grainOffset(seed, index, 0) * (size - grade),
+              grainOffset(seed, index, 1) * (size - grade),
+              grade, grade);
+          }
+        }
+        grainSheet.tiles[(sugar * (maxSpice + 1) + spice) * TILE_VARIANTS + variant] = tile;
+      }
+    }
+  }
 }
 
 function buildTerrain(frame) {
@@ -713,123 +786,26 @@ function buildTerrain(frame) {
   const cell = size / Math.max(frame.width, frame.height);
   terrainContext.setTransform(1, 0, 0, 1, 0, 0);
   terrainContext.clearRect(0, 0, terrain.width, terrain.height);
-
-  /* No lattice. The GRAINS are the lattice now.
-   *
-   * A drawn grid made sense when a cell was one flat rectangle and the lines
-   * were the only thing separating two similar fills. Over a field of packed
-   * grains it is a second grid at a second pitch laid over the first, and the
-   * plate read as a halftone screen rather than as terrain. Each cell's grains
-   * cluster inside their own square with a gap at the edges, so the cell
-   * structure is still there to be counted — it is simply drawn by the thing
-   * being measured instead of by scaffolding around it.
-   */
-  const hairline = Math.max(1, cell * 0.08);
   terrainContext.fillStyle = PLATE_HEX;
   terrainContext.fillRect(0, 0, cell * frame.width, cell * frame.height);
 
-  /* Resource is DENSITY, not shade.
-   *
-   * Each cell used to be one flat rectangle interpolated between white, sugar
-   * yellow and spice rust - gui.py's own model. It carried the quantity in
-   * CHROMA alone: full sugar against an empty cell measures 1.07:1, so the ramp
-   * that is the whole point of the picture had no luminance signal end to end,
-   * and a viewer with any colour-vision deficiency read a flat field. Drawing
-   * one grain per unit held puts the quantity in a channel that survives
-   * greyscale, a projector and a phone in sunlight: you can COUNT it. A cell
-   * with four sugar is four yellow grains; a cell holding four of each is eight;
-   * an eaten cell is bare plate. Sugar and spice keep their own hues, so the
-   * crossed diagonals still read at a glance.
-   */
-  /* PACKED, on a sub-grid — not scattered.
-   *
-   * A first attempt placed each grain at a free position anywhere in its cell
-   * and made them small enough not to collide. The result was noise: the two
-   * sugar massifs and the two spice massifs, which the shaded plate showed at a
-   * glance, dissolved into an even speckle, because at that size the eye cannot
-   * integrate density from scattered dots.
-   *
-   * Packing them fixes it. Each cell is a sub-grid with one slot per unit the
-   * world can hold, and the grains nearly touch, so a full cell reads as almost
-   * solid colour and an eaten one as bare plate — the coverage difference IS the
-   * regional brightness, and the massifs come back. The slot order is a cheap
-   * per-cell bijection so neighbouring cells do not fill in lockstep and screen
-   * into a moiré, and a fixed order means a cell losing resource loses its LAST
-   * grains rather than reshuffling every one of them.
-   */
-  const slots = Math.max(1, Math.round(state.maxSugar) + Math.round(state.maxSpice));
-  const perAxis = Math.max(1, Math.ceil(Math.sqrt(slots)));
-  const total = perAxis * perAxis;
-  const pitch = (cell - hairline) / perAxis;
-  const grain = Math.max(1, pitch * 0.92);
-  /* The two resources fill from OPPOSITE CORNERS.
-   *
-   * Interleaving them through one shuffled order put a yellow grain beside a
-   * rust one in every cell, so every region averaged to the same muddy
-   * yellow-orange and Sugarscape's crossed diagonals — sugar on one pair of
-   * quadrants, spice on the other — could not be seen at all. Sugar packs from
-   * the top-left in raster order and spice from the bottom-right in reverse, so
-   * a sugar-rich cell is a yellow clump, a spice-rich one a rust clump, and a
-   * cell holding both shows the split. Region colour follows region composition,
-   * which is the read the whole board exists for.
-   */
-  /* Each resource grows as a CLUMP from its own corner, ordered by distance.
-   *
-   * Filling the sub-grid in raster order made every cell lay its first three
-   * grains along its top row, and because neighbouring cells hold similar
-   * amounts they all did it together — the board struck into continuous
-   * horizontal yellow bands that swamped the terrain underneath. Ordering the
-   * seats by distance from the corner grows a compact blob instead, so the only
-   * thing that varies across the plate is how much of each cell is covered,
-   * which is the quantity.
-   */
-  const seatsFromCorner = (far) => {
-    const order = [];
-    for (let sy = 0; sy < perAxis; sy += 1) {
-      for (let sx = 0; sx < perAxis; sx += 1) {
-        const dx = far ? perAxis - 1 - sx : sx;
-        const dy = far ? perAxis - 1 - sy : sy;
-        order.push([sy * perAxis + sx, dx * dx + dy * dy]);
-      }
-    }
-    order.sort((first, second) => first[1] - second[1] || first[0] - second[0]);
-    return order.map((entry) => entry[0]);
-  };
-  const sugarSeats = seatsFromCorner(false);
-  const spiceSeats = seatsFromCorner(true);
-  const jitter = (pitch - grain) * 0.6;
-  const place = (index, seat, slot, colour) => {
-    terrainContext.fillStyle = colour;
-    const x = Math.floor(index / frame.height) * cell;
-    const y = (index % frame.height) * cell;
-    terrainContext.fillRect(
-      x + (seat % perAxis) * pitch + (grainOffset(index, slot, 0) - 0.5) * jitter,
-      y + Math.floor(seat / perAxis) * pitch + (grainOffset(index, slot, 1) - 0.5) * jitter,
-      grain, grain);
-  };
+  buildGrainSheet(cell);
+  const maxSugar = Math.max(0, Math.round(state.maxSugar));
+  const maxSpice = Math.max(0, Math.round(state.maxSpice));
   for (let index = 0; index < frame.cells.length; index += 1) {
     const [sugar, spice] = frame.cells[index];
     if (sugar <= 0 && spice <= 0) continue;
-    // A bitmask, so spice never lands on a seat sugar already took when a cell
-    // holds more than the sub-grid can seat.
-    let taken = 0;
-    let slot = 0;
-    for (let grainIndex = 0; grainIndex < Math.round(sugar) && slot < total; grainIndex += 1) {
-      const seat = sugarSeats[grainIndex];
-      if (seat === undefined) break;
-      taken |= 1 << seat;
-      place(index, seat, slot, SUGAR_HEX);
-      slot += 1;
-    }
-    for (let grainIndex = 0, placed = 0; grainIndex < spiceSeats.length
-      && placed < Math.round(spice) && slot < total; grainIndex += 1) {
-      const seat = spiceSeats[grainIndex];
-      if (taken & (1 << seat)) continue;
-      taken |= 1 << seat;
-      place(index, seat, slot, SPICE_HEX);
-      slot += 1;
-      placed += 1;
-    }
+    const s = Math.min(maxSugar, Math.max(0, Math.round(sugar)));
+    const p = Math.min(maxSpice, Math.max(0, Math.round(spice)));
+    // The variant is chosen per CELL, so the same amount does not print the same
+    // arrangement across a whole massif.
+    const variant = Math.floor(grainOffset(index, 7, 11) * TILE_VARIANTS);
+    const tile = grainSheet.tiles[(s * (maxSpice + 1) + p) * TILE_VARIANTS + variant];
+    if (!tile) continue;
+    // cellId = x * height + y (column-major).
+    terrainContext.drawImage(tile,
+      Math.round(Math.floor(index / frame.height) * cell),
+      Math.round((index % frame.height) * cell));
   }
 }
 
@@ -1099,13 +1075,14 @@ function boardKey(frame) {
       markup += `<rect x="${cellX}" y="${y - swatchW + 2}" `
         + `width="${swatchW}" height="${swatchW}" fill="${PLATE_HEX}" `
         + `stroke="${GRID_HEX}" stroke-width="0.8"/>`;
-      const perAxis = Math.max(1, Math.ceil(Math.sqrt(Math.max(1, steps))));
-      const pitch = (swatchW - 2) / perAxis;
-      const grain = pitch * 0.9;
-      for (let index = 0; index < step; index += 1) {
-        markup += `<rect x="${cellX + 1 + (index % perAxis) * pitch}" `
-          + `y="${y - swatchW + 3 + Math.floor(index / perAxis) * pitch}" `
-          + `width="${grain}" height="${grain}" fill="${grainColour}"/>`;
+      // The same cloud the board draws, at the same relative density, so the key
+      // teaches the encoding rather than a different notation for it.
+      const particle = Math.max(0.7, swatchW * 0.11);
+      const count = Math.round(step * 9);
+      for (let index = 0; index < count; index += 1) {
+        markup += `<rect x="${cellX + 1 + grainOffset(step, index, 0) * (swatchW - particle - 2)}" `
+          + `y="${y - swatchW + 3 + grainOffset(step, index, 1) * (swatchW - particle - 2)}" `
+          + `width="${particle}" height="${particle}" fill="${grainColour}"/>`;
       }
     }
     x += (steps + 1) * (swatchW + 2) + 8;

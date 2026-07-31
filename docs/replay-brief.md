@@ -183,19 +183,37 @@ which the ramp did — and it can be counted rather than estimated. The two hues
 now only have to say *which* resource, not *how much*, so they are free to be
 chosen for separation instead of for a ramp.
 
-What it took to get there, since two attempts read badly and are worth recording:
+**And the two hues had to be matched for brightness.** `#F2FA00` sugar measures
+L=0.872 against `#9B4722` spice at L=0.115 — a 4.7:1 luminance gap between the
+two things the viewer is being asked to compare. At equal coverage the yellow
+simply looked like more, so the eye read a sugar majority on a board that did not
+have one. Sugar is a warm white `#f4ecdb` (L=0.800) and spice a lit amber
+`#f0a63c` (L=0.478) now: a 1.5:1 gap, close enough that equal masses read as
+equal masses. Hue says *which* resource; density says how much.
 
-- **Scattered grains are noise.** Placing each grain anywhere in its cell, small
-  enough not to collide, dissolved the two sugar massifs and the two spice
-  massifs into an even speckle — at that size the eye cannot integrate density
-  from scattered dots. They have to PACK.
-- **Raster order bands the board.** Filling the sub-grid left-to-right made every
-  cell lay its first grains along its top row, and because neighbouring cells
-  hold similar amounts they did it together: continuous horizontal stripes across
-  the whole plate. Each resource now grows as a clump ordered by distance from
-  its own corner — sugar from one, spice from the other — so a sugar-rich cell is
-  a yellow clump, a spice-rich one a rust clump, and region colour follows region
-  composition. That is what brings the crossed diagonals back.
+What it took to get there, since three attempts read badly and none of them is
+obviously wrong until you look at it:
+
+- **Scattered grains are noise.** One grain per unit, placed anywhere in its cell
+  and small enough not to collide, dissolved the two sugar massifs and the two
+  spice massifs into an even speckle — at that size the eye cannot integrate
+  density from isolated dots.
+- **A packed sub-grid is a halftone screen.** One grain per unit on a per-cell
+  sub-grid is legible and countable, but it is a regular pitch inside a regular
+  pitch, which is a printing artefact rather than a landscape. Filling it in
+  raster order was worse: every cell laid its first grains along its top row, and
+  because neighbouring cells hold similar amounts they did it together, striking
+  continuous horizontal bands across the whole plate.
+- **One particle size reads as television static.** Real sand has grades. The
+  grains vary from 0.65× to 1.6× and the mass stops looking generated.
+
+What works is many fine particles per unit scattered across the whole cell with
+no inset, so neighbouring cells merge into one continuous field and the drifts
+run across cell boundaries. It is drawn as a small sheet of pre-rendered tiles —
+one per (sugar, spice) pair, three variants each so the repeat is invisible,
+rebuilt only when the board size changes — because at cloud density a full board
+is a quarter of a million fills per timestep, which is exactly the per-frame cost
+that made an earlier build stutter.
 - **The lattice had to go.** A drawn grid over a field of grains is a second grid
   at a second pitch, and the plate read as a halftone screen. The grains cluster
   inside their own cell with a gap at the edges, so the cell structure is drawn
