@@ -794,13 +794,17 @@ function stirTerrain(now) {
  * maxSugar+maxSpice tiles say. On the shipped 4/4 board that is 200 against 8,
  * and the saving is what pays for the loop frames below.
  */
-/* 36, not 26, because the grains got finer and DENSITY IS THE QUANTITY.
+/* 220, from 36, from 26, because the grains got finer and DENSITY IS THE
+ * QUANTITY.
  *
- * Coverage goes with the square of the grade, so dropping the particle size from
- * 0.075 of a cell to 0.064 took 27% of the ink off the plate — and the ink is
- * how much sugar is in the cell. More, smaller grains hold the same coverage a
- * unit always meant while fusing into a field instead of countable specks. */
-const PARTICLES_PER_UNIT = 36;
+ * Coverage goes with the SQUARE of the grade, so every cut to the particle size
+ * takes ink off the plate — and the ink is how much sugar is in the cell. 0.075
+ * -> 0.064 cost 27% of it and was paid for with 26 -> 36; 0.064 -> 0.026 costs
+ * 84%, and (0.064/0.026)^2 x 36 is 220. A unit of sugar therefore prints the
+ * same mass it always did, out of six times as many specks, each a sixth of the
+ * area. This constant and `particle` in buildGrainSheet are one setting with two
+ * halves: move either alone and a unit silently changes what it is worth. */
+const PARTICLES_PER_UNIT = 220;
 /* Eight, not three, because the cloud is now NESTED (see grainCloud).
  *
  * Amount no longer varies the arrangement, so the only thing standing between
@@ -848,7 +852,7 @@ const GRAIN_PHASES = 24;
 const GRAIN_PERIOD_MS = 1600;         // one full loop
 const GRAIN_WAVELENGTH = 12;          // cells between ripple crests, on the diagonal
 const GRAIN_RIPPLE = Math.max(1, Math.round(GRAIN_PHASES / GRAIN_WAVELENGTH));
-const grainSheet = { key: "", strips: [[], []], size: 0 };
+const grainSheet = { key: "", strips: [[], []], size: 0, bleed: 0, box: 0 };
 
 /* `?stir=off` holds the sand still, and it is not a debug flag — it is the only
  * way to see the two motions on this plate APART.
@@ -950,19 +954,49 @@ function buildGrainSheet(cellPx) {
   grainSheet.strips = [[], []];
   const size = Math.max(2, Math.ceil(cellPx));
   grainSheet.size = size;
-  // Finer than the 0.075 it started at. Larger grains hold their own edges and
-  // the eye counts them; at this grade they fuse into a continuous field and the
-  // cell boundaries stop announcing themselves.
-  const particle = Math.max(1, size * 0.064);
+  /* SAND, not gravel: 0.026 of a cell, down from 0.075 and then 0.064.
+   *
+   * At a fortieth of the cell a grain lands under one device pixel once the
+   * supersampled plate is scaled down, so it prints as a partial-coverage speck
+   * rather than as a countable block with edges of its own. That is the whole
+   * difference between a field of sand and a field of dots, and it is also what
+   * stops the stir reading as static: a grain that is a fraction of a pixel
+   * changes a fraction of a pixel's worth of ink when it moves.
+   *
+   * COVERAGE IS THE QUANTITY, and coverage goes with the SQUARE of the grade, so
+   * the count has to pay for the fineness or a unit of sugar quietly becomes a
+   * fifth of the ink it was: (0.064/0.026)^2 = 6.1, and 36 x 6.1 is the 220 in
+   * PARTICLES_PER_UNIT. Move one of the two and you must move the other. */
+  const particle = Math.max(0.6, size * 0.026);
   // How far a grain may wander from home. Under half a particle: the mass has to
   // read as stirred, not as scattered, and its density IS the quantity.
   const drift = Math.max(0.4, particle * 0.55);
+  /* The cells BLEED INTO EACH OTHER rather than each holding its own sand.
+   *
+   * A grain whose orbit carries it over the edge used to wrap round to the
+   * opposite side of the same cell — the cell as a torus. Density stayed flat
+   * across the boundary, which was the point, but nothing ever CROSSED one, so
+   * every cell was still a closed box and the lattice could be read off the
+   * plate by anyone who looked for it.
+   *
+   * Now the tile is drawn with a margin and the grain simply carries on into it,
+   * over the neighbour, and the tiles mesh. The cost is the honest one: that
+   * spilled grain belongs to the cell it came FROM, so when a settler eats that
+   * cell the part of the grain lying over the neighbour goes with it. Which is
+   * correct — it was never the neighbour's sand.
+   *
+   * The margin is exactly what an orbit plus a grade can reach, so the clip
+   * never cuts a grain and no grain reaches the next phase's column. */
+  const bleed = Math.ceil(drift + particle * 1.6);
+  const box = size + bleed * 2;
+  grainSheet.bleed = bleed;
+  grainSheet.box = box;
   for (const [resource, colour] of [[0, SUGAR_HEX], [1, SPICE_HEX]]) {
     for (let units = 1; units <= ceiling[resource]; units += 1) {
       for (let variant = 0; variant < TILE_VARIANTS; variant += 1) {
         const strip = document.createElement("canvas");
-        strip.width = size * GRAIN_PHASES;
-        strip.height = size;
+        strip.width = box * GRAIN_PHASES;
+        strip.height = box;
         const stripContext = strip.getContext("2d");
         stripContext.fillStyle = colour;
         const stream = grainStream(variant, resource);
@@ -1002,29 +1036,21 @@ function buildGrainSheet(cellPx) {
         for (let phase = 0; phase < GRAIN_PHASES; phase += 1) {
           stripContext.save();
           stripContext.beginPath();
-          stripContext.rect(phase * size, 0, size, size);
+          stripContext.rect(phase * box, 0, box, box);
           stripContext.clip();
-          stripContext.translate(phase * size, 0);
+          // The cell's own origin sits one margin in, so a grain that leaves it
+          // is drawn in the margin rather than wrapped back inside.
+          stripContext.translate(phase * box + bleed, bleed);
           for (let index = 0; index < paths.length; index += 1) {
             const path = paths[index];
             const grade = path.grade;
             const angle = (path.start + path.spin * phase / GRAIN_PHASES) * Math.PI * 2;
             const reachX = Math.cos(angle) * path.reach;
             const reachY = Math.sin(angle) * path.reach * path.flat;
-            const px = wrapInto(path.homeX + reachX * path.cosTilt - reachY * path.sinTilt, size);
-            const py = wrapInto(path.homeY + reachX * path.sinTilt + reachY * path.cosTilt, size);
-            stripContext.fillRect(px, py, grade, grade);
-            // The cell is a TORUS, not a box with margins. Inseting the homes so
-            // no orbit could reach an edge was the first fix and it printed a
-            // gutter at every cell boundary — a two-pixel dark rule around all
-            // 1,024 of them, which is the woven-mesh artefact this whole cloud
-            // exists to avoid. A grain leaving one edge re-enters at the opposite
-            // one instead, so the density stays flat right across the boundary.
-            const overX = px + grade > size;
-            const overY = py + grade > size;
-            if (overX) stripContext.fillRect(px - size, py, grade, grade);
-            if (overY) stripContext.fillRect(px, py - size, grade, grade);
-            if (overX && overY) stripContext.fillRect(px - size, py - size, grade, grade);
+            stripContext.fillRect(
+              path.homeX + reachX * path.cosTilt - reachY * path.sinTilt,
+              path.homeY + reachX * path.sinTilt + reachY * path.cosTilt,
+              grade, grade);
           }
           stripContext.restore();
         }
@@ -1045,7 +1071,8 @@ function buildTerrain(frame, stir) {
 
   buildGrainSheet(cell);
   terrainStir = stir;
-  const tile = grainSheet.size;
+  const box = grainSheet.box;
+  const bleed = grainSheet.bleed;
   const ceiling = grainCeiling();
   for (let index = 0; index < frame.cells.length; index += 1) {
     const [sugar, spice] = frame.cells[index];
@@ -1064,7 +1091,12 @@ function buildTerrain(frame, stir) {
       if (units <= 0) continue;
       const strip = grainStrip(resource, units, variant);
       if (!strip) continue;
-      terrainContext.drawImage(strip, column * tile, 0, tile, tile, left, top, tile, tile);
+      // Drawn one margin up and to the left of the cell it belongs to, so the
+      // sand that overhangs lands on the neighbours. Nothing is erased by the
+      // neighbour's own blit: the margins are transparent, so the two fields
+      // simply overlap and the boundary stops existing.
+      terrainContext.drawImage(strip, column * box, 0, box, box,
+        left - bleed, top - bleed, box, box);
     }
   }
 }

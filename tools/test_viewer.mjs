@@ -589,25 +589,38 @@ assert.ok(switched.wanted, "and the switch reads as on");
 assert.equal(new URLSearchParams("?stir=off").get("stir") !== "off", false,
   "?stir=off is what holds the sand still");
 
-/* A CELL IS A TORUS, not a box with margins.
+/* THE CELLS BLEED INTO EACH OTHER.
  *
- * Inseting the grain homes so no orbit could reach an edge was the first attempt
- * at containing the loop, and it printed a two-pixel dark gutter around all 1,024
- * cells — the woven-mesh artefact the sand cloud exists to avoid. A grain that
- * leaves one edge re-enters at the opposite one instead. */
-const wrapped = JSON.parse(vm.runInContext(`
+ * Two earlier attempts at containing the orbit are worth keeping on the record.
+ * Insetting the homes so no grain could reach an edge printed a two-pixel dark
+ * gutter around all 1,024 cells — the woven-mesh artefact the sand cloud exists
+ * to avoid. Wrapping the cell as a torus fixed the gutter and kept density flat
+ * across the boundary, but nothing ever CROSSED one, so every cell stayed a
+ * closed box and the lattice could still be read off the plate.
+ *
+ * The tile is drawn with a margin now and the grain carries on into it, over the
+ * neighbour. The margin has to be at least what an orbit plus a grade can reach,
+ * or the clip cuts grains off at the tile edge and the gutter comes back. */
+const bleeding = JSON.parse(vm.runInContext(`
+  state.maxSugar = 4; state.maxSpice = 4;
+  grainSheet.key = "";
+  buildGrainSheet(38);
+  const particle = Math.max(0.6, 38 * 0.026);
+  const drift = Math.max(0.4, particle * 0.55);
   JSON.stringify({
-    plain: [0, 3.5, 37.9].map((value) => Number(wrapInto(value, 38).toFixed(4))),
-    over: Number(wrapInto(39.5, 38).toFixed(4)),
-    under: Number(wrapInto(-1.5, 38).toFixed(4)),
-    bounded: [-970.2, -0.001, 0, 37.999, 200.7]
-      .every((value) => wrapInto(value, 38) >= 0 && wrapInto(value, 38) < 38),
+    bleed: grainSheet.bleed,
+    box: grainSheet.box,
+    size: grainSheet.size,
+    reach: drift + particle * 1.6,
+    strips: grainSheet.strips[0].length + grainSheet.strips[1].length,
   });
 `, viewerContext));
-assert.deepEqual(wrapped.plain, [0, 3.5, 37.9], "a grain inside the cell does not move");
-assert.equal(wrapped.over, 1.5, "one that orbits off the right edge comes back on the left");
-assert.equal(wrapped.under, 36.5, "and the other way round");
-assert.ok(wrapped.bounded, "no orbit, however far out, lands outside the cell");
+assert.ok(bleeding.bleed >= 1, `the tile must carry a margin, got ${bleeding.bleed}`);
+assert.equal(bleeding.box, bleeding.size + bleeding.bleed * 2, "one margin on every side");
+assert.ok(bleeding.bleed >= bleeding.reach,
+  `the margin must cover an orbit plus a grade (${bleeding.reach}), got ${bleeding.bleed}`);
+assert.ok(bleeding.bleed < bleeding.size / 4,
+  "and it is a spill, not a second cell: a grain crosses the line, it does not move house");
 
 /* AND THE STIR ARRIVES AS A RIPPLE.
  *
@@ -653,6 +666,7 @@ const sheet = JSON.parse(vm.runInContext(`
     spice: grainSheet.strips[1].filter(Boolean).length,
     width: strip.width,
     height: strip.height,
+    box: grainSheet.box,
     nothingForNothing: grainStrip(0, 0, 0) === undefined,
     variants: TILE_VARIANTS,
     phases: GRAIN_PHASES,
@@ -665,8 +679,10 @@ const sheet = JSON.parse(vm.runInContext(`
 assert.equal(sheet.sugar, 4 * sheet.variants, "one strip per sugar amount, per variant");
 assert.equal(sheet.spice, 3 * sheet.variants, "and per spice amount, which need not match it");
 assert.equal(sheet.size, 38, "the strip is built for the cell size it was asked for");
-assert.equal(sheet.width, 38 * sheet.phases, "and lays the whole loop out along it");
-assert.equal(sheet.height, 38, "one cell tall");
+// A cell plus its two margins — the sand overhangs, so the tile is wider than
+// the cell it belongs to (see THE CELLS BLEED INTO EACH OTHER).
+assert.equal(sheet.width, sheet.box * sheet.phases, "and lays the whole loop out along it");
+assert.equal(sheet.height, sheet.box, "one bled cell tall");
 assert.ok(sheet.nothingForNothing, "an empty cell has no strip; it is left as bare plate");
 
 /* Density is a RAMP SWITCH, not a scale factor, and the viewer's own larger-text

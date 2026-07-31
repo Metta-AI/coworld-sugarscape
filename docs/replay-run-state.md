@@ -78,6 +78,20 @@ owner's complaint was that the resource flickers. **Nobody can answer "does it
 still flicker?" while both motions are running**, which is what the switch is
 for. Judge the stir with `?stir=off` in the other tab.
 
+**The grain size and the grain count are ONE setting with two halves.** Coverage
+is the quantity a cell holds and coverage goes with the SQUARE of the grade, so
+`particle` in `buildGrainSheet` and `PARTICLES_PER_UNIT` must move together or a
+unit of sugar quietly changes what it is worth on the plate. The owner asked for
+much finer sand on 2026-07-30: 0.026 of a cell, down from 0.064, paid for with
+36 → 220 grains per unit. One-time sheet build 129ms, 11.9 MB of strips, first
+composite after a rebuild ~48ms of texture upload and 0.72ms warm.
+
+**And the cells bleed.** The tile carries a 3px margin and a grain that orbits
+past the edge is drawn into it, over the neighbour, instead of wrapping back
+inside — the torus kept density flat but nothing ever crossed a boundary, so the
+lattice could still be read off the plate. The honest cost of the spill: the
+overhanging sand belongs to the cell it came FROM, so a harvest takes it with it.
+
 ## Verification state — all green
 
 - `tools/test_all.sh` — viewer staleness check, 7 Nim byte-parity suites, and the
