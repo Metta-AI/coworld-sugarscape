@@ -1157,7 +1157,13 @@ function stirTerrain(now) {
  * maxSugar+maxSpice tiles say. On the shipped 4/4 board that is 200 against 8,
  * and the saving is what pays for the loop frames below.
  */
-const PARTICLES_PER_UNIT = 26;
+/* 36, not 26, because the grains got finer and DENSITY IS THE QUANTITY.
+ *
+ * Coverage goes with the square of the grade, so dropping the particle size from
+ * 0.075 of a cell to 0.064 took 27% of the ink off the plate — and the ink is
+ * how much sugar is in the cell. More, smaller grains hold the same coverage a
+ * unit always meant while fusing into a field instead of countable specks. */
+const PARTICLES_PER_UNIT = 36;
 /* Eight, not three, because the cloud is now NESTED (see grainCloud).
  *
  * Amount no longer varies the arrangement, so the only thing standing between
@@ -1191,10 +1197,11 @@ const TILE_VARIANTS = 8;
  * third of a pixel, which is below what the eye can resolve as a jump. Twenty-four
  * of them costs ~10 MB of sheet and one build per board size.
  *
- * The phase a cell shows is offset by where that cell stands on the lattice, so
- * the stir crosses the plate as a slow ripple rather than the whole field
- * twitching in lockstep — a crest every dozen cells on the diagonal, taking about
- * eight seconds to cross the shipped board.
+ * The phase a cell shows is offset by where that cell stands on the lattice. Two
+ * cells holding the same amount already share a cloud whenever they draw the same
+ * variant — one chance in eight — and if they also stood at the same phase they
+ * would be pixel-identical twins, which is exactly the printed-repeat the variants
+ * exist to break. The offset makes that one chance in eight times twenty-four.
  *
  * NOT scaled by animFactor, unlike every other motion on this stage: this is the
  * wind, not the clock. It keeps its own time while the replay is paused, sped up
@@ -1206,9 +1213,26 @@ const GRAIN_WAVELENGTH = 12;          // cells between ripple crests, on the dia
 const GRAIN_RIPPLE = Math.max(1, Math.round(GRAIN_PHASES / GRAIN_WAVELENGTH));
 const grainSheet = { key: "", strips: [[], []], size: 0 };
 
+/* `?stir=off` holds the sand still, and it is not a debug flag — it is the only
+ * way to see the two motions on this plate APART.
+ *
+ * There are two of them and they are easy to confuse for each other: the wind,
+ * which moves every grain a fraction of a pixel fifteen times a second and never
+ * stops, and the harvest, which is the resource actually changing hands. Held on
+ * one paused timestep with the stir on, ~47% of the plate's pixels change every
+ * 67ms step and 17% of them change by more than a quarter of the plate-to-grain
+ * contrast; with it off, none do. So a viewer asked whether the board still
+ * flickers cannot answer while both are running, and neither can an audit.
+ *
+ * Off, the plate is motionless until a settler eats, which is what the flicker
+ * work is for; on, it drifts. Default is on — this switches nothing off for a
+ * viewer who does not ask. */
+const stirWanted = new URLSearchParams(location.search).get("stir") !== "off";
+
 /** Which frame of the loop the sand stands at. Its own clock: see above. */
 function stirAt(now) {
-  return reducedMotion ? 0 : Math.floor(now / (GRAIN_PERIOD_MS / GRAIN_PHASES));
+  if (reducedMotion || !stirWanted) return 0;
+  return Math.floor(now / (GRAIN_PERIOD_MS / GRAIN_PHASES));
 }
 
 /** `value` brought into [0, span) — the cell wraps, so a grain that orbits off
@@ -1217,10 +1241,9 @@ function wrapInto(value, span) {
   return ((value % span) + span) % span;
 }
 
-/** Which frame of the loop the cell at (x, y) shows. Offset by where the cell
- *  STANDS, so the stir crosses the plate as a ripple rather than every cell
- *  turning over on the same beat. Crests lie along x - y and travel down and to
- *  the left, which is the way the haze in the surround blows: one wind. */
+/** Which frame of the loop the cell at (x, y) shows. Offset along x - y so that
+ *  neighbours never stand at the same phase, and two cells that happen to share
+ *  an amount AND a variant still cannot print as identical twins. */
 function grainColumn(stir, x, y) {
   return wrapInto(stir + (x - y) * GRAIN_RIPPLE, GRAIN_PHASES);
 }
@@ -1290,7 +1313,10 @@ function buildGrainSheet(cellPx) {
   grainSheet.strips = [[], []];
   const size = Math.max(2, Math.ceil(cellPx));
   grainSheet.size = size;
-  const particle = Math.max(1, size * 0.075);
+  // Finer than the 0.075 it started at. Larger grains hold their own edges and
+  // the eye counts them; at this grade they fuse into a continuous field and the
+  // cell boundaries stop announcing themselves.
+  const particle = Math.max(1, size * 0.064);
   // How far a grain may wander from home. Under half a particle: the mass has to
   // read as stirred, not as scattered, and its density IS the quantity.
   const drift = Math.max(0.4, particle * 0.55);
@@ -1304,25 +1330,52 @@ function buildGrainSheet(cellPx) {
         stripContext.fillStyle = colour;
         const stream = grainStream(variant, resource);
         const cloud = grainCloud(stream, units * PARTICLES_PER_UNIT);
+        /* Every grain floats on a path of ITS OWN — its own start, its own
+         * direction, its own ellipse at its own angle, none of it shared with
+         * the grain beside it.
+         *
+         * The first version tied the starting angle to the grain's x so that
+         * neighbours leaned together, on the theory that a wave passing through
+         * the cell would look more like weather than independent orbits would.
+         * It looks like neither. A cell whose grains all lean the same way is one
+         * rigid thing tilting, and the plate read as several hundred little rafts
+         * ROCKING back and forth in step. Correlation is the bug, not the fix:
+         * with nothing shared, the mass simmers, and the cells mesh into one
+         * field instead of each announcing its own edges.
+         *
+         * Precomputed per grain rather than per (grain, phase) — these are
+         * constants of the path, and recomputing eight hashes inside the phase
+         * loop cost twenty-four times what it needed to. */
+        const paths = cloud.map(([x, y, scale], index) => {
+          const tilt = grainOffset(stream, index, 5) * Math.PI;
+          return {
+            homeX: x * size,
+            homeY: y * size,
+            grade: particle * scale,
+            spin: grainOffset(stream, index, 3) < 0.5 ? 1 : -1,
+            start: grainOffset(stream, index, 4),
+            cosTilt: Math.cos(tilt),
+            sinTilt: Math.sin(tilt),
+            reach: drift * (0.35 + grainOffset(stream, index, 6) * 0.65),
+            // Round orbits all round is as uniform as flat ones all flat. Each
+            // grain gets its own squash, so no two trace the same figure.
+            flat: 0.3 + grainOffset(stream, index, 7) * 0.7,
+          };
+        });
         for (let phase = 0; phase < GRAIN_PHASES; phase += 1) {
           stripContext.save();
           stripContext.beginPath();
           stripContext.rect(phase * size, 0, size, size);
           stripContext.clip();
           stripContext.translate(phase * size, 0);
-          for (let index = 0; index < cloud.length; index += 1) {
-            const [x, y, scale] = cloud[index];
-            const grade = particle * scale;
-            // Grains standing near each other lean together: the loop's starting
-            // angle runs with the grain's own x, so a cell stirs as a wave passing
-            // through it. Independent phases per grain fizz like static instead.
-            const lean = x * 0.8 + grainOffset(stream, index, 3) * 0.2;
-            const radius = drift * (0.45 + grainOffset(stream, index, 4) * 0.55);
-            const angle = (lean + phase / GRAIN_PHASES) * Math.PI * 2;
-            const px = wrapInto(x * size + Math.cos(angle) * radius, size);
-            // Flatter than it is wide. Wind runs ACROSS a dune field, and a round
-            // orbit reads as boiling where a flat one reads as blown.
-            const py = wrapInto(y * size + Math.sin(angle) * radius * 0.4, size);
+          for (let index = 0; index < paths.length; index += 1) {
+            const path = paths[index];
+            const grade = path.grade;
+            const angle = (path.start + path.spin * phase / GRAIN_PHASES) * Math.PI * 2;
+            const reachX = Math.cos(angle) * path.reach;
+            const reachY = Math.sin(angle) * path.reach * path.flat;
+            const px = wrapInto(path.homeX + reachX * path.cosTilt - reachY * path.sinTilt, size);
+            const py = wrapInto(path.homeY + reachX * path.sinTilt + reachY * path.cosTilt, size);
             stripContext.fillRect(px, py, grade, grade);
             // The cell is a TORUS, not a box with margins. Inseting the homes so
             // no orbit could reach an edge was the first fix and it printed a
@@ -1589,7 +1642,13 @@ function drawBoard(frame, previous, t, now) {
    * Sized by wealth; hollow when a settler has less than one timestep of food
    * left, so the die-off is visible just before it happens. */
   const bodies = interpolate(previous, frame, t);
-  const radius = cell * 0.31;
+  // 0.31 of a cell put a dot two thirds the width of the square it stood in, and
+  // with 64 of them the swarm was reading as the subject and the lattice as its
+  // backdrop. It is the other way round: the sand is the picture. Smaller, and
+  // the settlers become what they are — bodies moving over a landscape. The
+  // embed floor is the constraint on going further: at 640 a cell is 8 CSS px,
+  // so this is a 4px dot, and the ring below is what keeps it a body.
+  const radius = cell * 0.26;
   // A settler is red or blue and so is the ground it stands on - sugar ramps to
   // yellow, spice to rust - so a bare dot separated by HUE ALONE, which is the
   // one channel the terrain already uses. The ring makes it structural: every

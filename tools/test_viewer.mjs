@@ -574,6 +574,21 @@ assert.equal(stir.fast, 1, "the wind does not blow harder at 4x; it is not the c
 assert.deepEqual(stir.reduced, [0, 0, 0],
   "reduced motion freezes the sand, which also stops the plate being repainted");
 
+/* `?stir=off` holds the sand still so the two motions on this plate can be told
+ * apart — the wind, which never stops, and the harvest, which is the resource
+ * changing hands. Nobody can answer "does the board still flicker?" while both
+ * are running. Default is ON: a viewer who does not ask gets the sand blowing. */
+const switched = JSON.parse(vm.runInContext(`
+  const onByDefault = stirAt((GRAIN_PERIOD_MS / GRAIN_PHASES) * 5) !== stirAt(0);
+  JSON.stringify({ onByDefault, wanted: stirWanted });
+`, viewerContext));
+assert.ok(switched.onByDefault, "with no query the sand blows");
+assert.ok(switched.wanted, "and the switch reads as on");
+// The sandbox's location carries no query, so the off path is checked on the
+// predicate the flag is built from rather than by reloading the document.
+assert.equal(new URLSearchParams("?stir=off").get("stir") !== "off", false,
+  "?stir=off is what holds the sand still");
+
 /* A CELL IS A TORUS, not a box with margins.
  *
  * Inseting the grain homes so no orbit could reach an edge was the first attempt

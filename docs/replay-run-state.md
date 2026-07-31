@@ -61,6 +61,23 @@ Rebuild the whole path after either of you edits, or the replay the owner is
 watching keeps showing the other one's last build: `build_viewer.py`, then the
 Nim binary, then restart 18400 AND the preview on 18402 (cycle below).
 
+**`?stir=off` tells the two motions apart, and you will need it.** They are easy
+to confuse for each other and the numbers say why. Held on ONE paused timestep,
+with nothing in the model changing at all:
+
+| per 67ms stir step, paused | stir on | `?stir=off` |
+|---|---|---|
+| plate pixels that move | 46.7% | 0.15% (the starving markers, not the plate) |
+| that move by >60 of 215 levels of plate-to-grain contrast | 17.4% | 0% |
+
+That is consistent with the intended ~⅓px drift rather than with grains
+teleporting — a 1px grain at that contrast shifts an edge pixel by ~70 when it
+moves a third of a pixel — but it means the drift runs at near-full contrast
+across roughly half the grain pixels, fifteen times a second, on a board whose
+owner's complaint was that the resource flickers. **Nobody can answer "does it
+still flicker?" while both motions are running**, which is what the switch is
+for. Judge the stir with `?stir=off` in the other tab.
+
 ## Verification state — all green
 
 - `tools/test_all.sh` — viewer staleness check, 7 Nim byte-parity suites, and the
