@@ -3,7 +3,7 @@
   "tags": ["agent-based-model", "economics", "population-policy"],
   "game": {
     "name": "sugarscape",
-    "version": "0.1.2",
+    "version": "0.1.3",
     "description": "A native, deterministic DTL Sugarscape simulation where each player policy controls the movement choices of an assigned population.",
     "owner": "Metta-AI",
     "config_schema": {
@@ -82,7 +82,7 @@
           "description": "Maximum startup wait for every player population to connect.",
           "type": "integer",
           "minimum": 0,
-          "default": 60000
+          "default": 180000
         },
         "frameInterval": {
           "type": "integer",
@@ -164,7 +164,7 @@
         "environmentWidth": 32,
         "environmentHeight": 32,
         "agentDecisionModels": ["population-a", "population-b"],
-        "connectionWaitMs": 60000,
+        "connectionWaitMs": 180000,
         "decisionTimeoutMs": 100,
         "frameInterval": 1,
         "players": [
@@ -190,7 +190,7 @@
       "environmentWidth": 16,
       "environmentHeight": 16,
       "agentDecisionModels": ["population-a", "population-b"],
-      "connectionWaitMs": 60000,
+      "connectionWaitMs": 180000,
       "decisionTimeoutMs": 100,
       "players": [
         {"name": "Population A"},
