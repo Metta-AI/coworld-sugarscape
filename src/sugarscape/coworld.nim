@@ -11,6 +11,7 @@ const
   HealthPath = "/healthz"
   PlayerPath = "/player"
   GlobalPath = "/global"
+  ReplayPath = "/replay"
   PlayerClientPaths = ["/client/player", "/clients/player"]
   GlobalClientPaths = ["/client/global", "/clients/global", "/client/replay",
     "/clients/replay"]
@@ -189,8 +190,8 @@ proc httpHandler(request: Request) =
   elif request.path == PlayerPath and request.httpMethod == "GET" and
       request.isWebSocketUpgrade():
     discard request.registerPlayer()
-  elif request.path == GlobalPath and request.httpMethod == "GET" and
-      request.isWebSocketUpgrade():
+  elif request.path in [GlobalPath, ReplayPath] and
+      request.httpMethod == "GET" and request.isWebSocketUpgrade():
     let websocket = request.upgradeToWebSocket()
     var history: seq[string]
     {.gcsafe.}:

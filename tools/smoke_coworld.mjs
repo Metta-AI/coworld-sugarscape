@@ -314,8 +314,10 @@ assert.ok(
 );
 
 const frames = [];
+const replayFrames = [];
 const lateFrames = [];
 const globalSocket = await openCollectingSocket("/global", frames);
+const replaySocket = await openCollectingSocket("/replay", replayFrames);
 const playerSocket = await openSocket("/player?slot=0&token=smoke-token");
 let observations = 0;
 let firstExpected = null;
@@ -403,8 +405,13 @@ assert.notEqual(
   replay.frames.at(-1).stats.meanWealth,
 );
 assert.ok(frames.length >= 3);
+assert.ok(replayFrames.length >= 3);
 assert.equal(typeof frames[0].streamId, "string");
 assert.ok(frames.every((frame) => frame.streamId === frames[0].streamId));
+assert.ok(
+  replayFrames.every((frame) => frame.streamId === replayFrames[0].streamId),
+);
+replaySocket.close();
 const firstDecisionFrame = replay.frames.find(
   (frame) => frame.timestep === firstExpected.timestep,
 );

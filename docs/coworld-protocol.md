@@ -81,10 +81,11 @@ canonical simulation.
 
 ## Global and replay sockets
 
-Connect to `GET /global`. A spectator joining an episode in progress first
-receives up to the most recent 300 `sugarscape.frame.v1` frames in order, then
-receives one live frame every configured `frameInterval` timesteps without a
-gap. Frames contain the complete sugar/spice/pollution grid, living agent
+Connect to `GET /global`; replay runtimes expose the same stream at the required
+`GET /replay` alias. A spectator joining an episode in progress first receives
+up to the most recent 300 `sugarscape.frame.v1` frames in order, then receives
+one live frame every configured `frameInterval` timesteps without a gap. Frames
+contain the complete sugar/spice/pollution grid, living agent
 summaries (including display attributes), friend/mate/active-loan links,
 policy-slot metadata, and an immutable snapshot of the canonical aggregate
 statistics. Each streamed frame also carries a server-generated `streamId`.
