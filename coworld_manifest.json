@@ -3,7 +3,7 @@
   "tags": ["agent-based-model", "economics", "population-policy"],
   "game": {
     "name": "sugarscape",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "description": "A native, deterministic DTL Sugarscape simulation where each player policy controls the movement choices of an assigned population.",
     "owner": "Metta-AI",
     "config_schema": {

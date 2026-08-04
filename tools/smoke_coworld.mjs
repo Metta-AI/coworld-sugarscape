@@ -44,17 +44,17 @@ let output = "";
 child.stdout.on("data", (chunk) => { output += chunk; });
 child.stderr.on("data", (chunk) => { output += chunk; });
 
-async function waitForHealth() {
+async function waitForHealth(url = baseUrl, childOutput = () => output) {
   for (let attempt = 0; attempt < 100; attempt += 1) {
     try {
-      const response = await fetch(`${baseUrl}/healthz`);
+      const response = await fetch(`${url}/healthz`);
       if (response.ok && await response.text() === "healthy") return;
     } catch {
       // The server thread is still starting.
     }
     await new Promise((resolveWait) => setTimeout(resolveWait, 20));
   }
-  throw new Error(`Coworld did not become healthy:\n${output}`);
+  throw new Error(`Coworld did not become healthy:\n${childOutput()}`);
 }
 
 function openSocket(path) {
@@ -69,9 +69,9 @@ function openSocket(path) {
   });
 }
 
-function openCollectingSocket(path, target) {
+function openCollectingSocket(path, target, socketPort = port) {
   return new Promise((resolveOpen, rejectOpen) => {
-    const socket = new WebSocket(`ws://127.0.0.1:${port}${path}`);
+    const socket = new WebSocket(`ws://127.0.0.1:${socketPort}${path}`);
     socket.addEventListener("message", (event) => {
       target.push(JSON.parse(event.data));
     });
@@ -428,10 +428,31 @@ const replayChild = spawn(binary, [
 let replayOutput = "";
 replayChild.stdout.on("data", (chunk) => { replayOutput += chunk; });
 replayChild.stderr.on("data", (chunk) => { replayOutput += chunk; });
-const replayExitCode = await new Promise((resolveExit) => {
-  replayChild.on("exit", resolveExit);
+await waitForHealth(
+  `http://127.0.0.1:${port + 1}`,
+  () => replayOutput,
+);
+const loadedReplayFrames = [];
+const loadedReplaySocket = await openCollectingSocket(
+  "/replay",
+  loadedReplayFrames,
+  port + 1,
+);
+for (let attempt = 0; attempt < 100; attempt += 1) {
+  if (loadedReplayFrames.length === replay.frames.length) break;
+  await new Promise((resolveWait) => setTimeout(resolveWait, 20));
+}
+assert.deepEqual(
+  loadedReplayFrames.map((frame) => frame.timestep),
+  replay.frames.map((frame) => frame.timestep),
+);
+loadedReplaySocket.close();
+const replayExitPromise = new Promise((resolveExit) => {
+  replayChild.on("exit", (code, signal) => resolveExit({code, signal}));
 });
-assert.equal(replayExitCode, 0, replayOutput);
+replayChild.kill("SIGTERM");
+const replayExit = await replayExitPromise;
+assert.deepEqual(replayExit, {code: null, signal: "SIGTERM"}, replayOutput);
 
 console.log(
   `Coworld smoke passed: ${observations} observations, ` +

@@ -580,6 +580,8 @@ proc runCoworld*(runtimeConfig: RuntimeConfig) =
     for frame in replay["frames"]:
       frame.publishFrame()
       sleep(40)
+    joinThread(thread)
+    return
   else:
     var
       sim = initSimulation(normalized)

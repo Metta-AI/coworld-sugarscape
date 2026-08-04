@@ -3,6 +3,8 @@
 ## Service and artifacts
 
 `GET /healthz` returns `healthy` after the HTTP/WebSocket server is ready.
+Replay mode remains available after loading and publishing its frames; the
+hosting platform owns the server process lifetime.
 Player and global browser pages are available at `/client/player` and
 `/client/global`; the plural `/clients/...` forms are aliases. Replay mode uses
 the same viewer at `/client/replay` or `/clients/replay`.
