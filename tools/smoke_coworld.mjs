@@ -87,7 +87,7 @@ function openCollectingSocket(path, target, socketPort = port) {
 await waitForHealth();
 const playerPage = await fetch(`${baseUrl}/client/player`);
 assert.equal(playerPage.status, 200);
-assert.match(await playerPage.text(), /population-policy socket/);
+assert.match(await playerPage.text(), /player-policy socket/);
 const viewerPage = await fetch(`${baseUrl}/client/global`);
 assert.equal(viewerPage.status, 200);
 const viewerHtml = await viewerPage.text();
@@ -318,72 +318,79 @@ const replayFrames = [];
 const lateFrames = [];
 const globalSocket = await openCollectingSocket("/global", frames);
 const replaySocket = await openCollectingSocket("/replay", replayFrames);
-const playerSocket = await openSocket("/player?slot=0&token=smoke-token");
+const playerSockets = await Promise.all([
+  openSocket("/player?slot=0&token=smoke-a"),
+  openSocket("/player?slot=1&token=smoke-b"),
+]);
 let observations = 0;
 let firstExpected = null;
 let lateGlobalSocket = null;
 
-playerSocket.addEventListener("message", async (event) => {
-  const observation = JSON.parse(event.data);
-  assert.equal(observation.type, "observation");
-  assert.ok(observation.candidates.length > 0);
-  observations += 1;
-  if (observations === 1) {
-    const legitimate = observation.candidates[0].cell;
-    const alternative = observation.candidates.find(
-      (candidate) => candidate.cell !== legitimate,
-    );
-    assert.ok(alternative, "first observation needs a spoofable alternative");
-    const spoofed = alternative.cell;
-    firstExpected = {
-      agentId: observation.agent.id,
-      cell: legitimate,
-      timestep: observation.timestep,
-    };
-    globalSocket.send(JSON.stringify({
-      type: "action",
-      requestId: observation.requestId,
-      cell: spoofed,
-    }));
-    setTimeout(() => playerSocket.send(JSON.stringify({
-      type: "action",
-      requestId: observation.requestId,
-      cell: legitimate,
-    })), 10);
-  } else if (observations === 2) {
-    playerSocket.send(JSON.stringify({
-      type: "action",
-      requestId: observation.requestId,
-      cell: -999,
-    }));
-  } else if (observations === 9) {
-    const lateSocketPromise = openCollectingSocket("/global", lateFrames);
-    playerSocket.send(JSON.stringify({
-      type: "action",
-      requestId: observation.requestId,
-      cell: observation.candidates[0].cell,
-    }));
-    lateGlobalSocket = await lateSocketPromise;
-  } else {
-    playerSocket.send(JSON.stringify({
-      type: "action",
-      requestId: observation.requestId,
-      cell: observation.candidates[0].cell,
-    }));
-  }
-});
+for (const [slot, playerSocket] of playerSockets.entries()) {
+  playerSocket.addEventListener("message", async (event) => {
+    const observation = JSON.parse(event.data);
+    assert.equal(observation.type, "observation");
+    assert.equal(observation.slot, slot);
+    assert.equal(observation.agent.id, slot);
+    assert.ok(observation.candidates.length > 0);
+    observations += 1;
+    if (observations === 1) {
+      const legitimate = observation.candidates[0].cell;
+      const alternative = observation.candidates.find(
+        (candidate) => candidate.cell !== legitimate,
+      );
+      assert.ok(alternative, "first observation needs a spoofable alternative");
+      const spoofed = alternative.cell;
+      firstExpected = {
+        agentId: observation.agent.id,
+        cell: legitimate,
+        timestep: observation.timestep,
+      };
+      globalSocket.send(JSON.stringify({
+        type: "action",
+        requestId: observation.requestId,
+        cell: spoofed,
+      }));
+      setTimeout(() => playerSocket.send(JSON.stringify({
+        type: "action",
+        requestId: observation.requestId,
+        cell: legitimate,
+      })), 10);
+    } else if (observations === 2) {
+      playerSocket.send(JSON.stringify({
+        type: "action",
+        requestId: observation.requestId,
+        cell: -999,
+      }));
+    } else if (observations === 3) {
+      const lateSocketPromise = openCollectingSocket("/global", lateFrames);
+      playerSocket.send(JSON.stringify({
+        type: "action",
+        requestId: observation.requestId,
+        cell: observation.candidates[0].cell,
+      }));
+      lateGlobalSocket = await lateSocketPromise;
+    } else {
+      playerSocket.send(JSON.stringify({
+        type: "action",
+        requestId: observation.requestId,
+        cell: observation.candidates[0].cell,
+      }));
+    }
+  });
+}
 
 const exitCode = await new Promise((resolveExit) => {
   child.on("exit", resolveExit);
 });
 assert.equal(exitCode, 0, output);
-assert.equal(observations, 24);
+assert.equal(observations, 6);
 
 const results = JSON.parse(await readFile(resultsPath, "utf8"));
-assert.deepEqual(results.decision_requests, [24]);
-assert.deepEqual(results.actions_received, [23]);
-assert.deepEqual(results.fallbacks, [1]);
-assert.equal(results.population.length, 1);
+assert.deepEqual(results.decision_requests, [3, 3]);
+assert.equal(results.actions_received.reduce((sum, value) => sum + value), 5);
+assert.equal(results.fallbacks.reduce((sum, value) => sum + value), 1);
+assert.equal(results.population.length, 2);
 assert.match(results.score_semantics, /final population sugar plus spice/);
 assert.deepEqual(
   lateFrames.slice(0, 2).map((frame) => frame.timestep),
@@ -400,6 +407,14 @@ assert.ok(Array.isArray(replay.frames[0].links));
 assert.equal(typeof replay.frames[0].agents[0].age, "number");
 assert.equal(typeof replay.frames[0].agents[0].sick, "boolean");
 assert.equal(typeof replay.frames[0].agents[0].movement, "number");
+assert.ok(replay.frames.every(
+  (frame) => frame.agents.every(
+    (agent) => agent.id === agent.slot && agent.tribe === agent.slot,
+  ),
+));
+assert.ok(replay.frames.every(
+  (frame) => frame.stats.remainingTribes === 2,
+));
 assert.notEqual(
   replay.frames[0].stats.meanWealth,
   replay.frames.at(-1).stats.meanWealth,
@@ -456,6 +471,7 @@ assert.deepEqual(replayExit, {code: null, signal: "SIGTERM"}, replayOutput);
 
 console.log(
   `Coworld smoke passed: ${observations} observations, ` +
-  `${results.actions_received[0]} actions, ${results.fallbacks[0]} fallback, ` +
+  `${results.actions_received.reduce((sum, value) => sum + value)} actions, ` +
+  `${results.fallbacks.reduce((sum, value) => sum + value)} fallback, ` +
   `${replay.frames.length} replay frames`,
 );

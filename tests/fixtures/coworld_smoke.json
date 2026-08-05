@@ -1,7 +1,7 @@
 {
   "seed": 12345,
   "timesteps": 3,
-  "startingAgents": 8,
+  "startingAgents": 2,
   "environmentWidth": 12,
   "environmentHeight": 12,
   "environmentMaxSugar": 4,
@@ -12,7 +12,8 @@
   "agentSugarMetabolism": [1, 1],
   "connectionWaitMs": 5000,
   "decisionTimeoutMs": 100,
-  "players": [{"name": "Greedy remote"}],
-  "tokens": ["smoke-token"],
-  "slots": [{"decisionModels": ["none"]}]
+  "onePlayerPerAgent": true,
+  "playerTribes": true,
+  "players": [{"name": "Greedy A"}, {"name": "Greedy B"}],
+  "tokens": ["smoke-a", "smoke-b"]
 }

@@ -90,9 +90,9 @@ No simultaneous-action approximation is compatible.
   the oracle. A caller-provided predetermined cell bypasses internal selection
   exactly where the upstream `predeterminedMove` hook does.
 - Rule-triggered interactions after movement are not promoted into new player
-  actions. Coworld policies choose destinations for a population; the native
-  rules continue to perform trade, reproduction, combat, lending, tagging, and
-  disease behavior.
+  actions. In the default Coworld contract each policy chooses destinations
+  for one initial agent; the native rules continue to perform trade,
+  reproduction, combat, lending, tagging, and disease behavior.
 
 ## Termination and scoring
 
@@ -102,9 +102,10 @@ runtime statistics and logs are compatibility outputs, not a newly invented
 reward.
 
 Coworld grading is additive and derives scores from recorded canonical state.
-It must not mutate the simulation or consume random numbers. The initial
-Coworld policy contract controls a population rather than opening one network
-connection per simulated agent, preserving large-population behavior.
+It must not mutate the simulation or consume random numbers. The default
+Coworld policy contract opens one authenticated player connection per initial
+agent. Population-by-decision-model slots remain available as a non-default
+adapter mode.
 
 ## Configuration and outputs
 
@@ -139,7 +140,7 @@ alternate semantics:
 | `ecology` | base, spice | seasons, pollution formation and diffusion |
 | `ethics` | all prior layers | Asimov, Bentham variants, Temperance, Leader |
 | `full` | all layers | every shipped example and mixed-model determinism fixture |
-| `coworld` | full | population-policy RPC, health/results/replay, browser spectator |
+| `coworld` | full | player-policy RPC, health/results/replay, browser spectator |
 
 The default executable exposes the full upstream configuration surface.
 Layer names organize verification; users do not opt into a different ruleset by

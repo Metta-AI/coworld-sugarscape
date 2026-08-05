@@ -22,6 +22,7 @@ type
   PolicySlot = object
     name: string
     token: string
+    agentIds: seq[int]
     decisionModels: seq[string]
     requests: int
     actions: int
@@ -31,6 +32,8 @@ type
     decisionTimeoutMs: int
     connectionWaitMs: int
     frameInterval: int
+    onePlayerPerAgent: bool
+    playerTribes: bool
     slots: seq[PolicySlot]
 
   PendingRequest = object
@@ -72,10 +75,19 @@ proc intField(node: JsonNode, name: string, fallback: int): int =
   else:
     fallback
 
+proc boolField(node: JsonNode, name: string, fallback: bool): bool =
+  if node.kind == JObject and node.hasKey(name) and
+      node[name].kind == JBool:
+    node[name].getBool()
+  else:
+    fallback
+
 proc readCoworldConfig(raw: JsonNode, normalized: JsonNode): CoworldConfig =
   result.decisionTimeoutMs = max(1, raw.intField("decisionTimeoutMs", 100))
   result.connectionWaitMs = max(0, raw.intField("connectionWaitMs", 5000))
   result.frameInterval = max(1, raw.intField("frameInterval", 1))
+  result.onePlayerPerAgent = raw.boolField("onePlayerPerAgent", false)
+  result.playerTribes = raw.boolField("playerTribes", false)
 
   let
     slotNodes =
@@ -97,6 +109,29 @@ proc readCoworldConfig(raw: JsonNode, normalized: JsonNode): CoworldConfig =
       else:
         newJArray()
     configuredModels = normalized["agentDecisionModels"]
+
+  if result.onePlayerPerAgent:
+    let startingAgents = normalized["startingAgents"].getInt()
+    if playerNodes.len != startingAgents:
+      raise newException(
+        ValueError,
+        "onePlayerPerAgent requires one player per starting agent",
+      )
+    for index in 0 ..< playerNodes.len:
+      let node = playerNodes[index]
+      var slot = PolicySlot(
+        name: node.stringField("name", "Player " & $(index + 1)),
+        agentIds: @[index],
+      )
+      if index < tokenNodes.len and tokenNodes[index].kind == JString:
+        slot.token = tokenNodes[index].getStr()
+      if slot.token.len == 0:
+        raise newException(
+          ValueError,
+          "player slot " & $index & " requires a nonempty token",
+        )
+      result.slots.add(slot)
+    return
 
   for index in 0 ..< slotNodes.len:
     let node = slotNodes[index]
@@ -290,9 +325,39 @@ proc serverThread(args: ServerThreadArgs) {.thread.} =
 
 proc slotForAgent(slots: openArray[PolicySlot], agent: Agent): int =
   for index, slot in slots:
-    if agent.decisionModel in slot.decisionModels:
+    if agent.id in slot.agentIds or
+        agent.decisionModel in slot.decisionModels:
       return index
   -1
+
+proc assignPlayerTribes(
+    sim: var Simulation,
+    slots: openArray[PolicySlot],
+) =
+  var tribePopulations = newSeq[int](slots.len)
+  for agent in sim.agentTemplates.mitems:
+    let slot = slots.slotForAgent(agent)
+    if slot >= 0:
+      agent.tribe = slot
+  for id in sim.activeAgents:
+    let slot = slots.slotForAgent(sim.agents[id])
+    if slot >= 0:
+      sim.agents[id].tribe = slot
+      inc tribePopulations[slot]
+
+  var
+    largestTribe = 0
+    largestTribeSize = 0
+    remainingTribes = 0
+  for tribe, population in tribePopulations:
+    if population > 0:
+      inc remainingTribes
+    if population > largestTribeSize:
+      largestTribe = tribe
+      largestTribeSize = population
+  sim.runtimeStats["largestTribe"] = %largestTribe
+  sim.runtimeStats["largestTribeSize"] = %largestTribeSize
+  sim.runtimeStats["remainingTribes"] = %remainingTribes
 
 proc candidateJson(candidate: MoveCandidate): JsonNode =
   %*{
@@ -455,6 +520,7 @@ proc frameJson(
   for slot in slots:
     slotNodes.add(%*{
       "name": slot.name,
+      "agentIds": slot.agentIds,
       "decisionModels": slot.decisionModels,
     })
   %*{
@@ -553,6 +619,13 @@ proc runCoworld*(runtimeConfig: RuntimeConfig) =
         raw
     normalized = parseConfiguration(input)
     coworldConfig = readCoworldConfig(coworldRaw, normalized)
+  if coworldConfig.playerTribes and normalized["agentTagging"].getBool():
+    raise newException(
+      ValueError,
+      "playerTribes cannot be combined with agentTagging",
+    )
+  normalized["playerTribes"] = %coworldConfig.playerTribes
+  normalized["onePlayerPerAgent"] = %coworldConfig.onePlayerPerAgent
   initAppState(coworldConfig.slots)
 
   let httpServer = newServer(httpHandler, websocketHandler, workerThreads = 2)
@@ -586,6 +659,8 @@ proc runCoworld*(runtimeConfig: RuntimeConfig) =
     var
       sim = initSimulation(normalized)
       frames = newJArray()
+    if coworldConfig.playerTribes:
+      sim.assignPlayerTribes(coworldConfig.slots)
     let initialFrame = sim.frameJson(coworldConfig.slots)
     frames.add(initialFrame)
     initialFrame.publishFrame()
@@ -595,6 +670,8 @@ proc runCoworld*(runtimeConfig: RuntimeConfig) =
         (sim.activeAgents.len > 0 or
           sim.config["keepAlivePostExtinction"].getBool()):
       sim.doTimestep(policy)
+      if coworldConfig.playerTribes:
+        sim.assignPlayerTribes(coworldConfig.slots)
       if sim.timestep mod coworldConfig.frameInterval == 0 or
           sim.timestep == sim.maxTimestep:
         let frame = sim.frameJson(appState.slots)

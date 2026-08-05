@@ -131,10 +131,21 @@ values for a deployed episode.
 
 ## Coworld behavior
 
-Each authenticated `/player` WebSocket controls a configured population of
-decision-model labels. The game requests one legal movement decision at a time
+The default variant is a 2,000-timestep, 64-player sugar-and-spice economy.
+Sugar and spice use equal capacity, endowment, metabolism, and regrowth ranges
+with opposing resource peaks. Each player controls exactly one initial agent,
+and a league user may occupy at most two seats. Each player is its own fixed
+combat tribe: agents can attack other players' agents but never themselves.
+Agents also trade to balance resource needs and produce pollution from
+collecting and consuming either resource. Pollution begins at timestep 100 and
+diffuses every two timesteps for the remainder of the episode. This
+`playerTribes` mode is a Coworld rule and does not change the standalone DTL
+model; it cannot be combined with cultural tag copying.
+
+Each authenticated `/player` WebSocket controls the initial agent whose ID
+matches its seat index. The game requests one legal movement decision at a time
 in canonical shuffled activation order. An action is bound to the exact socket,
-slot, request ID, and candidate set; malformed, spoofed, late, or illegal
+seat, request ID, and candidate set; malformed, spoofed, late, or illegal
 actions are ignored and use the deterministic greedy fallback.
 
 The `/global` WebSocket and browser spectator expose read-only
@@ -168,7 +179,7 @@ Python, architecture, and source revision used.
 ## Repository layout
 
 - `src/sugarscape/`: native model, compatibility runtime, and Coworld adapter.
-- `players/greedy/`: bundled deterministic population policy.
+- `players/greedy/`: bundled deterministic player policy.
 - `tests/nim/`: focused native compatibility tests.
 - `tests/fixtures/`: small oracle and edge-case configurations.
 - `tools/`: differential, benchmark, state-comparison, and Coworld smoke tools.

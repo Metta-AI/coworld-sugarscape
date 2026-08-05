@@ -18,16 +18,19 @@ the bind address, which defaults to `0.0.0.0:8080`.
 
 The committed `config.json` contains obvious local-example tokens. Production
 runners must replace them with fresh per-episode values and give each policy
-only its own authenticated URL. Every configured slot requires one nonempty
-token, either at the matching index of top-level `tokens` or in the slot's
-`token` field; startup fails rather than exposing an unauthenticated slot.
+only its own authenticated URL. In `onePlayerPerAgent` mode, every player seat
+requires one nonempty token at the matching index of top-level `tokens`.
+Startup fails unless the player count equals `startingAgents`. Legacy
+population slots may instead carry a `token` field.
 
 ## Player socket
 
-Connect to `GET /player?slot=N&token=T` with a WebSocket upgrade. A slot owns a
-configured set of agent decision-model labels, so one socket controls a whole
-population. Decisions are requested synchronously in the shuffled activation
-order.
+Connect to `GET /player?slot=N&token=T` with a WebSocket upgrade. In the default
+`onePlayerPerAgent` contract, seat `N` exclusively controls initial agent ID
+`N`; the default roster therefore has 64 seats for 64 initial agents. Decisions
+are requested synchronously in the shuffled activation order. The optional
+legacy `slots` configuration can still assign populations by decision-model
+label when `onePlayerPerAgent` is false.
 
 The game sends:
 
@@ -39,15 +42,15 @@ The game sends:
   "timestep": 4,
   "world": {"width": 32, "height": 32},
   "agent": {
-    "id": 19,
+    "id": 0,
     "cell": 241,
     "age": 4,
     "sugar": 11,
     "spice": 7,
     "sugarMetabolism": 2,
     "spiceMetabolism": 1,
-    "decisionModel": "population-a",
-    "tribe": -1,
+    "decisionModel": "none",
+    "tribe": 0,
     "race": -1,
     "sick": false
   },
@@ -80,6 +83,12 @@ to 100 milliseconds.
 Only movement is delegated. Collection, combat, tagging, trade, reproduction,
 lending, disease, metabolism, aging, and all RNG consumption remain inside the
 canonical simulation.
+
+When `playerTribes` is true, each player seat is also a fixed combat tribe: an
+agent's tribe equals its controlling seat index. With one agent per player,
+combat therefore occurs between players rather than between randomly assigned
+cultural groups. Cultural tag copying (`agentTagging`) is incompatible with
+fixed player tribes and is rejected at startup.
 
 ## Global and replay sockets
 

@@ -1,6 +1,6 @@
-# Sugarscape greedy population policy
+# Sugarscape greedy player policy
 
-This bundled certification policy controls one configured population. For every
+This bundled certification policy controls one configured agent. For every
 observation it chooses `candidates[0]`, the DTL-compatible greedy-best legal
 destination supplied by the game.
 
