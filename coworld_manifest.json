@@ -3,7 +3,7 @@
   "tags": ["agent-based-model", "economics", "population-policy"],
   "game": {
     "name": "sugarscape",
-    "version": "0.1.4",
+    "version": "0.1.5",
     "description": "A native, deterministic DTL Sugarscape simulation where each player policy controls the movement choices of an assigned population.",
     "owner": "Metta-AI",
     "config_schema": {
@@ -156,10 +156,10 @@
     {
       "id": "default",
       "name": "Two-population Sugarscape",
-      "description": "Two policy populations share a 32 by 32 sugar-and-spice world for 100 timesteps.",
+      "description": "Two policy populations share a 32 by 32 sugar-and-spice world for 1000 timesteps.",
       "game_config": {
         "seed": -1,
-        "timesteps": 100,
+        "timesteps": 1000,
         "startingAgents": 64,
         "environmentWidth": 32,
         "environmentHeight": 32,
