@@ -542,6 +542,37 @@ hosted play still run the container/WS contract (§1.2) — Arena is an
 experiment measuring what the pod-per-episode ladder costs. A v2 that wants
 both league hosting and Arena dogfooding ships both shells over one core.
 
+## Decisions taken for v2
+
+**D1 — v2 is our own implementation of Sugarscape, not DTL.** (2026-08-07)
+v2 is written from scratch. It is not a port of the DTL Python model
+(`nkremerh/sugarscape`), does not target behavioral parity with it, and is not
+bound by the CPython determinism contract that dominated v1 (MT19937 parity,
+`json.dumps` byte formatting, `-ffp-contract=off`). DTL and `archived/v1/`
+remain **reference and evidence** — for which Sugarscape mechanics exist and
+how they interact — but neither is a template or an oracle, and differential
+testing against `archived/v1/reference/dtl-python/` is not a correctness
+criterion. A mechanism-level walkthrough of DTL is at
+`docs/dtl-implementation.html`; read its §11 quirk list as the set of
+behaviours v2 is explicitly free to discard.
+
+Rationale: DTL is a batch social-science simulator with no notion of an
+external agent controller, so player control can only be bolted on. v1 could
+delegate **movement only** — the sim ranked candidate cells and the seat picked
+one from that list — via a synchronous per-agent WebSocket round trip inside
+the sequential activation loop (`archived/v1/docs/coworld-protocol.md`;
+`src/sugarscape/coworld.nim:467-488`), with `candidates[0]` substituted on a
+100 ms timeout. Every other mechanic (collection, combat, trade, reproduction,
+lending, disease, metabolism, aging, all RNG) stayed inside the sim, and there
+were no gates through which a player could influence them. Owning the model
+lets player agency and its gates be designed in rather than retrofitted.
+
+**This resolves fork 4 below** (determinism spec) in favour of v2 defining its
+own deterministic spec, optimized for Nim performance and native↔wasm parity.
+Forks 1, 2, 3, 5 and 6 remain open, and D1 widens 5 and 6: activation model and
+fallback semantics are now free model-design choices, not constraints inherited
+from DTL.
+
 ## Open design forks for v2 (decide deliberately with James — no verdicts here)
 
 1. **Message encoding (was "player protocol"):** Arena makes payload bytes
