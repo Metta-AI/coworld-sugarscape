@@ -7,5 +7,9 @@ explicitly requested.
 
 The repository root is reserved for a from-scratch successor. Add new game
 code outside `archived/`, with its own architecture and behavioral contract.
+Before any platform-facing work, read
+[docs/what-is-a-coworld.md](docs/what-is-a-coworld.md) — the coworld platform
+contract, current conventions, the experimental Arena (WASM) contract, and
+the open v2 design decisions.
 
 Read `archived/v1/AGENTS.md` only when working on the archived implementation.
