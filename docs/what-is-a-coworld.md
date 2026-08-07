@@ -575,6 +575,11 @@ from DTL.
 
 ## Open design forks for v2 (decide deliberately with James — no verdicts here)
 
+> **All six forks were closed on 2026-08-07** — see `docs/v2-design.md`
+> (§10 maps each fork to its resolution; the design doc is now the
+> authority on v2 model decisions). The list below is preserved as the
+> context that framed them.
+
 1. **Message encoding (was "player protocol"):** Arena makes payload bytes
    transport-independent — the same encoding rides the WS shell and the
    Arena shell. Choices: game-specific JSON (v1 lineage; natural for

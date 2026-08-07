@@ -1,8 +1,9 @@
 # Sugarscape v2 — Design
 
-**Status: draft, under active design.** This document records decisions as they
-are made and highlights what remains open. Nothing here is frozen until marked
-**Decided**.
+**Status: design complete (2026-08-07) — all open questions A1–F6 resolved.**
+This document records decisions as they are made. Everything below is
+**Decided** unless explicitly noted; changes now require revisiting a decision
+by name. Implementation may surface revisions — record them here with dates.
 
 Each item is tagged:
 
@@ -386,27 +387,48 @@ What it costs / leaves open:
 
 What a policy invocation receives and controls, per agent (P1):
 
-### 7.1 Observation (Decided in outline, contents open — F1)
+### 7.1 Observation (Decided — F1, 2026-08-07)
 
-- **Vision:** what the agent can see from its position, per its vision stat.
-  Range shape, and what is visible about other agents (holdings? tribe?
-  metabolism?), are open.
-- **Internal stats:** the agent's own state — holdings, metabolisms, age,
-  vision, and mechanic-specific state.
-- **Welfare, maybe (Leaning):** the pre-computed Cobb–Douglas wellness value,
-  so policies don't have to re-derive the scoring function.
+- **Geometry: classic von Neumann rays.** An agent sees the four axis rays
+  of length `vision` — no diagonals — and **vision is movement range**
+  (movement targets any visible cell; occupied ⇒ combat per E2). Visible
+  cells show current sugar/spice levels and pollution.
+- **Visible agents: minimal attributes.** Each visible occupant shows only
+  `{seat, holdings (sugar, spice), tribe, sick}` — the E2/E4/C4 minimums.
+  Genes (metabolisms, vision), age, sex, and fertility are **hidden**: mate
+  and rival assessment is inference, not reading — voided proposals carry
+  information, and the scratchpad (§7.2) is where courtship/reputation
+  knowledge accumulates. Fog is thus both spatial *and* attribute-deep
+  (poker, not chess). `max_age` is private to everyone, including
+  observers.
+- **Own state: complete.** Holdings, metabolisms, vision, age, own
+  max_age, sex, fertility window, tribe, sick + immune state, outstanding
+  loan contracts (both directions), position, **current-tick welfare and
+  the running integral** (the score being optimized is legible — B2).
+- **Globals:** current tick, episode length T, season state (when
+  enabled). The **public game config — including the capacity map — is
+  handed to every policy at start** (it's public anyway; it ships in
+  replays). The map is known; the other agents are the uncertainty.
 
-### 7.2 Memory: a scratchpad (Decided in principle)
+### 7.2 Memory: a scratchpad (Decided — F2, 2026-08-07)
 
-Each policy gets, for each agent, a persistent scratchpad — "some kind of text
-file" — carried across invocations. The policy reads it with the observation
-and can rewrite it with its action.
+Each **agent** has one persistent scratchpad: **8 KiB (config-adjustable) of
+validated UTF-8 text**, delivered with that agent's observation and
+rewritable with its action. Pads don't touch world state, so they're not
+needed for replay determinism; whether replays optionally snapshot them
+(spectator value vs. size) is F5's call.
 
-Implication to design around, not an afterthought (§8.3): under the Arena
-runtime a WASM component has no filesystem, so "a text file" concretely means
-a blob the host passes in with each invocation and accepts back, with a size
-cap. Scope (strictly per-agent, or per-seat shared — which would let one
-policy's agents coordinate), size limit, and format are open (F2).
+**Honest-rules clause.** The Arena research corrected §8.3's premise:
+component instances (and WS player processes) live for the whole episode,
+so *seat-scoped RAM persists regardless* — per-agent pad scope cannot be an
+isolation boundary, and v2 doesn't pretend it is. Intra-seat coordination
+through private memory is **legal** (unenforceable to ban); P1 governs the
+invocation shape (per-agent observations and actions), not memory
+isolation. The pad's real value is *legibility*: protocol-owned, per-agent
+keyed memory — inspectable in debugging, replay-snapshottable, and the
+natural home for courtship/reputation inference under F1's minimal
+visibility. Stateless-per-invocation policy styles (fresh-context LLM
+calls) read their pad instead of re-deriving.
 
 ### 7.3 Actions (partially decided)
 
@@ -419,7 +441,18 @@ policy's agents coordinate), size limit, and format are open (F2).
 | lend | negotiated credit contracts | **Decided** — E6, E4-shaped; due ≤ T; write-off; gross welfare |
 | tribe | change tribe? | tentative (E7) |
 
-### 7.4 Time (Decided — A4, 2026-08-07)
+### 7.4 Encoding (Decided — F3, 2026-08-07)
+
+All observation/action/negotiation messages are **UTF-8 JSON with a
+versioned envelope** (`{v, type, ...}`), schema documented in PROTOCOL.md,
+encoded/decoded by pure core functions shared by every shell. Rationale:
+zero-codegen authoring in any language, LLM-direct legibility, eyeball
+debuggability; under F1's minimal observations messages are small (~1–4 KB)
+and the boundary is not the hot loop. A binary protocol version can be
+added behind the same seam if profiling ever demands it. (Closes fork 1 in
+`what-is-a-coworld.md`.)
+
+### 7.5 Time (Decided — A4, 2026-08-07)
 
 The game has no notion of wall-clock time and imposes no per-invocation
 budget. A policy is either *responsive* or *faulted* (→ A3 freeze); deadlines
@@ -433,6 +466,52 @@ per-invocation deadline to ~1–5 s (the 180 s host default is sized for
 CTF/LLM profiles), since the episode wall clock is the only other bound on
 a slow-but-legal policy. Per-policy compute fairness is the platform's job
 (fixed CPU per component), not the game's.
+
+### 7.6 Runtime and replay (Decided — F4 + F5, 2026-08-07)
+
+**Runtime (F4, closes fork 2):** one deterministic core, thin shells, built
+in this order: **core → Arena components (`softmax:game`/`softmax:player`,
+per the merged coworld-ctf `arena/` recipe) → WS container shell → replay
+viewer.** Arena is the dogfood and the smallest harness for the core; the
+WS shell remains mandatory for certification/league hosting (Arena is
+experiment-scoped) and serves small configs, accepting E1's sequential-
+movement latency. The manifest **omits `engine_runtime`** — v2 builds on
+none of the listed runtimes.
+
+**Replay (F5, closes fork 3):** replay = **config + seed + decision log**
+(every accepted action/offer per gate in execution order), versioned JSON
+envelope consistent with §7.4, compressed; emitted incrementally via
+Arena's `replay-append` and written to `COGAME_SAVE_REPLAY_URI` by the WS
+shell — same bytes. The viewer is a **static bundle that resimulates**
+with the same core compiled for the browser (v1's own signpost; the
+ctf/crewrift production pattern). Scratchpad snapshots are **excluded**
+from the base format (not needed for resimulation; policy memory isn't
+broadcast by default) — a flagged debug/spectator extension may add them
+later. Emscripten-vs-jco viewer build path is an implementation choice,
+not spec.
+
+### 7.7 Determinism spec (Decided — F6, 2026-08-07)
+
+Same config + seed + decision log ⇒ **bit-identical world state on every
+target** (native, Arena wasm32, browser viewer). The spec:
+
+1. **All-integer world state** — no floats anywhere in the game, including
+   welfare: Cobb–Douglas is computed in **fixed-point (32.32)** via pinned
+   polynomial/table `ln`/`exp` implementations
+   (`welfare = exp((m₁·ln w₁ + m₂·ln w₂)/mT)`). No libm, no FMA/contraction
+   discipline (v1's `-ffp-contract=off` era ends), exact integer scores
+   with B6's survivor bits assembled arithmetically, exact integers in
+   results JSON.
+2. **RNG:** master `u64` seed → per-subsystem streams (movement shuffle,
+   lotteries, endowments, disease, child placement) derived by hashing
+   (master, subsystem-id); PCG-class generators with explicit `uint64`
+   state — never platform-width `int` (the wasm32 32-bit trap).
+   Per-subsystem streams keep behavior stable under feature toggles.
+3. **Defined iteration order everywhere** — arrays and explicit sort keys;
+   no hash-table ordering may leak into behavior.
+4. **Canonical per-tick state hash**, recorded periodically into the
+   replay; native↔wasm↔viewer hash parity tests are the correctness gate
+   (the coworld-ctf `gameHash` pattern).
 
 ## 8. Design tensions (read before answering the open questions)
 
@@ -469,6 +548,10 @@ its size cap a bandwidth/determinism knob of the protocol, and makes per-seat
 vs per-agent scope an explicit information-flow decision rather than a file
 layout. (F2)
 
+**Resolved (2026-08-07), with a corrected premise:** component RAM persists
+per-episode, so scope was never an enforceable isolation boundary — see
+§7.2's honest-rules clause. Per-agent pads chosen for legibility.
+
 ## 9. Open questions
 
 Grouped; tags reference the sections above.
@@ -487,7 +570,7 @@ Grouped; tags reference the sections above.
   `what-is-a-coworld.md`.)
 - **A4.** ~~Per-invocation compute budget for a policy, and what happens on
   timeout.~~ **Resolved (2026-08-07):** no game-level budget; time is
-  runtime-owned, a missed runtime deadline is a fault → A3. See §7.4.
+  runtime-owned, a missed runtime deadline is a fault → A3. See §7.5.
 
 ### B. Episode and scoring
 
@@ -572,21 +655,23 @@ Grouped; tags reference the sections above.
 
 ### F. Policy interface and platform
 
-- **F1.** Observation contents: vision shape (classic is von Neumann rays of
-  length `vision`), what's visible about other agents, whether any global
-  info (timestep, season) is included.
-- **F2.** Scratchpad scope (per-agent vs per-seat), size cap, format
-  (opaque bytes vs UTF-8 text) (§8.3).
-- **F3.** Message encoding for observations/actions — fork 1 (JSON vs
-  binary) in `what-is-a-coworld.md`.
-- **F4.** Runtime target: Arena WASM components (`softmax:game@0.1.0` /
-  `softmax:player@0.1.0`) vs Docker+WebSocket contract — fork 2. Arena is
-  the dogfood target and its host-driven pump makes the phased timestep
-  natural (a "step" needn't be a timestep — each phase can be a step).
-- **F5.** Replay architecture — fork 3.
-- **F6.** v2's own determinism spec: seeded RNG discipline, float policy,
-  replay reproducibility (D1 freed us from CPython parity; we still owe a
-  spec of our own).
+- **F1.** ~~Observation contents.~~ **Resolved (2026-08-07):** classic rays
+  (= movement range); visible agents show only seat/holdings/tribe/sick;
+  own state complete incl. welfare integral; globals tick/T/season; public
+  config at start. See §7.1.
+- **F2.** ~~Scratchpad scope, size, format.~~ **Resolved (2026-08-07):**
+  per-agent, 8 KiB UTF-8, honest-rules clause on seat RAM. See §7.2.
+- **F3.** ~~Message encoding.~~ **Resolved (2026-08-07):** JSON, versioned
+  envelope, pure-core codec. See §7.4. (Closes fork 1.)
+- **F4.** ~~Runtime target.~~ **Resolved (2026-08-07):** core → Arena
+  shells → WS shell; `engine_runtime` omitted. See §7.6. (Closes fork 2.)
+- **F5.** ~~Replay architecture.~~ **Resolved (2026-08-07):** decision-log
+  replay + resimulating static bundle; no pad snapshots in base format.
+  See §7.6. (Closes fork 3.)
+- **F6.** ~~Determinism spec.~~ **Resolved (2026-08-07):** all-integer
+  world + fixed-point welfare, per-subsystem u64 RNG streams, defined
+  iteration order, per-tick hash parity gates. See §7.7. (Completes
+  fork 4.)
 
 ## 10. Relation to the platform forks
 
@@ -594,9 +679,11 @@ From `what-is-a-coworld.md` §"Open design forks for v2":
 
 | fork | status here |
 |---|---|
-| 1 — message encoding | open (F3) |
-| 2 — engine runtime | open (F4); Arena favored as dogfood target |
-| 3 — replay architecture | open (F5) |
-| 4 — determinism spec | resolved by D1: our own spec; contents open (F6) |
-| 5 — activation model | narrowed by §6's phased leaning; within-phase order open (E1) |
-| 6 — fault/fallback | now a rules question (A3) |
+| 1 — message encoding | **closed (F3):** JSON, versioned envelope |
+| 2 — engine runtime | **closed (F4):** Arena-first dual shell; `engine_runtime` omitted |
+| 3 — replay architecture | **closed (F5):** decision-log + resimulating static bundle |
+| 4 — determinism spec | **closed (D1 + F6):** own spec — all-integer, fixed-point welfare |
+| 5 — activation model | **closed (§6 + E1):** phased timestep; movement sequential seeded |
+| 6 — fault/fallback | **closed (A3):** faulted seat's agents freeze |
+
+All six platform forks are closed as of 2026-08-07.
