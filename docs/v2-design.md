@@ -229,20 +229,48 @@ Lifecycle:
 
 ## 6. The timestep
 
-**Leaning: a phased timestep rather than per-agent sequential turns.** Classic
-Sugarscape (and DTL) activates one agent at a time, which does *everything* —
-move, harvest, mate, trade — before the next agent acts. v2 instead leans
-toward phases across the whole population:
+**Decided (upgraded from Leaning; E8 fixed the order, 2026-08-07): a phased
+timestep rather than per-agent sequential turns.** Classic Sugarscape (and
+DTL) activates one agent at a time, which does *everything* — move, harvest,
+mate, trade — before the next agent acts. v2 runs phases across the whole
+population. The canonical timestep:
 
 ```
-0. Simulation phase — all the world's own updates happen first
-   (growback, seasons, pollution dynamics, ... — composition and order open, E8)
-1. All agents move            (moving onto an occupied cell = combat, if enabled)
-2. All agents may harvest     (harvesting is an action, and optional)
-3. All agents may trade       — repeated until quiescent
-4. All agents may mate        — repeated until quiescent
-5. An agent may decide to change tribes
+Phase 0 — world updates (no policy invocations):
+   growback (seasons C2 + pollution suppression C3 applied)
+   pollution: diffusion (on interval ticks), then decay (every tick)
+   disease: transmission from neighbors, then one immune-response bit-step
+Phases 1–5 — action gates (policies invoked):
+   1. move/combat   (sequential, seeded order — E1)
+   2. harvest       (order-free fan-out)
+   3. trade         (E4 propose/respond cycles)
+   4. mate          (E5 propose/respond cycles)
+   5. tribe         (declare switch — E7)
+Phase 6 — upkeep (no policy invocations):
+   loan collections due this tick (E6)
+   metabolism burn (base + disease sickness penalty + pollution toxicity)
+   aging (+1); death checks: starvation, max age
+   estate settlement (D4) for upkeep deaths
+   welfare accrual: per-tick Cobb–Douglas on post-upkeep holdings → integral
 ```
+
+Load-bearing ordering choices (E8): **metabolism at end of tick** — an agent
+can harvest in the morning to pay for dinner; starvation is failing to feed
+yourself despite acting (classic collect-then-metabolize grace, phased).
+**Loans before metabolism** — today's debts are collectible from today's
+earnings, but senior to dinner: you can starve by repaying; over-leverage is
+genuinely dangerous while E6's write-off keeps lender risk real too.
+**Welfare accrues once per tick, post-upkeep, after deaths** — the day's
+actions count the same day; a death tick contributes 0 (B2-consistent).
+Combat deaths (phase 1) settle estates immediately, event-driven (E2);
+phase 6 checks only starvation and age.
+
+**Inaction is legal at every gate. (Decided — E9, 2026-08-07)** No-move /
+no-action is always a valid choice (the classic's forced best-cell move was
+behavior — evicted; A3's freeze rule depends on this). Illegal actions
+(out-of-range move, ineligible attack, unpayable offer) resolve as no-ops,
+identical to choosing inaction — never penalized beyond their own
+opportunity cost.
 
 What this buys: each phase is a clean *gate* — a named point where policies
 are consulted, with a defined observation before it and defined resolution
@@ -252,23 +280,107 @@ turn allowed).
 
 What it costs / leaves open:
 
-- **Within-phase order (E1):** simultaneous with conflict resolution, or
-  sequential in randomized order? Two agents moving to the same cell must
-  resolve somehow. This is fork 5 (activation model) from
-  `what-is-a-coworld.md`, now a free rules choice.
-- **Quiescence (E4, E5):** phases 3 and 4 loop "until quiescent" — quiescence
-  needs a definition and a round cap.
+- **Within-phase order: per-phase disciplines. (Decided — E1, 2026-08-07)**
+  Different phases use different activation strategies:
+  - **Movement (and therefore combat): sequential, episode-seeded shuffled
+    order each timestep.** Each agent observes fully-updated state at its
+    turn; an occupied cell is simply occupied — no conflict rules, classic
+    semantics. Runtime note, accepted deliberately: this is N serial policy
+    round-trips per timestep — negligible under Arena (in-process), slow
+    for the WS shell at full scale (Arena is the primary runtime; the WS
+    shell serves certification/local play at small configs).
+  - **Harvest: order-free** (own-cell only; no agent interaction) —
+    delivered as one concurrent fan-out.
+  - **Trade / mating: negotiation phases** — their within-phase structure
+    (pairing, proposal rounds, quiescence) is part of the protocol design
+    in E4/E5, explicitly not a simple activation-order question.
+  - **Tribe: order-free.**
+  (Closes fork 5's residue in `what-is-a-coworld.md`.)
+- **Trade protocol: bilateral targeted offers over R cycles. (Decided — E4,
+  2026-08-07)** The trade phase runs `trade_rounds` (default 2–3)
+  propose/respond cycles:
+  1. *Propose:* each agent may submit **one** offer targeted at one
+     von-Neumann-adjacent agent: `{give: (sugar, spice), want: (sugar,
+     spice)}`, integer bundles, give clamped to holdings.
+  2. *Respond:* each agent accepts/declines the offers addressed to it;
+     acceptances execute in episode-seeded order, voiding any no longer
+     payable (one-offer-per-proposer kills double-spend; voiding handles
+     acceptor overcommitment).
+  Countering is structural, not special-cased: decline and propose back
+  next cycle. A cycle with zero offers ends the phase early — quiescence
+  is a trivial deterministic check, not a definition problem. The sim
+  never computes MRS or prices; **prices emerge or don't**. Spot barter
+  only (credit is E6). Cross-tick price discovery is expected — the
+  scratchpad (§7.2) is where reputation lives. Order-book matching and
+  free-form negotiation channels remain buildable later as variants on the
+  same encoding.
+- **Mating: E4-shaped consent, classic eligibility. (Decided — E5,
+  2026-08-07)** `mating_rounds` propose/respond cycles: one targeted
+  proposal per agent per cycle to an eligible adjacent partner;
+  accept/decline; accepted matings execute in seeded order,
+  **re-validating eligibility at execution** (E4's voiding rule reused);
+  zero-proposal cycle ends the phase early. Eligibility is physics, all
+  classic: fertile age window, **wealth ≥ own initial endowment** (makes
+  the D5 contribution payable, limits reproduction to the successful),
+  opposite sex (D5 draws sex when fertility is on), von Neumann adjacency,
+  and an empty cell adjacent to either parent for the child (seeded pick;
+  none ⇒ the mating voids — classic crowding cap). Delta from classic:
+  each agent completes at most **one mating per timestep** (closes
+  tick-scale Genghis strategies; lineage volume lives across ticks). Mate
+  *choice* is the strategy layer D5 built: proposing to good genes is
+  investment; accepting prices in the endowment cost and A2's coin-flip
+  seat assignment.
+- **Lending: negotiated credit contracts. (Decided — E6, 2026-08-07)**
+  Third instance of the E4 shape: proposal `{lend: (s,sp), repay: (s,sp),
+  due_tick}` to an adjacent agent; accept ⇒ principal transfers now;
+  interest is implicit and per-contract (repay > lend, negotiated).
+  Physics: **`due_tick ≤ episode end`** (no contracting past P3's
+  horizon); at due, the sim auto-collects `min(owed, holdings)`;
+  **shortfall closes the contract** — the lender eats the loss, so credit
+  risk prices into negotiated interest. Death: heirs inherit debt pro-rata
+  with the estate, **capped at what they inherited** (limited liability);
+  no heirs ⇒ write-off. Anyone holding goods may lend (classic
+  age/fertility matchmaking evicted as behavior). **Closes B4's
+  remainder: welfare stays over gross holdings** — under integrated
+  welfare + due≤T + auto-collect, interest is the price of welfare-time
+  and the market sets it; even Cobb–Douglas concavity gains (rich→poor
+  transfers raise total welfare, incl. via E4 gifts) are legitimate
+  distribution management under `sum`, not exploits.
 - **Movement and combat share one verb (Decided):** the movement action names
   a target cell; if the cell is occupied (and combat is enabled), the same
-  action *is* an attack. No separate combat action. Combat's resolution
-  mechanics are open (E2).
+  action *is* an attack. No separate combat action.
+- **Combat resolution: classic, P2-cleaned. (Decided — E2, 2026-08-07)**
+  Legality (physics): the target must be strictly poorer — wealth = sugar +
+  spice, unweighted integer sum — and, when tribes are enabled (E7),
+  different-tribe. An eligible attacker deterministically wins: the victim
+  dies (D2), the attacker loots `min(α, victim wealth)` and takes the cell;
+  the victim's **remaining** estate flows through D4 (heirs or ground) —
+  combat and inheritance compose with no extra rule. Wealth doubles as
+  armor (poorer-only prevents kamikaze deletion). The classic retaliation
+  look-ahead is evicted as behavior: the sim permits any legal attack; risk
+  assessment belongs to policies (F1 must expose neighbor wealth
+  visibility). Illegal attack attempts = illegal moves (resolution → E9's
+  illegal-action rule).
 - **Harvest is explicit and optional (Decided):** unlike every classic
   Sugarscape variant, an agent on a resource cell chooses whether to harvest.
   Not harvesting is a meaningful move (e.g. leaving sugar to grow, or denying
   pollution production under a pollution regime).
-- **Tribe change (tentative — the user's own question mark):** phase 5 exists
-  in the leaning sketch, but what tribes *are* in v2 and what changing one
-  means is open (E7).
+- **Harvest amounts are partial. (Decided — E3, 2026-08-07)** The action
+  names per-resource amounts, clamped to the cell's current level.
+  All-or-nothing stays expressible (request everything); restraint becomes
+  priceable — harvesting exactly metabolic need minimizes C3's pollution
+  production, self-toxicity, and growback suppression. Sustainable-yield
+  farming is the strategy this buys.
+- **Tribes: chosen allegiance. (Decided — E7, 2026-08-07)** A tribe is a
+  declared affiliation, not emergent culture (classic tags) or static
+  teams (v1 seat-tribes): `tribe_count` (K, ranked default 2) config;
+  initial assignment episode-seeded; **phase 5 is real** — an agent may
+  declare a switch, effective at the next timestep; combat (E2) gates
+  cross-tribe. Tribes are protection pacts: safety-in-numbers, defection,
+  and betrayal (leave today, attack your ex-tribemate tomorrow) become
+  policy strategy. Feature-flagged like other mechanics; tribeless
+  variants gate combat on wealth alone. Novel-mechanic caveat recorded:
+  no literature precedent, dynamics to be observed in playtesting.
 
 ## 7. The policy boundary
 
@@ -300,11 +412,11 @@ policy's agents coordinate), size limit, and format are open (F2).
 
 | phase | action | status |
 |---|---|---|
-| move | target cell; occupied target = combat | **Decided** as the verb; resolution open (E1, E2) |
-| harvest | harvest or don't | **Decided** optional; amount semantics open (E3) |
-| trade | negotiate with neighbors | protocol entirely open (E4) — this is the hard one |
-| mate | ? | protocol open (E5) |
-| lend | negotiate terms with the counterparty | terms are agent-negotiated, not configured (**Decided**); protocol open (E6) |
+| move | target cell; occupied target = combat | **Decided** — sequential seeded order (E1); classic P2-cleaned combat (E2) |
+| harvest | per-resource amounts, clamped | **Decided** — optional, partial (E3) |
+| trade | targeted bilateral offers | **Decided** — E4 propose/respond cycles |
+| mate | targeted proposals, classic eligibility | **Decided** — E5, E4-shaped consent |
+| lend | negotiated credit contracts | **Decided** — E6, E4-shaped; due ≤ T; write-off; gross welfare |
 | tribe | change tribe? | tentative (E7) |
 
 ### 7.4 Time (Decided — A4, 2026-08-07)
@@ -431,33 +543,32 @@ Grouped; tags reference the sections above.
 
 ### E. Actions and phases
 
-- **E1.** Within-phase activation: simultaneous with conflict resolution, or
-  randomized sequential? If simultaneous: how do movement collisions resolve
-  (two agents, one target cell)?
-- **E2.** Combat: eligibility (classic rule limits targets by tribe and
-  wealth), what the winner takes (min(α, victim wealth) + ?), loser's fate
-  (death? displacement?), retaliation risk visibility.
-- **E3.** Harvest semantics: all-or-nothing, or partial amounts?
-- **E4.** Trade protocol — the hardest open question. Classic Sugarscape
-  computes MRS-crossing trades automatically at a geometric-mean price; v2
-  wants trade decisions made by policies. What's the negotiation primitive
-  (structured bid/ask? offer–accept–counter rounds?), what's quiescence, and
-  what's the round cap?
-- **E5.** Mating: eligibility (fertility window, neighboring, wealth
-  threshold as in the classic?), consent (both policies agree?), child
-  endowment split, child placement, and A2.
-- **E6.** Lending: negotiation protocol (terms agent-negotiated per §4),
-  default handling, whether debts survive death (classic ties this to
-  inheritance).
-- **E7.** Tribes: what they are in v2 (classic cultural tags? seat-aligned
-  teams as v1's `playerTribes`?), what changing tribe means, and whether
-  phase 5 survives at all.
-- **E8.** Simulation-phase composition and order: growback, seasons,
-  pollution diffusion/decay, disease progression, aging, metabolism burn —
-  which happen in phase 0 vs after the action phases, and where death checks
-  sit.
-- **E9.** Is "stay put" a legal move? (Presumably yes; classic Sugarscape
-  forces movement to the best cell, but P2 hands the choice to the policy.)
+- **E1.** ~~Within-phase activation.~~ **Resolved (2026-08-07):** per-phase
+  — movement/combat sequential in seeded order; harvest and tribe
+  order-free; trade/mating structure belongs to E4/E5. See §6.
+- **E2.** ~~Combat.~~ **Resolved (2026-08-07):** poorer-only (+
+  different-tribe when tribes on), deterministic win, loot min(α, wealth),
+  remainder through D4, victim dies, no sim-side safety check. See §6.
+- **E3.** ~~Harvest semantics.~~ **Resolved (2026-08-07):** partial
+  per-resource amounts, clamped. See §6.
+- **E4.** ~~Trade protocol.~~ **Resolved (2026-08-07):** bilateral targeted
+  offers over `trade_rounds` propose/respond cycles; decline+repropose is
+  the counter; zero-offer cycle = early end; seeded-order execution with
+  voiding. See §6.
+- **E5.** ~~Mating.~~ **Resolved (2026-08-07):** E4-shaped consent protocol,
+  classic eligibility as physics, once-per-tick cap, seeded child placement.
+  See §6.
+- **E6.** ~~Lending.~~ **Resolved (2026-08-07):** E4-shaped contracts,
+  due ≤ T, auto-collect, write-off on shortfall, heirs liable capped at
+  inheritance, gross-holdings welfare (closes B4's deferral). See §6.
+- **E7.** ~~Tribes.~~ **Resolved (2026-08-07):** chosen allegiance —
+  K-tribe config, seeded initial assignment, phase 5 declares switches
+  (next-tick effective), combat gates cross-tribe. See §6.
+- **E8.** ~~Simulation-phase composition and order.~~ **Resolved
+  (2026-08-07):** world → gates → upkeep; loans → metabolism → aging →
+  deaths → estates → welfare accrual. See §6.
+- **E9.** ~~Is "stay put" legal?~~ **Resolved (2026-08-07):** yes, at every
+  gate; illegal actions no-op. See §6.
 
 ### F. Policy interface and platform
 
