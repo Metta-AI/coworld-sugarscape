@@ -60,17 +60,40 @@ competitive benchmark shouldn't.
 - **Up to 64 seats. (Decided)** A seat is one submitted policy.
 - **A seat may control multiple agents (Decided)**, invoked per-agent per P1.
   E.g. 4 seats × 16 agents each.
-- **Seat count divides 64. (Leaning)** Enforcing `seats ∈ divisors(64)` with
-  `64 / seats` agents each keeps allocation equal — no policy starts with more
-  agents than another. This preserves flexibility in how many seats we offer
-  per league, and therefore how hard we stress-test Arena (64 seats = 65
-  component instances is the stress case; 4 seats is the gentle case).
-  Not yet committed: whether 64 is itself fixed, or is just the default
-  `agents_per_episode`. See A1.
-- **Newborn assignment: Open.** If mating is enabled, agents are created
-  mid-episode and P1 says every agent needs a controlling policy. Which one —
-  a designated parent's? This also breaks equal allocation over time. See A2,
-  and §8.1 for why this is a real tension rather than a detail.
+- **`total_agents` is config; seat count must divide it. (Decided — A1,
+  2026-08-07)** Config declares the total agent count (default 64);
+  validation enforces `total_agents % seats == 0`, and each seat starts with
+  `total_agents / seats` agents — equal allocation at t=0. This keeps
+  density a per-variant/league dial (it drives combat/trade pressure), lets
+  the certification fixture run tiny (e.g. 4 agents, 2 seats), and preserves
+  the Arena stress range (64 seats = 65 component instances is the stress
+  case; 4 seats is the gentle case).
+- **Newborn assignment: configurable. (Decided — A2, 2026-08-07)** When
+  mating creates an agent, the controlling seat is chosen per the config
+  option `newborn_assignment`:
+
+  | mode | child goes to |
+  |---|---|
+  | `random_parent` | one of the two parents' seats, episode-seeded 50/50 |
+  | `initiating_parent` | the seat whose agent initiated the mating |
+  | `receiving_parent` | the seat whose agent was initiated to (closer to human mating dynamics — offspring stays with the receiving parent) |
+
+  Default mode for ranked play is open (folds into B5's incentive review —
+  the choice interacts with the score reduce: under `max` a child is pure
+  upside, under `min` a liability). Note the incentive asymmetry:
+  `initiating_parent`/`receiving_parent` make the two sides of E5's
+  negotiation structurally different; that is now a *variant design* lever
+  rather than a flaw. Equal allocation remains a t=0 property; mating
+  creates deliberate compute/score asymmetry over time (§8.1).
+- **Dropped seats: agents freeze. (Decided — A3, 2026-08-07)** When a seat
+  faults (Arena drops it permanently; the WS shell mirrors the same rule),
+  its agents act in no phase from then on. Physics continues — they
+  metabolize, age, starve, and die per D2, and other agents may exploit
+  them (combat targets, occupied cells). No sim-owned fallback behavior:
+  a frozen agent is indistinguishable from one whose policy legally chooses
+  inaction every phase (P2; kills v1's `candidates[0]` fallback for good).
+  The platform separately records the fault (`SeatFault`,
+  `failed_policy_index`); the freeze rule is only the in-world consequence.
 
 ## 3. Scoring
 
@@ -211,6 +234,21 @@ policy's agents coordinate), size limit, and format are open (F2).
 | lend | negotiate terms with the counterparty | terms are agent-negotiated, not configured (**Decided**); protocol open (E6) |
 | tribe | change tribe? | tentative (E7) |
 
+### 7.4 Time (Decided — A4, 2026-08-07)
+
+The game has no notion of wall-clock time and imposes no per-invocation
+budget. A policy is either *responsive* or *faulted* (→ A3 freeze); deadlines
+that produce faults belong to the runtime — Arena's host per-delivery
+deadline, or the WS shell's per-decision timeout (config, order of seconds).
+This is forced as well as chosen: a deterministic Arena guest has no clock,
+so game-enforced time limits are inexpressible there, and any game-level
+budget would make the two runtimes play different rules. Consequence for
+deployment (not model) docs: Arena runners for Sugarscape should set the
+per-invocation deadline to ~1–5 s (the 180 s host default is sized for
+CTF/LLM profiles), since the episode wall clock is the only other bound on
+a slow-but-legal policy. Per-policy compute fairness is the platform's job
+(fixed CPU per component), not the game's.
+
 ## 8. Design tensions (read before answering the open questions)
 
 Three places where decided items interact and something has to give.
@@ -249,18 +287,19 @@ Grouped; tags reference the sections above.
 
 ### A. Players and seats
 
-- **A1.** Is 64 the fixed total agent count with `seats ∈ divisors(64)`
-  enforced, or is total agent count itself config (with seats dividing it)?
-- **A2.** Newborn control assignment (§8.1). Options include: designated
-  parent's policy; alternating; sim-controlled children (reintroduces v1's
-  wart); fertility off in ranked play.
-- **A3.** Dropped seat semantics. Arena permanently drops a faulted seat
-  (spec 0076), so this is now a *rules* question: what do orphaned agents do
-  for the rest of the episode — stand still and starve, run a null policy,
-  freeze? (This is fork 6 in `what-is-a-coworld.md`.)
-- **A4.** Per-invocation compute budget for a policy, and what happens on
-  timeout (v1 substituted a default action; Arena's answer is the seat
-  faults).
+- **A1.** ~~Is 64 the fixed total agent count with `seats ∈ divisors(64)`
+  enforced, or is total agent count itself config (with seats dividing it)?~~
+  **Resolved (2026-08-07):** `total_agents` is config (default 64), seats
+  must divide it. See §2.
+- **A2.** ~~Newborn control assignment (§8.1).~~ **Resolved (2026-08-07):**
+  configurable `newborn_assignment ∈ {random_parent, initiating_parent,
+  receiving_parent}`; ranked-play default deferred to B5. See §2.
+- **A3.** ~~Dropped seat semantics.~~ **Resolved (2026-08-07):** orphaned
+  agents freeze — no actions, physics continues. See §2. (Closes fork 6 in
+  `what-is-a-coworld.md`.)
+- **A4.** ~~Per-invocation compute budget for a policy, and what happens on
+  timeout.~~ **Resolved (2026-08-07):** no game-level budget; time is
+  runtime-owned, a missed runtime deadline is a fault → A3. See §7.4.
 
 ### B. Episode and scoring
 
