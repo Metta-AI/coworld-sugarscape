@@ -1,0 +1,1889 @@
+<title>The DTL Sugarscape — How the Model Actually Works</title>
+
+<style>
+:root {
+  --paper:      #E9EDEB;
+  --surface:    #F5F8F6;
+  --surface-2:  #DFE5E2;
+  --ink:        #131A19;
+  --ink-soft:   #33413E;
+  --muted:      #586764;
+  --rule:       #C3CECA;
+  --rule-soft:  #D6DEDA;
+  --sugar:      #A96F16;
+  --sugar-wash: rgba(169,111,22,0.12);
+  --spice:      #97382B;
+  --spice-wash: rgba(151,56,43,0.11);
+  --shadow:     0 1px 2px rgba(19,26,25,0.06), 0 8px 24px -16px rgba(19,26,25,0.35);
+
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, "Times New Roman", serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --measure: 40rem;
+  --wide: 57rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper:      #0C1110;
+    --surface:    #141B19;
+    --surface-2:  #1C2523;
+    --ink:        #DEE6E3;
+    --ink-soft:   #BCC8C4;
+    --muted:      #879A95;
+    --rule:       #27332F;
+    --rule-soft:  #1E2825;
+    --sugar:      #E0A54B;
+    --sugar-wash: rgba(224,165,75,0.14);
+    --spice:      #D2705E;
+    --spice-wash: rgba(210,112,94,0.13);
+    --shadow:     0 1px 2px rgba(0,0,0,0.4), 0 10px 30px -18px rgba(0,0,0,0.9);
+  }
+}
+
+:root[data-theme="dark"] {
+  --paper:      #0C1110;
+  --surface:    #141B19;
+  --surface-2:  #1C2523;
+  --ink:        #DEE6E3;
+  --ink-soft:   #BCC8C4;
+  --muted:      #879A95;
+  --rule:       #27332F;
+  --rule-soft:  #1E2825;
+  --sugar:      #E0A54B;
+  --sugar-wash: rgba(224,165,75,0.14);
+  --spice:      #D2705E;
+  --spice-wash: rgba(210,112,94,0.13);
+  --shadow:     0 1px 2px rgba(0,0,0,0.4), 0 10px 30px -18px rgba(0,0,0,0.9);
+}
+
+:root[data-theme="light"] {
+  --paper:      #E9EDEB;
+  --surface:    #F5F8F6;
+  --surface-2:  #DFE5E2;
+  --ink:        #131A19;
+  --ink-soft:   #33413E;
+  --muted:      #586764;
+  --rule:       #C3CECA;
+  --rule-soft:  #D6DEDA;
+  --sugar:      #A96F16;
+  --sugar-wash: rgba(169,111,22,0.12);
+  --spice:      #97382B;
+  --spice-wash: rgba(151,56,43,0.11);
+  --shadow:     0 1px 2px rgba(19,26,25,0.06), 0 8px 24px -16px rgba(19,26,25,0.35);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 17px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- shell ---------- */
+
+.shell {
+  max-width: 78rem;
+  margin: 0 auto;
+  padding: 0 1.5rem 8rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  column-gap: 4rem;
+}
+
+@media (min-width: 1120px) {
+  .shell {
+    grid-template-columns: 14rem minmax(0, 1fr);
+    padding-left: 2.5rem;
+  }
+  .rail { grid-column: 1; grid-row: 2; }
+  .masthead { grid-column: 1 / -1; }
+  .body-col { grid-column: 2; grid-row: 2; }
+}
+
+.body-col { max-width: var(--wide); min-width: 0; }
+
+.body-col > p,
+.body-col > ul,
+.body-col > ol,
+.body-col > h3,
+.body-col > .callout,
+.body-col > .lede,
+section > p,
+section > ul,
+section > ol,
+section > h3,
+section > .callout { max-width: var(--measure); }
+
+/* ---------- masthead ---------- */
+
+.masthead {
+  padding: 5rem 0 3rem;
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: 3.5rem;
+}
+
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 1.4rem;
+}
+
+h1 {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: clamp(2.3rem, 6vw, 3.6rem);
+  line-height: 1.08;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+  margin: 0 0 1.2rem;
+  max-width: 20ch;
+}
+
+h1 em { font-style: italic; color: var(--sugar); }
+
+.lede {
+  font-size: 1.14rem;
+  color: var(--ink-soft);
+  margin: 0 0 2rem;
+  max-width: 44rem;
+}
+
+.masthead-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 2.2rem;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.masthead-meta span strong {
+  color: var(--ink-soft);
+  font-weight: 500;
+}
+
+/* ---------- rail ---------- */
+
+.rail { margin-bottom: 3rem; }
+
+@media (min-width: 1120px) {
+  .rail {
+    position: sticky;
+    top: 2rem;
+    align-self: start;
+    max-height: calc(100vh - 4rem);
+    overflow-y: auto;
+    margin-bottom: 0;
+  }
+}
+
+.rail h2 {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 400;
+  margin: 0 0 0.9rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.rail ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  counter-reset: railnum;
+}
+
+.rail li { counter-increment: railnum; }
+
+.rail a {
+  display: grid;
+  grid-template-columns: 1.6rem 1fr;
+  gap: 0.1rem;
+  font-size: 0.86rem;
+  line-height: 1.3;
+  color: var(--ink-soft);
+  text-decoration: none;
+  border-bottom: none;
+}
+
+.rail a::before {
+  content: counter(railnum);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--muted);
+  padding-top: 0.15rem;
+}
+
+.rail a:hover { color: var(--sugar); }
+.rail a:hover::before { color: var(--sugar); }
+
+/* ---------- sections ---------- */
+
+section {
+  padding-top: 3.5rem;
+  margin-top: 3.5rem;
+  border-top: 1px solid var(--rule-soft);
+}
+
+section:first-of-type { border-top: none; margin-top: 0; padding-top: 0; }
+
+.sec-num {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--sugar);
+  display: block;
+  margin-bottom: 0.7rem;
+}
+
+h2 {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 1.95rem;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+  margin: 0 0 1.3rem;
+  max-width: 26ch;
+}
+
+h3 {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 1.08rem;
+  line-height: 1.35;
+  text-wrap: balance;
+  margin: 2.4rem 0 0.7rem;
+}
+
+h4 {
+  font-family: var(--mono);
+  font-weight: 500;
+  font-size: 0.72rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 2rem 0 0.6rem;
+}
+
+p { margin: 0 0 1.1rem; }
+
+ul, ol { margin: 0 0 1.2rem; padding-left: 1.3rem; }
+li { margin-bottom: 0.5rem; }
+li::marker { color: var(--muted); }
+
+a { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--sugar); }
+a:hover { color: var(--sugar); }
+a:focus-visible, .rail a:focus-visible {
+  outline: 2px solid var(--sugar);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+code {
+  font-family: var(--mono);
+  font-size: 0.845em;
+  background: var(--surface-2);
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+  color: var(--ink-soft);
+}
+
+strong { font-weight: 600; }
+
+.sugar-t { color: var(--sugar); font-weight: 600; }
+.spice-t { color: var(--spice); font-weight: 600; }
+
+/* ---------- callouts ---------- */
+
+.callout {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--sugar);
+  border-radius: 2px;
+  padding: 1.1rem 1.3rem;
+  margin: 1.8rem 0;
+  font-size: 0.95rem;
+}
+
+.callout p:last-child { margin-bottom: 0; }
+
+.callout .tag {
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--sugar);
+  display: block;
+  margin-bottom: 0.45rem;
+}
+
+.callout.quirk { border-left-color: var(--spice); }
+.callout.quirk .tag { color: var(--spice); }
+
+/* ---------- figures ---------- */
+
+figure {
+  margin: 2.5rem 0;
+  max-width: var(--wide);
+}
+
+figure .frame {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 1.5rem 1.2rem;
+  overflow-x: auto;
+}
+
+figure svg {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  min-width: 480px;
+  color: var(--ink-soft);
+}
+
+figcaption {
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--muted);
+  margin-top: 0.8rem;
+  max-width: 44rem;
+}
+
+figcaption b { color: var(--ink-soft); font-weight: 600; }
+
+/* svg helper classes */
+.s-box { fill: var(--surface-2); stroke: var(--rule); stroke-width: 1; }
+.s-box-hi { fill: var(--sugar-wash); stroke: var(--sugar); stroke-width: 1.2; }
+.s-box-alt { fill: none; stroke: var(--rule); stroke-width: 1; stroke-dasharray: 4 3; }
+.s-t { font-family: var(--mono); font-size: 12px; fill: var(--ink); }
+.s-t-sm { font-family: var(--mono); font-size: 10.5px; fill: var(--muted); }
+.s-t-lbl { font-family: var(--mono); font-size: 10px; fill: var(--muted); letter-spacing: 0.08em; }
+.s-line { stroke: var(--ink-soft); stroke-width: 1.2; fill: none; }
+.s-line-soft { stroke: var(--rule); stroke-width: 1; fill: none; }
+.s-line-dash { stroke: var(--muted); stroke-width: 1; fill: none; stroke-dasharray: 4 3; }
+.s-sugar { fill: var(--sugar); }
+.s-spice { fill: var(--spice); }
+.s-sugar-s { stroke: var(--sugar); stroke-width: 1.4; fill: none; }
+
+/* ---------- tables ---------- */
+
+.table-wrap {
+  overflow-x: auto;
+  margin: 1.8rem 0;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--surface);
+  max-width: var(--wide);
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.87rem;
+  min-width: 34rem;
+}
+
+thead th {
+  text-align: left;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 500;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--rule);
+  white-space: nowrap;
+}
+
+tbody td {
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid var(--rule-soft);
+  vertical-align: top;
+  line-height: 1.5;
+}
+
+tbody tr:last-child td { border-bottom: none; }
+
+td.num, th.num { font-variant-numeric: tabular-nums; text-align: right; }
+
+td code { background: none; padding: 0; color: var(--ink); }
+
+.t-mono td:first-child { font-family: var(--mono); font-size: 0.79rem; white-space: nowrap; }
+
+/* ---------- step list ---------- */
+
+.steps {
+  list-style: none;
+  padding: 0;
+  margin: 1.5rem 0;
+  counter-reset: step;
+  max-width: var(--wide);
+  border-top: 1px solid var(--rule-soft);
+}
+
+.steps li {
+  counter-increment: step;
+  display: grid;
+  grid-template-columns: 2.4rem 1fr;
+  gap: 0.9rem;
+  padding: 0.85rem 0;
+  margin: 0;
+  border-bottom: 1px solid var(--rule-soft);
+}
+
+.steps li::before {
+  content: counter(step, decimal-leading-zero);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--muted);
+  padding-top: 0.28rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.steps li b {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  font-weight: 500;
+  display: block;
+  margin-bottom: 0.15rem;
+}
+
+.steps li span { font-size: 0.92rem; color: var(--ink-soft); }
+
+.steps li .rng {
+  color: var(--sugar);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-left: 0.5rem;
+  white-space: nowrap;
+}
+
+/* ---------- formula ---------- */
+
+.formula {
+  font-family: var(--mono);
+  font-size: 0.92rem;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 1rem 1.2rem;
+  margin: 1.5rem 0;
+  overflow-x: auto;
+  line-height: 1.7;
+  max-width: var(--wide);
+}
+
+.formula .cm { color: var(--muted); }
+
+/* ---------- colophon ---------- */
+
+.colophon {
+  margin-top: 4rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--rule);
+  font-size: 0.85rem;
+  color: var(--muted);
+  max-width: 44rem;
+}
+
+.colophon a { border-bottom-color: var(--rule); }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+</style>
+
+<div class="shell">
+
+  <header class="masthead">
+    <p class="eyebrow">Coworld Sugarscape · v2 background reading</p>
+    <h1>The DTL Sugarscape, <em>mechanism by mechanism</em></h1>
+    <p class="lede">
+      A reading of the Digital Terraria Lab's Python implementation of Epstein &amp; Axtell's
+      <cite>Growing Artificial Societies</cite> — the model that the archived v1 Nim port
+      reproduced byte for byte. This document describes what the code does, in the order it
+      does it, at the level of mechanism rather than syntax.
+    </p>
+    <div class="masthead-meta">
+      <span><strong>Source</strong> archived/v1/reference/dtl-python</span>
+      <span><strong>Scope</strong> agent.py · sugarscape.py · environment.py · cell.py · condition.py · ethics.py</span>
+      <span><strong>≈4,650 lines</strong> of Python</span>
+    </div>
+  </header>
+
+  <nav class="rail" aria-label="Contents">
+    <h2>Contents</h2>
+    <ol>
+      <li><a href="#provenance">Provenance and what "byte-for-byte" means</a></li>
+      <li><a href="#objects">The object graph</a></li>
+      <li><a href="#world">The world: grid, peaks, growback</a></li>
+      <li><a href="#adjacency">Two kinds of adjacency</a></li>
+      <li><a href="#agent">The agent and the welfare function</a></li>
+      <li><a href="#timestep">The timestep, in exact order</a></li>
+      <li><a href="#modules">The seven interaction modules</a></li>
+      <li><a href="#ethics">Decision models</a></li>
+      <li><a href="#determinism">Determinism and the RNG discipline</a></li>
+      <li><a href="#config">The configuration surface</a></li>
+      <li><a href="#quirks">Fixed points: quirks a port must keep</a></li>
+    </ol>
+  </nav>
+
+  <main class="body-col">
+
+    <!-- shared arrowhead markers for every figure below -->
+    <svg width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute">
+      <defs>
+        <marker id="ar1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+        </marker>
+        <marker id="ar1s" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" style="fill:var(--sugar)"/>
+        </marker>
+      </defs>
+    </svg>
+
+    <!-- ================= 1 ================= -->
+    <section id="provenance">
+      <span class="sec-num">§ 1 — Provenance</span>
+      <h2>What DTL is, and what "byte-for-byte" actually means</h2>
+
+      <p>
+        Sugarscape is the founding artificial-society model: a lattice of cells that grow a
+        renewable resource, and a population of agents that look around, move to the best
+        cell they can see, eat, and die. Epstein and Axtell used it to show that recognisable
+        macro-phenomena — skewed wealth distributions, migration waves, trade prices,
+        epidemics — emerge from local rules with no global coordination.
+      </p>
+      <p>
+        The <strong>Digital Terraria Lab (DTL) implementation</strong> is a Python descendant of
+        that model, maintained by Nate Kremer-Herman and contributors. It is not a
+        minimal teaching implementation. It carries the whole book — growback, seasons,
+        pollution, sex and reproduction, cultural tags, combat, spice and bilateral trade,
+        credit, disease, inheritance — and then adds a layer the book does not have:
+        pluggable <strong>decision models</strong>, in which an agent's choice of where to move is
+        filtered through an ethical theory rather than through pure greed.
+      </p>
+      <p>
+        The archived v1 of this repository is a Nim port of that Python. The port's contract
+        was not "behaves similarly" but <em>produces identical log bytes for identical seeds</em>.
+        That contract is what makes DTL worth reading closely: every incidental detail of the
+        Python — the order dictionaries are iterated, the exact rejection loop inside
+        <code>random.shuffle</code>, whether a division yields <code>0</code> or <code>0.0</code>, how
+        CPython renders a float in JSON — became part of the specification.
+      </p>
+
+      <div class="callout">
+        <span class="tag">Why this matters for v2</span>
+        <p>
+          Reading DTL as "a Sugarscape" tells you what the model is <em>for</em>. Reading it as the
+          v1 port had to tells you what the model <em>is</em>: a specific sequence of state mutations
+          and random draws. v2 needs the first to choose its mechanics and the second to know
+          precisely which behaviours it is choosing to keep, change, or drop.
+        </p>
+      </div>
+
+      <p>
+        Concretely, the Nim port had to reimplement CPython's Mersenne Twister including
+        <code>init_by_array</code> seeding and the rejection sampling inside <code>_randbelow</code>;
+        reproduce <code>json.dumps</code> float formatting and unbounded integers; and preserve
+        outright bugs, such as an inverted boundary test in the cell-neighbour lookup, which
+        it does with an explicit flag named <code>preserveSouthBoundaryBug</code>. That flag is
+        the clearest single illustration of what fidelity cost.
+      </p>
+    </section>
+
+    <!-- ================= 2 ================= -->
+    <section id="objects">
+      <span class="sec-num">§ 2 — Structure</span>
+      <h2>The object graph, and the back-references that hold it together</h2>
+
+      <p>
+        There are five classes and one small hierarchy of subclasses. The important structural
+        fact is that ownership runs downward but <em>reference</em> runs in both directions:
+        every cell knows its environment, every environment knows its simulation, and every
+        agent reaches global configuration by walking <code>self.cell.environment.sugarscape</code>.
+        Agent code reads and writes simulation-level state through that chain constantly.
+      </p>
+
+      <figure>
+        <div class="frame">
+          <svg viewBox="0 0 820 400" role="img" aria-label="Object graph: Sugarscape owns Environment and a list of Agents; Environment owns a grid of Cells; Agents reach global state back through cell.environment.sugarscape.">
+            <!-- Sugarscape -->
+            <rect class="s-box" x="40" y="30" width="200" height="76" rx="3"/>
+            <text class="s-t" x="56" y="55">Sugarscape</text>
+            <text class="s-t-sm" x="56" y="73">configuration · timestep</text>
+            <text class="s-t-sm" x="56" y="89">agents[] · diseases[] · RNG</text>
+
+            <!-- Environment -->
+            <rect class="s-box" x="40" y="160" width="200" height="76" rx="3"/>
+            <text class="s-t" x="56" y="185">Environment</text>
+            <text class="s-t-sm" x="56" y="203">grid[x][y] · seasons</text>
+            <text class="s-t-sm" x="56" y="219">growback · pollution</text>
+
+            <!-- Cell -->
+            <rect class="s-box" x="40" y="290" width="200" height="76" rx="3"/>
+            <text class="s-t" x="56" y="315">Cell</text>
+            <text class="s-t-sm" x="56" y="333">sugar/spice · maxSugar/Spice</text>
+            <text class="s-t-sm" x="56" y="349">agent · neighbors · ranges</text>
+
+            <!-- Agent -->
+            <rect class="s-box-hi" x="420" y="160" width="220" height="90" rx="3"/>
+            <text class="s-t" x="436" y="185">Agent</text>
+            <text class="s-t-sm" x="436" y="203">holdings · metabolism · vision</text>
+            <text class="s-t-sm" x="436" y="219">tags · immuneSystem · diseases</text>
+            <text class="s-t-sm" x="436" y="235">socialNetwork · decisionModel</text>
+
+            <!-- subclasses -->
+            <rect class="s-box-alt" x="420" y="300" width="220" height="66" rx="3"/>
+            <text class="s-t-sm" x="436" y="322">Bentham · Asimov · Temperance</text>
+            <text class="s-t-sm" x="436" y="338">Leader</text>
+            <text class="s-t-lbl" x="436" y="356">override findBestEthicalCell()</text>
+
+            <!-- Condition -->
+            <rect class="s-box-alt" x="690" y="160" width="100" height="90" rx="3"/>
+            <text class="s-t-sm" x="704" y="185">Condition</text>
+            <text class="s-t-sm" x="704" y="203">Disease</text>
+            <text class="s-t-sm" x="704" y="221">Depression</text>
+            <text class="s-t-sm" x="704" y="239">ZombieVirus</text>
+
+            <!-- ownership arrows -->
+            <line class="s-line" x1="140" y1="106" x2="140" y2="154" marker-end="url(#ar1)"/>
+            <text class="s-t-lbl" x="150" y="134">owns 1</text>
+            <line class="s-line" x1="140" y1="236" x2="140" y2="284" marker-end="url(#ar1)"/>
+            <text class="s-t-lbl" x="150" y="264">owns W×H</text>
+
+            <line class="s-line" x1="240" y1="60" x2="414" y2="60" marker-end="url(#ar1)"/>
+            <line class="s-line" x1="414" y1="60" x2="414" y2="154" marker-end="url(#ar1)"/>
+            <text class="s-t-lbl" x="252" y="52">holds agents[] — shuffled every timestep</text>
+
+            <line class="s-line" x1="240" y1="328" x2="410" y2="328" marker-end="url(#ar1)"/>
+            <line class="s-line-soft" x1="410" y1="328" x2="410" y2="205"/>
+            <line class="s-line" x1="410" y1="205" x2="414" y2="205" marker-end="url(#ar1)"/>
+            <text class="s-t-lbl" x="252" y="320">cell.agent ⇄ agent.cell</text>
+
+            <line class="s-line-dash" x1="530" y1="250" x2="530" y2="294" marker-end="url(#ar1)"/>
+            <text class="s-t-lbl" x="540" y="276">subclass of</text>
+
+            <line class="s-line-soft" x1="640" y1="205" x2="684" y2="205" marker-end="url(#ar1)"/>
+
+            <!-- back-reference -->
+            <path class="s-sugar-s" d="M 420 175 L 300 175 L 300 400 L 20 400 L 20 68 L 34 68" marker-end="url(#ar1s)"/>
+            <text class="s-t-lbl" x="306" y="392" style="fill:var(--sugar)">self.cell.environment.sugarscape — the global back-channel</text>
+          </svg>
+        </div>
+        <figcaption>
+          <b>Ownership is a tree; access is a cycle.</b> Agents mutate simulation-level state
+          (agent IDs, born/dead lists, per-timestep statistics, the experimental-group counters)
+          directly through the back-reference, so agent behaviour and global bookkeeping are not
+          separable layers.
+        </figcaption>
+      </figure>
+
+      <p>
+        Two consequences follow from this shape and both matter for a port. First, there is no
+        double buffering anywhere: agents act <strong>sequentially and asynchronously</strong> within a
+        timestep, so the fifth agent to act sees a world already changed by the four before it.
+        Second, because <code>Sugarscape.agents</code> is shuffled in place each timestep, the
+        canonical agent list is permanently permuted — which affects not only activation order
+        but also the order in which deaths are processed and log records are emitted.
+      </p>
+    </section>
+
+    <!-- ================= 3 ================= -->
+    <section id="world">
+      <span class="sec-num">§ 3 — The world</span>
+      <h2>Grid, resource peaks, growback, seasons, pollution</h2>
+
+      <p>
+        The environment is a <code>width × height</code> array indexed <code>grid[x][y]</code>, by default
+        50 × 50, and by default a <strong>torus</strong>: <code>environmentWraparound</code> is true, so
+        column <code>width−1</code> is adjacent to column <code>0</code>. Each cell carries a current and a
+        maximum amount of two commodities, <span class="sugar-t">sugar</span> and
+        <span class="spice-t">spice</span>, plus a pollution level and a season.
+      </p>
+
+      <h3>Resource peaks</h3>
+      <p>
+        The classic terrain is generated, not authored. Each configured peak
+        <code>[x, y, maxValue]</code> is painted by <code>addResourcePeak</code> as a cone that is
+        quantised upward by <code>ceil</code> into discrete bands, and peaks compose by taking the
+        maximum, so overlapping peaks never sum:
+      </p>
+
+      <div class="formula">
+radius        = ceil(sqrt(2 · (H + W)))                      <span class="cm">→ 15 on a 50×50 grid</span>
+dispersion    = sqrt(max(px, W−px)² + max(py, H−py)²) · radius/W
+value(i,j)    = ceil( min( 1 + maxValue · (1 − dist/dispersion), maxValue ) )
+cell.maxSugar = max(cell.maxSugar, value(i,j))               <span class="cm">peaks compose by max, never sum</span>
+      </div>
+
+      <p>
+        The defaults place sugar peaks at (35,15) and (15,35) and spice peaks at (35,35) and
+        (15,15), each capped at 4 — the familiar two-mountain sugarscape, with spice on the
+        opposite diagonal so that the two commodities are spatially anti-correlated and trade
+        has something to do.
+      </p>
+
+      <h3>Where agents start</h3>
+      <p>
+        Agents are seeded into <strong>quadrants</strong>, not uniformly. Quadrant 1 is the top-left,
+        numbered clockwise; <code>environmentQuadrantSizeFactor</code> shrinks each quadrant toward
+        its corner. Placement shuffles the cell list inside each active quadrant, shuffles the
+        quadrant order, then deals agents round-robin across quadrants. With the default
+        <code>[1,2,3,4]</code> the whole grid is eligible, but restricting to one quadrant is how the
+        book's migration figures are reproduced.
+      </p>
+
+      <figure>
+        <div class="frame">
+          <svg viewBox="0 0 820 360" role="img" aria-label="Left: the 50 by 50 grid showing two sugar peaks on one diagonal and two spice peaks on the other, with quadrant boundaries. Right: torus wraparound, where moving off the right edge re-enters on the left.">
+            <!-- LEFT: the field -->
+            <text class="s-t-lbl" x="40" y="26">RESOURCE FIELD &amp; STARTING QUADRANTS</text>
+            <rect class="s-box" x="40" y="40" width="280" height="280" rx="2"/>
+            <!-- quadrant divider -->
+            <line class="s-line-dash" x1="180" y1="40" x2="180" y2="320"/>
+            <line class="s-line-dash" x1="40" y1="180" x2="320" y2="180"/>
+
+            <!-- sugar peaks: (35,15) and (15,35) -> scaled x*5.6+40, y*5.6+40 -->
+            <circle class="s-sugar" cx="236" cy="124" r="7"/>
+            <circle cx="236" cy="124" r="20" fill="none" stroke-width="1" opacity="0.55" style="stroke:var(--sugar)"/>
+            <circle cx="236" cy="124" r="34" fill="none" stroke-width="1" opacity="0.3" style="stroke:var(--sugar)"/>
+            <circle cx="236" cy="124" r="48" fill="none" stroke-width="1" opacity="0.16" style="stroke:var(--sugar)"/>
+
+            <circle class="s-sugar" cx="124" cy="236" r="7"/>
+            <circle cx="124" cy="236" r="20" fill="none" stroke-width="1" opacity="0.55" style="stroke:var(--sugar)"/>
+            <circle cx="124" cy="236" r="34" fill="none" stroke-width="1" opacity="0.3" style="stroke:var(--sugar)"/>
+            <circle cx="124" cy="236" r="48" fill="none" stroke-width="1" opacity="0.16" style="stroke:var(--sugar)"/>
+
+            <!-- spice peaks: (15,15) and (35,35) -->
+            <circle class="s-spice" cx="124" cy="124" r="7"/>
+            <circle cx="124" cy="124" r="20" fill="none" stroke-width="1" opacity="0.5" style="stroke:var(--spice)"/>
+            <circle cx="124" cy="124" r="34" fill="none" stroke-width="1" opacity="0.26" style="stroke:var(--spice)"/>
+
+            <circle class="s-spice" cx="236" cy="236" r="7"/>
+            <circle cx="236" cy="236" r="20" fill="none" stroke-width="1" opacity="0.5" style="stroke:var(--spice)"/>
+            <circle cx="236" cy="236" r="34" fill="none" stroke-width="1" opacity="0.26" style="stroke:var(--spice)"/>
+
+            <text class="s-t-lbl" x="48" y="58">Q1</text>
+            <text class="s-t-lbl" x="298" y="58">Q2</text>
+            <text class="s-t-lbl" x="298" y="314">Q3</text>
+            <text class="s-t-lbl" x="48" y="314">Q4</text>
+
+            <text class="s-t-lbl" x="40" y="340">x → 0 … 49   ·   y ↓ 0 … 49   ·   grid is indexed [x][y]</text>
+
+            <!-- legend -->
+            <circle class="s-sugar" cx="360" cy="60" r="5"/>
+            <text class="s-t-sm" x="374" y="64">sugar peak, max 4</text>
+            <circle class="s-spice" cx="360" cy="84" r="5"/>
+            <text class="s-t-sm" x="374" y="88">spice peak, max 4</text>
+
+            <!-- RIGHT: torus -->
+            <text class="s-t-lbl" x="520" y="26">WRAPAROUND</text>
+            <rect class="s-box" x="520" y="130" width="240" height="120" rx="2"/>
+            <line class="s-line-soft" x1="560" y1="130" x2="560" y2="250"/>
+            <line class="s-line-soft" x1="600" y1="130" x2="600" y2="250"/>
+            <line class="s-line-soft" x1="640" y1="130" x2="640" y2="250"/>
+            <line class="s-line-soft" x1="680" y1="130" x2="680" y2="250"/>
+            <line class="s-line-soft" x1="720" y1="130" x2="720" y2="250"/>
+            <line class="s-line-soft" x1="520" y1="170" x2="760" y2="170"/>
+            <line class="s-line-soft" x1="520" y1="210" x2="760" y2="210"/>
+
+            <circle class="s-sugar" cx="740" cy="190" r="6"/>
+            <path class="s-sugar-s" d="M 748 190 L 772 190 L 772 288 L 508 288 L 508 190 L 532 190" marker-end="url(#ar1s)"/>
+            <text class="s-t-lbl" x="560" y="304" style="fill:var(--sugar)">(x + 1) mod width — distance is the shorter way round</text>
+            <text class="s-t-sm" x="520" y="112">wraparound = true (default): the grid is a torus,</text>
+            <text class="s-t-sm" x="520" y="96">no edges, no corners, no privileged position.</text>
+          </svg>
+        </div>
+        <figcaption>
+          <b>Two commodities on opposite diagonals, on a surface with no edge.</b> Wraparound also
+          changes distance: <code>findWraparoundDistance</code> folds any delta greater than half the
+          border back around, which caps the useful vision radius at <code>width // 2</code>.
+        </figcaption>
+      </figure>
+
+      <h3>Growback, seasons, pollution</h3>
+      <p>
+        Every timestep, before any agent acts, the environment runs three things in order:
+        <code>updateSeasons</code>, <code>updatePollution</code>, then <code>doCellUpdate</code>.
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Process</th><th>Rule</th><th>Controlled by</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><b>Growback</b></td>
+              <td><code>sugar = min(sugar + rate, maxSugar)</code>, applied to every cell. Rate 1 is the book's "constant growback"; a rate ≥ maxSugar gives immediate growback.</td>
+              <td><code>environmentSugarRegrowRate</code>, <code>environmentSpiceRegrowRate</code></td>
+            </tr>
+            <tr>
+              <td><b>Seasons</b></td>
+              <td>The grid is split at an equator into two hemispheres holding opposite seasons, which swap every <code>seasonInterval</code> steps. Cells in the <em>wet</em> season grow back every step; cells in the <em>dry</em> season grow back only on the tick when a countdown of length <code>seasonalGrowbackDelay</code> resets.</td>
+              <td><code>environmentSeasonInterval</code>, <code>environmentSeasonalGrowbackDelay</code>, <code>environmentEquator</code></td>
+            </tr>
+            <tr>
+              <td><b>Pollution</b></td>
+              <td>Two sources, both charged to the cell: <em>production</em> pollution when an agent harvests, <em>consumption</em> pollution when an agent metabolises. Both are active only inside a configured timeframe.</td>
+              <td><code>environmentSugarProductionPollutionFactor</code> and its three siblings, <code>environmentPollutionTimeframe</code></td>
+            </tr>
+            <tr>
+              <td><b>Diffusion</b></td>
+              <td>On a delay countdown, every cell computes the mean pollution of its neighbours into a flux field, then all cells adopt their flux at once. This is the one genuinely synchronous update in the model.</td>
+              <td><code>environmentPollutionDiffusionDelay</code>, <code>environmentPollutionDiffusionTimeframe</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        Pollution does not damage agents directly. It works entirely through cell valuation:
+        an agent divides a cell's resources by <code>1 + pollution</code> when deciding where to move,
+        so a polluted cell simply stops looking attractive. This is what produces the book's
+        result that agents pollute a region and then abandon it.
+      </p>
+    </section>
+
+    <!-- ================= 4 ================= -->
+    <section id="adjacency">
+      <span class="sec-num">§ 4 — Adjacency</span>
+      <h2>Two different notions of "nearby", used for different things</h2>
+
+      <p>
+        This is the distinction most easily missed on a first read, and getting it wrong
+        changes almost every downstream behaviour. Each cell carries <em>two</em> separate
+        adjacency structures, computed once at startup and never recomputed.
+      </p>
+
+      <figure>
+        <div class="frame">
+          <svg viewBox="0 0 820 330" role="img" aria-label="Left: cell.neighbors, the four von Neumann or eight Moore adjacent cells, used for all social interaction. Right: cell.ranges, distance-banded lookup tables used for vision and movement, shaped as a cross in cardinal mode and a disc in radial mode.">
+            <!-- neighbors -->
+            <text class="s-t-lbl" x="20" y="24">cell.neighbors — SOCIAL ADJACENCY</text>
+            <g>
+              <rect class="s-box" x="20" y="60" width="34" height="34"/>
+              <rect class="s-box" x="56" y="60" width="34" height="34"/>
+              <rect class="s-box" x="92" y="60" width="34" height="34"/>
+              <rect class="s-box" x="20" y="96" width="34" height="34"/>
+              <rect class="s-box-hi" x="56" y="96" width="34" height="34"/>
+              <rect class="s-box" x="92" y="96" width="34" height="34"/>
+              <rect class="s-box" x="20" y="132" width="34" height="34"/>
+              <rect class="s-box" x="56" y="132" width="34" height="34"/>
+              <rect class="s-box" x="92" y="132" width="34" height="34"/>
+              <!-- von Neumann marks -->
+              <circle class="s-sugar" cx="73" cy="77" r="4"/>
+              <circle class="s-sugar" cx="37" cy="113" r="4"/>
+              <circle class="s-sugar" cx="109" cy="113" r="4"/>
+              <circle class="s-sugar" cx="73" cy="149" r="4"/>
+              <!-- moore extras -->
+              <circle cx="37" cy="77" r="4" fill="none" stroke-width="1.2" style="stroke:var(--sugar)"/>
+              <circle cx="109" cy="77" r="4" fill="none" stroke-width="1.2" style="stroke:var(--sugar)"/>
+              <circle cx="37" cy="149" r="4" fill="none" stroke-width="1.2" style="stroke:var(--sugar)"/>
+              <circle cx="109" cy="149" r="4" fill="none" stroke-width="1.2" style="stroke:var(--sugar)"/>
+            </g>
+            <circle class="s-sugar" cx="26" cy="196" r="4"/>
+            <text class="s-t-sm" x="38" y="200">vonNeumann (default): 4</text>
+            <circle cx="26" cy="218" r="4" fill="none" stroke-width="1.2" style="stroke:var(--sugar)"/>
+            <text class="s-t-sm" x="38" y="222">moore: adds 4 diagonals</text>
+            <text class="s-t-sm" x="20" y="252">Used by: trade · reproduction ·</text>
+            <text class="s-t-sm" x="20" y="270">tagging · lending · disease spread</text>
+            <text class="s-t-sm" x="20" y="288">— every interaction is strictly</text>
+            <text class="s-t-sm" x="20" y="306">adjacent, regardless of vision.</text>
+
+            <line class="s-line-soft" x1="270" y1="20" x2="270" y2="316"/>
+
+            <!-- ranges: cardinal -->
+            <text class="s-t-lbl" x="300" y="24">cell.ranges — PERCEPTUAL / MOVEMENT REACH</text>
+            <text class="s-t-sm" x="300" y="48">cardinal (default)</text>
+            <g transform="translate(300,60)">
+              <g>
+                <rect class="s-box-alt" x="0" y="0" width="154" height="154"/>
+                <rect class="s-box-hi" x="61" y="61" width="32" height="32"/>
+                <rect class="s-box" x="61" y="29" width="32" height="32"/>
+                <rect class="s-box" x="61" y="93" width="32" height="32"/>
+                <rect class="s-box" x="29" y="61" width="32" height="32"/>
+                <rect class="s-box" x="93" y="61" width="32" height="32"/>
+                <rect class="s-box" x="61" y="0" width="32" height="27"/>
+                <rect class="s-box" x="61" y="127" width="32" height="27"/>
+                <rect class="s-box" x="0" y="61" width="27" height="32"/>
+                <rect class="s-box" x="127" y="61" width="27" height="32"/>
+                <text class="s-t-sm" x="70" y="82">•</text>
+              </g>
+            </g>
+            <text class="s-t-sm" x="300" y="238">A cross: only same row and same</text>
+            <text class="s-t-sm" x="300" y="256">column, keyed by integer distance.</text>
+
+            <!-- ranges: radial -->
+            <text class="s-t-sm" x="520" y="48">radial</text>
+            <g transform="translate(520,60)">
+              <rect class="s-box-alt" x="0" y="0" width="154" height="154"/>
+              <circle cx="77" cy="77" r="72" stroke-width="1.1" style="fill:var(--sugar-wash);stroke:var(--sugar)"/>
+              <circle cx="77" cy="77" r="48" fill="none" stroke-width="0.9" opacity="0.6" style="stroke:var(--sugar)"/>
+              <circle cx="77" cy="77" r="24" fill="none" stroke-width="0.9" opacity="0.6" style="stroke:var(--sugar)"/>
+              <rect class="s-box-hi" x="66" y="66" width="22" height="22"/>
+            </g>
+            <text class="s-t-sm" x="520" y="238">A disc, banded by floor(euclidean</text>
+            <text class="s-t-sm" x="520" y="256">distance); exact distance is kept</text>
+            <text class="s-t-sm" x="520" y="274">as the tie-break value.</text>
+
+            <text class="s-t-sm" x="300" y="306">Reach each turn = min(vision, movement, maxCellDistance). The agent's own cell is not in this set.</text>
+          </svg>
+        </div>
+        <figcaption>
+          <b>Interaction is adjacent; perception is ranged.</b> An agent with vision 6 can move six
+          cells to a rich site, but it can only trade with, mate with, infect, lend to or
+          culturally pressure the agents in the four cells immediately around wherever it
+          landed.
+        </figcaption>
+      </figure>
+
+      <p>
+        <code>cell.ranges</code> is a memoised table built once by <code>findCellRanges</code>: a dict from
+        integer band → {cell → distance}, sized to the largest vision or movement any agent
+        could ever have (including disease bonuses). Radial geometry is used only when
+        <em>both</em> <code>agentVisionMode</code> and <code>agentMovementMode</code> are <code>"radial"</code>;
+        otherwise everything is cardinal.
+      </p>
+
+      <p>
+        An agent's per-turn candidate set is then
+        <code>min(vision, movement, maxCellDistance)</code> bands unioned together. Note what this
+        means: <strong>vision and movement are not independent</strong> in DTL. An agent that can see
+        six cells but move one considers only one cell in each direction — it cannot look at
+        a distant peak and walk toward it over several turns.
+      </p>
+
+      <div class="callout quirk">
+        <span class="tag">Deviation from the book</span>
+        <p>
+          The current cell is never a member of <code>cellsInRange</code>. Unless the candidate list
+          comes back empty, <strong>an agent always relocates</strong>, even when every reachable cell is
+          worse than where it is standing. In <cite>Growing Artificial Societies</cite> the agent
+          evaluates its own site alongside the others and may stay put.
+        </p>
+      </div>
+    </section>
+
+    <!-- ================= 5 ================= -->
+    <section id="agent">
+      <span class="sec-num">§ 5 — The agent</span>
+      <h2>Endowments, welfare, and how a cell is chosen</h2>
+
+      <p>
+        An agent is a bundle of scalar endowments plus a social network. The endowments that
+        drive the core loop are small in number:
+      </p>
+
+      <div class="table-wrap">
+        <table class="t-mono">
+          <thead>
+            <tr><th>Endowment</th><th>Meaning</th><th>Default range</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>sugar / spice</td><td>Current holdings; also the starting values, which double as the fertility threshold</td><td>[10,40] / [0,0]</td></tr>
+            <tr><td>sugarMetabolism<br>spiceMetabolism</td><td>Units burned per timestep. Reaching zero of a commodity you metabolise is death.</td><td>[1,4] / [0,0]</td></tr>
+            <tr><td>vision</td><td>How far the agent can see</td><td>[1,6]</td></tr>
+            <tr><td>movement</td><td>How far it can travel in one step</td><td>[1,6]</td></tr>
+            <tr><td>maxAge</td><td>Death by aging; <code>-1</code> means immortal</td><td>[-1,-1]</td></tr>
+            <tr><td>aggressionFactor</td><td>&gt; 0 turns every move into a combat move</td><td>[0,0]</td></tr>
+            <tr><td>tradeFactor</td><td>0 disables trade; scales the marginal rate of substitution</td><td>[0,0]</td></tr>
+            <tr><td>fertilityFactor</td><td>Higher = cheaper reproduction; 0 means infertile</td><td>[0,0]</td></tr>
+            <tr><td>lookaheadFactor</td><td>Timesteps of metabolic cost subtracted before valuing a cell</td><td>[0,0]</td></tr>
+            <tr><td>decisionModel<br>decisionModelFactor</td><td>Which ethical evaluator to use, and whether it is consulted at all</td><td>"none" / [0,0]</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        Endowments are not drawn independently per agent. They are generated as a
+        <strong>deterministic ramp</strong> — walk from min to max in the smallest increment implied by
+        the configured decimals, wrapping back to min at the top — and then that list is
+        shuffled. This guarantees an exactly uniform spread across the population rather than a
+        sampled approximation of one, and it is why replacement agents drawn later from the
+        same endowment pool follow the same distribution as the founders.
+      </p>
+
+      <h3>The welfare function</h3>
+      <p>
+        Everything an agent values — a cell, a trade, a combat opportunity — is scored with one
+        function, a Cobb–Douglas utility over the two commodities, with each exponent set to
+        that commodity's share of the agent's total metabolism:
+      </p>
+
+      <div class="formula">
+m_s, m_p = sugar, spice metabolism        M = m_s + m_p
+
+W(x_s, x_p) = (w_s + x_s − m_s·L) <sup>m_s/M</sup> · (w_p + x_p − m_p·L) <sup>m_p/M</sup>
+
+  <span class="cm">w_s, w_p  current holdings          x_s, x_p  the prospective reward</span>
+  <span class="cm">L         lookaheadFactor          negative terms are clamped to 0</span>
+      </div>
+
+      <p>
+        The consequence is that an agent with heavy sugar metabolism and no spice metabolism
+        scores cells purely on sugar, while a balanced agent needs both and will value a cell
+        holding some of each above a cell holding a lot of one. That single asymmetry is what
+        makes trade profitable later.
+      </p>
+      <p>
+        Two optional modifiers wrap this. <code>agentTagPreferences</code> replaces the metabolic
+        exponents with ones derived from the proportion of zeroes and ones in the agent's
+        cultural tag string, so culture starts to determine taste. And if any of the four
+        in-group factors — ageism, racism, sexism, tribalism — is enabled, the resulting
+        welfare is multiplied by a modifier computed from the proportion of a candidate cell's
+        neighbours that are in-group, which biases movement toward one's own kind.
+      </p>
+
+      <h3>Choosing a cell</h3>
+
+      <figure>
+        <div class="frame">
+          <svg viewBox="0 0 820 300" role="img" aria-label="Move selection pipeline: gather cells in range, shuffle, filter out illegal combat targets, score by welfare, stable insertion sort by wealth then distance, optional ethical override, then either combat-move or plain move.">
+            <g>
+              <rect class="s-box" x="14" y="60" width="118" height="58" rx="3"/>
+              <text class="s-t-sm" x="26" y="82">cellsInRange</text>
+              <text class="s-t-sm" x="26" y="100">bands 1…reach</text>
+
+              <rect class="s-box-hi" x="152" y="60" width="104" height="58" rx="3"/>
+              <text class="s-t-sm" x="164" y="82">shuffle()</text>
+              <text class="s-t-lbl" x="164" y="100" style="fill:var(--sugar)">RNG draw</text>
+
+              <rect class="s-box" x="276" y="60" width="126" height="58" rx="3"/>
+              <text class="s-t-sm" x="288" y="80">drop occupied</text>
+              <text class="s-t-sm" x="288" y="96">cells that are not</text>
+              <text class="s-t-sm" x="288" y="112">valid prey</text>
+
+              <rect class="s-box" x="422" y="60" width="126" height="58" rx="3"/>
+              <text class="s-t-sm" x="434" y="80">score each:</text>
+              <text class="s-t-sm" x="434" y="96">W(sugar, spice)</text>
+              <text class="s-t-sm" x="434" y="112">÷ (1 + pollution)</text>
+
+              <rect class="s-box" x="568" y="60" width="132" height="58" rx="3"/>
+              <text class="s-t-sm" x="580" y="80">drop targets</text>
+              <text class="s-t-sm" x="580" y="96">protected by a</text>
+              <text class="s-t-sm" x="580" y="112">richer retaliator</text>
+
+              <line class="s-line" x1="132" y1="89" x2="148" y2="89" marker-end="url(#ar1)"/>
+              <line class="s-line" x1="256" y1="89" x2="272" y2="89" marker-end="url(#ar1)"/>
+              <line class="s-line" x1="402" y1="89" x2="418" y2="89" marker-end="url(#ar1)"/>
+              <line class="s-line" x1="548" y1="89" x2="564" y2="89" marker-end="url(#ar1)"/>
+            </g>
+
+            <path class="s-line" d="M 700 89 L 730 89 L 730 150 L 90 150 L 90 176" marker-end="url(#ar1)"/>
+
+            <g>
+              <rect class="s-box" x="14" y="180" width="160" height="58" rx="3"/>
+              <text class="s-t-sm" x="26" y="200">stable insertion sort</text>
+              <text class="s-t-sm" x="26" y="216">wealth ↓, then</text>
+              <text class="s-t-sm" x="26" y="232">distance ↑</text>
+
+              <rect class="s-box" x="200" y="180" width="150" height="58" rx="3"/>
+              <text class="s-t-sm" x="212" y="200">ranked[0]</text>
+              <text class="s-t-sm" x="212" y="218">= the greedy choice</text>
+
+              <rect class="s-box-alt" x="376" y="180" width="172" height="58" rx="3"/>
+              <text class="s-t-sm" x="388" y="200">if decisionModelFactor &gt; 0:</text>
+              <text class="s-t-sm" x="388" y="218">findBestEthicalCell()</text>
+              <text class="s-t-lbl" x="388" y="234">may override the greedy pick</text>
+
+              <rect class="s-box-hi" x="574" y="180" width="126" height="58" rx="3"/>
+              <text class="s-t-sm" x="586" y="200">aggression &gt; 0 ?</text>
+              <text class="s-t-sm" x="586" y="218">doCombat : gotoCell</text>
+
+              <line class="s-line" x1="174" y1="209" x2="196" y2="209" marker-end="url(#ar1)"/>
+              <line class="s-line" x1="350" y1="209" x2="372" y2="209" marker-end="url(#ar1)"/>
+              <line class="s-line" x1="548" y1="209" x2="570" y2="209" marker-end="url(#ar1)"/>
+            </g>
+
+            <text class="s-t-lbl" x="14" y="272">The shuffle is not cosmetic: the sort is stable, so cells tied on both wealth and distance keep shuffled order —</text>
+            <text class="s-t-lbl" x="14" y="288">random tie-breaking is delegated to it, and with zero total metabolism every cell ties and the shuffle decides outright.</text>
+          </svg>
+        </div>
+        <figcaption>
+          <b>Rank, then optionally overrule.</b> The greedy Sugarscape rule ("closest cell with the
+          most resources") is always computed; a decision model can only replace the answer
+          afterwards, and the difference between the two is logged as
+          <code>lastMoveOptimal</code>.
+        </figcaption>
+      </figure>
+
+      <p>
+        The <em>retaliation</em> filter deserves a note, because it is the book's combat rule and it
+        is subtle. Before scoring, the agent surveys every tribe visible to it and records the
+        wealth of that tribe's <em>richest</em> visible member. A candidate cell occupied by prey is
+        discarded if that prey's tribe fields someone richer than the attacker would be after
+        winning. Combat is therefore deterred not by the victim's strength but by its
+        neighbours'.
+      </p>
+    </section>
+
+    <!-- ================= 6 ================= -->
+    <section id="timestep">
+      <span class="sec-num">§ 6 — The loop</span>
+      <h2>The timestep, in exact order</h2>
+
+      <p>
+        This is the spine of the model. Everything else is a subroutine hanging off it. The
+        order is not incidental — it decides, for instance, that resources regrow before anyone
+        moves, that an agent harvests <em>before</em> paying its metabolism, and that a starving
+        agent never gets to trade its way out of death that turn.
+      </p>
+
+      <figure>
+        <div class="frame">
+          <svg viewBox="0 0 840 700" role="img" aria-label="Flowchart of one timestep. The simulation increments the clock, updates the environment, shuffles the agent list, introduces scheduled diseases, then runs each agent's turn in sequence; afterwards it removes dead agents, replaces them, updates statistics and writes the log. Each agent's turn runs fourteen steps with two early exits on death.">
+            <!-- simulation lane -->
+            <text class="s-t-lbl" x="20" y="22">Sugarscape.doTimestep()</text>
+            <rect class="s-box-alt" x="14" y="32" width="250" height="640" rx="4"/>
+
+            <rect class="s-box" x="30" y="52" width="218" height="34" rx="3"/>
+            <text class="s-t-sm" x="44" y="74">timestep += 1</text>
+
+            <rect class="s-box" x="30" y="102" width="218" height="66" rx="3"/>
+            <text class="s-t-sm" x="44" y="122">environment.doTimestep()</text>
+            <text class="s-t-lbl" x="44" y="140">seasons → pollution countdown</text>
+            <text class="s-t-lbl" x="44" y="156">→ growback → diffusion</text>
+
+            <rect class="s-box-hi" x="30" y="184" width="218" height="34" rx="3"/>
+            <text class="s-t-sm" x="44" y="206">shuffle(agents)</text>
+            <text class="s-t-lbl" x="196" y="206" style="fill:var(--sugar)">RNG</text>
+
+            <rect class="s-box" x="30" y="234" width="218" height="34" rx="3"/>
+            <text class="s-t-sm" x="44" y="256">addRemainingDiseases()</text>
+
+            <rect class="s-box" x="30" y="284" width="218" height="48" rx="3"/>
+            <text class="s-t-sm" x="44" y="304">for agent in agents:</text>
+            <text class="s-t-sm" x="44" y="322">    agent.doTimestep()</text>
+
+            <rect class="s-box" x="30" y="470" width="218" height="34" rx="3"/>
+            <text class="s-t-sm" x="44" y="492">removeDeadAgents()</text>
+
+            <rect class="s-box-hi" x="30" y="520" width="218" height="34" rx="3"/>
+            <text class="s-t-sm" x="44" y="542">replaceDeadAgents()</text>
+            <text class="s-t-lbl" x="196" y="542" style="fill:var(--sugar)">RNG</text>
+
+            <rect class="s-box" x="30" y="570" width="218" height="34" rx="3"/>
+            <text class="s-t-sm" x="44" y="592">updateRuntimeStats()</text>
+
+            <rect class="s-box" x="30" y="620" width="218" height="34" rx="3"/>
+            <text class="s-t-sm" x="44" y="642">writeToLog()</text>
+
+            <line class="s-line" x1="139" y1="86" x2="139" y2="98" marker-end="url(#ar1)"/>
+            <line class="s-line" x1="139" y1="168" x2="139" y2="180" marker-end="url(#ar1)"/>
+            <line class="s-line" x1="139" y1="218" x2="139" y2="230" marker-end="url(#ar1)"/>
+            <line class="s-line" x1="139" y1="268" x2="139" y2="280" marker-end="url(#ar1)"/>
+            <line class="s-line" x1="139" y1="332" x2="139" y2="466" marker-end="url(#ar1)"/>
+            <line class="s-line" x1="139" y1="504" x2="139" y2="516" marker-end="url(#ar1)"/>
+            <line class="s-line" x1="139" y1="554" x2="139" y2="566" marker-end="url(#ar1)"/>
+            <line class="s-line" x1="139" y1="604" x2="139" y2="616" marker-end="url(#ar1)"/>
+
+            <!-- agent lane -->
+            <text class="s-t-lbl" x="310" y="22">Agent.doTimestep() — run once per living agent, sequentially</text>
+            <rect class="s-box-alt" x="304" y="32" width="522" height="522" rx="4"/>
+
+            <path class="s-sugar-s" d="M 248 308 L 276 308 L 276 60 L 300 60" marker-end="url(#ar1s)"/>
+
+            <g>
+              <rect class="s-box-hi" x="322" y="46" width="230" height="28" rx="2"/>
+              <text class="s-t-sm" x="334" y="65">1  moveToBestCell()</text>
+              <text class="s-t-lbl" x="500" y="65" style="fill:var(--sugar)">RNG</text>
+
+              <rect class="s-box" x="322" y="80" width="230" height="28" rx="2"/>
+              <text class="s-t-sm" x="334" y="99">2  updateNeighbors()</text>
+
+              <rect class="s-box" x="322" y="114" width="230" height="28" rx="2"/>
+              <text class="s-t-sm" x="334" y="133">3  collectResourcesAtCell()</text>
+
+              <rect class="s-box" x="322" y="148" width="230" height="28" rx="2"/>
+              <text class="s-t-sm" x="334" y="167">4  doUniversalIncome()</text>
+
+              <rect class="s-box" x="322" y="182" width="230" height="28" rx="2"/>
+              <text class="s-t-sm" x="334" y="201">5  doMetabolism()</text>
+
+              <rect class="s-box-hi" x="322" y="228" width="230" height="28" rx="2"/>
+              <text class="s-t-sm" x="334" y="247">6  doTagging()</text>
+              <text class="s-t-lbl" x="500" y="247" style="fill:var(--sugar)">RNG</text>
+
+              <rect class="s-box-hi" x="322" y="262" width="230" height="28" rx="2"/>
+              <text class="s-t-sm" x="334" y="281">7  doTrading()</text>
+              <text class="s-t-lbl" x="500" y="281" style="fill:var(--sugar)">RNG</text>
+
+              <rect class="s-box-hi" x="322" y="296" width="230" height="28" rx="2"/>
+              <text class="s-t-sm" x="334" y="315">8  doReproduction()</text>
+              <text class="s-t-lbl" x="500" y="315" style="fill:var(--sugar)">RNG</text>
+
+              <rect class="s-box-hi" x="322" y="330" width="230" height="28" rx="2"/>
+              <text class="s-t-sm" x="334" y="349">9  doLending()</text>
+              <text class="s-t-lbl" x="500" y="349" style="fill:var(--sugar)">RNG</text>
+
+              <rect class="s-box-hi" x="322" y="364" width="230" height="28" rx="2"/>
+              <text class="s-t-sm" x="334" y="383">10 doDisease()</text>
+              <text class="s-t-lbl" x="500" y="383" style="fill:var(--sugar)">RNG</text>
+
+              <rect class="s-box" x="322" y="398" width="230" height="28" rx="2"/>
+              <text class="s-t-sm" x="334" y="417">11 doAging()</text>
+
+              <rect class="s-box" x="322" y="444" width="230" height="28" rx="2"/>
+              <text class="s-t-sm" x="334" y="463">12 findCellsInRange()</text>
+
+              <rect class="s-box" x="322" y="478" width="230" height="28" rx="2"/>
+              <text class="s-t-sm" x="334" y="497">13 updateHappiness()</text>
+
+              <rect class="s-box" x="322" y="512" width="230" height="28" rx="2"/>
+              <text class="s-t-sm" x="334" y="531">14 updateRuntimeStats · updateValues</text>
+            </g>
+
+            <!-- early exits -->
+            <path class="s-line-dash" d="M 552 196 L 690 196 L 690 596 L 640 596" marker-end="url(#ar1)"/>
+            <text class="s-t-lbl" x="562" y="190">if starved → turn ends here</text>
+            <path class="s-line-dash" d="M 552 412 L 660 412 L 660 596 L 640 596" marker-end="url(#ar1)"/>
+            <text class="s-t-lbl" x="562" y="406">if aged out → turn ends here</text>
+
+            <rect class="s-box-alt" x="470" y="580" width="170" height="32" rx="3"/>
+            <text class="s-t-sm" x="484" y="600">agent turn complete</text>
+
+            <!-- annotations -->
+            <text class="s-t-lbl" x="310" y="640">Harvest (3) precedes metabolism (5): an agent can be saved by the cell it just landed on.</text>
+            <text class="s-t-lbl" x="310" y="658">Interaction (6–10) precedes aging (11): the dying still trade, mate and infect on their last turn.</text>
+            <text class="s-t-lbl" x="310" y="676">Starvation, aging and combat vacate the cell at once; wealth driven negative by a transfer does not — see caption.</text>
+          </svg>
+        </div>
+        <figcaption>
+          <b>One timestep.</b> Amber marks a step that consumes random numbers; the two dashed
+          paths are the early exits that make death terminate a turn immediately. Steps 6–10 all
+          operate on the four (or eight) immediately adjacent cells, never on the vision radius.
+          On death, <code>doDeath</code> clears the cell straight away — so starvation, aging and
+          combat victims are gone the moment they die. The exception is an agent whose holdings
+          are pushed below zero by a <em>transfer</em> — a reproduction cost, a loan repayment.
+          Nothing calls <code>doDeath</code> on it, so it fails <code>isAlive</code> for the rest of the
+          timestep: skipped as an interaction partner, but still occupying its cell until
+          <code>removeDeadAgents</code> sweeps.
+        </figcaption>
+      </figure>
+
+      <h3>The agent's turn, step by step</h3>
+
+      <ol class="steps">
+        <li><b>moveToBestCell()</b><span>Rank every reachable cell, apply the decision model if one is active, then either walk into the cell or fight whoever is standing there. Resources are <em>not</em> collected yet.</span><span class="rng">shuffle</span></li>
+        <li><b>updateNeighbors()</b><span>Refresh the adjacent-agent list and fold those agents into the social network: visit counts, observed marginal rates of substitution, and the friend list ranked by cultural Hamming distance.</span></li>
+        <li><b>collectResourcesAtCell()</b><span>Take <em>all</em> sugar and spice at the cell — there is no harvest cap — update the exponential moving average of income (α = 0.05, used for creditworthiness), charge production pollution, and zero the cell.</span></li>
+        <li><b>doUniversalIncome()</b><span>If the configured interval has elapsed, add the flat basic-income grant of each commodity.</span></li>
+        <li><b>doMetabolism()</b><span>Subtract metabolism, charge consumption pollution. Death by starvation if either holding goes negative, or hits zero for a commodity the agent actually burns. <em>A dead agent's turn stops here.</em></span></li>
+        <li><b>doTagging()</b><span>For each adjacent agent, pick a random position in the cultural tag string and overwrite the neighbour's bit at that position with your own; recompute their tribe. This is the book's cultural-transmission rule.</span><span class="rng">shuffle + randrange</span></li>
+        <li><b>doTrading()</b><span>Repeated bilateral barter with each adjacent agent whose marginal rate of substitution differs, until no further trade improves both parties.</span><span class="rng">shuffle</span></li>
+        <li><b>doReproduction()</b><span>If fertile, pair with each compatible adjacent agent and place a child in an empty cell adjacent to either parent; both parents pay.</span><span class="rng">shuffle ×2, seeded draws</span></li>
+        <li><b>doLending()</b><span>Settle any matured loans first, then offer new ones to adjacent agents who are of reproductive age but currently too poor to be fertile.</span><span class="rng">shuffle</span></li>
+        <li><b>doDisease()</b><span>Advance incubation, run the immune response, then attempt to transmit one randomly chosen disease to each adjacent agent.</span><span class="rng">shuffle ×2, randrange, uniform ×2</span></li>
+        <li><b>doAging()</b><span>Increment age; die if <code>maxAge</code> is reached and finite. <em>A dead agent's turn stops here.</em></span></li>
+        <li><b>findCellsInRange()</b><span>Recompute the reachable set from the new position, for use next turn and by other agents' ethical evaluations this turn.</span></li>
+        <li><b>updateHappiness()</b><span>Recompute the five happiness components — wealth, health, social, family, conflict — and their sum.</span></li>
+        <li><b>updateRuntimeStats() · updateValues()</b><span>Emit the per-agent log record; <code>updateValues</code> is the subclass hook where dynamic selfishness and the temperance rule-base are updated.</span></li>
+      </ol>
+
+      <div class="callout">
+        <span class="tag">Ordering consequences worth internalising</span>
+        <p>
+          Growback happens once for the whole grid before any agent moves, so all agents compete
+          for the same regrown field. Because agents then act one at a time on the live grid,
+          being early in the shuffled order is a real advantage — the first mover harvests the
+          richest cell, and later movers evaluate a field that has already been stripped.
+          Activation order is therefore a genuine source of variance, not just of nondeterminism.
+        </p>
+      </div>
+    </section>
+
+    <!-- ================= 7 ================= -->
+    <section id="modules">
+      <span class="sec-num">§ 7 — Interaction</span>
+      <h2>The seven modules that hang off the turn</h2>
+
+      <p>
+        Each of these is off by default and switched on by giving agents a nonzero endowment
+        for it. They compose freely, which is what the example configurations in
+        <code>examples/</code> exercise — each one maps to a specific figure or page range in
+        <cite>Growing Artificial Societies</cite>.
+      </p>
+
+      <h3>Combat</h3>
+      <p>
+        Enabled by <code>agentAggressionFactor &gt; 0</code>. An aggressive agent's move
+        <em>is</em> its attack: <code>moveToBestCell</code> routes through <code>doCombat</code>, which loots
+        <code>min(environmentMaxCombatLoot, victim's holdings)</code> of each commodity, kills the
+        occupant, and takes the cell. Valid prey must be of a different tribe and no wealthier
+        than the attacker; the retaliation filter described in §5 removes the rest.
+        Aggression also inflates perceived value — a highly aggressive agent multiplies the
+        prospective loot by its aggression factor when scoring, so combat becomes attractive
+        beyond its literal payoff.
+      </p>
+
+      <h3>Culture and tribes</h3>
+      <p>
+        Agents carry a binary tag string of length <code>agentTagStringLength</code>. Tribe
+        membership is a function of how many zeroes the string contains, bucketed evenly across
+        <code>environmentMaxTribes</code>:
+      </p>
+      <div class="formula">
+tribeSize = (tagStringLength + 1) / numTribes
+tribe     = min( ceil( (zeroes + 1) / tribeSize ) − 1, numTribes − 1 )
+      </div>
+      <p>
+        Because tagging overwrites one bit of a neighbour's string per turn and tribe is
+        recomputed immediately, cultural conversion is continuous: an agent surrounded by
+        another tribe drifts into it. Tags also drive the friend network (nearest by Hamming
+        distance), optionally the welfare exponents, and — through tribe — combat eligibility.
+      </p>
+
+      <h3>Trade</h3>
+      <p>
+        Enabled by <code>agentTradeFactor &gt; 0</code>. Each agent computes a marginal rate of
+        substitution from how urgently it needs each commodity relative to its metabolism.
+        MRS &gt; 1 means spice is relatively abundant, so the agent should sell spice.
+      </p>
+
+      <figure>
+        <div class="frame">
+          <svg viewBox="0 0 820 250" role="img" aria-label="Trade between two agents: their marginal rates of substitution sit either side of parity, the trade price is the geometric mean of the two, and trading moves both rates toward each other until they would cross.">
+            <line class="s-line" x1="60" y1="120" x2="760" y2="120" marker-end="url(#ar1)"/>
+            <text class="s-t-lbl" x="700" y="142">MRS</text>
+
+            <line class="s-line-soft" x1="410" y1="96" x2="410" y2="144"/>
+            <text class="s-t-sm" x="396" y="164">1.0</text>
+            <text class="s-t-lbl" x="330" y="182">parity: no gains from trade</text>
+
+            <circle class="s-spice" cx="180" cy="120" r="7"/>
+            <text class="s-t-sm" x="140" y="100">sugar seller</text>
+            <text class="s-t-lbl" x="140" y="84">MRS &lt; 1 — needs spice</text>
+
+            <circle class="s-sugar" cx="640" cy="120" r="7"/>
+            <text class="s-t-sm" x="596" y="100">spice seller</text>
+            <text class="s-t-lbl" x="576" y="84">MRS &gt; 1 — needs sugar</text>
+
+            <path class="s-line-dash" d="M 190 106 Q 300 62 400 100"/>
+            <path class="s-line-dash" d="M 630 106 Q 520 62 420 100"/>
+            <text class="s-t-lbl" x="300" y="52">each trade moves both toward parity</text>
+
+            <line class="s-sugar-s" x1="410" y1="120" x2="410" y2="196"/>
+            <circle class="s-sugar" cx="410" cy="196" r="4"/>
+            <text class="s-t-sm" x="424" y="200">price = √(MRS_spiceSeller · MRS_sugarSeller)</text>
+            <text class="s-t-lbl" x="424" y="218">quantities: the cheaper side moves 1 unit, the other moves `price`</text>
+
+            <text class="s-t-lbl" x="60" y="240">A trade executes only if it improves MRS or welfare for BOTH parties, is not lethal to either, and does not make the two rates cross.</text>
+          </svg>
+        </div>
+        <figcaption>
+          <b>Barter as convergence on a shared price.</b> The pair trades repeatedly inside one
+          turn, each transaction pushing both rates toward each other; the loop halts at the
+          crossing point, which is the classic Edgeworth result the book is reproducing.
+        </figcaption>
+      </figure>
+
+      <h3>Reproduction</h3>
+      <p>
+        Requires sexes (<code>agentMaleToFemaleRatio</code>), fertility windows, and a nonzero
+        <code>agentFertilityFactor</code>. An agent is fertile when it is inside its fertility age
+        window <em>and</em> holds at least as much of each commodity as it started life with — so
+        wealth is literally the licence to breed. Each parent pays
+        <code>startingResource / (fertilityFactor × 2)</code>, and the child's initial endowment is
+        exactly the sum of those two payments: reproduction transfers wealth, it does not create
+        it. Scalar traits are inherited by coin flip per trait, tag strings bit by bit with
+        random resolution of mismatches, and the decision-model settings as one inseparable
+        block from a single parent.
+      </p>
+
+      <h3>Disease and the immune system</h3>
+      <p>
+        A disease is a bit string. An agent's immune system is a longer bit string. Infection
+        is possible only if the disease's string does not appear exactly somewhere in the
+        immune system; recovery works by flipping one immune-system bit per timestep toward the
+        disease's pattern at the best-matching offset, so recovery time is a function of the
+        initial Hamming distance.
+      </p>
+
+      <figure>
+        <div class="frame">
+          <svg viewBox="0 0 820 210" role="img" aria-label="Immune matching: the disease bit string is slid along the immune system bit string to find the window with the smallest Hamming distance; each timestep one mismatched bit in that window is corrected until the strings match and the agent recovers.">
+            <text class="s-t-lbl" x="20" y="24">IMMUNE SYSTEM</text>
+            <g>
+              <rect class="s-box" x="20" y="36" width="30" height="30"/><text class="s-t" x="31" y="57">1</text>
+              <rect class="s-box" x="52" y="36" width="30" height="30"/><text class="s-t" x="63" y="57">0</text>
+              <rect class="s-box" x="84" y="36" width="30" height="30"/><text class="s-t" x="95" y="57">1</text>
+              <rect class="s-box-hi" x="116" y="36" width="30" height="30"/><text class="s-t" x="127" y="57">1</text>
+              <rect class="s-box-hi" x="148" y="36" width="30" height="30"/><text class="s-t" x="159" y="57">0</text>
+              <rect class="s-box-hi" x="180" y="36" width="30" height="30"/><text class="s-t" x="191" y="57">0</text>
+              <rect class="s-box-hi" x="212" y="36" width="30" height="30"/><text class="s-t" x="223" y="57">1</text>
+              <rect class="s-box" x="244" y="36" width="30" height="30"/><text class="s-t" x="255" y="57">0</text>
+              <rect class="s-box" x="276" y="36" width="30" height="30"/><text class="s-t" x="287" y="57">1</text>
+              <rect class="s-box" x="308" y="36" width="30" height="30"/><text class="s-t" x="319" y="57">1</text>
+            </g>
+
+            <text class="s-t-lbl" x="116" y="96">best-matching window</text>
+            <line class="s-line-soft" x1="116" y1="70" x2="116" y2="104"/>
+            <line class="s-line-soft" x1="242" y1="70" x2="242" y2="104"/>
+
+            <text class="s-t-lbl" x="20" y="140">DISEASE TAGS</text>
+            <g>
+              <rect class="s-box" x="116" y="150" width="30" height="30"/><text class="s-t" x="127" y="171">1</text>
+              <rect class="s-box" x="148" y="150" width="30" height="30"/><text class="s-t" x="159" y="171">0</text>
+              <rect class="s-box" x="180" y="150" width="30" height="30" stroke-width="1.6" style="stroke:var(--spice)"/><text class="s-t" x="191" y="171">1</text>
+              <rect class="s-box" x="212" y="150" width="30" height="30"/><text class="s-t" x="223" y="171">1</text>
+            </g>
+            <text class="s-t-sm" x="180" y="200" style="fill:var(--spice)">↑ one mismatched bit</text>
+
+            <path class="s-line-dash" d="M 360 60 L 420 60"/>
+            <text class="s-t-sm" x="440" y="46">Hamming distance 0 → immune, cannot catch it.</text>
+            <text class="s-t-sm" x="440" y="68">Distance d → infected; d timesteps of bit-flipping</text>
+            <text class="s-t-sm" x="440" y="90">to recover, one flip per turn.</text>
+            <text class="s-t-sm" x="440" y="124">While infected, the disease's penalties are added</text>
+            <text class="s-t-sm" x="440" y="146">to the agent's vision, movement, metabolism,</text>
+            <text class="s-t-sm" x="440" y="168">fertility, aggression and happiness modifiers —</text>
+            <text class="s-t-sm" x="440" y="190">and subtracted again exactly on recovery.</text>
+          </svg>
+        </div>
+        <figcaption>
+          <b>Immunity as substring matching.</b> Transmission additionally requires two
+          independent uniform draws to clear the disease's <code>transmissionChance</code> and fail the
+          target's <code>diseaseProtectionChance</code>. Diseases with an incubation period are
+          infectious before their penalties activate.
+        </figcaption>
+      </figure>
+
+      <h3>Credit</h3>
+      <p>
+        There are two kinds of lender. A <em>fertile</em> agent may lend only what it holds above
+        its own reproduction threshold; an agent past fertility age has no such reservation and
+        will lend up to half of each holding. Borrowers are agents of reproductive age who are
+        <em>not</em> fertile purely because they are too poor. A loan's size is capped by the
+        borrower's shortfall and the lender's available amount, the rate is <code>min(1, lendingFactor × baseInterestRate)</code>, and the
+        borrower must pass a creditworthiness test against its moving-average income net of
+        existing debt. On maturity, a borrower who cannot pay in full surrenders half of each
+        holding and the remainder is rolled into a fresh loan with interest compounded.
+      </p>
+
+      <h3>Inheritance</h3>
+      <p>
+        On death, remaining wealth is split evenly among living children, sons, daughters, or
+        friends depending on <code>agentInheritancePolicy</code>. This is the mechanism that turns
+        the wealth distribution sharply more unequal, which is the point the book uses it to
+        make.
+      </p>
+
+      <h3>Happiness</h3>
+      <p>
+        Not a book mechanism — a DTL addition, and the objective the Leader agent optimises.
+        Five components sum to a scalar: wealth relative to the population mean (passed through
+        <code>erf</code>), health (sick or not), social (friend count against capacity), family
+        (living children and mates, penalised for sick or dead ones, also through <code>erf</code>),
+        and conflict (positive after a kill only if the agent is highly aggressive, negative
+        otherwise).
+      </p>
+    </section>
+
+    <!-- ================= 8 ================= -->
+    <section id="ethics">
+      <span class="sec-num">§ 8 — Decision models</span>
+      <h2>Where an ethical theory plugs into a greedy agent</h2>
+
+      <p>
+        This is DTL's substantive addition to Sugarscape, and it is deliberately narrow in
+        scope: a decision model changes <strong>one decision only</strong> — which cell to move to.
+        Trading, mating, lending and combat rules are untouched. The plug point is a single
+        method, <code>findBestEthicalCell(cells, greedyBestCell)</code>, which the base
+        <code>Agent</code> implements as "return the greedy answer" and each subclass overrides.
+      </p>
+      <p>
+        Selection happens at construction: <code>configureAgents</code> inspects the endowment's
+        <code>decisionModel</code> string and instantiates a subclass instead of a plain
+        <code>Agent</code>. Suffixes on the string tune it further — <code>NoLookahead</code> and
+        <code>HalfLookahead</code> pin the lookahead factor, <code>Dynamic</code> enables drifting
+        selfishness, <code>PECS</code> selects the elaborated temperance variant. Crucially, the
+        model is consulted only when <code>agentDecisionModelFactor &gt; 0</code>; otherwise even a
+        Bentham agent behaves greedily.
+      </p>
+
+      <div class="table-wrap">
+        <table class="t-mono">
+          <thead>
+            <tr><th>Model</th><th>Class</th><th>How it scores a cell</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>none<br>rawSugarscape</td><td>Agent</td>
+              <td>No override. Pure Sugarscape rule M: closest cell with the highest welfare.</td>
+            </tr>
+            <tr>
+              <td>bentham</td><td>Bentham</td>
+              <td>Felicific calculus. For every agent in the neighbourhood, compute intensity, duration, certainty, proximity and extent for the candidate cell, plus discounted future terms standing in for purity and fecundity. Other agents' values enter as <em>opportunity costs</em>, negated and weighted by <code>1 − selfishnessFactor</code>. Selfishness defaults to 0.5.</td>
+            </tr>
+            <tr>
+              <td>altruist</td><td>Bentham</td>
+              <td>Same calculus with <code>selfishnessFactor = 0</code>: the agent's own welfare carries no weight at all.</td>
+            </tr>
+            <tr>
+              <td>egoist</td><td>Bentham</td>
+              <td>Same calculus with <code>selfishnessFactor = 1</code>: everyone else carries no weight. Differs from <code>none</code> in that it still scores by the felicific terms rather than raw welfare.</td>
+            </tr>
+            <tr>
+              <td>negativeBentham</td><td>Bentham</td>
+              <td>Selfishness <code>−1</code> switches the return type: the cell yields a pair (happiness, unhappiness) and cells are ranked to <em>minimise harm</em> first, maximise good second.</td>
+            </tr>
+            <tr>
+              <td>asimov</td><td>Asimov</td>
+              <td>Deontological. Law One vetoes any cell that would kill a non-robot or let one starve, with a score of <code>−maxsize</code>. Law Two takes the first positive recommendation from a neighbour, evaluated with <em>that neighbour's</em> decision model. Law Three is a self-preservation tiebreak. Falls back to standing still if nothing is permissible.</td>
+            </tr>
+            <tr>
+              <td>temperance</td><td>Temperance</td>
+              <td>Virtue ethics. Cells are scored by how much they change time-to-live, then a random roll against the (drifting) temperance factor picks either the best or the <em>worst</em> cell — modelling a virtue that is practised imperfectly and reinforced or eroded by each choice.</td>
+            </tr>
+            <tr>
+              <td>temperancePECS</td><td>Temperance</td>
+              <td>Replaces the simple score with four summed sub-scores — physical, emotional, cognitive, social — where the cognitive and social terms accumulate a rule base over the agent's life and the social term scales with observed community disapproval of overconsumption.</td>
+            </tr>
+            <tr>
+              <td>agentLeader</td><td>Leader</td>
+              <td>Not an ethics but a benchmark: one immortal, omniscient agent that brute-forces the joint placement of the entire population, deep-copying the whole simulation once per candidate assignment and scoring by mean happiness. Combinatorial, and intended as an upper bound rather than a runnable configuration.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        Four <strong>bias factors</strong> — ageism, racism, sexism, tribalism — cut across all of
+        this. They appear twice, in two different forms. In the ordinary welfare path they
+        scale a cell's value by the proportion of its neighbours who are in-group. In the
+        Bentham path they instead weight each neighbour's contribution to the utility sum by
+        whether that neighbour is in-group. So the same configured factor means "I prefer to
+        live among my own" in one model and "I count their suffering less" in the other.
+      </p>
+
+      <div class="callout">
+        <span class="tag">Note for v2</span>
+        <p>
+          The decision-model layer is where DTL's research interest lives, and it is also the
+          least book-derived part of the system — the least constrained by any external
+          specification, and the most freely reinterpretable.
+        </p>
+      </div>
+    </section>
+
+    <!-- ================= 9 ================= -->
+    <section id="determinism">
+      <span class="sec-num">§ 9 — Determinism</span>
+      <h2>One global stream, and the seeded excursions off it</h2>
+
+      <p>
+        Every random draw in DTL comes from CPython's single module-level
+        <code>random</code> instance. There is no per-agent generator and no injected RNG. Setting
+        <code>seed</code> in the configuration seeds that one stream at startup; the whole run is a
+        deterministic function of it, and reproducibility depends entirely on every draw
+        happening in exactly the same order.
+      </p>
+      <p>
+        But drawing endowments straight from that stream would make each attribute's values
+        depend on the iteration order of a dictionary — brittle, and hostile to adding a new
+        attribute later. DTL's answer is a recurring idiom: save the stream, reseed it from a
+        hash of the attribute's <em>name</em>, do the shuffle, restore the stream.
+      </p>
+
+      <figure>
+        <div class="frame">
+          <svg viewBox="0 0 820 280" role="img" aria-label="The main random stream runs continuously; for each named attribute the generator state is saved, reseeded from the MD5 hash of the attribute name plus the timestep, used for one shuffle, then restored, so the main stream is unaffected.">
+            <text class="s-t-lbl" x="20" y="26">MAIN STREAM — seeded once from `seed`, advances monotonically</text>
+            <line class="s-line" x1="20" y1="60" x2="790" y2="60" marker-end="url(#ar1)"/>
+
+            <circle class="s-sugar" cx="120" cy="60" r="5"/>
+            <circle class="s-sugar" cx="200" cy="60" r="5"/>
+            <circle class="s-sugar" cx="560" cy="60" r="5"/>
+            <circle class="s-sugar" cx="640" cy="60" r="5"/>
+            <circle class="s-sugar" cx="720" cy="60" r="5"/>
+            <text class="s-t-lbl" x="96" y="46">immune systems</text>
+            <text class="s-t-lbl" x="520" y="46">sexes · models · placement · agent order</text>
+
+            <!-- excursion -->
+            <rect class="s-box-hi" x="270" y="120" width="240" height="96" rx="3"/>
+            <text class="s-t-sm" x="286" y="146">for each attribute name:</text>
+            <text class="s-t-sm" x="286" y="166">  seed( md5(name) + timestep )</text>
+            <text class="s-t-sm" x="286" y="186">  shuffle( its endowment list )</text>
+            <text class="s-t-lbl" x="286" y="206">one private stream per attribute</text>
+
+            <path class="s-sugar-s" d="M 300 60 L 300 92 L 330 92 L 330 116" marker-end="url(#ar1s)"/>
+            <text class="s-t-lbl" x="200" y="88" style="fill:var(--sugar)">getstate()</text>
+
+            <path class="s-sugar-s" d="M 460 116 L 460 92 L 490 92 L 490 64" marker-end="url(#ar1s)"/>
+            <text class="s-t-lbl" x="498" y="88" style="fill:var(--sugar)">setstate() — main stream resumes untouched</text>
+
+            <text class="s-t-lbl" x="20" y="252">Same idiom in randomizeDiseaseEndowments() and findChildEndowment(): each inherited trait is decided by its own name-seeded stream,</text>
+            <text class="s-t-lbl" x="20" y="270">so adding a trait never disturbs the draws for any existing one.</text>
+          </svg>
+        </div>
+        <figcaption>
+          <b>Name-derived seeding buys order-independence.</b> An attribute's shuffle depends on
+          <code>md5(attributeName)</code> and the current timestep, not on where it sits in a dict, so
+          the endowment assigned to a given agent is stable under refactoring.
+        </figcaption>
+      </figure>
+
+      <p>
+        The trick is elegant but leaves a sharp edge: inside <code>findChildEndowment</code> the
+        excursion is not closed between every use. The tag, racial-tag and immune-system blocks
+        each reseed, and the depression roll that follows the racial-tag block draws from
+        <em>that</em> block's stream rather than the main one. Any reimplementation has to
+        reproduce that, not clean it up.
+      </p>
+
+      <h3>What a faithful port has to reproduce</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Surface</th><th>Requirement</th></tr></thead>
+          <tbody>
+            <tr><td>Generator</td><td>MT19937 with CPython's <code>init_genrand</code> and <code>init_by_array</code> seeding, including how an integer seed is decomposed into 32-bit limbs.</td></tr>
+            <tr><td>Integer draws</td><td><code>_randbelow</code> uses <code>getrandbits(k)</code> with <em>rejection</em> until the value is in range — not a modulo. Getting this wrong desynchronises the stream on the first out-of-range draw.</td></tr>
+            <tr><td>Shuffle</td><td>Fisher–Yates descending, calling <code>_randbelow(i + 1)</code> at each step.</td></tr>
+            <tr><td>Hash seeding</td><td><code>int(md5(name).hexdigest(), 16) + timestep</code> is a 128-bit integer; it must be converted to limbs exactly as CPython would.</td></tr>
+            <tr><td>Numerics</td><td>Python 3 true division always yields a float, so <code>0 / n</code> is <code>0.0</code> and serialises differently from <code>0</code>. Integers are unbounded.</td></tr>
+            <tr><td>Serialisation</td><td><code>json.dumps</code> key insertion order, default separators, and CPython's shortest-round-trip float repr.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        The archived v1 implements all six — <code>py_random.nim</code> for the first four,
+        <code>py_json.nim</code> for the last two, the latter carrying unbounded Python integers
+        through a tagged string so they survive Nim's 64-bit JSON nodes. That is the concrete
+        meaning of "byte-for-byte".
+      </p>
+
+      <h3>Where the shuffles actually change outcomes</h3>
+      <ul>
+        <li><strong>Agent activation order</strong>, reshuffled every timestep, decides who harvests the regrown field first.</li>
+        <li><strong>Candidate cell order</strong>, because the ranking sort is stable — cells tied on both welfare and distance keep shuffled order, and when total metabolism is zero <em>every</em> cell ties.</li>
+        <li><strong>Neighbour iteration order</strong> in tagging, trade, reproduction, lending and disease — who you interact with first determines what resources are left for the rest.</li>
+        <li><strong>Empty-cell selection</strong> for newborns, and <strong>which disease</strong> an infectious agent transmits to each neighbour.</li>
+      </ul>
+    </section>
+
+    <!-- ================= 10 ================= -->
+    <section id="config">
+      <span class="sec-num">§ 10 — Configuration</span>
+      <h2>The surface, grouped by what it turns on</h2>
+
+      <p>
+        Configuration is a single flat JSON object merged over a defaults dictionary, then run
+        through <code>verifyConfiguration</code>, which clamps, sorts, and disables mutually
+        incoherent combinations before the simulation is constructed. Ranges written
+        <code>[min, max]</code> become the endowment ramp described in §5; scalars are global.
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Group</th><th>Turns on when</th><th>Principal keys</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><b>World</b></td><td>always</td>
+              <td><code>environmentWidth/Height</code>, <code>environmentWraparound</code>, <code>environmentSugarPeaks</code>, <code>environmentSpicePeaks</code>, <code>environmentMaxSugar/Spice</code>, <code>neighborhoodMode</code></td>
+            </tr>
+            <tr>
+              <td><b>Growback</b></td><td>always</td>
+              <td><code>environmentSugarRegrowRate</code>, <code>environmentSpiceRegrowRate</code></td>
+            </tr>
+            <tr>
+              <td><b>Seasons</b></td><td><code>environmentSeasonInterval &gt; 0</code></td>
+              <td><code>environmentSeasonalGrowbackDelay</code>, <code>environmentEquator</code></td>
+            </tr>
+            <tr>
+              <td><b>Pollution</b></td><td>any pollution factor &gt; 0</td>
+              <td>four <code>…ConsumptionPollutionFactor</code> / <code>…ProductionPollutionFactor</code> keys, <code>environmentPollutionTimeframe</code>, <code>environmentPollutionDiffusionDelay</code></td>
+            </tr>
+            <tr>
+              <td><b>Population</b></td><td>always</td>
+              <td><code>startingAgents</code>, <code>environmentStartingQuadrants</code>, <code>environmentQuadrantSizeFactor</code>, <code>agentReplacements</code>, <code>timesteps</code>, <code>seed</code></td>
+            </tr>
+            <tr>
+              <td><b>Core agent</b></td><td>always</td>
+              <td><code>agentStartingSugar/Spice</code>, <code>agentSugarMetabolism</code>, <code>agentSpiceMetabolism</code>, <code>agentVision</code>, <code>agentMovement</code>, <code>agentMaxAge</code>, <code>agentVisionMode</code>, <code>agentMovementMode</code>, <code>agentLookaheadFactor</code></td>
+            </tr>
+            <tr>
+              <td><b>Reproduction</b></td><td><code>agentFertilityFactor &gt; 0</code></td>
+              <td><code>agentMaleToFemaleRatio</code>, <code>agentMale/FemaleFertilityAge</code>, <code>agentMale/FemaleInfertilityAge</code>, <code>agentInheritancePolicy</code></td>
+            </tr>
+            <tr>
+              <td><b>Culture</b></td><td><code>agentTagStringLength &gt; 0</code></td>
+              <td><code>environmentMaxTribes</code>, <code>agentTagging</code>, <code>agentTagPreferences</code>, <code>environmentTribePerQuadrant</code>, <code>agentMaxFriends</code></td>
+            </tr>
+            <tr>
+              <td><b>Combat</b></td><td><code>agentAggressionFactor &gt; 0</code></td>
+              <td><code>environmentMaxCombatLoot</code> (also needs tribes, for prey eligibility)</td>
+            </tr>
+            <tr>
+              <td><b>Trade</b></td><td><code>agentTradeFactor &gt; 0</code></td>
+              <td>requires nonzero spice metabolism and spice peaks to be meaningful</td>
+            </tr>
+            <tr>
+              <td><b>Credit</b></td><td><code>agentLendingFactor &gt; 0</code></td>
+              <td><code>agentBaseInterestRate</code>, <code>agentLoanDuration</code></td>
+            </tr>
+            <tr>
+              <td><b>Disease</b></td><td><code>startingDiseases &gt; 0</code></td>
+              <td><code>agentImmuneSystemLength</code>, <code>diseaseTagStringLength</code>, <code>diseaseTransmissionChance</code>, <code>diseaseIncubationPeriod</code>, six <code>disease…Penalty</code> keys, <code>diseaseList</code></td>
+            </tr>
+            <tr>
+              <td><b>Decision models</b></td><td><code>agentDecisionModelFactor &gt; 0</code></td>
+              <td><code>agentDecisionModels</code>, <code>agentSelfishnessFactor</code>, <code>agentDynamicSelfishnessFactor</code>, <code>agentDecisionModelLookaheadFactor/Discount</code>, <code>agentLeader</code></td>
+            </tr>
+            <tr>
+              <td><b>Bias</b></td><td>any factor ≥ 0</td>
+              <td><code>agentDecisionModelAgeism/Racism/Sexism/TribalFactor</code>, <code>environmentInGroupRaces</code>, <code>environmentSexistGroups</code>, <code>environmentAgeistAbsoluteRanges</code>, <code>environmentAgeistRelativeRange</code>, <code>agentRacialTagStringLength</code>, <code>environmentMaxRaces</code></td>
+            </tr>
+            <tr>
+              <td><b>Instrumentation</b></td><td>optional</td>
+              <td><code>logfile</code>, <code>agentLogfile</code>, <code>logfileFormat</code>, <code>experimentalGroup</code>, <code>debugMode</code>, <code>headlessMode</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        The <code>experimentalGroup</code> key is worth singling out. Setting it to a group name —
+        a sex, a race, a decision model, "sick", "depressed", a specific disease or age band —
+        causes every runtime statistic to be computed three times: for the whole population,
+        for the group, and for its complement, with an additional matrix of cross-group
+        interaction counts for combat, trade, lending, reproduction and infection. That is the
+        machinery DTL's own research runs on.
+      </p>
+    </section>
+
+    <!-- ================= 11 ================= -->
+    <section id="quirks">
+      <span class="sec-num">§ 11 — Fixed points</span>
+      <h2>The behaviours a byte-compatible port had to preserve</h2>
+
+      <p>
+        These are the places where DTL's behaviour is decided by an accident of implementation
+        rather than by the model. They are listed not to criticise the code but because they
+        are precisely the load-bearing details: the v1 port had to reproduce every one of them,
+        and v2 has to make an explicit decision about every one of them.
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Where</th><th>Behaviour</th><th>Effect</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>cell.findSouthNeighbor</code></td>
+              <td>The non-wraparound bounds test is inverted relative to north/east/west: it returns <code>None</code> when <code>y + 1 &lt; height − 1</code>.</td>
+              <td>On a non-toroidal grid, most cells have no south neighbour at all while the bottom row wraps. The v1 port keeps it behind a flag named <code>preserveSouthBoundaryBug</code>.</td>
+            </tr>
+            <tr>
+              <td>movement candidates</td>
+              <td>The agent's current cell is never in <code>cellsInRange</code>.</td>
+              <td>Agents relocate every turn regardless of whether staying would be better. Departs from the book's rule M.</td>
+            </tr>
+            <tr>
+              <td><code>findWelfare</code></td>
+              <td>With zero total metabolism, both exponents are zero and welfare is 1 for every cell.</td>
+              <td>Movement becomes pure shuffle order. Any configuration with no metabolism is effectively a random walk.</td>
+            </tr>
+            <tr>
+              <td><code>Depression.trigger</code></td>
+              <td>Uses <code>*=</code> with <code>ceil(value × penalty)</code> where assignment was intended, and the metabolism penalty is &gt; 1.</td>
+              <td>Depressed agents get explosively inflated movement and metabolism, and overeat rather than undereat. Acknowledged in an in-source TODO.</td>
+            </tr>
+            <tr>
+              <td><code>findNearestHammingDistanceInDisease</code></td>
+              <td>The sliding window runs <code>range(len(immuneSystem) − len(diseaseTags))</code>, one short of the last valid offset.</td>
+              <td>The final alignment is never tested, so an agent immune only at the tail of its immune string is not recognised as immune.</td>
+            </tr>
+            <tr>
+              <td>pollution diffusion</td>
+              <td>The two diffusion loops index <code>grid[i][j]</code> with <code>i</code> running over <em>height</em> and <code>j</code> over <em>width</em>.</td>
+              <td>Correct only on square grids; a non-square grid indexes wrongly or raises.</td>
+            </tr>
+            <tr>
+              <td><code>sugarLastProduced</code></td>
+              <td>The test <code>sugar + rate != sugar</code> is just "rate ≠ 0"; it does not detect that a cell was already at maximum.</td>
+              <td>The reported "environment wealth created" statistic overcounts, charging growth to saturated cells.</td>
+            </tr>
+            <tr>
+              <td><code>canTradeWithNeighbor</code></td>
+              <td>Returns <code>False</code> to refuse but falls off the end returning <code>None</code> to permit.</td>
+              <td>Works only because the caller compares against <code>False</code> explicitly. Any tightening to a truthiness test inverts trade.</td>
+            </tr>
+            <tr>
+              <td><code>updateLoans</code>, <code>payDebt</code></td>
+              <td>Both mutate the creditor/debtor lists while iterating them.</td>
+              <td>Some loans are skipped in a given pass. The skipping pattern is deterministic and therefore part of the observable behaviour.</td>
+            </tr>
+            <tr>
+              <td>agent endowments</td>
+              <td>The <code>universalSpice</code> range takes its maximum from <code>universalSugar[1]</code>.</td>
+              <td>Basic spice income silently follows the sugar ceiling.</td>
+            </tr>
+            <tr>
+              <td><code>Cell.hemisphere</code></td>
+              <td>Computed from <code>x ≥ equator</code>, while the season actually assigned in <code>setCell</code> uses <code>y &lt; equator</code>.</td>
+              <td>Harmless today — <code>hemisphere</code> is unused — but the two disagree, so anything that starts reading it will be wrong.</td>
+            </tr>
+            <tr>
+              <td><code>Sugarscape.agents</code></td>
+              <td>Shuffled in place each timestep rather than iterated over a shuffled copy.</td>
+              <td>The canonical list is permanently permuted, which also reorders death processing and per-agent log records.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout quirk">
+        <span class="tag">The takeaway for v2</span>
+        <p>
+          None of these are hard to fix. The point is that fixing any one of them breaks
+          byte-compatibility with every recorded DTL run, which is why v1 preserved them all.
+          A from-scratch successor is free of that constraint — but it should inherit the
+          <em>discipline</em> that made the constraint satisfiable: one explicit random stream,
+          a single documented activation order, and no reliance on container iteration order
+          anywhere behaviour depends on it.
+        </p>
+      </div>
+    </section>
+
+    <footer class="colophon">
+      <p>
+        Prepared as background for the from-scratch v2 Sugarscape coworld. Source of record:
+        the pinned upstream Python under <code>archived/v1/reference/dtl-python/</code> —
+        <a href="https://github.com/nkremerh/sugarscape">nkremerh/sugarscape</a>, maintained by
+        Nate Kremer-Herman and contributors, released into the public domain under the Unlicense.
+        The model derives from Joshua M. Epstein and Robert Axtell,
+        <cite>Growing Artificial Societies: Social Science from the Bottom Up</cite> (1996).
+      </p>
+      <p>
+        Everything described here is read from the archived reference implementation, which is
+        frozen and must not be extended.
+      </p>
+    </footer>
+
+  </main>
+</div>
