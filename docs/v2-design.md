@@ -78,9 +78,10 @@ competitive benchmark shouldn't.
   | `initiating_parent` | the seat whose agent initiated the mating |
   | `receiving_parent` | the seat whose agent was initiated to (closer to human mating dynamics — offspring stays with the receiving parent) |
 
-  Default mode for ranked play is open (folds into B5's incentive review —
-  the choice interacts with the score reduce: under `max` a child is pure
-  upside, under `min` a liability). Note the incentive asymmetry:
+  Ranked default: `random_parent` (settled with B5, 2026-08-07 — under the
+  `sum` reduce a child is upside for whichever seat receives it, so the
+  neutral 50/50 keeps E5's negotiation symmetric). Note the incentive
+  asymmetry:
   `initiating_parent`/`receiving_parent` make the two sides of E5's
   negotiation structurally different; that is now a *variant design* lever
   rather than a flaw. Equal allocation remains a t=0 property; mating
@@ -99,26 +100,62 @@ competitive benchmark shouldn't.
 
 - **Per-agent wellness = Cobb–Douglas welfare. (Decided)** Established in the
   field; grounds an agent's welfare in its own metabolisms for the resources
-  (an agent that needs more spice weighs spice more). Exact form — exponents,
-  measured over current holdings vs something else, instantaneous vs
-  time-integrated — is open (B3, B4).
+  (an agent that needs more spice weighs spice more). **Exponents decided
+  (B4, 2026-08-07): metabolism shares, the classic form** — for holdings w᛬
+  and metabolisms m᛬, `welfare = Π wᵣ^(mᵣ/mT)`, `mT = Σ mᵣ`. Whether
+  holdings are gross or net of loan principal is deferred into E6 (lending
+  design) — E6 now owns a scoring-critical sub-decision: under integrated
+  scoring with a known episode end, gross holdings make endgame
+  borrow-and-hold free welfare unless E6 counters it.
+- **Wellness is time-integrated over the episode. (Decided — B2+B3,
+  2026-08-07)** An agent's wellness = Σ per-tick Cobb–Douglas welfare over
+  the episode ÷ T (episode length, not ticks-alive); ticks after death
+  contribute 0, and **dead agents remain in the reduce** with their
+  truncated integrals. Consequences, which are the reason for the choice:
+  death costs proportionally to how early it happens (no `min` cliff, no
+  one-death-zeroes-everything); dying rich early doesn't pay (the integral
+  stops — normalizing by ticks-alive would resurrect that exploit, hence
+  ÷T); culling weak agents doesn't pay (they stay in the reduce); newborns
+  (A2) integrate naturally with a bounded contribution. Resolves the §8.2
+  tension. Implementation: one running welfare sum per agent; observation
+  (§7.1) should expose both current-tick welfare and the running integral
+  so policies can see the quantity being optimized; results/replays can
+  carry per-tick welfare curves.
 - **Per-player score = a configurable reduce over the wellness of the
   policy's agents. (Decided)** The config names a reduce function; the game
   applies it to the wellness scores of all agents the policy controlled:
 
   | `score_reduce` | meaning |
   |---|---|
+  | `sum` | total across agents — **ranked default (B5, 2026-08-07)** |
   | `max` | best single agent |
   | `min` | worst single agent |
   | `median` | middle agent |
   | `mean` | arithmetic mean |
   | `geometric_mean` | geometric mean |
 
-  This defers the "average or maximum?" question to configuration so we can
-  decide what to actually measure later (B5 tracks choosing the default).
-- **Dead agents' contribution: Open — and load-bearing.** Under `min` or
-  `mean`, how a dead agent scores (zero? welfare at death? excluded?) can
-  dominate the result. See B2 and §8.2.
+  **Ranked default: `sum` (Decided — B5, 2026-08-07)** — total integrated
+  welfare of every agent the seat controlled, ÷ T. The one reduce under
+  which survival, prosperity, *and* reproduction all point the same way: a
+  child is worth the welfare it goes on to accrue, death is its own
+  penalty, culling never pays. Bounded by carrying capacity (the map can
+  only sustain so many agents), which caps the total-utilitarian failure
+  mode. `mean` remains the variant lever for leagues that want wealth
+  strategy without population growth (it structurally punishes mating —
+  late-born agents dilute the average). Rider settled with it: ranked
+  `newborn_assignment` default = `random_parent` (keeps E5's negotiation
+  symmetric; the directional modes are variant levers).
+- ~~**Dead agents' contribution: Open — and load-bearing.**~~ Resolved by
+  the integrated-wellness decision above (B2+B3).
+- **Ties: broken by surviving agent count, then draw. (Decided — B6,
+  2026-08-07)** Equal integrals → the seat with more agents alive at
+  episode end ranks higher; still equal → a genuine draw (the platform's
+  all-pairs Elo scores draws 0.5/0.5 natively). Implementation note: the
+  platform ranks on the single `results.scores` scalar, so the survivor
+  tie-break must be encoded lexicographically into the score value (e.g.
+  survivor count in bits strictly below welfare precision — exact layout
+  belongs to F6's determinism/precision spec). Results also carry survivor
+  counts as a plain field for human reading.
 
 ## 4. The world and its configuration
 
@@ -137,7 +174,7 @@ config option; the exact semantics of several are open (§9 group C).
 | features | enable/disable each mechanic | including agent capabilities: combat, trade, lending, fertility |
 | combat | α | the one behavior-adjacent constant we keep: it is physics (bounds combat's yield), not behavior |
 | scoring | `score_reduce` | §3 |
-| episode | length | value open (B1) |
+| episode | length | **Decided (B1, 2026-08-07): ranked default 1000 timesteps** — ~10–15 generations and 10+ season cycles if enabled, deep trade horizon, ~half of v1's 2000-tick league compute (spend the difference on more episodes per round); certification fixtures stay ~10–20 ticks |
 
 **Explicitly *not* config (Decided):** movement rules, aggression parameters,
 lending rate and duration. Action selection belongs to policies; lending terms
@@ -272,6 +309,9 @@ score 0) and drags `mean`; scoring welfare-at-death rewards dying rich early;
 excluding the dead rewards sacrificing agents. Each choice creates a different
 game. This is the biggest unspecified scoring question. (B2)
 
+**Resolved (2026-08-07):** dissolved by choosing time-integrated wellness —
+see §3. The pathologies above were all artifacts of end-snapshot scoring.
+
 ### 8.3 The scratchpad is protocol, not storage
 
 Because Arena components are sandboxed WASM with no filesystem and no
@@ -303,16 +343,20 @@ Grouped; tags reference the sections above.
 
 ### B. Episode and scoring
 
-- **B1.** Episode length (timesteps). What's long enough for trade/mating
-  dynamics to matter but short enough to run as a league episode?
-- **B2.** Dead agents in the reduce (§8.2).
-- **B3.** Wellness measured when: final-timestep snapshot, or integrated over
-  the episode (e.g. mean welfare over lifetime)?
-- **B4.** Exact Cobb–Douglas form: exponents = metabolism shares (the
-  standard choice)? Over current holdings only, or holdings net of
-  outstanding loans?
-- **B5.** Default `score_reduce` for ranked play.
-- **B6.** Tie-breaking between policies.
+- **B1.** ~~Episode length (timesteps).~~ **Resolved (2026-08-07):** ranked
+  default 1000 (config per §4).
+- **B2.** ~~Dead agents in the reduce (§8.2).~~ **Resolved (2026-08-07):**
+  dead agents stay in the reduce with truncated integrals. See §3.
+- **B3.** ~~Wellness measured when?~~ **Resolved (2026-08-07):** integrated
+  over the episode, ÷T. See §3.
+- **B4.** ~~Exact Cobb–Douglas form.~~ **Resolved (2026-08-07):** exponents
+  = metabolism shares (classic). Gross-vs-net-of-debt holdings deferred into
+  E6, which now owns it (see §3).
+- **B5.** ~~Default `score_reduce` for ranked play.~~ **Resolved
+  (2026-08-07):** `sum` (newly added to the table); ranked
+  `newborn_assignment` = `random_parent`. See §3.
+- **B6.** ~~Tie-breaking between policies.~~ **Resolved (2026-08-07):**
+  survivors, then draw. See §3.
 
 ### C. World mechanics
 
