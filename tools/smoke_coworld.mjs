@@ -5,6 +5,7 @@ import { spawn } from "node:child_process";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { unzipSync } from "node:zlib";
 import vm from "node:vm";
 
 const root = resolve(import.meta.dirname, "..");
@@ -13,6 +14,7 @@ const fixture = join(root, "tests/fixtures/coworld_smoke.json");
 const workspace = await mkdtemp(join(tmpdir(), "coworld-sugarscape-smoke-"));
 const resultsPath = join(workspace, "results.json");
 const replayPath = join(workspace, "replay.json");
+const staticViewerDir = join(root, "build/static-replay-viewer");
 const port = Number(process.env.SUGARSCAPE_SMOKE_PORT ?? 18173);
 const baseUrl = `http://127.0.0.1:${port}`;
 
@@ -132,6 +134,8 @@ function fakeElement(selector = "") {
       ? "resources"
       : selector === "#agent-mode"
         ? "decisionModel"
+        : selector === "#speed"
+          ? "1"
         : selector === "#series"
           ? "population"
           : "0",
@@ -155,10 +159,17 @@ const viewerContext = vm.createContext({
     querySelector: (selector) => fakeElement(selector),
   },
   drawnPoints,
-  location: {host: "localhost", protocol: "http:"},
+  location: {
+    host: "localhost",
+    href: "http://localhost/client/global",
+    protocol: "http:",
+    search: "",
+  },
   Math,
   Number,
   setTimeout,
+  URL,
+  URLSearchParams,
   WebSocket: FakeWebSocket,
 });
 const viewerScript = viewerHtml.match(/<script>([\s\S]*)<\/script>/)?.[1];
@@ -398,26 +409,35 @@ assert.deepEqual(
 );
 lateGlobalSocket?.close();
 
-const replay = JSON.parse(await readFile(replayPath, "utf8"));
-assert.equal(replay.format, "sugarscape.replay.v1");
+const replayBytes = await readFile(replayPath);
+const replay = JSON.parse(unzipSync(replayBytes).toString("utf8"));
+assert.equal(replay.format, "sugarscape.replay.v2");
 assert.equal(replay.config.seed, 12345);
-assert.deepEqual(replay.frames.map((frame) => frame.timestep), [0, 1, 2, 3]);
-assert.equal(replay.frames[0].cells[0].length, 3);
-assert.ok(Array.isArray(replay.frames[0].links));
-assert.equal(typeof replay.frames[0].agents[0].age, "number");
-assert.equal(typeof replay.frames[0].agents[0].sick, "boolean");
-assert.equal(typeof replay.frames[0].agents[0].movement, "number");
+assert.deepEqual(replay.frames.map((frame) => frame[0]), [0, 1, 2, 3]);
+assert.equal(replay.frames[0][1], 1);
+assert.equal(replay.frames[0][2][0].length, 3);
+assert.ok(Array.isArray(replay.frames[0][4]));
+const agentField = Object.fromEntries(
+  replay.agentFields.map((field, index) => [field, index]),
+);
+const statField = Object.fromEntries(
+  replay.statFields.map((field, index) => [field, index]),
+);
+assert.equal(typeof replay.frames[0][3][0][agentField.age], "number");
+assert.equal(typeof replay.frames[0][3][0][agentField.sick], "boolean");
+assert.equal(typeof replay.frames[0][3][0][agentField.movement], "number");
 assert.ok(replay.frames.every(
-  (frame) => frame.agents.every(
-    (agent) => agent.id === agent.slot && agent.tribe === agent.slot,
+  (frame) => frame[3].every(
+    (agent) => agent[agentField.id] === agent[agentField.slot] &&
+      agent[agentField.tribe] === agent[agentField.slot],
   ),
 ));
 assert.ok(replay.frames.every(
-  (frame) => frame.stats.remainingTribes === 2,
+  (frame) => frame[5][statField.remainingTribes] === 2,
 ));
 assert.notEqual(
-  replay.frames[0].stats.meanWealth,
-  replay.frames.at(-1).stats.meanWealth,
+  replay.frames[0][5][statField.meanWealth],
+  replay.frames.at(-1)[5][statField.meanWealth],
 );
 assert.ok(frames.length >= 3);
 assert.ok(replayFrames.length >= 3);
@@ -428,12 +448,12 @@ assert.ok(
 );
 replaySocket.close();
 const firstDecisionFrame = replay.frames.find(
-  (frame) => frame.timestep === firstExpected.timestep,
+  (frame) => frame[0] === firstExpected.timestep,
 );
-const firstAgent = firstDecisionFrame.agents.find(
-  (agent) => agent.id === firstExpected.agentId,
+const firstAgent = firstDecisionFrame[3].find(
+  (agent) => agent[agentField.id] === firstExpected.agentId,
 );
-assert.equal(firstAgent.cell, firstExpected.cell);
+assert.equal(firstAgent[agentField.cell], firstExpected.cell);
 
 const replayChild = spawn(binary, [
   "--host:127.0.0.1",
@@ -459,7 +479,7 @@ for (let attempt = 0; attempt < 100; attempt += 1) {
 }
 assert.deepEqual(
   loadedReplayFrames.map((frame) => frame.timestep),
-  replay.frames.map((frame) => frame.timestep),
+  replay.frames.map((frame) => frame[0]),
 );
 loadedReplaySocket.close();
 const replayExitPromise = new Promise((resolveExit) => {
@@ -468,6 +488,92 @@ const replayExitPromise = new Promise((resolveExit) => {
 replayChild.kill("SIGTERM");
 const replayExit = await replayExitPromise;
 assert.deepEqual(replayExit, {code: null, signal: "SIGTERM"}, replayOutput);
+
+const wasmBytes = await readFile(join(staticViewerDir, "timeline.wasm"));
+const {instance: timelineInstance} = await WebAssembly.instantiate(wasmBytes);
+const timelineExports = timelineInstance.exports;
+assert.equal(timelineExports.configure(4, 40), 0);
+assert.equal(timelineExports.isPlaying(), 0);
+assert.equal(timelineExports.setPlaying(1), 1);
+assert.equal(timelineExports.advance(80), 2);
+assert.equal(timelineExports.seek(0), 0);
+assert.equal(timelineExports.setSpeed(4), 4);
+
+const staticElements = new Map();
+const staticContext = vm.createContext({
+  Blob,
+  console,
+  DecompressionStream,
+  document: {
+    createElement: () => fakeElement(),
+    querySelector: (selector) => {
+      if (!staticElements.has(selector)) staticElements.set(selector, fakeElement(selector));
+      return staticElements.get(selector);
+    },
+  },
+  fetch: async (input) => {
+    const url = String(input);
+    if (url.endsWith("/replay.bin")) return new Response(replayBytes);
+    if (url.endsWith("/timeline.wasm")) {
+      return new Response(wasmBytes, {
+        headers: {"content-type": "application/wasm"},
+      });
+    }
+    return new Response("not found", {status: 404});
+  },
+  location: {
+    host: "viewer.test",
+    href: "https://viewer.test/index.html?replay=https%3A%2F%2Fviewer.test%2Freplay.bin",
+    protocol: "https:",
+    search: "?replay=https%3A%2F%2Fviewer.test%2Freplay.bin",
+  },
+  Math,
+  Number,
+  requestAnimationFrame: () => 0,
+  Response,
+  setTimeout,
+  TextDecoder,
+  URL,
+  URLSearchParams,
+  WebAssembly,
+  WebSocket: FakeWebSocket,
+});
+vm.runInContext(viewerScript, staticContext);
+let staticState;
+for (let attempt = 0; attempt < 100; attempt += 1) {
+  await new Promise((resolveWait) => setTimeout(resolveWait, 10));
+  staticState = JSON.parse(vm.runInContext(`JSON.stringify({
+    count: frameCount(),
+    frameIndex,
+    playing,
+    status: statusElement.textContent,
+  })`, staticContext));
+  if (staticState.status === "paused") break;
+}
+assert.deepEqual(staticState, {
+  count: 4,
+  frameIndex: 0,
+  playing: false,
+  status: "paused",
+});
+const seekState = JSON.parse(vm.runInContext(`
+  selectFrame(3);
+  const last = frameAt(frameIndex);
+  selectFrame(0);
+  const first = frameAt(frameIndex);
+  JSON.stringify({
+    firstTimestep: first.timestep,
+    firstCells: first.cells,
+    lastTimestep: last.timestep,
+    retained: frameCount(),
+    rewoundIndex: frameIndex,
+  });
+`, staticContext));
+assert.equal(seekState.firstTimestep, 0);
+assert.equal(seekState.lastTimestep, 3);
+assert.equal(seekState.retained, 4);
+assert.equal(seekState.rewoundIndex, 0);
+assert.deepEqual(seekState.firstCells, loadedReplayFrames[0].cells);
 
 console.log(
   `Coworld smoke passed: ${observations} observations, ` +

@@ -10,6 +10,7 @@ requires "bitworld >= 0.1.0"
 requires "mummy >= 0.4.7"
 requires "curly >= 1.1.1"
 requires "checksums >= 0.2.2"
+requires "zippy >= 0.10.19"
 
 task test, "Run native compatibility tests":
   for test in [
@@ -18,6 +19,7 @@ task test, "Run native compatibility tests":
     "environment",
     "agents",
     "simulation",
+    "replay",
     "py_json",
     "log_parity",
   ]:

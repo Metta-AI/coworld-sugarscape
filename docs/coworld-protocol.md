@@ -3,8 +3,10 @@
 ## Service and artifacts
 
 `GET /healthz` returns `healthy` after the HTTP/WebSocket server is ready.
-Replay mode remains available after loading and publishing its frames; the
-hosting platform owns the server process lifetime.
+Legacy replay mode remains available after loading and publishing its frames;
+the hosting platform owns the server process lifetime. Hosted replay links use
+the manifest's static replay-viewer bundle instead and do not start this
+process.
 Player and global browser pages are available at `/client/player` and
 `/client/global`; the plural `/clients/...` forms are aliases. Replay mode uses
 the same viewer at `/client/replay` or `/clients/replay`.
@@ -111,21 +113,40 @@ wealth histogram with a stable observed wealth domain, a normalized Lorenz
 curve, and buffered play/pause/step/scrub controls. The histogram measures each
 living agent's current sugar plus spice; the Lorenz curve compares cumulative
 population share with cumulative wealth share. The player-protocol explainer is
-at `/client/player`. `/client/replay` uses the same viewer while a process
-started with `COGAME_LOAD_REPLAY_URI` publishes the recorded frames.
+at `/client/player`. `/client/replay` uses the same viewer while a legacy
+process started with `COGAME_LOAD_REPLAY_URI` publishes the recorded frames.
 
-Replay artifacts use:
+New replay artifacts are deterministic zlib streams. Inflating one produces a
+UTF-8 JSON document with metadata stored once and compact frame rows:
 
 ```json
 {
-  "format": "sugarscape.replay.v1",
+  "format": "sugarscape.replay.v2",
   "config": {"seed": 8675309},
+  "width": 32,
+  "height": 32,
+  "slots": [],
+  "agentFields": ["id", "cell"],
+  "statFields": ["population"],
+  "keyframeInterval": 100,
   "frames": []
 }
 ```
 
 `config` is the effective validated configuration, including the concrete seed
-chosen for an input seed of `-1`.
+chosen for an input seed of `-1`. Each frame is
+`[timestep, keyframe, cells, agents, links, stats]`. A keyframe has a complete
+row-major cell array; other frames contain changed cells as
+`[cellIndex, sugar, spice, pollution]`. Agent and statistic rows use the
+top-level column lists. Frame zero and every 100th recorded frame are keyframes,
+so arbitrary seeks apply at most 99 deltas.
+
+The static bundle declared by `game.replay_viewer.bundle` fetches and indexes
+the complete artifact before rendering frame zero in a paused state. It retains
+all compact frames and supports pause, step, seek, rewind, playback speed, and
+bounded random access. It also accepts historical uncompressed
+`sugarscape.replay.v1` documents. The legacy native replay server accepts both
+formats and expands v2 rows back to `sugarscape.frame.v1` messages.
 
 ## Results
 

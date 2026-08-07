@@ -140,7 +140,7 @@ alternate semantics:
 | `ecology` | base, spice | seasons, pollution formation and diffusion |
 | `ethics` | all prior layers | Asimov, Bentham variants, Temperance, Leader |
 | `full` | all layers | every shipped example and mixed-model determinism fixture |
-| `coworld` | full | player-policy RPC, health/results/replay, browser spectator |
+| `coworld` | full | player-policy RPC, health/results, compact replay artifact, static browser viewer |
 
 The default executable exposes the full upstream configuration surface.
 Layer names organize verification; users do not opt into a different ruleset by

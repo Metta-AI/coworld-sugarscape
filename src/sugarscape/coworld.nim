@@ -4,6 +4,7 @@ import
   mummy,
   ./agents,
   ./configuration,
+  ./replay,
   ./simulation
 
 const
@@ -646,11 +647,10 @@ proc runCoworld*(runtimeConfig: RuntimeConfig) =
     runtimeConfig.port
 
   if runtimeConfig.replayMode:
-    let replay = parseJson(runtimeConfig.replay)
-    if replay.kind != JObject or not replay.hasKey("frames") or
-        replay["frames"].kind != JArray:
-      raise newException(ValueError, "invalid sugarscape.replay.v1 artifact")
-    for frame in replay["frames"]:
+    let frames = expandedReplayFrames(
+      decodeReplayArtifact(runtimeConfig.replay)
+    )
+    for frame in frames:
       frame.publishFrame()
       sleep(40)
     joinThread(thread)
@@ -678,11 +678,7 @@ proc runCoworld*(runtimeConfig: RuntimeConfig) =
         frames.add(frame)
         frame.publishFrame()
     runtimeConfig.writeResults(sim.buildResults())
-    runtimeConfig.writeReplay($(%*{
-      "format": "sugarscape.replay.v1",
-      "config": sim.config,
-      "frames": frames,
-    }))
+    runtimeConfig.writeReplay(encodeReplayArtifact(sim.config, frames))
 
   httpServer.close()
   joinThread(thread)

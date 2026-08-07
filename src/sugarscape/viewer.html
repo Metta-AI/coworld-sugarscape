@@ -450,6 +450,15 @@
             <button id="back" type="button" aria-label="Previous frame">−1</button>
             <button id="forward" type="button" aria-label="Next frame">+1</button>
           </div>
+          <label class="select-control"><span>Speed</span>
+            <select id="speed">
+              <option value="0.5">0.5×</option>
+              <option value="1" selected>1×</option>
+              <option value="2">2×</option>
+              <option value="4">4×</option>
+              <option value="8">8×</option>
+            </select>
+          </label>
           <label class="timeline-wrap">
             <span>History</span>
             <input id="timeline" type="range" min="0" max="0" value="0"
@@ -555,6 +564,7 @@ const inspectElement = document.querySelector("#inspect");
 const playButton = document.querySelector("#play");
 const backButton = document.querySelector("#back");
 const forwardButton = document.querySelector("#forward");
+const speedSelect = document.querySelector("#speed");
 const timeline = document.querySelector("#timeline");
 const frameLabel = document.querySelector("#frame-label");
 const cellMode = document.querySelector("#cell-mode");
@@ -571,13 +581,176 @@ const palette = [
   "#78d78b", "#ff7897", "#66a6ff", "#f39b59",
 ];
 const linkColors = {friend: "#8ecae6", mate: "#ff7aa2", loan: "#ffd166"};
+const replayUrl = new URLSearchParams(location.search).get("replay");
+const staticReplayMode = replayUrl !== null;
 const frames = [];
 const frameIndexes = new Map();
+const seriesCache = new Map();
 let frameIndex = -1;
-let playing = true;
+let playing = !staticReplayMode;
 let inspectedCell = -1;
 let observedWealthMaximum = 1;
 let currentStreamId = null;
+let compactReplay = null;
+let compactCells = null;
+let compactCellFrame = -1;
+let decodedFrame = null;
+let decodedFrameIndex = -1;
+let timelineRuntime = null;
+
+function frameCount() {
+  return compactReplay ? compactReplay.frames.length : frames.length;
+}
+
+function applyCellDelta(cells, changes) {
+  for (const change of changes) {
+    if (!Array.isArray(change) || change.length !== 4) {
+      throw new Error("invalid compact replay cell delta");
+    }
+    const index = Number(change[0]);
+    if (!Number.isInteger(index) || index < 0 || index >= cells.length) {
+      throw new Error("compact replay cell index is out of range");
+    }
+    cells[index] = [change[1], change[2], change[3]];
+  }
+}
+
+function compactCellsAt(index) {
+  if (
+    compactCells !== null && compactCellFrame + 1 === index &&
+    compactReplay.frames[index][1] === 0
+  ) {
+    applyCellDelta(compactCells, compactReplay.frames[index][2]);
+    compactCellFrame = index;
+    return compactCells;
+  }
+
+  let keyframe = index;
+  while (keyframe > 0 && compactReplay.frames[keyframe][1] !== 1) {
+    keyframe -= 1;
+  }
+  if (compactReplay.frames[keyframe][1] !== 1) {
+    throw new Error("compact replay does not have a preceding keyframe");
+  }
+  compactCells = compactReplay.frames[keyframe][2].map((cell) => cell.slice());
+  for (let frame = keyframe + 1; frame <= index; frame += 1) {
+    const encoded = compactReplay.frames[frame];
+    if (encoded[1] === 1) {
+      compactCells = encoded[2].map((cell) => cell.slice());
+    } else {
+      applyCellDelta(compactCells, encoded[2]);
+    }
+  }
+  compactCellFrame = index;
+  return compactCells;
+}
+
+function compactFrameAt(index) {
+  if (decodedFrameIndex === index) return decodedFrame;
+  const encoded = compactReplay.frames[index];
+  if (!Array.isArray(encoded) || encoded.length !== 6) {
+    throw new Error("invalid compact replay frame");
+  }
+  const agents = encoded[3].map((row) => {
+    if (!Array.isArray(row) || row.length !== compactReplay.agentFields.length) {
+      throw new Error("invalid compact replay agent");
+    }
+    return Object.fromEntries(
+      compactReplay.agentFields.map((field, fieldIndex) => [field, row[fieldIndex]]),
+    );
+  });
+  if (!Array.isArray(encoded[5]) || encoded[5].length !== compactReplay.statFields.length) {
+    throw new Error("invalid compact replay statistics");
+  }
+  const stats = Object.fromEntries(
+    compactReplay.statFields.map((field, fieldIndex) => [field, encoded[5][fieldIndex]]),
+  );
+  decodedFrame = {
+    format: "sugarscape.frame.v1",
+    timestep: encoded[0],
+    width: compactReplay.width,
+    height: compactReplay.height,
+    cells: compactCellsAt(index),
+    agents,
+    links: encoded[4],
+    slots: compactReplay.slots,
+    stats,
+  };
+  decodedFrameIndex = index;
+  return decodedFrame;
+}
+
+function frameAt(index) {
+  if (index < 0 || index >= frameCount()) return null;
+  return compactReplay ? compactFrameAt(index) : frames[index];
+}
+
+function seriesValue(frame, key) {
+  return key === "population"
+    ? frame.agents.length
+    : Number((frame.stats || {})[key] ?? 0);
+}
+
+function appendSeriesValue(key, timestep, value) {
+  let cache = seriesCache.get(key);
+  if (!cache) {
+    cache = {points: [], minimums: [], maximums: []};
+    seriesCache.set(key, cache);
+  }
+  const previousMinimum = cache.minimums.at(-1) ?? value;
+  const previousMaximum = cache.maximums.at(-1) ?? value;
+  cache.points.push([timestep, value]);
+  cache.minimums.push(Math.min(previousMinimum, value));
+  cache.maximums.push(Math.max(previousMaximum, value));
+}
+
+function appendSeriesFrame(frame) {
+  for (const key of [
+    "population", "meanWealth", "giniCoefficient", "meanHappiness",
+    "carryingCapacity", "tradeVolume", "loanVolume",
+  ]) {
+    appendSeriesValue(key, frame.timestep, seriesValue(frame, key));
+  }
+}
+
+function indexStaticSeries() {
+  seriesCache.clear();
+  observedWealthMaximum = 1;
+  if (compactReplay) {
+    const sugarIndex = compactReplay.agentFields.indexOf("sugar");
+    const spiceIndex = compactReplay.agentFields.indexOf("spice");
+    const statisticIndexes = new Map(
+      compactReplay.statFields.map((field, index) => [field, index]),
+    );
+    for (const encoded of compactReplay.frames) {
+      for (const key of [
+        "population", "meanWealth", "giniCoefficient", "meanHappiness",
+        "carryingCapacity", "tradeVolume", "loanVolume",
+      ]) {
+        const value = key === "population"
+          ? encoded[3].length
+          : Number(encoded[5][statisticIndexes.get(key)] ?? 0);
+        appendSeriesValue(key, encoded[0], value);
+      }
+      for (const agent of encoded[3]) {
+        observedWealthMaximum = Math.max(
+          observedWealthMaximum,
+          Number(agent[sugarIndex]) + Number(agent[spiceIndex]),
+        );
+      }
+    }
+    return;
+  }
+  for (let index = 0; index < frameCount(); index += 1) {
+    const frame = frameAt(index);
+    appendSeriesFrame(frame);
+    observeChartDomains(frame);
+  }
+  decodedFrame = null;
+  decodedFrameIndex = -1;
+  compactCells = null;
+  compactCellFrame = -1;
+}
 
 function hashValue(value) {
   const text = String(value);
@@ -1073,15 +1246,16 @@ function chartPoint(area, bounds, point) {
   };
 }
 
-function drawPolyline(canvas, points, color, bounds, labels = {}) {
+function drawPolyline(canvas, points, color, bounds, labels = {}, count = points.length) {
   const {context, area} = drawChartAxes(canvas, bounds, labels);
-  if (points.length === 0) return;
+  if (count === 0) return;
   context.beginPath();
-  points.forEach((point, index) => {
+  for (let index = 0; index < count; index += 1) {
+    const point = points[index];
     const position = chartPoint(area, bounds, point);
     if (index === 0) context.moveTo(position.x, position.y);
     else context.lineTo(position.x, position.y);
-  });
+  }
   context.strokeStyle = color;
   context.lineWidth = 2;
   context.stroke();
@@ -1089,39 +1263,34 @@ function drawPolyline(canvas, points, color, bounds, labels = {}) {
 
 function renderSeries() {
   const key = seriesSelect.value;
-  const visibleFrames = frames.slice(0, frameIndex + 1);
-  const points = visibleFrames.map((frame) => {
-    const value = key === "population"
-      ? frame.agents.length
-      : Number((frame.stats || {})[key] ?? 0);
-    return [frame.timestep, value];
-  });
-  if (points.length === 0) return;
-  const values = points.map((point) => point[1]);
-  const minimum = Math.min(...values);
-  const maximum = Math.max(...values);
+  const cache = seriesCache.get(key);
+  const count = Math.min(frameIndex + 1, cache?.points.length ?? 0);
+  if (!cache || count === 0) return;
+  const minimum = cache.minimums[count - 1];
+  const maximum = cache.maximums[count - 1];
   const padding = maximum === minimum
     ? Math.max(Math.abs(maximum) * .02, key === "giniCoefficient" ? .01 : 1)
     : (maximum - minimum) * .08;
   const bounds = {
-    minimumX: points[0][0],
-    maximumX: Math.max(points[0][0] + 1, points.at(-1)[0]),
+    minimumX: cache.points[0][0],
+    maximumX: Math.max(cache.points[0][0] + 1, cache.points[count - 1][0]),
     minimumY: minimum < 0 ? minimum - padding : Math.max(0, minimum - padding),
     maximumY: maximum + padding,
   };
   const selectedLabel =
     seriesSelect.options[seriesSelect.selectedIndex].textContent;
   seriesCaption.textContent =
-    `Time series · ${selectedLabel} · ${formatChartValue(values.at(-1))}`;
+    `Time series · ${selectedLabel} · ${formatChartValue(cache.points[count - 1][1])}`;
   drawPolyline(
     seriesChart,
-    points,
+    cache.points,
     "#f4c15d",
     bounds,
     {
       minimumX: `t${bounds.minimumX}`,
-      maximumX: `t${points.at(-1)[0]}`,
+      maximumX: `t${cache.points[count - 1][0]}`,
     },
+    count,
   );
 }
 
@@ -1232,11 +1401,11 @@ function renderInspection(frame) {
 }
 
 function render() {
-  if (frameIndex < 0 || !frames[frameIndex]) return;
-  const frame = frames[frameIndex];
-  timeline.max = Math.max(0, frames.length - 1);
+  const frame = frameAt(frameIndex);
+  if (!frame) return;
+  timeline.max = Math.max(0, frameCount() - 1);
   timeline.value = frameIndex;
-  frameLabel.textContent = `frame ${frameIndex + 1} / ${frames.length}`;
+  frameLabel.textContent = `frame ${frameIndex + 1} / ${frameCount()}`;
   playButton.textContent = playing ? "Ⅱ Pause" : "▶ Play";
   renderWorld(frame);
   renderStats(frame);
@@ -1248,7 +1417,11 @@ function render() {
 }
 
 function selectFrame(index) {
-  frameIndex = Math.max(0, Math.min(frames.length - 1, index));
+  frameIndex = Math.max(0, Math.min(frameCount() - 1, index));
+  if (staticReplayMode && timelineRuntime) {
+    timelineRuntime.setPlaying(0);
+    timelineRuntime.seek(frameIndex);
+  }
   render();
 }
 
@@ -1256,6 +1429,7 @@ function recordFrame(frame) {
   if (currentStreamId !== null && frame.streamId !== currentStreamId) {
     frames.length = 0;
     frameIndexes.clear();
+    seriesCache.clear();
     frameIndex = -1;
     inspectedCell = -1;
     observedWealthMaximum = 1;
@@ -1264,11 +1438,18 @@ function recordFrame(frame) {
   const existingIndex = frameIndexes.get(frame.timestep);
   if (existingIndex !== undefined) {
     frames[existingIndex] = frame;
+    seriesCache.clear();
+    observedWealthMaximum = 1;
+    for (const recorded of frames) {
+      appendSeriesFrame(recorded);
+      observeChartDomains(recorded);
+    }
     if (playing) frameIndex = frames.length - 1;
     else if (frameIndex === existingIndex) render();
     return;
   }
   observeChartDomains(frame);
+  appendSeriesFrame(frame);
   frameIndexes.set(frame.timestep, frames.length);
   frames.push(frame);
   if (playing || frameIndex < 0) frameIndex = frames.length - 1;
@@ -1276,8 +1457,16 @@ function recordFrame(frame) {
 }
 
 playButton.addEventListener("click", () => {
-  playing = !playing;
-  if (playing && frames.length > 0) frameIndex = frames.length - 1;
+  if (staticReplayMode) {
+    if (!timelineRuntime || frameCount() < 2) return;
+    if (!playing && frameIndex >= frameCount() - 1) {
+      frameIndex = timelineRuntime.seek(0);
+    }
+    playing = timelineRuntime.setPlaying(playing ? 0 : 1) === 1;
+  } else {
+    playing = !playing;
+    if (playing && frames.length > 0) frameIndex = frames.length - 1;
+  }
   render();
 });
 backButton.addEventListener("click", () => {
@@ -1292,12 +1481,15 @@ timeline.addEventListener("input", () => {
   playing = false;
   selectFrame(Number(timeline.value));
 });
+speedSelect.addEventListener("change", () => {
+  if (timelineRuntime) timelineRuntime.setSpeed(Number(speedSelect.value));
+});
 for (const control of [cellMode, agentMode, linksToggle, seriesSelect]) {
   control.addEventListener("change", render);
 }
 world.addEventListener("click", (event) => {
   if (frameIndex < 0) return;
-  const frame = frames[frameIndex];
+  const frame = frameAt(frameIndex);
   const bounds = world.getBoundingClientRect();
   const x = Math.min(
     frame.width - 1,
@@ -1328,7 +1520,119 @@ function connect() {
   });
   socket.addEventListener("error", () => socket.close());
 }
-connect();
+
+async function replayText(response) {
+  if (!response.ok) throw new Error(`replay fetch failed: HTTP ${response.status}`);
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  let format = null;
+  if (bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b) {
+    format = "gzip";
+  } else if (
+    bytes.length >= 2 && (bytes[0] & 0x0f) === 8 &&
+    ((bytes[0] << 8) + bytes[1]) % 31 === 0
+  ) {
+    format = "deflate";
+  }
+  if (format !== null) {
+    if (typeof DecompressionStream !== "function") {
+      throw new Error("this browser cannot decompress Sugarscape replays");
+    }
+    const stream = new Blob([bytes]).stream().pipeThrough(
+      new DecompressionStream(format),
+    );
+    return new Response(stream).text();
+  }
+  return new TextDecoder().decode(bytes);
+}
+
+function validateCompactReplay(replay) {
+  if (
+    !Number.isInteger(replay.width) || !Number.isInteger(replay.height) ||
+    !Array.isArray(replay.slots) || !Array.isArray(replay.agentFields) ||
+    !Array.isArray(replay.statFields) || !Array.isArray(replay.frames) ||
+    replay.frames.length === 0 || replay.frames[0][1] !== 1
+  ) {
+    throw new Error("invalid sugarscape.replay.v2 artifact");
+  }
+}
+
+async function loadTimelineRuntime() {
+  const wasmUrl = new URL("./timeline.wasm", location.href);
+  const response = await fetch(wasmUrl);
+  if (!response.ok) throw new Error(`WASM fetch failed: HTTP ${response.status}`);
+  let instance;
+  if (typeof WebAssembly.instantiateStreaming === "function") {
+    try {
+      ({instance} = await WebAssembly.instantiateStreaming(response.clone(), {}));
+    } catch {
+      ({instance} = await WebAssembly.instantiate(await response.arrayBuffer(), {}));
+    }
+  } else {
+    ({instance} = await WebAssembly.instantiate(await response.arrayBuffer(), {}));
+  }
+  return instance.exports;
+}
+
+function showReplayError(error) {
+  playing = false;
+  statusElement.textContent = "replay error";
+  statusElement.dataset.state = "reconnecting";
+  inspectElement.textContent = error instanceof Error ? error.message : String(error);
+  console.error(error);
+}
+
+async function loadStaticReplay() {
+  statusElement.textContent = "loading replay";
+  try {
+    const [text, runtime] = await Promise.all([
+      fetch(replayUrl).then(replayText),
+      loadTimelineRuntime(),
+    ]);
+    const replay = JSON.parse(text);
+    if (replay.format === "sugarscape.replay.v2") {
+      validateCompactReplay(replay);
+      compactReplay = replay;
+    } else if (
+      replay.format === "sugarscape.replay.v1" && Array.isArray(replay.frames)
+    ) {
+      frames.push(...replay.frames);
+    } else {
+      throw new Error("unsupported Sugarscape replay format");
+    }
+    timelineRuntime = runtime;
+    timelineRuntime.configure(frameCount(), 40);
+    timelineRuntime.setSpeed(Number(speedSelect.value));
+    playing = false;
+    frameIndex = 0;
+    indexStaticSeries();
+    statusElement.textContent = "paused";
+    statusElement.dataset.state = "live";
+    render();
+    if (typeof requestAnimationFrame === "function") {
+      let previousTime = null;
+      const animate = (time) => {
+        if (previousTime === null) previousTime = time;
+        if (playing) {
+          const next = timelineRuntime.advance(Math.max(0, time - previousTime));
+          if (next !== frameIndex) {
+            frameIndex = next;
+            render();
+          }
+          playing = timelineRuntime.isPlaying() === 1;
+          if (!playing) render();
+        }
+        previousTime = time;
+        requestAnimationFrame(animate);
+      };
+      requestAnimationFrame(animate);
+    }
+  } catch (error) {
+    showReplayError(error);
+  }
+}
+
+if (staticReplayMode) loadStaticReplay();
+else connect();
 </script>
 </body>
 </html>

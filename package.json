@@ -1,0 +1,10 @@
+{
+  "name": "coworld-sugarscape-replay-viewer",
+  "private": true,
+  "scripts": {
+    "build:replay-viewer": "tools/build_replay_viewer.sh \"$PWD/build/static-replay-viewer\""
+  },
+  "devDependencies": {
+    "assemblyscript": "0.28.20"
+  }
+}

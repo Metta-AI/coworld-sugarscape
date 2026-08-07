@@ -83,6 +83,17 @@ nim c -d:release --opt:speed \
   players/greedy/greedy.nim
 ```
 
+Build the static replay-viewer bundle:
+
+```bash
+npm ci
+npm run build:replay-viewer
+```
+
+The generated `build/static-replay-viewer/` directory is declared by the
+Coworld manifest and must exist before upload. Hosted replay links load this
+bundle directly in Observatory; they do not start the game container.
+
 ## Validation
 
 Run the focused native suites:
@@ -156,11 +167,14 @@ replay scrubbing. Its broadcast-style layout keeps the world dominant while
 making episode metrics, population identity, and analytical context glanceable
 across desktop and narrow screens. The world renders sugar crystals, spice
 pods, pollution effects, and animated settler sprites while retaining the
-selected analytical color modes. Late spectators receive up to 300 recent
+selected analytical color modes. Late live spectators receive up to 300 recent
 frames before live updates. Results report each slot's final living population
-wealth (sugar plus spice, truncated to an integer). Replay artifacts contain
-the effective configuration and immutable statistics for all recorded frames
-without consuming model RNG. The complete wire contract is in
+wealth (sugar plus spice, truncated to an integer). New replay artifacts retain
+every recorded frame in a compact, zlib-compressed presentation format without
+consuming model RNG. The static viewer loads the complete artifact, starts
+paused at frame zero, and supports stepping, seeking, rewinding, and
+variable-speed playback. Historical plain-JSON replay artifacts remain
+readable. The complete wire contract is in
 [`docs/coworld-protocol.md`](docs/coworld-protocol.md).
 
 ## Performance

@@ -7,6 +7,7 @@ for test in \
   environment \
   agents \
   simulation \
+  replay \
   py_json \
   log_parity
 do
