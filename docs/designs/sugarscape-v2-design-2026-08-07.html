@@ -1,0 +1,1798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sugarscape v2 — Design (2026-08-07)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700;900&family=Merriweather+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  /* ============ Ink & Print tokens ============ */
+  :root {
+    --bg: #fffdf4;            /* cream paper */
+    --surface: #fffaf0;
+    --surface-alt: #f8f6ef;
+    --fg: #111827;            /* warm near-black — never pure #000 */
+    --fg-subtle: #555555;
+    --fg-muted: #999999;
+    --ink-navy: #1a3875;
+    --ink-sage: #6e8050;
+    --ink-terracotta: #b36e4e;
+    --ink-gold: #d4a853;
+    --accent: #859ebe;
+    --accent-soft: #eef2f7;
+    --cta: #0e2758;
+    --cta-foreground: #fffdf4;
+    --border: #e4dac8;
+    --border-strong: #d4c9b5;
+    --border-subtle: #f0ebe1;
+    --serif: 'Merriweather', Georgia, serif;
+    --sans: 'Merriweather Sans', 'Helvetica Neue', sans-serif;
+    --mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.7;
+  }
+
+  /* ============ Page grid: reading column + comment rail ============ */
+  .dc-page {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 0;
+    max-width: 1240px;
+    margin: 0 auto;
+  }
+  article#doc {
+    max-width: 72ch;
+    margin: 0 auto;
+    padding: 56px 40px 120px;
+    min-width: 0;
+  }
+
+  /* ============ Typography ============ */
+  .eyebrow {
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--fg-subtle);
+  }
+  header.masthead { border-bottom: 2px solid var(--border-strong); padding-bottom: 20px; margin-bottom: 32px; }
+  header.masthead h1 {
+    font-family: var(--serif);
+    font-weight: 900;
+    font-size: 34px;
+    line-height: 1.2;
+    margin: 8px 0 10px;
+  }
+  header.masthead .context { color: var(--fg-subtle); font-size: 13.5px; margin: 0; }
+  h2 {
+    font-family: var(--serif);
+    font-weight: 700;
+    font-size: 15px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-navy);
+    margin: 48px 0 12px;
+  }
+  h3 { font-family: var(--serif); font-weight: 700; font-size: 16.5px; margin: 32px 0 8px; }
+  p { margin: 0 0 14px; }
+  a { color: var(--ink-navy); text-decoration-color: var(--accent); text-underline-offset: 3px; }
+  a:hover { color: var(--cta); }
+  strong { font-weight: 700; }
+  ul, ol { padding-left: 24px; margin: 0 0 14px; }
+  li { margin-bottom: 4px; }
+  hr { border: 0; border-top: 1px solid var(--border); margin: 40px 0; }
+
+  /* Key-points opener: every section starts with scannable bullets */
+  .key-points {
+    list-style: none;
+    padding: 0 0 0 2px;
+    margin: 0 0 18px;
+  }
+  .key-points li { padding-left: 18px; position: relative; margin-bottom: 6px; }
+  .key-points li::before { content: '—'; position: absolute; left: 0; color: var(--ink-gold); font-weight: 700; }
+
+  /* ============ TOC ============ */
+  nav.toc { margin: 28px 0 8px; }
+  nav.toc ol { list-style: none; padding: 0; column-count: 2; column-gap: 40px; margin: 10px 0 0; }
+  nav.toc li { margin-bottom: 5px; break-inside: avoid; }
+  nav.toc a { text-decoration: none; border-bottom: 1px dotted var(--border-strong); }
+  nav.toc .toc-num { font-family: var(--mono); font-size: 12px; color: var(--fg-muted); margin-right: 8px; }
+
+  /* ============ Tables ============ */
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 18px 0 22px;
+    font-size: 13.5px;
+  }
+  th {
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--fg-subtle);
+    text-align: left;
+    padding: 6px 12px 6px 0;
+    border-bottom: 2px solid var(--border-strong);
+  }
+  td { padding: 7px 12px 7px 0; border-bottom: 1px solid var(--border-subtle); vertical-align: top; }
+  td.num, th.num { text-align: right; font-family: var(--mono); font-size: 12.5px; font-feature-settings: 'tnum' 1; }
+
+  /* ============ Figures ============ */
+  figure { margin: 24px 0 28px; }
+  figure svg { max-width: 100%; height: auto; display: block; }
+  figcaption {
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--fg-subtle);
+  }
+  figcaption .fig-label {
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-size: 10.5px;
+    color: var(--ink-navy);
+    margin-right: 8px;
+  }
+
+  /* ============ Code & citations ============ */
+  code {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    background: var(--surface-alt);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+  pre {
+    background: var(--surface-alt);
+    border: 1px solid var(--border-subtle);
+    border-radius: 3px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    margin: 16px 0 20px;
+  }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.6; }
+  .cite {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--fg-subtle);
+    background: var(--surface-alt);
+    padding: 1px 6px;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+
+  /* ============ Callouts ============ */
+  .callout { padding: 12px 16px; margin: 18px 0; font-size: 13.5px; border-radius: 3px; }
+  .callout .callout-label {
+    display: block;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 4px;
+  }
+  .callout-info { background: var(--accent-soft); }
+  .callout-info .callout-label { color: var(--ink-navy); }
+  .callout-warn { background: rgba(179, 110, 78, 0.08); border-left: 3px solid var(--ink-terracotta); }
+  .callout-warn .callout-label { color: var(--ink-terracotta); }
+  .callout-open { background: rgba(212, 168, 83, 0.10); }
+  .callout-open .callout-label { color: #8a6a1f; }
+
+  /* Decision record */
+  .decision { border-top: 1px solid var(--border); padding: 14px 0 4px; margin: 14px 0; }
+  .decision .decision-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-sage); }
+  .decision p { margin-top: 6px; }
+
+  @media (max-width: 1100px) {
+    .dc-page { grid-template-columns: 1fr; }
+  }
+  @media print {
+    #dc-sidebar, #dc-fab, #dc-toggle { display: none !important; }
+    .dc-page { grid-template-columns: 1fr; }
+  }
+
+  /* ================================================================
+     DC-COMMENTS BEGIN — styles (copy verbatim; do not modify)
+     ================================================================ */
+  ::highlight(dc-hl) { background: rgba(212, 168, 83, 0.28); }
+  ::highlight(dc-hl-active) { background: rgba(212, 168, 83, 0.6); }
+
+  #dc-fab {
+    position: absolute;
+    z-index: 40;
+    display: none;
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--cta-foreground);
+    background: var(--cta);
+    border: 1px solid #0a1c42;
+    border-radius: 3px;
+    padding: 5px 10px;
+    cursor: pointer;
+  }
+  #dc-fab:hover { background: var(--ink-navy); }
+
+  #dc-sidebar {
+    border-left: 1px solid var(--border);
+    background: var(--surface);
+    padding: 24px 20px 60px;
+    font-size: 13px;
+    position: sticky;
+    top: 0;
+    height: 100dvh;
+    overflow-y: auto;
+  }
+  #dc-sidebar h2.dc-title {
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--fg-subtle);
+    margin: 0 0 4px;
+  }
+  .dc-actions { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0 18px; }
+  .dc-btn {
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--fg);
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 3px;
+    padding: 4px 9px;
+    cursor: pointer;
+  }
+  .dc-btn:hover { background: var(--surface-alt); }
+  .dc-btn:focus-visible, #dc-fab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .dc-empty { color: var(--fg-muted); font-style: italic; }
+  .dc-item { border-top: 1px solid var(--border-subtle); padding: 12px 0; cursor: pointer; }
+  .dc-item.dc-resolved { opacity: 0.5; }
+  .dc-quote {
+    border-left: 2px solid var(--ink-gold);
+    padding-left: 8px;
+    color: var(--fg-subtle);
+    font-style: italic;
+    font-size: 12px;
+    margin-bottom: 6px;
+    overflow-wrap: break-word;
+  }
+  .dc-orphan-tag {
+    font-size: 9.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-terracotta);
+    background: rgba(179, 110, 78, 0.12);
+    border-radius: 999px;
+    padding: 1px 7px;
+    margin-left: 6px;
+  }
+  .dc-text { white-space: pre-wrap; overflow-wrap: break-word; }
+  .dc-item textarea {
+    width: 100%;
+    min-height: 64px;
+    font-family: var(--sans);
+    font-size: 13px;
+    color: var(--fg);
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    border-radius: 3px;
+    padding: 6px 8px;
+    resize: vertical;
+  }
+  .dc-item textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .dc-meta { display: flex; align-items: center; gap: 10px; margin-top: 6px; font-size: 11px; color: var(--fg-muted); }
+  .dc-meta label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+  .dc-meta .dc-del { margin-left: auto; color: var(--ink-terracotta); background: none; border: none; font-size: 11px; cursor: pointer; padding: 0; }
+  .dc-meta .dc-del:hover { text-decoration: underline; }
+  #dc-status { font-size: 11px; color: var(--ink-sage); min-height: 16px; margin-top: 8px; }
+
+  #dc-toggle { display: none; }
+  @media (max-width: 1100px) {
+    #dc-sidebar {
+      position: fixed;
+      right: 0;
+      top: 0;
+      width: 320px;
+      max-width: 90vw;
+      transform: translateX(100%);
+      transition: transform 200ms ease-out;
+      z-index: 50;
+      box-shadow: -4px 0 16px rgba(0, 0, 0, 0.08);
+    }
+    #dc-sidebar.dc-open { transform: translateX(0); }
+    #dc-toggle {
+      display: block;
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      z-index: 51;
+      font-family: var(--sans);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--cta-foreground);
+      background: var(--cta);
+      border: 1px solid #0a1c42;
+      border-radius: 999px;
+      padding: 9px 15px;
+      cursor: pointer;
+    }
+  }
+  /* ============ DC-COMMENTS END — styles ============ */
+</style>
+</head>
+<body>
+<div class="dc-page">
+<article id="doc">
+
+  <!-- ============ Masthead ============ -->
+  <header class="masthead">
+    <span class="eyebrow">Design Document · 2026-08-07 · Status: Design complete — pre-implementation</span>
+    <h1>Sugarscape v2 — Design</h1>
+    <p class="context">The settled design for our own Sugarscape: player agency built into every mechanic
+    as an explicit gate, over one all-integer deterministic core that runs identically as Arena WASM
+    components, a WebSocket container, and a browser replay resimulator. For James (author/reviewer)
+    and implementing agents.</p>
+  </header>
+
+  <!-- ============ Executive summary ============ -->
+  <section id="summary">
+    <h2>Executive Summary</h2>
+    <p>Sugarscape v2 is our <em>own</em> Sugarscape — not a port of the DTL Python model (platform
+    decision D1 in <span class="cite">docs/what-is-a-coworld.md</span>). The founding move is a clean
+    split the classic model never made: Epstein &amp; Axtell hard-code agent <em>behavior</em> —
+    the best-cell movement rule, MRS-crossing trade, automatic mating, the combat retaliation
+    look-ahead — directly into the simulation. v2 evicts all of it to submitted player policies and
+    keeps only physics. Every classic behavioral rule became either a policy gate (a named point in
+    the timestep where each agent's policy is consulted) or a negotiation protocol between agents.
+    That is precisely the structure DTL lacked and the retired v1 could not retrofit: v1 exposed
+    exactly one gate, movement, because its closed 14-step agent turn allowed nothing else
+    <span class="cite">archived/v1/</span>.</p>
+    <p>All 35 open design questions (A1–F6) were settled on 2026-08-07; this document is the record,
+    rendered from <span class="cite">docs/v2-design.md</span>. The most consequential calls: scoring is
+    <strong>time-integrated Cobb–Douglas welfare</strong>, summed across a seat's agents and divided by
+    episode length (B2+B3+B5) — the one scheme under which survival, prosperity, and reproduction all
+    point the same way; the timestep is <strong>phased</strong> — world physics, then five action gates,
+    then upkeep (E8); and determinism is total — no floats anywhere, bit-identical state across native,
+    wasm32, and the browser (F6). Two decisions are recorded as deliberate human overrides of the
+    analysis: E1 (sequential seeded movement over simultaneous-with-lottery) and F1 (minimal visibility
+    over full transparency — "poker, not chess"). The one explicitly novel, untested mechanic is E7's
+    chosen-allegiance tribes; it ships feature-flagged.</p>
+  </section>
+
+  <!-- ============ TOC ============ -->
+  <nav class="toc">
+    <span class="eyebrow">Contents</span>
+    <ol>
+      <li><span class="toc-num">1</span><a href="#principles">Principles</a></li>
+      <li><span class="toc-num">2</span><a href="#seats">Players, Seats, and Agents</a></li>
+      <li><span class="toc-num">3</span><a href="#scoring">Scoring</a></li>
+      <li><span class="toc-num">4</span><a href="#world">The World and Its Configuration</a></li>
+      <li><span class="toc-num">5</span><a href="#lifecycle">Agent Lifecycle</a></li>
+      <li><span class="toc-num">6</span><a href="#timestep">The Timestep and Its Action Gates</a></li>
+      <li><span class="toc-num">7</span><a href="#policy-boundary">The Policy Boundary</a></li>
+      <li><span class="toc-num">8</span><a href="#runtime">Runtime and Replay Architecture</a></li>
+      <li><span class="toc-num">9</span><a href="#determinism">Determinism Spec</a></li>
+      <li><span class="toc-num">10</span><a href="#alternatives">Alternatives Considered</a></li>
+      <li><span class="toc-num">11</span><a href="#risks">Open Questions and Risks</a></li>
+      <li><span class="toc-num">12</span><a href="#decision-index">Appendix: Decision Index</a></li>
+      <li><span class="toc-num">13</span><a href="#sources">Sources</a></li>
+    </ol>
+  </nav>
+
+  <!-- ============ 1 · Principles ============ -->
+  <section id="principles">
+    <h2>1 · Principles</h2>
+    <ul class="key-points">
+      <li><strong>P1</strong> — agent-level control: every agent is driven by a submitted policy, invoked per agent; no protocol call whose subject is "all your agents."</li>
+      <li><strong>P2</strong> — the simulation defines physics; policies define behavior. Config never encodes how agents act.</li>
+      <li><strong>P3</strong> — fixed pool, fixed length, scored at the end. No persistent world, no drop-in entry.</li>
+      <li>Founding decision: v2 is our own implementation, not a DTL port — player control is designed in from the start, not retrofitted.</li>
+    </ul>
+
+    <p><strong>P1 — Agent-level control, not population-level control.</strong> Every agent is
+    controlled by a submitted player policy. A single policy may control more than one agent, but it
+    is invoked <em>per agent</em>, with that agent's context, and makes a decision <em>for that
+    agent</em>. A policy can control a population of agents; it cannot control them <em>as</em> a
+    population. Two consequences worth stating: the observation given to a policy invocation is scoped
+    to one agent (§7) — a policy does not receive a roster of its agents or their positions — and the
+    scratchpad memory (§7) is the only <em>protocol</em> channel through which a policy could
+    coordinate its own agents, which made the pad's scope a design decision with teeth (F2 resolves
+    it, with an honest-rules caveat).</p>
+
+    <p><strong>P2 — The simulation defines the physics; policies define the behavior.</strong> Config
+    controls the environment and which mechanics exist (§4). It does not control how agents behave:
+    no movement rules, no aggression parameters, no lending rates or durations. Where classic
+    Sugarscape hard-codes a behavioral rule, v2 exposes a decision to the policy instead. The
+    permitted exceptions are physics-side parameters <em>of</em> a mechanic — e.g. combat α (§6),
+    which bounds what combat <em>yields</em>, not whether an agent fights.</p>
+
+    <p><strong>P3 — Fixed pool, fixed length, scored at the end.</strong> An episode starts with a
+    fixed set of players, runs for a fixed duration, and reports a score per player at the end. The
+    rationale is recorded because it forecloses a tempting alternative: a run-forever world
+    accumulates wealth — through lifetime accumulation, and through inheritance if enabled — so
+    incumbents dominate on tenure rather than policy quality, and a newly entering policy faces an
+    unfair, uninteresting test. Age-based die-offs don't fix this. Real life has this property; a
+    competitive benchmark shouldn't.</p>
+
+    <div class="decision">
+      <span class="decision-label">Decision — Founding (platform decision D1)</span>
+      <p><strong>v2 is our own Sugarscape, not a port of the DTL Python model.</strong> DTL
+      <span class="cite">docs/dtl-implementation.html</span> and the retired v1
+      <span class="cite">archived/v1/</span> are reference material for <em>what mechanics exist</em>,
+      not templates. The central motivation: player control of agents must be designed in from the
+      start, with clear gates, rather than retrofitted — the v1 attempt demonstrated the retrofit
+      ceiling concretely. (Distinct from lifecycle decision D1, max age, in §5.)</p>
+    </div>
+
+    <p>How the eviction plays out, rule by classic rule:</p>
+    <table>
+      <thead>
+        <tr><th>Classic rule (E&amp;A 1996)</th><th>Classic form</th><th>Disposition in v2</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>M — movement</td><td>always move to the best visible cell</td><td>Evicted → gate 1 policy choice; inaction legal (E9)</td></tr>
+        <tr><td>C<sub>α</sub> — combat</td><td>attack with a hard-coded retaliation look-ahead</td><td>Look-ahead evicted; legality stays physics, risk assessment is policy work (E2)</td></tr>
+        <tr><td>T — trade</td><td>MRS-crossing bilateral trade at a sim-computed price</td><td>Evicted → E4 negotiation; the sim never computes prices — they emerge, or don't</td></tr>
+        <tr><td>S — sex/mating</td><td>automatic mating with any eligible neighbor</td><td>Eligibility stays physics; consent and partner choice → E5</td></tr>
+        <tr><td>L<sub>dr</sub> — credit</td><td>fixed rate r and duration d, age-based matchmaking</td><td>Rate, duration, and matchmaking evicted → negotiated contracts (E6)</td></tr>
+        <tr><td>K — culture</td><td>passive tag-flipping between neighbors</td><td>Replaced by chosen allegiance — a declared, switchable affiliation (E7)</td></tr>
+        <tr><td>G, S<sub>αβγ</sub>, pollution, disease</td><td>environment rules</td><td>Remain physics — phase 0 of the timestep, config-controlled (C2–C4)</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============ 2 · Players, seats, agents ============ -->
+  <section id="seats">
+    <h2>2 · Players, Seats, and Agents</h2>
+    <ul class="key-points">
+      <li>Up to 64 seats; a seat is one submitted policy and may control many agents, always invoked per-agent (P1).</li>
+      <li>A1 — <code>total_agents</code> is config (default 64); the seat count must divide it; equal allocation holds at t=0 only.</li>
+      <li>A2 — newborn seat assignment is configurable; ranked default <code>random_parent</code> (episode-seeded 50/50).</li>
+      <li>A3 — a faulted seat's agents freeze: they act in no phase, but physics continues.</li>
+    </ul>
+
+    <p><strong>Seats and totals (A1).</strong> An episode admits up to 64 seats, each one submitted
+    policy. Config declares <code>total_agents</code> (default 64); validation enforces
+    <code>total_agents % seats == 0</code>, and each seat starts with <code>total_agents / seats</code>
+    agents — equal allocation at t=0. Making the total itself config keeps agent density a
+    per-variant/league dial (density drives combat and trade pressure), lets the certification fixture
+    run tiny (e.g. 4 agents across 2 seats, against the ranked default of 64), and preserves the
+    Arena stress range: 64 seats means 65 component instances (64 players + 1 game) at the heavy end,
+    while a 4-seat episode is the gentle case <span class="cite">docs/v2-design.md §2</span>.</p>
+
+    <p><strong>Newborn assignment (A2).</strong> When mating (E5) creates an agent mid-episode, P1
+    demands it belong to some seat. The controlling seat is chosen per the config option
+    <code>newborn_assignment</code>:</p>
+
+    <table>
+      <thead>
+        <tr><th>Mode</th><th>Child goes to</th></tr>
+      </thead>
+      <tbody>
+        <tr style="background: var(--accent-soft);"><td><code>random_parent</code></td><td>One of the two parents' seats, episode-seeded 50/50 — <strong>ranked default</strong> (settled with B5)</td></tr>
+        <tr><td><code>initiating_parent</code></td><td>The seat whose agent initiated the mating</td></tr>
+        <tr><td><code>receiving_parent</code></td><td>The seat whose agent was initiated to (closer to human mating dynamics — offspring stays with the receiving parent)</td></tr>
+      </tbody>
+    </table>
+
+    <p>Under the <code>sum</code> reduce (B5) a child is upside for whichever seat receives it, so the
+    neutral 50/50 keeps E5's negotiation symmetric. The two directional modes make the two sides of a
+    mating structurally different — that incentive asymmetry is now a deliberate <em>variant-design
+    lever</em>, not a flaw. Note that equal allocation is strictly a t=0 property: a policy good at
+    mating ends up invoking on more agents over time, which is both a reward and a compute asymmetry,
+    accepted knowingly <span class="cite">docs/v2-design.md §8.1</span>.</p>
+
+    <p><strong>Dropped seats freeze (A3).</strong> When a seat faults (Arena drops it permanently; the
+    WS shell mirrors the same rule), its agents act in no phase from then on. Physics continues: they
+    metabolize, age, starve, and die per D2, and other agents may exploit them — as combat targets, or
+    simply as bodies occupying cells. There is no sim-owned fallback behavior: a frozen agent is
+    indistinguishable from one whose policy legally chooses inaction every phase (E9 makes inaction
+    legal precisely so this rule needs no special code path). This kills v1's sim-side greedy fallback
+    for good — v1 answered a disconnected or timed-out player by picking the move itself
+    <span class="cite">archived/v1/src/sugarscape/coworld.nim:467-488</span>, which is exactly the
+    behavior P2 evicts. The platform separately records the fault (<code>SeatFault</code>,
+    <code>failed_policy_index</code>); the freeze rule is only the in-world consequence. This closes
+    fork 6 of <span class="cite">docs/what-is-a-coworld.md</span>.</p>
+  </section>
+
+  <!-- ============ 3 · Scoring ============ -->
+  <section id="scoring">
+    <h2>3 · Scoring</h2>
+    <ul class="key-points">
+      <li>Per-agent wellness = time-integrated Cobb–Douglas welfare: Σ of per-tick welfare ÷ T, where T is episode length (ranked default 1000 ticks); death truncates the integral (B2+B3).</li>
+      <li>Cobb–Douglas exponents = metabolism shares, the classic form (B4); holdings stay gross of debt — E6 closes that deferral.</li>
+      <li>Per-seat score = a configurable reduce over the seat's agents; ranked default <code>sum</code> (B5) — the one reduce where survival, prosperity, and reproduction all point the same way.</li>
+      <li>Ties break on surviving agent count, then a genuine draw (B6), encoded lexicographically below welfare precision in the score scalar.</li>
+    </ul>
+
+    <p><strong>Episode length (B1).</strong> The ranked default is 1000 timesteps. Against D1's
+    max-age default of [60, 100] ticks that yields roughly 10–15 generations, plus 10+ season cycles
+    when seasons are enabled, and a deep horizon for trade and lending dynamics. It is about half of
+    v1's 2000-tick league episodes — the compute saved is spent on more episodes per round.
+    Certification fixtures stay tiny, around 10–20 ticks
+    <span class="cite">docs/v2-design.md §4</span>.</p>
+
+    <p><strong>Per-tick welfare (B4).</strong> Each tick, each living agent's welfare is the classic
+    Cobb–Douglas form over its holdings w and metabolisms m:
+    <code>welfare = Π wᵣ^(mᵣ/mT)</code>, with <code>mT = Σ mᵣ</code> — an agent that needs more spice
+    weighs spice more. Exponents-as-metabolism-shares was uncontested: it is the established,
+    trade-generating choice from the literature. The one deferred sub-question — gross holdings or
+    net of loan principal — was deliberately pushed <em>into</em> E6, which resolved it: welfare is
+    computed over <strong>gross holdings</strong> (§6, E6).</p>
+
+    <p><strong>Time-integrated wellness (B2+B3).</strong> An agent's wellness for the episode is the
+    sum of its per-tick welfare over the whole episode, divided by T — the episode length, not
+    ticks-alive. Ticks after death contribute 0, and dead agents remain in the reduce with their
+    truncated integrals. The consequences are the reason for the choice: death costs proportionally
+    to how early it happens (no cliff, no one-death-zeroes-everything); dying rich early doesn't pay,
+    because the integral simply stops — normalizing by ticks-alive would resurrect exactly that
+    exploit, hence ÷T; culling weak agents doesn't pay, because they stay in the reduce; and newborns
+    (A2) integrate naturally with a bounded contribution. Implementation is one running welfare sum
+    per agent; the observation (§7) exposes both current-tick welfare and the running integral, so
+    the quantity being optimized is legible to the policies optimizing it, and results/replays can
+    carry per-tick welfare curves <span class="cite">docs/v2-design.md §3</span>.</p>
+
+    <div class="decision">
+      <span class="decision-label">Decision — B2+B3 (2026-08-07)</span>
+      <p><strong>Wellness is integrated over the episode, ÷T; dead agents stay in the reduce.</strong>
+      Every end-snapshot variant examined had a disqualifying pathology (see §10); integration
+      dissolves all of them at once rather than patching any one. This resolved the design tension
+      recorded as §8.2 in <span class="cite">docs/v2-design.md</span>.</p>
+    </div>
+
+    <figure>
+      <svg viewBox="0 0 640 200" role="img" aria-label="Scoring pipeline: per-tick welfare to per-agent integral to per-seat reduce to score scalar">
+        <defs>
+          <marker id="arrow-sc" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8" fill="none" stroke="#859ebe" stroke-width="1.2"/>
+          </marker>
+        </defs>
+        <rect x="8" y="36" width="140" height="100" rx="3" fill="#fffaf0" stroke="#d4c9b5"/>
+        <text x="78" y="60" text-anchor="middle" font-family="Merriweather Sans" font-size="13" font-weight="600" fill="#1a3875">Per-tick welfare</text>
+        <text x="78" y="82" text-anchor="middle" font-family="Merriweather Sans" font-size="12" fill="#555555">fixed-point (32.32)</text>
+        <text x="78" y="100" text-anchor="middle" font-family="Merriweather Sans" font-size="12" fill="#555555">Cobb–Douglas</text>
+        <text x="78" y="118" text-anchor="middle" font-family="Merriweather Sans" font-size="12" fill="#555555">Π wᵣ^(mᵣ/mT)</text>
+        <text x="78" y="156" text-anchor="middle" font-family="ui-monospace, Menlo, monospace" font-size="12" fill="#999999">B4</text>
+        <line x1="148" y1="86" x2="166" y2="86" stroke="#859ebe" stroke-width="1.5" marker-end="url(#arrow-sc)"/>
+        <rect x="168" y="36" width="140" height="100" rx="3" fill="#fffaf0" stroke="#d4c9b5"/>
+        <text x="238" y="60" text-anchor="middle" font-family="Merriweather Sans" font-size="13" font-weight="600" fill="#1a3875">Per-agent integral</text>
+        <text x="238" y="82" text-anchor="middle" font-family="Merriweather Sans" font-size="12" fill="#555555">Σ over ticks ÷ T</text>
+        <text x="238" y="100" text-anchor="middle" font-family="Merriweather Sans" font-size="12" fill="#555555">death truncates;</text>
+        <text x="238" y="118" text-anchor="middle" font-family="Merriweather Sans" font-size="12" fill="#555555">later ticks add 0</text>
+        <text x="238" y="156" text-anchor="middle" font-family="ui-monospace, Menlo, monospace" font-size="12" fill="#999999">B2+B3</text>
+        <line x1="308" y1="86" x2="326" y2="86" stroke="#859ebe" stroke-width="1.5" marker-end="url(#arrow-sc)"/>
+        <rect x="328" y="36" width="140" height="100" rx="3" fill="#eef2f7" stroke="#859ebe"/>
+        <text x="398" y="60" text-anchor="middle" font-family="Merriweather Sans" font-size="13" font-weight="600" fill="#1a3875">Per-seat reduce</text>
+        <text x="398" y="82" text-anchor="middle" font-family="Merriweather Sans" font-size="12" fill="#555555">sum (ranked default)</text>
+        <text x="398" y="100" text-anchor="middle" font-family="Merriweather Sans" font-size="12" fill="#555555">dead agents stay in;</text>
+        <text x="398" y="118" text-anchor="middle" font-family="Merriweather Sans" font-size="12" fill="#555555">newborns join</text>
+        <text x="398" y="156" text-anchor="middle" font-family="ui-monospace, Menlo, monospace" font-size="12" fill="#999999">B5</text>
+        <line x1="468" y1="86" x2="486" y2="86" stroke="#859ebe" stroke-width="1.5" marker-end="url(#arrow-sc)"/>
+        <rect x="488" y="36" width="140" height="100" rx="3" fill="#fffaf0" stroke="#d4c9b5"/>
+        <text x="558" y="60" text-anchor="middle" font-family="Merriweather Sans" font-size="13" font-weight="600" fill="#1a3875">Score scalar</text>
+        <text x="558" y="82" text-anchor="middle" font-family="Merriweather Sans" font-size="12" fill="#555555">exact integer;</text>
+        <text x="558" y="100" text-anchor="middle" font-family="Merriweather Sans" font-size="12" fill="#555555">survivor bits below</text>
+        <text x="558" y="118" text-anchor="middle" font-family="Merriweather Sans" font-size="12" fill="#555555">welfare precision</text>
+        <text x="558" y="156" text-anchor="middle" font-family="ui-monospace, Menlo, monospace" font-size="12" fill="#999999">B6 · F6</text>
+      </svg>
+      <figcaption><span class="fig-label">Figure 1</span>The scoring pipeline. Welfare is computed per
+      tick in fixed point, accumulated per agent (÷T; death truncates), reduced per seat
+      (<code>sum</code> in ranked play), and emitted as one exact-integer scalar with B6's survivor
+      tie-break occupying bits strictly below welfare precision.</figcaption>
+    </figure>
+
+    <p><strong>The reduce (B5).</strong> The config names a reduce function; the game applies it to
+    the wellness integrals of every agent the seat controlled at any point:</p>
+
+    <table>
+      <thead>
+        <tr><th><code>score_reduce</code></th><th>Meaning</th><th>Character as a game</th></tr>
+      </thead>
+      <tbody>
+        <tr style="background: var(--accent-soft);"><td><code>sum</code></td><td>Total integrated welfare across the seat's agents, ÷T — <strong>ranked default</strong></td><td>Survival, prosperity, and reproduction all point the same way; bounded by carrying capacity</td></tr>
+        <tr><td><code>mean</code></td><td>Arithmetic mean</td><td>Variant lever: wealth strategy without population growth — structurally punishes mating (late-born agents dilute)</td></tr>
+        <tr><td><code>max</code></td><td>Best single agent</td><td>Variant only: 15 of 16 agents irrelevant; invites culling-by-neglect</td></tr>
+        <tr><td><code>min</code></td><td>Worst single agent</td><td>Variant only: every newborn is your minimum</td></tr>
+        <tr><td><code>median</code></td><td>Middle agent</td><td>Variant only: tail-blind</td></tr>
+        <tr><td><code>geometric_mean</code></td><td>Geometric mean</td><td>Variant only: one near-zero agent collapses it</td></tr>
+      </tbody>
+    </table>
+
+    <div class="decision">
+      <span class="decision-label">Decision — B5 (2026-08-07)</span>
+      <p><strong>Ranked default is <code>sum</code></strong> — added to the table for this purpose; it
+      was not among the original candidates. It is the only reduce under which a child is worth the
+      welfare it goes on to accrue, death is its own penalty, and culling never pays. The
+      total-utilitarian failure mode is capped physically: the map can only sustain so many agents.
+      A rider settled with it: ranked <code>newborn_assignment</code> = <code>random_parent</code>
+      (keeps E5's negotiation symmetric; the directional modes are variant levers).</p>
+    </div>
+
+    <p><strong>Ties (B6).</strong> Equal integrals → the seat with more agents alive at episode end
+    ranks higher; still equal → a genuine draw, which the platform's all-pairs Elo scores 0.5/0.5
+    natively. Because the platform ranks on the single <code>results.scores</code> scalar, the
+    survivor tie-break is encoded lexicographically into the score value — survivor count in bits
+    strictly below welfare precision, with the exact layout owned by F6's determinism spec. Results
+    also carry survivor counts as a plain field for human reading
+    <span class="cite">docs/v2-design.md §3</span>.</p>
+  </section>
+
+  <!-- ============ 4 · World & config ============ -->
+  <section id="world">
+    <h2>4 · The World and Its Configuration</h2>
+    <ul class="key-points">
+      <li>Every row below is decided config surface; a capacity map is data, never a program (C1).</li>
+      <li>Every world has both sugar and spice state (C5); "sugar-only" = zero spice capacity + zero spice metabolism.</li>
+      <li>Seasons, pollution, and disease are the classic mechanics with all-integer semantics (C2–C4), each feature-flagged.</li>
+      <li>Movement rules, aggression parameters, and lending rate/duration are explicitly <em>not</em> config — that is behavior, and behavior belongs to policies (P2).</li>
+    </ul>
+
+    <table>
+      <thead>
+        <tr><th>Area</th><th>Config</th><th>Decided semantics</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>map</td><td><code>height</code>, <code>width</code></td><td>Grid dimensions in cells</td></tr>
+        <tr><td>resources (C5)</td><td>—</td><td>Both sugar and spice always exist as state — no single-resource mode. Sugar-only variants = zero spice capacity grid + zero spice metabolism ranges; the CD exponent for spice becomes 0 and welfare degrades to the classic sugar-only form. Uniform schemas everywhere; no trade validation needed, since trade is policy-negotiated (E4) and a spiceless world simply has nothing to exchange</td></tr>
+        <tr><td>capacity (C1)</td><td>named built-in or explicit grids</td><td>Built-ins <code>four_hills</code> (ranked default — classic sugar NE/SW + spice NW/SE terraced hills), <code>two_hills</code> (sugar-only classic; zero spice capacity), <code>flat</code> (uniform; debugging/baselines), generated deterministically in-sim from <code>height</code>×<code>width</code>. Custom maps are explicit per-cell integer capacity grids per resource, dims validated — a map is data, never a program; generation belongs to tooling</td></tr>
+        <tr><td>growback</td><td>per-resource growth rates</td><td>Sugar and spice rates independently settable; this rate <em>is</em> the classic α — not a separate seasons knob</td></tr>
+        <tr><td>endowments (D5)</td><td>draw ranges</td><td>Ranges for initial holdings, metabolisms, vision, max age, and — when fertility is on — sex, fertility window, immune string (§5)</td></tr>
+        <tr><td>seasons (C2)</td><td><code>season_length</code> (γ), <code>winter_divisor</code> (β)</td><td>Classic S<sub>αβγ</sub> with integer semantics: N/S hemispheres swap summer/winter every <code>season_length</code> ticks; summer cells regrow at the normal growback rate every tick, winter cells regrow that amount only every <code>winter_divisor</code>-th tick. One climate governs both resources; all-integer math. Flagship ranked variant: seasons off (a variant lever, not model spec)</td></tr>
+        <tr><td>pollution (C3)</td><td><code>production_coef</code>, <code>consumption_coef</code>, <code>diffusion_interval</code>, <code>decay_rate</code>, <code>suppression_coef</code>, <code>toxicity_coef</code></td><td>Classic linear sources: harvesting h adds <code>production_coef·h</code>, metabolism m adds <code>consumption_coef·m</code> to the cell. Diffusion = 4-neighbor mean every <code>diffusion_interval</code> ticks over fixed-point integer pollution (floor division); decay is subtractive per tick (<code>max(0, p − decay_rate)</code>) so land heals. Both physical effects ship, independently configurable (coefficient 0 disables): growback suppression (<code>max(0, growback − suppression_coef·p)</code> — commons tragedy as physics) and metabolic toxicity (agents on the cell burn <code>floor(toxicity_coef·p)</code> extra — personal harm)</td></tr>
+        <tr><td>disease (C4)</td><td><code>immune_length</code>, <code>disease_length</code>, <code>disease_count</code>, <code>initial_diseases_per_agent</code></td><td>Classic bit-string model: agents carry immune strings, diseases are substrings; immune iff the disease is a substring, else sick (+1 metabolism). The immune response flips one bit per tick of the closest-matching substring — recovery takes Hamming-distance ticks; transmission passes one seeded-random disease per neighbor per tick. Specific persistent immunity; composes with D5 inheritance. Pure physics — policies interact only via observation (F1 sickness visibility) and movement</td></tr>
+        <tr><td>features</td><td>enable/disable per mechanic</td><td>Combat, trade, lending, fertility, tribes, inheritance — each independently flagged</td></tr>
+        <tr><td>combat</td><td>α</td><td>The one behavior-adjacent constant kept: it is physics — it bounds combat's yield (loot = min(α, victim wealth)), not whether an agent fights (E2)</td></tr>
+        <tr><td>scoring</td><td><code>score_reduce</code></td><td>§3; ranked default <code>sum</code></td></tr>
+        <tr><td>episode (B1)</td><td>length</td><td>Ranked default 1000 timesteps; certification fixtures ~10–20 ticks</td></tr>
+      </tbody>
+    </table>
+
+    <p>Two rejections shaped this table. Observation-only pollution was rejected because under P2 it
+    is provably inert: a mechanic that only appears in observations, with no physical consequence,
+    is costless data that a smart policy simply ignores — the classic's pollution "worked" only
+    because the hard-coded movement rule was forced to respect it. And a procedural custom-map spec
+    (v1-style radial-falloff peaks) was rejected because the falloff math would become normative spec
+    that every runtime must reproduce bit-for-bit; explicit grids keep the determinism surface flat
+    <span class="cite">docs/v2-design.md §4</span>.</p>
+
+    <p><strong>Explicitly not config:</strong> movement rules, aggression parameters, lending rate
+    and duration. Action selection belongs to policies; lending terms are a negotiation between
+    agents (E6).</p>
+  </section>
+
+  <!-- ============ 5 · Agent lifecycle ============ -->
+  <section id="lifecycle">
+    <h2>5 · Agent Lifecycle</h2>
+    <ul class="key-points">
+      <li>D1 — max age drawn per agent from config range <code>[60, 100]</code> ticks (ranked default); <code>null</code> = immortal, a variant lever. With 1000-tick episodes this forces ~10–15 generations.</li>
+      <li>D2/D3 — death by starvation, old age, or combat; no replacement — reproduction (E5) is the only source of new agents.</li>
+      <li>D4 — estates split by integer division among living children, remainder (or the whole estate) drops on the death cell; feature-flagged, ranked default on.</li>
+      <li>D5 — full classic genetics: crossover for vision, metabolisms, and immune strings; each parent pays half of its own initial endowment as the child's starting wealth.</li>
+    </ul>
+
+    <p>An agent has position, sugar and spice holdings, per-resource metabolism, vision, age, and
+    whatever the enabled mechanics add: tribe, immune state, fertility attributes, loans. At t=0
+    each agent draws, seeded, from configured ranges: initial holdings, metabolisms, vision, max
+    age, and — when fertility is on — sex, fertility window (childbearing start/end ages), and an
+    immune bit-string (C4) <span class="cite">docs/v2-design.md §5</span>.</p>
+
+    <p><strong>Max age (D1).</strong> Drawn per-agent at episode start from the config range
+    <code>max_age: [min, max]</code>, classic ranked default [60, 100] ticks; <code>null</code>
+    means immortal and is a variant lever, not ranked play. This is the partner mechanism to B5's
+    <code>sum</code> reduce: with 1000-tick episodes and 60–100-tick lifespans, reproduction becomes
+    strategically necessary, not optional. Under integrated wellness, age death is amortized — a
+    full life's welfare has already accrued — so it is never a scoring cliff.</p>
+
+    <p><strong>Death and replacement (D2, D3).</strong> Death causes: starvation (cannot pay a
+    tick's metabolism from holdings), old age, and combat when E2 resolves lethally. <em>When</em>
+    death is checked inside the timestep is E8's ordering (§6). There is no replacement: P3's fixed
+    pool plus P1 (every agent belongs to a seat) preclude classic batch-style replacement;
+    reproduction is the only source of new agents.</p>
+
+    <p><strong>Estates (D4).</strong> A dead agent's holdings split by integer division among its
+    living children — possibly cross-seat, per A2 — and the remainder, or the whole estate when no
+    child lives, drops on the death cell as harvestable resource. Cell levels may exceed capacity;
+    growback simply doesn't apply above capacity. Inheritance is feature-flagged, ranked default on.
+    Under <code>sum</code>, inheritance makes mating an investment rather than just a lottery.
+    Epstein &amp; Axtell's caution that inheritance amplifies inequality doesn't bite inside one
+    bounded episode (P3). Lending hooks in here: E6 ties outstanding debts to heirs (§6).</p>
+
+    <p><strong>Newborn genetics (D5).</strong> Newborns follow the full classic rule S: vision and
+    each metabolism by per-attribute 50/50 crossover; the immune string by bitwise crossover
+    (inherited resistance); and each parent contributes <strong>half of its own initial
+    endowment</strong> as the child's starting wealth — mating's price tag, and the reason E5 gates
+    fertility on wealth. Max age, sex, and fertility window are drawn fresh. The consequence: genes
+    and estates both flow through lineages, so mate choice is genetic strategy, episode-bounded per
+    P3 — and partially benefits rival seats via A2's cross-seat children.</p>
+  </section>
+
+  <!-- ============ 6 · The timestep ============ -->
+  <section id="timestep">
+    <h2>6 · The Timestep and Its Action Gates</h2>
+    <ul class="key-points">
+      <li>A phased timestep across the whole population — not the classic one-agent-does-everything sequential turn: world physics → five action gates → upkeep (E8).</li>
+      <li>Each gate is a named point where policies are consulted, with a defined observation before it and a defined resolution after it — the structure DTL lacked and v1 could not retrofit.</li>
+      <li>Movement/combat run sequentially in episode-seeded order (E1 — a recorded human override); trade, mating, and lending share one propose/respond negotiation shape (E4/E5/E6).</li>
+      <li>Inaction is legal at every gate, and illegal actions resolve as no-ops (E9) — A3's freeze rule depends on this.</li>
+    </ul>
+
+    <figure>
+      <svg viewBox="0 0 640 732" role="img" aria-label="The canonical timestep: phase 0 world updates, five action gates, phase 6 upkeep">
+        <defs>
+          <marker id="arrow-ts" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8" fill="none" stroke="#859ebe" stroke-width="1.2"/>
+          </marker>
+          <marker id="arrow-loop" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8" fill="none" stroke="#d4c9b5" stroke-width="1.2"/>
+          </marker>
+        </defs>
+
+        <!-- next-tick loop -->
+        <path d="M 260 704 L 260 718 L 40 718 L 40 72 L 54 72" fill="none" stroke="#d4c9b5" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrow-loop)"/>
+        <text x="150" y="713" font-family="Merriweather Sans" font-size="12" fill="#999999">next tick</text>
+
+        <!-- Phase 0 -->
+        <rect x="60" y="20" width="400" height="104" rx="3" fill="#f8f6ef" stroke="#d4c9b5"/>
+        <text x="76" y="44" font-family="Merriweather Sans" font-size="13.5" font-weight="700" fill="#1a3875">Phase 0 — world updates</text>
+        <text x="76" y="64" font-family="Merriweather Sans" font-size="12" fill="#555555">growback — seasons (C2) + pollution suppression (C3)</text>
+        <text x="76" y="82" font-family="Merriweather Sans" font-size="12" fill="#555555">pollution: diffusion on interval ticks; decay every tick</text>
+        <text x="76" y="100" font-family="Merriweather Sans" font-size="12" fill="#555555">disease: neighbor transmission, then one immune bit-step</text>
+        <line x1="472" y1="20" x2="472" y2="124" stroke="#6e8050" stroke-width="2.5"/>
+        <text x="484" y="62" font-family="Merriweather Sans" font-size="12" font-weight="700" fill="#6e8050">pure physics</text>
+        <text x="484" y="79" font-family="Merriweather Sans" font-size="12" fill="#555555">no policy invocations</text>
+
+        <line x1="260" y1="124" x2="260" y2="144" stroke="#859ebe" stroke-width="1.5" marker-end="url(#arrow-ts)"/>
+
+        <!-- Gate 1 -->
+        <rect x="60" y="146" width="400" height="64" rx="3" fill="#eef2f7" stroke="#859ebe"/>
+        <circle cx="84" cy="178" r="13" fill="#1a3875"/>
+        <text x="84" y="183" text-anchor="middle" font-family="Merriweather Sans" font-size="13" font-weight="700" fill="#fffdf4">1</text>
+        <text x="108" y="172" font-family="Merriweather Sans" font-size="13.5" font-weight="700" fill="#1a3875">Move / combat</text>
+        <text x="108" y="192" font-family="Merriweather Sans" font-size="12" fill="#555555">sequential, episode-seeded order (E1) · occupied = attack (E2)</text>
+
+        <line x1="260" y1="210" x2="260" y2="228" stroke="#859ebe" stroke-width="1.5" marker-end="url(#arrow-ts)"/>
+
+        <!-- Gate 2 -->
+        <rect x="60" y="230" width="400" height="64" rx="3" fill="#eef2f7" stroke="#859ebe"/>
+        <circle cx="84" cy="262" r="13" fill="#1a3875"/>
+        <text x="84" y="267" text-anchor="middle" font-family="Merriweather Sans" font-size="13" font-weight="700" fill="#fffdf4">2</text>
+        <text x="108" y="256" font-family="Merriweather Sans" font-size="13.5" font-weight="700" fill="#1a3875">Harvest</text>
+        <text x="108" y="276" font-family="Merriweather Sans" font-size="12" fill="#555555">order-free fan-out · optional, partial amounts (E3)</text>
+
+        <line x1="260" y1="294" x2="260" y2="312" stroke="#859ebe" stroke-width="1.5" marker-end="url(#arrow-ts)"/>
+
+        <!-- Gate 3 -->
+        <rect x="60" y="314" width="400" height="64" rx="3" fill="#eef2f7" stroke="#859ebe"/>
+        <circle cx="84" cy="346" r="13" fill="#1a3875"/>
+        <text x="84" y="351" text-anchor="middle" font-family="Merriweather Sans" font-size="13" font-weight="700" fill="#fffdf4">3</text>
+        <text x="108" y="340" font-family="Merriweather Sans" font-size="13.5" font-weight="700" fill="#1a3875">Trade</text>
+        <text x="108" y="360" font-family="Merriweather Sans" font-size="12" fill="#555555">propose / respond × trade_rounds cycles (E4)</text>
+
+        <line x1="260" y1="378" x2="260" y2="396" stroke="#859ebe" stroke-width="1.5" marker-end="url(#arrow-ts)"/>
+
+        <!-- Gate 4 -->
+        <rect x="60" y="398" width="400" height="64" rx="3" fill="#eef2f7" stroke="#859ebe"/>
+        <circle cx="84" cy="430" r="13" fill="#1a3875"/>
+        <text x="84" y="435" text-anchor="middle" font-family="Merriweather Sans" font-size="13" font-weight="700" fill="#fffdf4">4</text>
+        <text x="108" y="424" font-family="Merriweather Sans" font-size="13.5" font-weight="700" fill="#1a3875">Mate</text>
+        <text x="108" y="444" font-family="Merriweather Sans" font-size="12" fill="#555555">propose / respond × mating_rounds cycles (E5)</text>
+
+        <line x1="260" y1="462" x2="260" y2="480" stroke="#859ebe" stroke-width="1.5" marker-end="url(#arrow-ts)"/>
+
+        <!-- Gate 5 -->
+        <rect x="60" y="482" width="400" height="64" rx="3" fill="#eef2f7" stroke="#859ebe"/>
+        <circle cx="84" cy="514" r="13" fill="#1a3875"/>
+        <text x="84" y="519" text-anchor="middle" font-family="Merriweather Sans" font-size="13" font-weight="700" fill="#fffdf4">5</text>
+        <text x="108" y="508" font-family="Merriweather Sans" font-size="13.5" font-weight="700" fill="#1a3875">Tribe</text>
+        <text x="108" y="528" font-family="Merriweather Sans" font-size="12" fill="#555555">declare a switch, effective next timestep (E7)</text>
+
+        <!-- gates bracket -->
+        <line x1="472" y1="146" x2="472" y2="546" stroke="#d4a853" stroke-width="2.5"/>
+        <text x="484" y="330" font-family="Merriweather Sans" font-size="12" font-weight="700" fill="#1a3875">policies invoked</text>
+        <text x="484" y="347" font-family="Merriweather Sans" font-size="12" fill="#555555">one call per agent</text>
+        <text x="484" y="364" font-family="Merriweather Sans" font-size="12" fill="#555555">at each gate</text>
+
+        <line x1="260" y1="546" x2="260" y2="564" stroke="#859ebe" stroke-width="1.5" marker-end="url(#arrow-ts)"/>
+
+        <!-- Phase 6 -->
+        <rect x="60" y="566" width="400" height="138" rx="3" fill="#f8f6ef" stroke="#d4c9b5"/>
+        <text x="76" y="590" font-family="Merriweather Sans" font-size="13.5" font-weight="700" fill="#1a3875">Phase 6 — upkeep</text>
+        <text x="76" y="610" font-family="Merriweather Sans" font-size="12" fill="#555555">loan collections due this tick (E6)</text>
+        <text x="76" y="627" font-family="Merriweather Sans" font-size="12" fill="#555555">metabolism burn — base + sickness (C4) + toxicity (C3)</text>
+        <text x="76" y="644" font-family="Merriweather Sans" font-size="12" fill="#555555">aging +1 · death checks: starvation, max age (D2)</text>
+        <text x="76" y="661" font-family="Merriweather Sans" font-size="12" fill="#555555">estate settlement for upkeep deaths (D4)</text>
+        <text x="76" y="678" font-family="Merriweather Sans" font-size="12" fill="#555555">welfare accrual → running integral (B2)</text>
+        <line x1="472" y1="566" x2="472" y2="704" stroke="#6e8050" stroke-width="2.5"/>
+        <text x="484" y="620" font-family="Merriweather Sans" font-size="12" font-weight="700" fill="#6e8050">pure physics</text>
+        <text x="484" y="637" font-family="Merriweather Sans" font-size="12" fill="#555555">no policy invocations</text>
+      </svg>
+      <figcaption><span class="fig-label">Figure 2</span>The canonical timestep (E8). World physics
+      run first with no policy involvement; policies are then consulted at five named gates; upkeep
+      settles debts, metabolism, aging, deaths, estates, and finally accrues the tick's welfare.
+      Combat deaths in gate 1 settle estates immediately, event-driven; phase 6 checks only
+      starvation and age <span class="cite">docs/v2-design.md §6</span>.</figcaption>
+    </figure>
+
+    <p>Classic Sugarscape (and DTL) activates one agent at a time, which does <em>everything</em> —
+    move, harvest, mate, trade — before the next agent acts. v2 runs phases across the whole
+    population instead. What this buys: each phase is a clean <em>gate</em> — a named point where
+    policies are consulted, with a defined observation before it and a defined resolution after it.
+    That is precisely the structure DTL lacked <span class="cite">docs/dtl-implementation.html</span>
+    and v1 could not retrofit — v1 exposed one gate, movement, because that is all its closed
+    14-step agent turn allowed <span class="cite">archived/v1/</span>.</p>
+
+    <p><strong>Load-bearing ordering choices (E8).</strong> <em>Metabolism at end of tick:</em> an
+    agent can harvest in the morning to pay for dinner; starvation is failing to feed yourself
+    despite acting — the classic collect-then-metabolize grace, phased. <em>Loans before
+    metabolism:</em> today's debts are collectible from today's earnings, but senior to dinner — you
+    can starve by repaying, so over-leverage is genuinely dangerous, while E6's write-off keeps
+    lender risk real too. <em>Welfare accrues once per tick, post-upkeep, after deaths:</em> the
+    day's actions count the same day, and a death tick contributes 0, consistent with B2.</p>
+
+    <p><strong>Inaction is legal at every gate (E9).</strong> No-move / no-action is always a valid
+    choice — the classic's forced best-cell move was behavior, and it is evicted. Illegal actions
+    (an out-of-range move, an ineligible attack, an unpayable offer) resolve as no-ops, identical to
+    choosing inaction, and are never penalized beyond their own opportunity cost. A3's freeze rule
+    depends on this: a faulted seat's agents are simply agents that choose inaction forever.</p>
+
+    <h3>Within-phase order (E1)</h3>
+    <p>Different phases use different activation disciplines. <strong>Movement — and therefore
+    combat — is sequential, in an episode-seeded order reshuffled each timestep.</strong> Each agent
+    observes fully-updated state at its turn; an occupied cell is simply occupied — no conflict
+    rules, classic semantics. Harvest is order-free (own-cell only, no agent interaction) and is
+    delivered as one concurrent fan-out. Trade and mating are negotiation phases whose within-phase
+    structure belongs to their protocol designs (E4/E5), explicitly not a simple activation-order
+    question. Tribe declaration is order-free. This closes fork 5's residue in
+    <span class="cite">docs/what-is-a-coworld.md</span>.</p>
+
+    <div class="decision">
+      <span class="decision-label">Decision — E1 (2026-08-07) · Human override</span>
+      <p><strong>Sequential seeded movement, by James's explicit call — overriding the
+      recommendation.</strong> The assistant recommended simultaneous movement with a conflict
+      lottery, on fairness and latency grounds. James chose sequential seeded order: classic
+      Sugarscape semantics were valued above the WS-shell latency cost, and the cost is consciously
+      accepted — N serial policy round-trips per timestep is negligible under Arena (in-process) but
+      slow for the WS shell at full scale. Arena is the primary runtime; the WS shell serves
+      certification and local play at small configs.</p>
+    </div>
+
+    <h3>Movement and combat (E2)</h3>
+    <p>The movement action names a target cell; if the cell is occupied and combat is enabled, the
+    same action <em>is</em> an attack — there is no separate combat verb. Legality is physics: the
+    target must be strictly poorer (wealth = sugar + spice, an unweighted integer sum) and, when
+    tribes are enabled, of a different tribe. An eligible attacker deterministically wins: the
+    victim dies (D2), the attacker loots <code>min(α, victim wealth)</code> and takes the cell, and
+    the victim's <em>remaining</em> estate flows through D4 — combat and inheritance compose with no
+    extra rule. Wealth doubles as armor: the poorer-only rule prevents kamikaze deletion of the
+    rich. The classic retaliation look-ahead is evicted as behavior, not dropped as an oversight:
+    the sim permits any legal attack, and risk assessment belongs to policies — which is why F1 must
+    expose neighbor wealth. Illegal attack attempts resolve like illegal moves, per E9.</p>
+
+    <h3>Harvest (E3)</h3>
+    <p>Unlike every classic Sugarscape variant, harvesting is explicit and optional: an agent on a
+    resource cell chooses whether to harvest, and the action names per-resource amounts, clamped to
+    the cell's current level. All-or-nothing stays expressible — request everything. What partial
+    amounts buy is priceable restraint: harvesting exactly metabolic need minimizes C3's pollution
+    production, self-toxicity, and growback suppression. Sustainable-yield farming is the strategy
+    this enables; not harvesting at all is also meaningful (leaving sugar to grow, or denying
+    pollution production under a pollution regime).</p>
+
+    <h3>Trade (E4)</h3>
+    <p>The trade phase runs <code>trade_rounds</code> propose/respond cycles (default 2–3, a
+    placeholder pending playtesting). In each cycle, every agent may submit <strong>one</strong>
+    offer targeted at one von-Neumann-adjacent agent — <code>{give: (sugar, spice), want: (sugar,
+    spice)}</code>, integer bundles, give clamped to holdings. Each agent then accepts or declines
+    the offers addressed to it; acceptances execute in episode-seeded order, voiding any offer no
+    longer payable. One-offer-per-proposer kills double-spend on the proposing side; voiding handles
+    acceptor overcommitment. Countering is structural, not special-cased: decline, and propose back
+    next cycle. A cycle with zero offers ends the phase early — quiescence is a trivial
+    deterministic check, not a definition problem.</p>
+
+    <figure>
+      <svg viewBox="0 0 640 212" role="img" aria-label="E4 negotiation cycle: propose, respond, execute, repeat">
+        <defs>
+          <marker id="arrow-e4" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8" fill="none" stroke="#859ebe" stroke-width="1.2"/>
+          </marker>
+        </defs>
+        <rect x="24" y="30" width="176" height="72" rx="3" fill="#eef2f7" stroke="#859ebe"/>
+        <text x="112" y="56" text-anchor="middle" font-family="Merriweather Sans" font-size="13.5" font-weight="700" fill="#1a3875">Propose</text>
+        <text x="112" y="76" text-anchor="middle" font-family="Merriweather Sans" font-size="12" fill="#555555">one targeted offer</text>
+        <text x="112" y="92" text-anchor="middle" font-family="Merriweather Sans" font-size="12" fill="#555555">per agent per cycle</text>
+        <line x1="200" y1="66" x2="230" y2="66" stroke="#859ebe" stroke-width="1.5" marker-end="url(#arrow-e4)"/>
+        <rect x="232" y="30" width="176" height="72" rx="3" fill="#eef2f7" stroke="#859ebe"/>
+        <text x="320" y="56" text-anchor="middle" font-family="Merriweather Sans" font-size="13.5" font-weight="700" fill="#1a3875">Respond</text>
+        <text x="320" y="76" text-anchor="middle" font-family="Merriweather Sans" font-size="12" fill="#555555">accept or decline the</text>
+        <text x="320" y="92" text-anchor="middle" font-family="Merriweather Sans" font-size="12" fill="#555555">offers addressed to you</text>
+        <line x1="408" y1="66" x2="438" y2="66" stroke="#859ebe" stroke-width="1.5" marker-end="url(#arrow-e4)"/>
+        <rect x="440" y="30" width="176" height="72" rx="3" fill="#eef2f7" stroke="#859ebe"/>
+        <text x="528" y="56" text-anchor="middle" font-family="Merriweather Sans" font-size="13.5" font-weight="700" fill="#1a3875">Execute</text>
+        <text x="528" y="76" text-anchor="middle" font-family="Merriweather Sans" font-size="12" fill="#555555">episode-seeded order;</text>
+        <text x="528" y="92" text-anchor="middle" font-family="Merriweather Sans" font-size="12" fill="#555555">unpayable offers void</text>
+        <path d="M 528 102 L 528 138 L 112 138 L 112 104" fill="none" stroke="#859ebe" stroke-width="1.5" marker-end="url(#arrow-e4)"/>
+        <text x="320" y="158" text-anchor="middle" font-family="Merriweather Sans" font-size="12" fill="#555555">next cycle — up to R rounds (trade_rounds / mating_rounds, default 2–3)</text>
+        <text x="320" y="184" text-anchor="middle" font-family="Merriweather Sans" font-size="12" fill="#8a6a1f">a cycle with zero offers ends the phase early — quiescence is a trivial deterministic check</text>
+      </svg>
+      <figcaption><span class="fig-label">Figure 3</span>The E4 negotiation cycle. The same
+      propose/respond/execute shape is reused by mating (E5, with eligibility re-validated at
+      execution) and lending (E6, with credit contracts as the proposal payload).</figcaption>
+    </figure>
+
+    <div class="decision">
+      <span class="decision-label">Decision — E4 (2026-08-07)</span>
+      <p><strong>Bilateral targeted offers over R cycles; the sim never computes MRS or
+      prices.</strong> Prices emerge, or they don't. Spot barter only — credit is E6's mechanic.
+      Cross-tick price discovery is expected, and the scratchpad (§7) is where reputation lives.
+      Order-book matching and free-form negotiation channels remain buildable later as variants on
+      the same encoding.</p>
+    </div>
+
+    <h3>Mating (E5)</h3>
+    <p>Mating reuses the E4 consent shape: <code>mating_rounds</code> propose/respond cycles, one
+    targeted proposal per agent per cycle to an eligible adjacent partner; accept or decline;
+    accepted matings execute in seeded order, <strong>re-validating eligibility at execution</strong>
+    (E4's voiding rule reused); a zero-proposal cycle ends the phase early. Eligibility is physics,
+    all classic: fertile age window; <strong>wealth ≥ own initial endowment</strong> (which makes
+    D5's half-endowment contribution payable and limits reproduction to the successful); opposite
+    sex (D5 draws sex when fertility is on); von Neumann adjacency; and an empty cell adjacent to
+    either parent for the child — seeded pick; if none exists the mating voids, the classic crowding
+    cap. One delta from classic: each agent completes at most <strong>one mating per timestep</strong>,
+    which closes tick-scale Genghis strategies — lineage volume lives across ticks. Mate
+    <em>choice</em> is the strategy layer D5 built: proposing to good genes is investment, and
+    accepting prices in the endowment cost and A2's coin-flip seat assignment.</p>
+
+    <h3>Lending (E6)</h3>
+    <p>Lending is the third instance of the E4 shape: a proposal is a credit contract
+    <code>{lend: (s, sp), repay: (s, sp), due_tick}</code> offered to an adjacent agent; acceptance
+    transfers the principal now. Interest is implicit and per-contract — repay exceeds lend by
+    whatever the parties negotiate. The physics: <code>due_tick ≤ episode end</code> (no contracting
+    past P3's horizon); at due, the sim auto-collects <code>min(owed, holdings)</code>; a
+    <strong>shortfall closes the contract</strong> — the lender eats the loss, so credit risk prices
+    into negotiated interest. On death, heirs inherit debt pro-rata with the estate, capped at what
+    they inherited (limited liability); with no heirs, the debt is written off. Anyone holding goods
+    may lend — the classic age/fertility matchmaking is evicted as behavior. E6 also closes B4's
+    deferred sub-question: <strong>welfare stays over gross holdings</strong>. Under integrated
+    welfare with due ≤ T and auto-collect, interest is the price of welfare-time and the market sets
+    it; even Cobb–Douglas concavity gains — rich→poor transfers raise total welfare, including via
+    E4 gifts — are legitimate distribution management under <code>sum</code>, not exploits.</p>
+
+    <h3>Tribes (E7)</h3>
+    <p>A tribe is a declared affiliation — not emergent culture (the classic tags) and not static
+    teams (v1's seat-tribes). Config sets <code>tribe_count</code> (K, ranked default 2); initial
+    assignment is episode-seeded; and phase 5 is real — an agent may declare a switch, effective at
+    the next timestep. Combat gates on cross-tribe (E2). Tribes are protection pacts:
+    safety-in-numbers, defection, and betrayal — leave today, attack your ex-tribemate tomorrow —
+    become policy strategy. Feature-flagged like the other mechanics; tribeless variants gate combat
+    on wealth alone.</p>
+
+    <div class="decision">
+      <span class="decision-label">Decision — E7 (2026-08-07)</span>
+      <p><strong>Chosen allegiance is the design's one explicitly novel mechanic — and its biggest
+      untested bet.</strong> There is no literature precedent; the dynamics will be observed in
+      playtesting, and the feature flag is the fallback if they disappoint (§11). It was chosen over
+      classic cultural tags (emergent and passive — nearly invisible to a policy trying to
+      <em>play</em> them, and no phase 5 at all) and v1's seat-tribes (which degenerate to
+      everyone-their-own-tribe at 64 single-agent seats — zero strategic content).</p>
+    </div>
+  </section>
+
+  <!-- ============ 7 · The policy boundary ============ -->
+  <section id="policy-boundary">
+    <h2>7 · The Policy Boundary</h2>
+    <ul class="key-points">
+      <li>F1 — minimal visibility (a recorded human override): visible agents show only seat, holdings, tribe, and sickness; genes, age, sex, fertility, and max age are hidden — poker, not chess.</li>
+      <li>F2 — each agent carries one persistent scratchpad, 8 KiB of UTF-8 (config-adjustable), with an honest-rules clause: intra-seat RAM coordination is legal because it is unenforceable to ban.</li>
+      <li>F3 — every message is UTF-8 JSON in a versioned envelope, encoded by pure core functions shared by all shells.</li>
+      <li>A4 — the game has no notion of wall-clock time; deadlines that produce faults belong to the runtime.</li>
+    </ul>
+
+    <h3>Observation (F1)</h3>
+    <p><strong>Geometry: classic von Neumann rays.</strong> An agent sees the four axis rays of
+    length <code>vision</code> — no diagonals — and vision <em>is</em> movement range: movement
+    targets any visible cell, and an occupied target is combat per E2. Visible cells show current
+    sugar and spice levels and pollution.</p>
+    <p><strong>Visible agents: minimal attributes.</strong> Each visible occupant shows only
+    <code>{seat, holdings (sugar, spice), tribe, sick}</code> — the minimums E2 (wealth legality),
+    E4 (counterparty holdings), and C4 (sickness) require. Genes (metabolisms, vision), age, sex,
+    and fertility are hidden; <code>max_age</code> is private to everyone, including its owner's
+    observers. Mate and rival assessment is inference, not reading: voided proposals carry
+    information, and the scratchpad is where courtship and reputation knowledge accumulates. The
+    fog is both spatial <em>and</em> attribute-deep.</p>
+    <p><strong>Own state: complete.</strong> Holdings, metabolisms, vision, age, own max age, sex,
+    fertility window, tribe, sickness and immune state, outstanding loan contracts in both
+    directions, position — plus current-tick welfare and the running integral, so the score being
+    optimized is legible (B2).</p>
+    <p><strong>Globals:</strong> current tick, episode length T, and season state when enabled. The
+    public game config — including the capacity map — is handed to every policy at episode start:
+    it is public anyway, since it ships in replays. The map is known; the other agents are the
+    uncertainty.</p>
+
+    <div class="decision">
+      <span class="decision-label">Decision — F1 (2026-08-07) · Human override</span>
+      <p><strong>Minimal visibility, by James's explicit call — overriding the
+      recommendation.</strong> The assistant recommended full transparency of agent attributes;
+      James chose the minimal set — "poker, not chess." The consequence is flagged and accepted:
+      mating proposals are partially blind (a proposer cannot read a target's fertility), voided
+      proposals <em>are</em> information, and the scratchpad is where courtship inference
+      accumulates. If playtesting shows courtship is too random, exposing a <code>fertile_now</code>
+      bit is a one-line revision (§11). Square-radius vision was also rejected — it would break the
+      vision = movement-range identity.</p>
+    </div>
+
+    <h3>Memory: the scratchpad (F2)</h3>
+    <p>Each <em>agent</em> has one persistent scratchpad: 8 KiB (config-adjustable) of validated
+    UTF-8 text, delivered with that agent's observation and rewritable with its action. Because
+    Arena components are sandboxed WASM with no filesystem, the pad lives in the host–policy
+    contract itself — observation carries the blob in, the action result carries it back — which
+    makes its size cap a protocol bandwidth knob. Pads don't touch world state, so they are not
+    needed for replay determinism; whether replays optionally snapshot them was F5's call (excluded
+    from the base format, §8).</p>
+    <div class="callout callout-info">
+      <span class="callout-label">Honest-rules clause</span>
+      The Arena research corrected an earlier premise: component instances (and WS player processes)
+      live for the whole episode, so seat-scoped RAM persists regardless — per-agent pad scope was
+      never an enforceable isolation boundary, and v2 doesn't pretend it is. Intra-seat coordination
+      through private memory is <strong>legal</strong> (unenforceable to ban); P1 governs the
+      invocation shape (per-agent observations and actions), not memory isolation. The pad's real
+      value is <em>legibility</em>: protocol-owned, per-agent-keyed memory — inspectable in
+      debugging, replay-snapshottable, and the natural home for courtship/reputation inference under
+      F1's minimal visibility. Stateless-per-invocation policy styles (fresh-context LLM calls) read
+      their pad instead of re-deriving <span class="cite">docs/v2-design.md §7.2, §8.3</span>.
+    </div>
+
+    <h3>Actions per gate</h3>
+    <table>
+      <thead>
+        <tr><th>Phase</th><th>Action</th><th>Resolution</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>move</td><td>target cell; occupied target = combat</td><td>Sequential seeded order (E1); classic P2-cleaned combat (E2)</td></tr>
+        <tr><td>harvest</td><td>per-resource amounts, clamped</td><td>Optional and partial (E3)</td></tr>
+        <tr><td>trade</td><td>targeted bilateral offers</td><td>E4 propose/respond cycles</td></tr>
+        <tr><td>mate</td><td>targeted proposals</td><td>E5 — E4-shaped consent, classic eligibility as physics</td></tr>
+        <tr><td>lend</td><td>negotiated credit contracts</td><td>E6 — E4-shaped; due ≤ T; write-off on shortfall; gross-holdings welfare</td></tr>
+        <tr><td>tribe</td><td>declare a tribe switch</td><td>E7 — effective next timestep</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Encoding (F3)</h3>
+    <p>All observation, action, and negotiation messages are UTF-8 JSON with a versioned envelope
+    (<code>{v, type, ...}</code>), schema documented in PROTOCOL.md, encoded and decoded by pure
+    core functions shared by every shell. The rationale: zero-codegen authoring in any language,
+    LLM-direct legibility, and eyeball debuggability. Under F1's minimal observations, messages are
+    small — roughly 1–4 KB — and the policy boundary is not the hot loop. A binary protocol version
+    can be added behind the same seam if profiling ever demands it. This matches every turn-based
+    coworld in the ecosystem, including v1, and closes fork 1 of
+    <span class="cite">docs/what-is-a-coworld.md</span>.</p>
+
+    <h3>Time (A4)</h3>
+    <p>The game has no notion of wall-clock time and imposes no per-invocation budget. A policy is
+    either <em>responsive</em> or <em>faulted</em> (→ A3 freeze); deadlines that produce faults
+    belong to the runtime — Arena's host per-delivery deadline, or the WS shell's per-decision
+    timeout (config, on the order of seconds). This is forced as well as chosen: a deterministic
+    Arena guest has no clock, so game-enforced time limits are inexpressible there, and any
+    game-level budget would make the two runtimes play different rules. One deployment (not model)
+    consequence: Arena runners for Sugarscape should set the per-invocation deadline to roughly
+    1–5 s — the 180 s host default is sized for CTF/LLM profiles — since the episode wall clock
+    (3600 s under Arena) is the only other bound on a slow-but-legal policy. Per-policy compute
+    fairness is the platform's job (fixed CPU per component), not the game's
+    <span class="cite">docs/v2-design.md §7.5</span>.</p>
+  </section>
+
+  <!-- ============ 8 · Runtime & replay ============ -->
+  <section id="runtime">
+    <h2>8 · Runtime and Replay Architecture</h2>
+    <ul class="key-points">
+      <li>F4 — one deterministic core with thin shells, built in order: core → Arena components → WS container → replay viewer.</li>
+      <li>Arena is the dogfood and the smallest harness for the core; the WS shell remains mandatory for certification and league hosting (Arena is experiment-scoped).</li>
+      <li>F5 — a replay is config + seed + decision log; the viewer is a static bundle that resimulates with the same core compiled for the browser.</li>
+      <li>All six platform design forks from <span class="cite">docs/what-is-a-coworld.md</span> are closed by this design.</li>
+    </ul>
+
+    <figure>
+      <svg viewBox="0 0 640 372" role="img" aria-label="One deterministic core feeding three shells: Arena components, WS container, and browser replay viewer">
+        <defs>
+          <marker id="arrow-rt" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8" fill="none" stroke="#859ebe" stroke-width="1.2"/>
+          </marker>
+          <marker id="arrow-rp" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8" fill="none" stroke="#b36e4e" stroke-width="1.2"/>
+          </marker>
+        </defs>
+        <rect x="16" y="52" width="228" height="184" rx="3" fill="#eef2f7" stroke="#859ebe"/>
+        <text x="32" y="80" font-family="Merriweather Sans" font-size="13.5" font-weight="700" fill="#1a3875">Deterministic core</text>
+        <text x="32" y="104" font-family="Merriweather Sans" font-size="12" fill="#555555">all-integer world state</text>
+        <text x="32" y="122" font-family="Merriweather Sans" font-size="12" fill="#555555">fixed-point (32.32) welfare</text>
+        <text x="32" y="140" font-family="Merriweather Sans" font-size="12" fill="#555555">seeded per-subsystem RNG</text>
+        <text x="32" y="158" font-family="Merriweather Sans" font-size="12" fill="#555555">pure JSON codec (F3)</text>
+        <text x="32" y="176" font-family="Merriweather Sans" font-size="12" fill="#555555">canonical per-tick hash</text>
+        <text x="32" y="212" font-family="Merriweather Sans" font-size="12" font-style="italic" fill="#6e8050">built first — one implementation,</text>
+        <text x="32" y="228" font-family="Merriweather Sans" font-size="12" font-style="italic" fill="#6e8050">compiled for every target</text>
+
+        <line x1="244" y1="88" x2="342" y2="60" stroke="#859ebe" stroke-width="1.5" marker-end="url(#arrow-rt)"/>
+        <line x1="244" y1="144" x2="342" y2="144" stroke="#859ebe" stroke-width="1.5" marker-end="url(#arrow-rt)"/>
+        <line x1="244" y1="200" x2="342" y2="228" stroke="#859ebe" stroke-width="1.5" marker-end="url(#arrow-rt)"/>
+
+        <rect x="344" y="28" width="280" height="64" rx="3" fill="#fffaf0" stroke="#d4c9b5"/>
+        <text x="360" y="52" font-family="Merriweather Sans" font-size="13" font-weight="600" fill="#1a3875">Arena components</text>
+        <text x="360" y="72" font-family="Merriweather Sans" font-size="12" fill="#555555">softmax:game / softmax:player — the dogfood</text>
+
+        <rect x="344" y="112" width="280" height="64" rx="3" fill="#fffaf0" stroke="#d4c9b5"/>
+        <text x="360" y="136" font-family="Merriweather Sans" font-size="13" font-weight="600" fill="#1a3875">WS container shell</text>
+        <text x="360" y="156" font-family="Merriweather Sans" font-size="12" fill="#555555">COGAME_* contract — certification &amp; league</text>
+
+        <rect x="344" y="196" width="280" height="64" rx="3" fill="#fffaf0" stroke="#d4c9b5"/>
+        <text x="360" y="220" font-family="Merriweather Sans" font-size="13" font-weight="600" fill="#1a3875">Browser replay viewer</text>
+        <text x="360" y="240" font-family="Merriweather Sans" font-size="12" fill="#555555">static bundle — resimulates with the same core</text>
+
+        <rect x="80" y="296" width="504" height="44" rx="3" fill="#f8f6ef" stroke="#d4c9b5"/>
+        <text x="332" y="323" text-anchor="middle" font-family="Merriweather Sans" font-size="12.5" font-weight="600" fill="#b36e4e">replay = config + seed + decision log — same bytes from either shell</text>
+
+        <path d="M 484 92 L 484 104 L 560 104 L 560 296" fill="none" stroke="#b36e4e" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrow-rp)"/>
+        <path d="M 484 176 L 484 188 L 540 188 L 540 296" fill="none" stroke="#b36e4e" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrow-rp)"/>
+        <path d="M 320 296 L 320 276 L 380 276 L 380 260" fill="none" stroke="#b36e4e" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrow-rp)"/>
+      </svg>
+      <figcaption><span class="fig-label">Figure 4</span>One core, three shells (F4/F5). The
+      all-integer deterministic core is compiled into Arena WASM components, the WS container, and
+      the browser viewer. A replay — config + seed + decision log — is emitted identically by either
+      hosting shell (Arena <code>replay-append</code>, WS <code>COGAME_SAVE_REPLAY_URI</code>) and
+      feeds the viewer, which resimulates rather than plays back recorded state.</figcaption>
+    </figure>
+
+    <p><strong>Runtime (F4).</strong> One deterministic core, thin shells, built in this order:
+    core → Arena components (<code>softmax:game</code> / <code>softmax:player</code>, per the merged
+    coworld-ctf recipe <span class="cite">coworld-ctf/arena/</span>) → WS container shell → replay
+    viewer. Arena <span class="cite">metta docs/specs/0076-arena-single-pod-experiment.md</span> is
+    the dogfood and the smallest harness that proves the core; the WS shell remains mandatory for
+    certification and league hosting, because Arena is experiment-scoped, and it serves small
+    configs while accepting E1's sequential-movement latency. The manifest omits
+    <code>engine_runtime</code> — v2 builds on none of the listed runtimes. Closes fork 2.</p>
+
+    <p><strong>Replay (F5).</strong> A replay is config + seed + decision log — every accepted
+    action and offer per gate, in execution order — in a versioned JSON envelope consistent with F3,
+    compressed. It is emitted incrementally via Arena's <code>replay-append</code> and written to
+    <code>COGAME_SAVE_REPLAY_URI</code> by the WS shell: same bytes either way. The viewer is a
+    static bundle that <em>resimulates</em> with the same core compiled for the browser — v1's own
+    signpost, and the ctf/crewrift production pattern. Scratchpad snapshots are excluded from the
+    base format: they are not needed for resimulation, and policy memory is not broadcast by
+    default; a flagged debug/spectator extension may add them later. The Emscripten-vs-jco viewer
+    build path is an implementation choice, not spec. Closes fork 3.</p>
+
+    <table>
+      <thead>
+        <tr><th>Platform fork (<span class="cite">docs/what-is-a-coworld.md</span>)</th><th>Status in this design</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>1 — message encoding</td><td><strong>Closed (F3):</strong> JSON, versioned envelope, pure-core codec</td></tr>
+        <tr><td>2 — engine runtime</td><td><strong>Closed (F4):</strong> Arena-first dual shell; <code>engine_runtime</code> omitted</td></tr>
+        <tr><td>3 — replay architecture</td><td><strong>Closed (F5):</strong> decision-log replay + resimulating static bundle</td></tr>
+        <tr><td>4 — determinism spec</td><td><strong>Closed (platform D1 + F6):</strong> own spec — all-integer state, fixed-point welfare</td></tr>
+        <tr><td>5 — activation model</td><td><strong>Closed (§6 + E1):</strong> phased timestep; movement sequential in seeded order</td></tr>
+        <tr><td>6 — fault/fallback</td><td><strong>Closed (A3):</strong> a faulted seat's agents freeze; no sim-owned fallback</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============ 9 · Determinism ============ -->
+  <section id="determinism">
+    <h2>9 · Determinism Spec</h2>
+    <ul class="key-points">
+      <li>Same config + seed + decision log ⇒ bit-identical world state on every target: native, Arena wasm32, and the browser viewer (F6).</li>
+      <li>No floats anywhere in the game — welfare is computed in 32.32 fixed point via pinned <code>ln</code>/<code>exp</code> implementations.</li>
+      <li>RNG: one master u64 seed hashed into per-subsystem PCG-class streams with explicit uint64 state.</li>
+      <li>A canonical per-tick state hash, recorded into replays, makes native↔wasm↔viewer parity a testable gate.</li>
+    </ul>
+
+    <p>The spec has four planks <span class="cite">docs/v2-design.md §7.7</span>:</p>
+    <ol>
+      <li><strong>All-integer world state.</strong> No floats anywhere in the game, including
+      welfare: Cobb–Douglas is computed in fixed-point (32.32) via pinned polynomial/table
+      <code>ln</code>/<code>exp</code> implementations —
+      <code>welfare = exp((m₁·ln w₁ + m₂·ln w₂)/mT)</code>. No libm, and no FMA/contraction
+      discipline: v1's <code>-ffp-contract=off</code> era ends. Scores are exact integers, with
+      B6's survivor bits assembled arithmetically, and results JSON carries exact integers.</li>
+      <li><strong>RNG.</strong> A master <code>u64</code> seed derives per-subsystem streams —
+      movement shuffle, lotteries, endowments, disease, child placement — by hashing (master,
+      subsystem-id); PCG-class generators with explicit <code>uint64</code> state, never
+      platform-width <code>int</code> (the wasm32 32-bit trap). Per-subsystem streams keep behavior
+      stable under feature toggles: switching disease off must not perturb the movement shuffle.</li>
+      <li><strong>Defined iteration order everywhere.</strong> Arrays and explicit sort keys; no
+      hash-table ordering may leak into behavior.</li>
+      <li><strong>Canonical per-tick state hash</strong>, recorded periodically into the replay;
+      native↔wasm↔viewer hash parity tests are the correctness gate — the coworld-ctf
+      <code>gameHash</code> pattern <span class="cite">coworld-ctf/arena/</span>.</li>
+    </ol>
+
+    <div class="decision">
+      <span class="decision-label">Decision — F6 (2026-08-07)</span>
+      <p><strong>All-integer, with fixed-point welfare — not floats with discipline.</strong>
+      Vendored-<code>pow</code> floating point was rejected because floats would re-enter the
+      accumulating welfare integral and the contraction-flag discipline would return with them;
+      deferring to a minimal spec was rejected because replay exactness remains unproven until this
+      exact choice is made anyway. Completes fork 4 of
+      <span class="cite">docs/what-is-a-coworld.md</span>.</p>
+    </div>
+  </section>
+
+  <!-- ============ 10 · Alternatives considered ============ -->
+  <section id="alternatives">
+    <h2>10 · Alternatives Considered</h2>
+    <ul class="key-points">
+      <li>Every decision below records the losing branches and the specific reason each lost — the design record in <span class="cite">docs/v2-design.md</span> often keeps only the winner.</li>
+      <li>Two entries (E1, F1) are human overrides of the analysis and are marked as such.</li>
+      <li>Recurring theme: any alternative that put behavior back inside the simulation lost to P2.</li>
+    </ul>
+
+    <h3>A — Players and seats</h3>
+    <p><strong>A1 — total agent count.</strong> Rejected a fixed total of 64 (certification would
+    have to simulate 64 agents; no density variants) and an <code>agents_per_seat</code>-only
+    parametrization — James preferred the explicit total plus divisor validation.</p>
+    <p><strong>A2 — newborn assignment.</strong> Rejected any single fixed rule in favor of the
+    configurable three-mode set. Also rejected: sim-controlled children (reintroduces v1's two-tier
+    NPC wart and violates P1/P2) and fertility-off-in-ranked (punts the question rather than
+    answering it).</p>
+    <p><strong>A3 — dropped seats.</strong> Rejected immediate death (infra noise would shock the
+    ecology discontinuously for everyone else) and sim-owned fallback behavior — v1's greedy
+    fallback generalized <span class="cite">archived/v1/src/sugarscape/coworld.nim:467-488</span> —
+    which would require the sim to implement exactly the behavior P2 evicted. Freeze wins because
+    physics continues and no special code path exists.</p>
+    <p><strong>A4 — budgets.</strong> Rejected game-enforced time budgets entirely: inexpressible
+    under Arena (a deterministic guest has no clock), and any game-level budget would make the two
+    runtimes play different rules. Time is runtime-owned.</p>
+
+    <h3>B — Episode and scoring</h3>
+    <p><strong>B1 — length.</strong> Rejected 500 ticks (mating and lending dynamics too shallow)
+    and 2000 ticks (v1's league value — doubles compute and squeezes the 3600 s Arena episode wall
+    clock).</p>
+    <p><strong>B2+B3 — wellness.</strong> Rejected <em>all</em> end-snapshot variants: dead-scores-0
+    (one death zeroes <code>min</code>; a loss at t=999 erases the whole episode),
+    welfare-at-death (dying rich early scores like living rich long), and exclude-the-dead (culling
+    your weak agents raises the reduce — monstrous). Also rejected integrating but normalizing by
+    ticks-alive: a short spectacular life would outrank a long good one. Integration ÷ T dissolves
+    every one of these pathologies at once.</p>
+    <p><strong>B4 — Cobb–Douglas form.</strong> Exponents were uncontested (metabolism shares — the
+    classic, trade-generating choice). The gross-vs-net question was deliberately deferred
+    <em>into</em> E6 rather than decided early — and E6 resolved it: gross.</p>
+    <p><strong>B5 — reduce.</strong> Rejected <code>mean</code> as ranked default (structurally
+    punishes mating — late-born agents dilute the average), <code>max</code> (15 of a seat's 16
+    agents become irrelevant; invites culling-by-neglect), <code>min</code> (every newborn is your
+    minimum), and <code>median</code>/<code>geometric_mean</code> (tail-blind; one near-zero agent
+    collapses the geomean). <code>sum</code> was <em>added</em> to the table as the only reduce
+    where survival, prosperity, and reproduction all point the same way, bounded by carrying
+    capacity.</p>
+    <p><strong>B6 — ties.</strong> James rejected both pure draws and full deterministic tie-break
+    chains; chose survivors-then-draw. Implementation note: the survivor count encodes
+    lexicographically below welfare precision in the score scalar — F6 owns the exact layout.</p>
+
+    <h3>C — World mechanics</h3>
+    <p><strong>C1 — maps.</strong> Rejected a v1-style procedural-peaks spec (radial falloff math
+    becomes normative spec every runtime must reproduce bit-for-bit) and supporting both formats
+    (two validation and determinism stories). A map is data, not a program.</p>
+    <p><strong>C2 — seasons.</strong> Rejected fractional winter growback rates (floats in the
+    environment) and per-resource climates (no classic precedent; doubles the config surface).</p>
+    <p><strong>C3 — pollution.</strong> Rejected observation-only pollution — provably inert under
+    P2, since smart policies ignore costless data; the classic's pollution only worked through the
+    hard-coded movement rule. Shipped <em>both</em> physical effects, independently configurable,
+    rather than picking one story.</p>
+    <p><strong>C4 — disease.</strong> Rejected a simpler SIR model (flatter dynamics, generic
+    rather than specific immunity) and deferral (leaves holes in the config schema and in F1's
+    observation contract).</p>
+    <p><strong>C5 — resources.</strong> James rejected a first-class single-resource mode; chose
+    always-both. Uniform schemas everywhere; sugar-only is just zero spice capacity plus zero spice
+    metabolism, and no trade validation is needed since trade is policy-negotiated — a spiceless
+    world has nothing to exchange.</p>
+
+    <h3>D — Agent lifecycle</h3>
+    <p><strong>D1 — max age.</strong> Rejected ranked-immortal and no-max-age: well-played agents
+    would live all 1000 ticks, fertility would become optional, and B5's reproduction incentive
+    would be undermined.</p>
+    <p><strong>D2–D4 — death and estates.</strong> Rejected inherit-else-vanish and always-vanish
+    (deflationary; corpses inert) and always-drop (removes the dynasty investment mechanic).
+    No-replacement was confirmed directly from P3 + P1.</p>
+    <p><strong>D5 — genetics.</strong> Rejected all-fresh draws for newborns (mate choice becomes
+    strategically empty — hollows E5) and a configurable genetics knob (an untested second path
+    with no demand).</p>
+
+    <h3>E — Actions and phases</h3>
+    <p><strong>E1 — activation.</strong> The assistant recommended simultaneous movement with a
+    conflict lottery (fairness, latency); <strong>James overrode the recommendation</strong> and
+    chose sequential seeded order for movement — classic semantics valued over the WS-shell latency
+    cost, consciously accepted (Arena is the primary runtime). Harvest and tribe are order-free;
+    the negotiation phases get their own structures in E4/E5.</p>
+    <p><strong>E2 — combat.</strong> Rejected probabilistic resolution by wealth ratio (adds outcome
+    RNG and weakens wealth-as-armor) and unrestricted attack (kamikaze griefing becomes free for
+    doomed agents). The classic retaliation look-ahead is evicted as behavior — not dropped as an
+    oversight.</p>
+    <p><strong>E3 — harvest.</strong> Rejected all-or-nothing harvesting: pollution restraint would
+    collapse to a binary choice, and C3's levers would lose their play.</p>
+    <p><strong>E4 — trade.</strong> Rejected a sim-matched order book (the matcher re-centralizes
+    what P2 decentralized, and bilateral strategy — partners, reputation, boycott — dissolves) and
+    a free-form byte negotiation channel (protocol surface explodes and the binding machinery is
+    still needed; buildable later as a variant).</p>
+    <p><strong>E5 — mating.</strong> Rejected dropping the opposite-sex requirement (makes sex
+    vestigial) and willingness-flags with sim-side pairing (partner <em>choice</em> disappears —
+    hollows D5's genetic strategy).</p>
+    <p><strong>E6 — lending.</strong> Rejected rollover-on-shortfall (zombie contracts, compounding
+    bookkeeping) and net-of-principal welfare (belt-and-suspenders against an exploit that
+    due ≤ T plus auto-collect already neutralize; would put principal tracking inside the scoring
+    function). The insight worth preserving: under integrated welfare, interest is the price of
+    welfare-time, and Cobb–Douglas concavity gains from rich→poor transfers — including E4 gifts —
+    are legitimate distribution management under <code>sum</code>, not exploits.</p>
+    <p><strong>E7 — tribes.</strong> Rejected classic cultural tags (emergent and passive — nearly
+    invisible to a policy trying to <em>play</em> them; no phase 5), v1's seat-tribes (degenerates
+    to everyone-their-own-tribe at 64 single-agent seats; zero strategic content), and deferral.
+    Chosen allegiance is the one explicitly novel mechanic — flagged as the design's biggest
+    untested bet (§11).</p>
+    <p><strong>E8 — ordering.</strong> Rejected metabolism-before-actions (an agent dies before
+    acting; breaks the classic collect-then-metabolize grace) and loan collection in phase 0
+    (tighter credit, lender-unfriendly).</p>
+    <p><strong>E9 — inaction.</strong> Rejected penalizing illegal actions: a no-op <em>is</em>
+    inaction, and A3's freeze rule depends on inaction being legal.</p>
+
+    <h3>F — Policy interface and platform</h3>
+    <p><strong>F1 — observation.</strong> The assistant recommended full transparency;
+    <strong>James overrode the recommendation</strong> and chose minimal visibility —
+    <code>{seat, holdings, tribe, sick}</code> only, with <code>max_age</code> private to all —
+    "poker, not chess." The consequence is flagged and accepted: mating proposals are partially
+    blind, voided proposals <em>are</em> information, and the scratchpad is where courtship
+    inference accumulates. Square-radius vision was also rejected — it breaks the vision =
+    movement-range identity.</p>
+    <p><strong>F2 — scratchpad.</strong> Rejected a per-seat pad (loses per-agent replay
+    legibility) and dual per-seat + per-agent pads (machinery without demand). The corrected
+    premise is on record: component RAM persists per-episode, so pad scope was never an enforceable
+    isolation boundary — the honest-rules clause makes intra-seat RAM coordination legal.</p>
+    <p><strong>F3 — encoding.</strong> Rejected CBOR/MessagePack (a decode tax on every debug
+    session and every LLM policy) and a Sprite-v1-lineage binary format (built for 24 tps pixel
+    streams — the wrong profile). The JSON family matches every turn-based coworld in the
+    ecosystem, including v1.</p>
+    <p><strong>F4 — runtime.</strong> Rejected a WS-first build order: it delays the dogfood and
+    builds the bigger shell before the core is proven.</p>
+    <p><strong>F5 — replay.</strong> Rejected scratchpad snapshots in the base replay format:
+    bloat, and policy memory would be public by default.</p>
+    <p><strong>F6 — determinism.</strong> Rejected vendored-<code>pow</code> floats (floats
+    re-enter the accumulating integral; the contraction discipline returns) and a
+    minimal-spec-defer (replay exactness stays unproven until the choice is made anyway).</p>
+  </section>
+
+  <!-- ============ 11 · Open questions & risks ============ -->
+  <section id="risks">
+    <h2>11 · Open Questions and Risks</h2>
+    <ul class="key-points">
+      <li>The design is complete — nothing below blocks implementation — but real risks remain, and each has a named mitigation or escape hatch.</li>
+      <li>The two watch-items are the two most original calls: E7's chosen-allegiance tribes and F1's minimal visibility.</li>
+      <li>Several defaults (negotiation round counts, combat α, pollution coefficients, tribe count) are placeholders pending playtesting.</li>
+    </ul>
+
+    <div class="callout callout-open">
+      <span class="callout-label">Open — E7 chosen-allegiance tribes</span>
+      The one mechanic with no literature precedent; its dynamics are unobserved until playtesting.
+      Fallback: the feature flag — tribeless variants gate combat on wealth alone, and ranked play
+      can ship without tribes if the dynamics disappoint.
+    </div>
+    <div class="callout callout-open">
+      <span class="callout-label">Open — F1 blind mating proposals</span>
+      Minimal visibility means a proposer cannot read a target's fertility. If playtesting shows
+      courtship is too random, exposing a <code>fertile_now</code> bit on visible agents is a
+      one-line revision to the observation schema.
+    </div>
+    <div class="callout callout-warn">
+      <span class="callout-label">Risk — Arena scaling</span>
+      64 seats means 65 Arena component instances (64 players + 1 game), against the 17 the
+      arena-runner experiment was sized for. A scaling question to raise with the Arena work —
+      per-component memory caps are host constants, not game config
+      <span class="cite">metta docs/specs/0076-arena-single-pod-experiment.md</span>.
+    </div>
+    <div class="callout callout-warn">
+      <span class="callout-label">Risk — Arena is experiment-scoped</span>
+      Arena's metta stack was unmerged as of 2026-08-06 (the <code>jb/arena-task-*</code> branches).
+      The WS shell therefore remains mandatory for league hosting; F4's build order treats Arena as
+      the dogfood, not the sole deployment path.
+    </div>
+    <div class="callout callout-open">
+      <span class="callout-label">Open — fixed-point ln/exp implementation</span>
+      The 32.32 <code>ln</code>/<code>exp</code> pair must be written and parity-tested once —
+      native vs wasm32 vs browser — then frozen with pinned coefficients. Until then, F6's
+      bit-identical guarantee is a spec, not a demonstrated property.
+    </div>
+    <div class="callout callout-open">
+      <span class="callout-label">Open — negotiation round defaults</span>
+      <code>trade_rounds</code> and <code>mating_rounds</code> defaults (2–3 cycles per phase) are
+      placeholders pending playtesting; they trade convergence depth against per-tick policy
+      invocations.
+    </div>
+    <div class="callout callout-open">
+      <span class="callout-label">Open — balance unknowns</span>
+      Combat α (loot cap), the six pollution coefficients, and the tribe count default (K = 2) are
+      untested balance values; playtesting owns them. None of them changes protocol shape.
+    </div>
+  </section>
+
+  <!-- ============ 12 · Appendix: decision index ============ -->
+  <section id="decision-index">
+    <h2>12 · Appendix: Decision Index</h2>
+    <p>All 35 open questions, resolved 2026-08-07. One line each; the body sections above carry the
+    rationale, and <span class="cite">docs/v2-design.md §9</span> is the authoritative ledger.</p>
+    <table>
+      <thead>
+        <tr><th>Id</th><th>Question</th><th>Resolution</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>A1</td><td>Total agent count fixed or config?</td><td><code>total_agents</code> is config (default 64); seat count must divide it</td></tr>
+        <tr><td>A2</td><td>Who controls newborns?</td><td>Configurable {random_parent, initiating_parent, receiving_parent}; ranked default <code>random_parent</code></td></tr>
+        <tr><td>A3</td><td>Dropped-seat semantics</td><td>Agents freeze — no actions, physics continues; no sim fallback</td></tr>
+        <tr><td>A4</td><td>Per-invocation compute budget</td><td>None in-game; time is runtime-owned; a missed runtime deadline is a fault → A3</td></tr>
+        <tr><td>B1</td><td>Episode length</td><td>Ranked default 1000 timesteps; config per §4</td></tr>
+        <tr><td>B2</td><td>Dead agents in the reduce?</td><td>Stay in, with truncated integrals</td></tr>
+        <tr><td>B3</td><td>Wellness measured when?</td><td>Integrated over the episode, ÷ T</td></tr>
+        <tr><td>B4</td><td>Exact Cobb–Douglas form</td><td>Exponents = metabolism shares; gross-vs-net deferred into E6 (resolved: gross)</td></tr>
+        <tr><td>B5</td><td>Default <code>score_reduce</code></td><td><code>sum</code> — newly added to the table; rider: <code>random_parent</code> default</td></tr>
+        <tr><td>B6</td><td>Tie-breaking</td><td>Surviving agent count, then a genuine draw; encoded below welfare precision</td></tr>
+        <tr><td>C1</td><td>Capacity map format</td><td>Explicit integer grids only; built-ins <code>four_hills</code> (ranked default), <code>two_hills</code>, <code>flat</code></td></tr>
+        <tr><td>C2</td><td>Seasons semantics</td><td>Classic hemispheric S<sub>αβγ</sub>, integer winter semantics (<code>season_length</code>, <code>winter_divisor</code>)</td></tr>
+        <tr><td>C3</td><td>Pollution model</td><td>Classic linear sources; fixed-point 4-neighbor diffusion; subtractive decay; suppression + toxicity both configurable</td></tr>
+        <tr><td>C4</td><td>Disease model</td><td>Classic bit-string immune systems; sick = +1 metabolism; specific persistent immunity</td></tr>
+        <tr><td>C5</td><td>Single-resource support?</td><td>Always both resources; sugar-only = zero spice capacity + zero spice metabolism</td></tr>
+        <tr><td>D1</td><td>Max age</td><td>Per-agent seeded draw from config range; ranked default [60, 100] ticks; <code>null</code> = immortal</td></tr>
+        <tr><td>D2</td><td>Death causes</td><td>Starvation, old age, combat; timing per E8</td></tr>
+        <tr><td>D3</td><td>Replacement on death</td><td>None — reproduction is the only source of new agents</td></tr>
+        <tr><td>D4</td><td>Inheritance</td><td>On (feature-flagged, ranked default on): split among living children, else drop on the death cell</td></tr>
+        <tr><td>D5</td><td>Endowments and genetics</td><td>Full classic: crossover genetics; each parent contributes half its initial endowment; fresh draws for age/sex/fertility</td></tr>
+        <tr><td>E1</td><td>Within-phase activation</td><td>Per-phase: movement/combat sequential in seeded order (human override); harvest and tribe order-free</td></tr>
+        <tr><td>E2</td><td>Combat</td><td>Poorer-only (+ cross-tribe when tribes on); deterministic win; loot min(α, victim wealth); remainder through D4</td></tr>
+        <tr><td>E3</td><td>Harvest semantics</td><td>Optional; partial per-resource amounts, clamped to the cell</td></tr>
+        <tr><td>E4</td><td>Trade protocol</td><td>Bilateral targeted offers over <code>trade_rounds</code> cycles; seeded execution with voiding; zero-offer cycle ends early</td></tr>
+        <tr><td>E5</td><td>Mating</td><td>E4-shaped consent; classic eligibility as physics; at most one mating per agent per tick</td></tr>
+        <tr><td>E6</td><td>Lending</td><td>E4-shaped credit contracts; due ≤ T; auto-collect; write-off on shortfall; heirs capped at inheritance; gross-holdings welfare</td></tr>
+        <tr><td>E7</td><td>Tribes</td><td>Chosen allegiance; <code>tribe_count</code> K (default 2); phase-5 switches effective next tick; combat gates cross-tribe</td></tr>
+        <tr><td>E8</td><td>Phase composition and order</td><td>World → gates → upkeep; loans → metabolism → aging → deaths → estates → welfare accrual</td></tr>
+        <tr><td>E9</td><td>Is "stay put" legal?</td><td>Yes, at every gate; illegal actions resolve as no-ops</td></tr>
+        <tr><td>F1</td><td>Observation contents</td><td>Classic rays (= movement range); visible agents show seat/holdings/tribe/sick only (human override); own state complete; config public</td></tr>
+        <tr><td>F2</td><td>Scratchpad</td><td>Per-agent, 8 KiB UTF-8 (config-adjustable); honest-rules clause on seat RAM</td></tr>
+        <tr><td>F3</td><td>Message encoding</td><td>UTF-8 JSON, versioned envelope, pure-core codec (closes fork 1)</td></tr>
+        <tr><td>F4</td><td>Runtime target</td><td>Core → Arena components → WS shell → viewer; <code>engine_runtime</code> omitted (closes fork 2)</td></tr>
+        <tr><td>F5</td><td>Replay architecture</td><td>Config + seed + decision log; resimulating static viewer; no pad snapshots in base format (closes fork 3)</td></tr>
+        <tr><td>F6</td><td>Determinism spec</td><td>All-integer state; 32.32 fixed-point welfare; per-subsystem u64 RNG streams; per-tick hash parity (completes fork 4)</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============ 13 · Sources ============ -->
+  <section id="sources">
+    <h2>13 · Sources</h2>
+    <ul>
+      <li><span class="cite">docs/v2-design.md</span> — the authoritative design record; every decision A1–F6 with rationale. This document renders it; on any divergence, it wins.</li>
+      <li><span class="cite">docs/what-is-a-coworld.md</span> — the platform contract; its six open design forks are all closed by this design (§8).</li>
+      <li><span class="cite">docs/dtl-implementation.html</span> — walkthrough of the DTL mechanism set that v2 draws its mechanics inventory from.</li>
+      <li>Epstein &amp; Axtell, <em>Growing Artificial Societies</em> (1996) — the classic rules G, M, S, T, K, C<sub>α</sub>, L<sub>dr</sub>, P<sub>αβ</sub>, D<sub>δ</sub>.</li>
+      <li><span class="cite">metta docs/specs/0076-arena-single-pod-experiment.md</span> — the Arena WASM runtime (James's own experiment; v2's dogfood target).</li>
+      <li><span class="cite">coworld-ctf/arena/</span> — the merged Nim WASM component recipe v2's Arena shells follow.</li>
+      <li><span class="cite">archived/v1/</span> — the retired vibe-coded port; evidence only, never a template.</li>
+    </ul>
+  </section>
+
+
+</article>
+
+<!-- ================================================================
+     DC-COMMENTS BEGIN — markup + script (copy verbatim; do not modify)
+     ================================================================ -->
+<aside id="dc-sidebar" aria-label="Comments">
+  <h2 class="dc-title">Comments <span id="dc-count"></span></h2>
+  <div class="dc-actions">
+    <button class="dc-btn" id="dc-export">Export JSON</button>
+    <button class="dc-btn" id="dc-copy">Copy JSON</button>
+    <button class="dc-btn" id="dc-import">Import…</button>
+    <input type="file" id="dc-file" accept=".json,application/json" hidden>
+  </div>
+  <div id="dc-status" role="status"></div>
+  <div id="dc-list"><p class="dc-empty">No comments yet. Select text in the document to add one.</p></div>
+</aside>
+<button id="dc-fab" type="button">+ Comment</button>
+<button id="dc-toggle" type="button">Comments</button>
+
+<script>
+(() => {
+  'use strict';
+  const FORMAT = 'dc-comments/1';
+  const CTX = 32; // prefix/suffix context length, chars
+  const doc = document.getElementById('doc');
+  const fab = document.getElementById('dc-fab');
+  const listEl = document.getElementById('dc-list');
+  const countEl = document.getElementById('dc-count');
+  const statusEl = document.getElementById('dc-status');
+  const sidebar = document.getElementById('dc-sidebar');
+  const storeKey = 'dc:' + document.title;
+
+  let comments = []; // {id, exact, prefix, suffix, text, created, resolved}
+  let ranges = new Map(); // id -> Range (null if orphaned)
+  let seq = 0;
+
+  // ---- text indexing: one global string over #doc's text nodes ----
+  function docText() {
+    const r = document.createRange();
+    r.selectNodeContents(doc);
+    return r.toString();
+  }
+  function globalOffset(container, offset) {
+    const r = document.createRange();
+    r.setStart(doc, 0);
+    r.setEnd(container, offset);
+    return r.toString().length;
+  }
+  function offsetsToRange(start, end) {
+    const walker = document.createTreeWalker(doc, NodeFilter.SHOW_TEXT);
+    let pos = 0, range = document.createRange(), haveStart = false;
+    while (walker.nextNode()) {
+      const node = walker.currentNode, len = node.data.length;
+      if (!haveStart && pos + len >= start) {
+        range.setStart(node, start - pos);
+        haveStart = true;
+      }
+      if (haveStart && pos + len >= end) {
+        range.setEnd(node, end - pos);
+        return range;
+      }
+      pos += len;
+    }
+    return null;
+  }
+
+  // ---- anchoring: TextQuoteSelector-style exact + prefix/suffix ----
+  function selectorFromRange(range) {
+    const text = docText();
+    const start = globalOffset(range.startContainer, range.startOffset);
+    const end = globalOffset(range.endContainer, range.endOffset);
+    return {
+      exact: text.slice(start, end),
+      prefix: text.slice(Math.max(0, start - CTX), start),
+      suffix: text.slice(end, end + CTX),
+    };
+  }
+  function locate(c) {
+    const text = docText();
+    let i = text.indexOf(c.prefix + c.exact + c.suffix);
+    if (i >= 0) return offsetsToRange(i + c.prefix.length, i + c.prefix.length + c.exact.length);
+    i = text.indexOf(c.exact);
+    if (i >= 0) return offsetsToRange(i, i + c.exact.length);
+    return null;
+  }
+  function reanchorAll() {
+    ranges = new Map(comments.map(c => [c.id, locate(c)]));
+    paint();
+  }
+
+  // ---- painting via CSS Custom Highlight API ----
+  const hl = typeof Highlight !== 'undefined' ? new Highlight() : null;
+  const hlActive = typeof Highlight !== 'undefined' ? new Highlight() : null;
+  if (hl) { CSS.highlights.set('dc-hl', hl); CSS.highlights.set('dc-hl-active', hlActive); }
+  function paint(activeId) {
+    if (!hl) return;
+    hl.clear(); hlActive.clear();
+    for (const [id, r] of ranges) {
+      if (!r) continue;
+      (id === activeId ? hlActive : hl).add(r);
+    }
+  }
+
+  // ---- persistence (best-effort; file:// storage varies by browser) ----
+  function save() {
+    try { localStorage.setItem(storeKey, JSON.stringify(comments)); } catch (e) { /* unavailable on some file:// setups */ }
+  }
+  function load() {
+    try {
+      const raw = localStorage.getItem(storeKey);
+      if (raw) comments = JSON.parse(raw);
+    } catch (e) { /* ignore */ }
+  }
+
+  // ---- sidebar rendering ----
+  function flash(msg) {
+    statusEl.textContent = msg;
+    setTimeout(() => { if (statusEl.textContent === msg) statusEl.textContent = ''; }, 2500);
+  }
+  function sortedComments() {
+    const pos = c => {
+      const r = ranges.get(c.id);
+      return r ? globalOffset(r.startContainer, r.startOffset) : Infinity; // orphans last
+    };
+    return [...comments].sort((a, b) => pos(a) - pos(b));
+  }
+  function render(editingId) {
+    countEl.textContent = comments.length ? '(' + comments.length + ')' : '';
+    listEl.textContent = '';
+    if (!comments.length) {
+      const p = document.createElement('p');
+      p.className = 'dc-empty';
+      p.textContent = 'No comments yet. Select text in the document to add one.';
+      listEl.appendChild(p);
+      return;
+    }
+    for (const c of sortedComments()) {
+      const item = document.createElement('div');
+      item.className = 'dc-item' + (c.resolved ? ' dc-resolved' : '');
+      item.dataset.id = c.id;
+
+      const quote = document.createElement('div');
+      quote.className = 'dc-quote';
+      quote.textContent = c.exact.length > 90 ? c.exact.slice(0, 90) + '…' : c.exact;
+      if (!ranges.get(c.id)) {
+        const tag = document.createElement('span');
+        tag.className = 'dc-orphan-tag';
+        tag.textContent = 'orphaned';
+        quote.appendChild(tag);
+      }
+      item.appendChild(quote);
+
+      if (c.id === editingId) {
+        const ta = document.createElement('textarea');
+        ta.value = c.text;
+        ta.placeholder = 'Write a comment… (⌘/Ctrl+Enter to save, Esc to cancel)';
+        ta.addEventListener('keydown', e => {
+          if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') commit();
+          if (e.key === 'Escape') cancel();
+        });
+        ta.addEventListener('click', e => e.stopPropagation());
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'dc-btn';
+        saveBtn.textContent = 'Save';
+        saveBtn.style.marginTop = '6px';
+        saveBtn.addEventListener('click', e => { e.stopPropagation(); commit(); });
+        function commit() {
+          c.text = ta.value.trim();
+          if (!c.text) return cancel();
+          save(); render();
+        }
+        function cancel() {
+          if (!c.text) { comments = comments.filter(x => x.id !== c.id); ranges.delete(c.id); paint(); }
+          save(); render();
+        }
+        item.appendChild(ta);
+        item.appendChild(saveBtn);
+        listEl.appendChild(item);
+        requestAnimationFrame(() => ta.focus());
+        continue;
+      }
+
+      const text = document.createElement('div');
+      text.className = 'dc-text';
+      text.textContent = c.text;
+      item.appendChild(text);
+
+      const meta = document.createElement('div');
+      meta.className = 'dc-meta';
+      const when = document.createElement('span');
+      when.textContent = c.created.slice(0, 10);
+      const resolved = document.createElement('label');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = !!c.resolved;
+      cb.addEventListener('click', e => e.stopPropagation());
+      cb.addEventListener('change', () => { c.resolved = cb.checked; save(); render(); });
+      resolved.append(cb, 'resolved');
+      const del = document.createElement('button');
+      del.className = 'dc-del';
+      del.textContent = 'delete';
+      del.addEventListener('click', e => {
+        e.stopPropagation();
+        comments = comments.filter(x => x.id !== c.id);
+        ranges.delete(c.id);
+        paint(); save(); render();
+      });
+      meta.append(when, resolved, del);
+      item.appendChild(meta);
+
+      item.addEventListener('click', () => {
+        const r = ranges.get(c.id);
+        if (!r) return flash('Anchor not found in this version of the document.');
+        const rect = r.getBoundingClientRect();
+        window.scrollTo({ top: window.scrollY + rect.top - 160, behavior: 'smooth' });
+        paint(c.id);
+        setTimeout(() => paint(), 2000);
+      });
+      // double-click text to edit
+      text.addEventListener('dblclick', e => { e.stopPropagation(); render(c.id); });
+      listEl.appendChild(item);
+    }
+  }
+
+  // ---- selection -> floating Comment button ----
+  document.addEventListener('mouseup', e => {
+    if (fab.contains(e.target)) return;
+    setTimeout(() => {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !sel.rangeCount) { fab.style.display = 'none'; return; }
+      const range = sel.getRangeAt(0);
+      if (!doc.contains(range.commonAncestorContainer) || !range.toString().trim()) {
+        fab.style.display = 'none';
+        return;
+      }
+      const rect = range.getBoundingClientRect();
+      fab.style.display = 'block';
+      fab.style.left = Math.min(rect.right + 8 + window.scrollX, window.scrollX + document.documentElement.clientWidth - 120) + 'px';
+      fab.style.top = (rect.top + window.scrollY - 4) + 'px';
+      fab.dataset.pending = '1';
+    }, 0);
+  });
+  fab.addEventListener('click', () => {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed) return;
+    const range = sel.getRangeAt(0);
+    const c = Object.assign({ id: 'c' + Date.now().toString(36) + (seq++), text: '', created: new Date().toISOString(), resolved: false }, selectorFromRange(range));
+    comments.push(c);
+    ranges.set(c.id, range.cloneRange());
+    paint(c.id);
+    sel.removeAllRanges();
+    fab.style.display = 'none';
+    sidebar.classList.add('dc-open');
+    render(c.id);
+  });
+
+  // ---- export / import ----
+  function payload() {
+    return JSON.stringify({
+      format: FORMAT,
+      doc: document.title,
+      exported: new Date().toISOString(),
+      comments: comments,
+    }, null, 2);
+  }
+  document.getElementById('dc-export').addEventListener('click', () => {
+    const blob = new Blob([payload()], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = (document.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'doc') + '.comments.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    flash('Downloaded.');
+  });
+  document.getElementById('dc-copy').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(payload()); flash('Copied to clipboard.'); }
+    catch (e) { flash('Clipboard blocked — use Export instead.'); }
+  });
+  document.getElementById('dc-import').addEventListener('click', () => document.getElementById('dc-file').click());
+  document.getElementById('dc-file').addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    file.text().then(raw => {
+      const data = JSON.parse(raw);
+      if (data.format !== FORMAT || !Array.isArray(data.comments)) { flash('Not a dc-comments file.'); return; }
+      const byId = new Map(comments.map(c => [c.id, c]));
+      for (const c of data.comments) byId.set(c.id, c);
+      comments = [...byId.values()];
+      reanchorAll(); save(); render();
+      flash('Imported ' + data.comments.length + ' comment(s).');
+    }).catch(() => flash('Could not parse that file.'));
+    e.target.value = '';
+  });
+
+  document.getElementById('dc-toggle').addEventListener('click', () => sidebar.classList.toggle('dc-open'));
+
+  // ---- init ----
+  load();
+  reanchorAll();
+  render();
+})();
+</script>
+<!-- ============ DC-COMMENTS END ============ -->
+</div>
+</body>
+</html>
