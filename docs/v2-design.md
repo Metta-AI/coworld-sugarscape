@@ -165,12 +165,13 @@ config option; the exact semantics of several are open (§9 group C).
 | area | config | notes |
 |---|---|---|
 | map | `height`, `width` | |
-| capacity | pre-made capacity distribution for sugar and spice | the default / the four hills Sugarscape normally uses, selectable by name; custom maps also specifiable (format open, C1) |
+| resources | — | **Decided (C5, 2026-08-07):** every world has both sugar and spice state — no single-resource mode. "Sugar-only" variants = zero spice capacity grid + zero spice metabolism ranges (CD exponent for spice becomes 0, welfare degrades to the classic sugar-only form). Uniform schemas everywhere; no trade validation needed since trade is policy-negotiated (E4) — a spiceless world just has nothing to exchange. C1's `two_hills` built-in = zero spice capacity |
+| capacity | named built-in or explicit grids | **Decided (C1, 2026-08-07):** built-ins `four_hills` (ranked default — classic sugar NE/SW + spice NW/SE terraced hills), `two_hills` (sugar-only classic), `flat` (uniform; debugging/baselines), generated deterministically in-sim from `height`×`width`; custom maps are **explicit per-cell integer capacity grids** per resource, dims validated against `height`×`width` — a map is data, never a program (no procedural custom spec; generation belongs to tooling) |
 | growback | growth rate for sugar; growth rate for spice | independently settable |
 | endowments | ranges from which agent endowments are drawn | including fertility, if fertility is enabled; which attributes exactly is open (D5) |
-| seasons | seasonal migration α, β, γ | exact semantics open (C2) |
-| pollution | production coefficient (harvesting), consumption coefficient (metabolism), diffusion, **decay rate** | decay is deliberate: pollution must not monotonically take over the map (C3) |
-| disease | disease characteristics | model open (C4) |
+| seasons | `season_length` (γ), `winter_divisor` (β) | **Decided (C2, 2026-08-07):** classic S_αβγ with integer semantics — N/S hemispheres swap summer/winter every `season_length` ticks; summer cells regrow at the normal growback rate every tick, winter cells regrow that amount only every `winter_divisor`-th tick. α is not a separate knob (it *is* the growback rate above); one climate governs both resources; all-integer math. Flagship ranked variant: seasons off (variant lever, not model spec). Phase-0 ordering → E8 |
+| pollution | `production_coef`, `consumption_coef`, `diffusion_interval`, `decay_rate`, `suppression_coef`, `toxicity_coef` | **Decided (C3, 2026-08-07):** classic linear sources — harvesting `h` adds `production_coef·h`, metabolism `m` adds `consumption_coef·m` to the cell; diffusion = 4-neighbor mean every `diffusion_interval` ticks over **fixed-point integer** pollution (floor division); decay subtractive per tick (`max(0, p − decay_rate)`) so land heals. Physical effects, **both shipped, independently configurable** (coefficient 0 disables): growback suppression (effective regrowth = `max(0, growback − suppression_coef·p)` — commons tragedy as physics) and metabolic toxicity (agents on the cell burn `floor(toxicity_coef·p)` extra — personal harm). Observation-only pollution rejected: under P2 it would be inert |
+| disease | `immune_length`, `disease_length`, `disease_count`, `initial_diseases_per_agent` | **Decided (C4, 2026-08-07):** classic bit-string model — agent immune strings, disease substrings; immune iff disease is a substring, else sick (+1 metabolism); immune response flips one bit per tick of the closest-matching substring (recovery = Hamming distance ticks); transmission passes one seeded-random disease per neighbor per tick. Specific persistent immunity; composes with D5 inheritance. Pure physics — policies interact only via observation (F1: sickness visibility) and movement |
 | features | enable/disable each mechanic | including agent capabilities: combat, trade, lending, fertility |
 | combat | α | the one behavior-adjacent constant we keep: it is physics (bounds combat's yield), not behavior |
 | scoring | `score_reduce` | §3 |
@@ -360,15 +361,22 @@ Grouped; tags reference the sections above.
 
 ### C. World mechanics
 
-- **C1.** Custom capacity map format (and what "the default or the four
-  hills" set of named built-ins contains exactly).
-- **C2.** Seasonal migration α, β, γ: exact semantics of each parameter.
-- **C3.** Pollution: functional form of production (harvest) and consumption
-  terms, diffusion schedule, decay rate application order.
-- **C4.** Disease model: classic bit-string immune systems, or something
-  simpler? Transmission, and whether policies see/act on infection.
-- **C5.** Are sugar *and* spice always both present, or is single-resource a
-  supported config?
+- **C1.** ~~Custom capacity map format and built-in set.~~ **Resolved
+  (2026-08-07):** explicit grids only; built-ins `four_hills`, `two_hills`,
+  `flat`. See §4.
+- **C2.** ~~Seasonal migration α, β, γ semantics.~~ **Resolved
+  (2026-08-07):** classic hemispheric rule, integer winter semantics,
+  `season_length` + `winter_divisor` config. See §4.
+- **C3.** ~~Pollution: functional forms, diffusion, decay.~~ **Resolved
+  (2026-08-07):** classic linear sources, fixed-point neighbor-mean
+  diffusion, subtractive decay, and two configurable physical effects
+  (growback suppression + metabolic toxicity). See §4. Application order
+  within phase 0 → E8.
+- **C4.** ~~Disease model.~~ **Resolved (2026-08-07):** classic bit-string
+  immune systems. Policies see/act on infection only via observation and
+  movement (visibility details → F1). See §4.
+- **C5.** ~~Single-resource support?~~ **Resolved (2026-08-07):** always
+  both; sugar-only = zero spice capacity + zero spice metabolism. See §4.
 
 ### D. Agent lifecycle
 
