@@ -188,9 +188,44 @@ vision, age, and whatever the enabled mechanics add (tribe/tags, immune
 state, fertility attributes, loans). Endowments are drawn from configured
 ranges at episode start.
 
-Lifecycle is largely **Open**: death causes and timing (D2), max age (D1),
-whether anything replaces a dead agent (D3 — P3's fixed pool suggests no),
-inheritance (D4), and what a newborn inherits from parents (D5).
+Lifecycle:
+
+- **Max age: Decided (D1, 2026-08-07).** Drawn per-agent at episode start
+  (seeded) from config range `max_age: [min, max]`, classic ranked default
+  `[60, 100]`; `null` = immortal (variant lever). With B1's 1000-tick
+  episodes this forces ~10–15 generations — the partner mechanism to B5's
+  `sum` reduce: reproduction becomes strategically necessary, not optional.
+  Under integrated wellness, age death is amortized (full life's welfare
+  already accrued), never a cliff.
+- **Death causes: Decided (D2, 2026-08-07).** Starvation (cannot pay a
+  tick's metabolism from holdings), old age (D1), and combat if E2 resolves
+  lethally. *When* in the timestep death is checked → E8.
+- **No replacement: Decided (D3, 2026-08-07).** P3's fixed pool + P1
+  (every agent belongs to a seat) preclude batch-style replacement;
+  reproduction (E5) is the only source of new agents.
+- **Estate: inherit, else drop. (Decided — D4, 2026-08-07)** A dead agent's
+  holdings split by integer division among living children (possibly
+  cross-seat per A2 — under `sum`, inheritance makes mating an investment,
+  not just a lottery); the remainder, and the whole estate when no child
+  lives, drops on the death cell as harvestable resource. Cell levels may
+  exceed capacity; growback simply doesn't apply above capacity.
+  Inheritance is feature-flagged, ranked default on. E&A's
+  inequality-amplifier caution doesn't bite within one bounded episode
+  (P3). E6 hook: classic lending ties outstanding debts to heirs — E6
+  owns that linkage.
+- **Endowments and newborn genetics: Decided (D5, 2026-08-07).** At t=0
+  each agent draws, seeded, from configured ranges: initial sugar + spice
+  holdings, per-resource metabolism, vision, max age (D1), and — when the
+  features are on — sex, fertility window (childbearing start/end ages),
+  and an immune bit-string (C4). Newborns follow the full classic rule S:
+  vision and each metabolism by per-attribute 50/50 crossover; immune
+  string by bitwise crossover (inherited resistance); **each parent
+  contributes half of its own initial endowment as the child's starting
+  wealth** — mating's price tag, and the reason E5 gates fertility on
+  wealth; max age, sex, and fertility window drawn fresh. Consequence:
+  genes and estates (D4) both flow through lineages — mate choice is
+  genetic strategy, episode-bounded per P3, and partially benefits rival
+  seats via A2's cross-seat children.
 
 ## 6. The timestep
 
@@ -380,16 +415,19 @@ Grouped; tags reference the sections above.
 
 ### D. Agent lifecycle
 
-- **D1.** Max age: enabled? drawn from a configured range?
-- **D2.** Death causes (starvation, age, combat) and *when* in the phase
-  order death is checked; what happens to holdings on death (inheritance —
-  D4 — or vanish, or drop on the cell?).
-- **D3.** Replacement on death: P3 implies no replacement (fixed pool,
-  fixed length) — confirm.
-- **D4.** Inheritance: enabled at all? (P3's rationale mentions it as a
-  wealth-accumulation vector; within a single episode it may be fine.)
-- **D5.** Endowment attribute list and ranges; what a newborn inherits
-  (genetics: vision/metabolism crossover as in the classic?).
+- **D1.** ~~Max age.~~ **Resolved (2026-08-07):** per-agent draw from config
+  range, ranked default [60,100], null = immortal. See §5.
+- **D2.** ~~Death causes and holdings disposal.~~ **Resolved (2026-08-07):**
+  starvation / age / combat; estate per D4. Timing within the timestep →
+  E8. See §5.
+- **D3.** ~~Replacement on death.~~ **Resolved (2026-08-07):** confirmed —
+  no replacement. See §5.
+- **D4.** ~~Inheritance.~~ **Resolved (2026-08-07):** on (feature-flagged,
+  ranked default on) — split among living children, else drop on cell.
+  See §5.
+- **D5.** ~~Endowments and newborn genetics.~~ **Resolved (2026-08-07):**
+  full classic — crossover genetics, half-initial-endowment parental
+  contributions, fresh draws for age/sex/fertility. See §5.
 
 ### E. Actions and phases
 
