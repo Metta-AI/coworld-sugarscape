@@ -1,7 +1,0 @@
-<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
-<title>Sugarscape player policy</title><style>body{max-width:760px;margin:3rem auto;padding:0 1rem;background:#11110e;color:#eee6d5;font:16px/1.55 system-ui}code,pre{background:#22221c;padding:.15rem .35rem}pre{padding:1rem;overflow:auto}h1{font-size:1.6rem}</style></head>
-<body><h1>Sugarscape player-policy socket</h1><p>Connect a policy to <code>/player?slot=0&amp;token=…</code>. In the default game, one authenticated socket controls one agent's sequential movement decisions.</p>
-<pre>observation → {"type":"observation","requestId":1,"agent":{…},"candidates":[…]}
-action      ← {"type":"action","requestId":1,"cell":123}</pre>
-<p>An invalid, late, or missing action falls back to the greedy-best legal cell and is counted in results.</p></body></html>

@@ -1,0 +1,1639 @@
+<!-- ARCHIVED: Sugarscape v1 is archival-only; do not extend or release this code. -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Sugarscape Observatory</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #f7f2e8;
+      --muted: #91a1a8;
+      --faint: #60717a;
+      --canvas: #071014;
+      --panel: rgba(13, 25, 31, .88);
+      --panel-strong: #0f2028;
+      --line: rgba(145, 178, 188, .18);
+      --line-strong: rgba(145, 178, 188, .32);
+      --gold: #f4c15d;
+      --teal: #46d2c4;
+      --coral: #ff785f;
+      --pink: #ff7897;
+      --shadow: 0 22px 60px rgba(0, 0, 0, .28);
+    }
+    * { box-sizing: border-box }
+    html { background: #071014 }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 12% -10%, rgba(70, 210, 196, .13), transparent 30rem),
+        radial-gradient(circle at 92% 12%, rgba(244, 193, 93, .11), transparent 34rem),
+        linear-gradient(145deg, #071014 0%, #0a151a 48%, #081116 100%);
+      color: var(--ink);
+      font: 14px/1.45 Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+    }
+    body::before {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      background-image:
+        linear-gradient(rgba(255, 255, 255, .018) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, .018) 1px, transparent 1px);
+      background-size: 42px 42px;
+      content: "";
+      mask-image: linear-gradient(to bottom, black, transparent 75%);
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      min-height: 86px;
+      padding: 16px clamp(18px, 3vw, 44px);
+      background: rgba(7, 16, 20, .72);
+      border-bottom: 1px solid var(--line);
+      backdrop-filter: blur(18px);
+    }
+    .brand { display: grid; gap: 5px }
+    .eyebrow {
+      color: var(--teal);
+      font: 700 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+    }
+    h1 {
+      margin: 0;
+      font: 650 clamp(22px, 2vw, 30px)/1 ui-sans-serif, system-ui;
+      letter-spacing: -.035em;
+    }
+    h1 span {
+      color: var(--gold);
+      font-weight: 450;
+    }
+    .header-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .header-chip, .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 34px;
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(15, 32, 40, .72);
+      color: var(--muted);
+      font: 700 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .status-pill::before {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--gold);
+      box-shadow: 0 0 0 4px rgba(244, 193, 93, .11);
+      content: "";
+    }
+    .status-pill[data-state="live"] { color: var(--teal) }
+    .status-pill[data-state="live"]::before {
+      background: var(--teal);
+      box-shadow: 0 0 0 4px rgba(70, 210, 196, .11), 0 0 14px var(--teal);
+    }
+    h2 {
+      margin: 0;
+      color: var(--ink);
+      font-size: 11px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+    .section-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .section-kicker {
+      color: var(--faint);
+      font: 700 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+    button, select, input {
+      border: 1px solid var(--line);
+      background: rgba(5, 13, 17, .84);
+      color: var(--ink);
+      font: inherit;
+      transition: border-color .16s ease, background .16s ease, transform .16s ease;
+    }
+    button, select {
+      min-height: 36px;
+      padding: 6px 11px;
+      border-radius: 8px;
+    }
+    button {
+      cursor: pointer;
+      font-weight: 750;
+    }
+    button:hover {
+      transform: translateY(-1px);
+      border-color: rgba(244, 193, 93, .7);
+      background: rgba(244, 193, 93, .08);
+    }
+    button:focus-visible, select:focus-visible, input:focus-visible {
+      outline: 2px solid var(--teal);
+      outline-offset: 2px;
+    }
+    #play {
+      min-width: 96px;
+      border-color: rgba(244, 193, 93, .4);
+      background: linear-gradient(135deg, rgba(244, 193, 93, .19), rgba(244, 193, 93, .07));
+      color: #ffe1a1;
+    }
+    input[type="range"] {
+      height: 4px;
+      border: 0;
+      border-radius: 999px;
+      accent-color: var(--gold);
+      cursor: pointer;
+    }
+    label { color: var(--muted) }
+    main {
+      display: grid;
+      grid-template-columns: minmax(520px, 1fr) minmax(360px, 430px);
+      gap: clamp(14px, 1.5vw, 24px);
+      width: min(1760px, 100%);
+      margin: 0 auto;
+      padding: clamp(14px, 2vw, 28px);
+    }
+    .surface {
+      background: linear-gradient(145deg, rgba(16, 32, 39, .94), rgba(10, 21, 27, .9));
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+    }
+    .world-pane {
+      min-width: 0;
+      padding: clamp(12px, 1.4vw, 20px);
+    }
+    .control-deck {
+      display: grid;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .transport {
+      display: grid;
+      grid-template-columns: auto minmax(170px, 1fr) auto;
+      gap: 12px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--line);
+    }
+    .button-group { display: flex; gap: 7px }
+    .timeline-wrap {
+      display: grid;
+      grid-template-columns: auto minmax(120px, 1fr);
+      align-items: center;
+      gap: 10px;
+      color: var(--faint);
+      font: 700 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    #timeline { width: 100% }
+    #frame-label {
+      justify-self: end;
+      color: var(--muted);
+      font: 700 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      white-space: nowrap;
+    }
+    .view-controls { justify-content: space-between }
+    .view-options { display: flex; flex-wrap: wrap; gap: 8px }
+    .select-control {
+      display: grid;
+      grid-template-columns: auto auto;
+      align-items: center;
+      gap: 8px;
+      padding-left: 10px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: rgba(5, 13, 17, .5);
+      color: var(--faint);
+      font: 700 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+    }
+    .select-control select {
+      border-width: 0 0 0 1px;
+      border-radius: 0 8px 8px 0;
+    }
+    .toggle-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 36px;
+      padding: 0 11px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: rgba(5, 13, 17, .5);
+      font-size: 12px;
+    }
+    .toggle-control input { accent-color: var(--teal) }
+    .world-shell {
+      position: relative;
+      overflow: hidden;
+      padding: 7px;
+      border: 1px solid var(--line-strong);
+      border-radius: 14px;
+      background: #061014;
+      box-shadow: inset 0 0 40px rgba(0, 0, 0, .35);
+    }
+    .world-caption {
+      position: absolute;
+      z-index: 2;
+      top: 18px;
+      left: 18px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 9px;
+      border: 1px solid rgba(255, 255, 255, .1);
+      border-radius: 7px;
+      background: rgba(3, 10, 13, .72);
+      color: rgba(247, 242, 232, .72);
+      font: 700 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      backdrop-filter: blur(8px);
+      pointer-events: none;
+    }
+    .world-caption::before {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--coral);
+      box-shadow: 0 0 10px var(--coral);
+      content: "";
+    }
+    #world {
+      display: block;
+      width: 100%;
+      aspect-ratio: 1;
+      background: var(--canvas);
+      border-radius: 9px;
+      image-rendering: pixelated;
+      cursor: crosshair;
+    }
+    aside {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      gap: 12px;
+    }
+    section {
+      padding: 15px;
+    }
+    dl {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin: 0;
+    }
+    .metric {
+      display: grid;
+      gap: 5px;
+      min-width: 0;
+      padding: 10px;
+      border: 1px solid rgba(145, 178, 188, .12);
+      border-radius: 10px;
+      background: rgba(4, 12, 16, .48);
+    }
+    dt {
+      overflow: hidden;
+      color: var(--faint);
+      font: 700 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: .06em;
+      text-overflow: ellipsis;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    dd {
+      margin: 0;
+      color: var(--ink);
+      font: 720 clamp(17px, 1.4vw, 22px)/1 ui-sans-serif, system-ui;
+      letter-spacing: -.025em;
+    }
+    .legend {
+      display: grid;
+      grid-template-columns: 10px 1fr;
+      gap: 8px 10px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .dot {
+      width: 9px;
+      height: 9px;
+      border: 2px solid rgba(255, 255, 255, .28);
+      border-radius: 50%;
+      box-shadow: 0 0 12px currentColor;
+    }
+    .inspection-card { flex: 0 0 auto }
+    #inspect {
+      min-height: 58px;
+      color: var(--muted);
+      font: 11px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+      white-space: pre-wrap;
+    }
+    .analysis-card { min-height: 0 }
+    .analysis-card .section-heading { margin-bottom: 10px }
+    .chart-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+    .chart-grid figure {
+      overflow: hidden;
+      margin: 0;
+      min-width: 0;
+      padding: 10px;
+      border: 1px solid rgba(145, 178, 188, .13);
+      border-radius: 11px;
+      background: rgba(4, 12, 16, .45);
+    }
+    .chart-grid figcaption {
+      margin-bottom: 8px;
+      color: var(--muted);
+      font: 700 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+    }
+    .chart-grid canvas {
+      display: block;
+      width: 100%;
+      height: 116px;
+      background: linear-gradient(180deg, rgba(9, 24, 29, .8), rgba(4, 12, 16, .82));
+      border: 1px solid rgba(145, 178, 188, .1);
+      border-radius: 7px;
+    }
+    .series-control { margin-left: auto }
+    @media (max-width: 1100px) {
+      main { grid-template-columns: 1fr }
+      aside {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .analysis-card { grid-column: 1 / -1 }
+      .chart-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) }
+    }
+    @media (max-width: 720px) {
+      body { overflow-x: hidden }
+      header {
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+      }
+      .header-chip { display: none }
+      .header-meta { margin-left: auto }
+      main { grid-template-columns: minmax(0, 1fr); padding: 10px }
+      .world-pane { padding: 10px }
+      .transport { grid-template-columns: minmax(0, 1fr) auto }
+      .timeline-wrap { grid-column: 1 / -1; grid-row: 2 }
+      .view-controls { align-items: stretch }
+      .view-options, .select-control { width: 100% }
+      .select-control { grid-template-columns: 64px 1fr }
+      .select-control select { width: 100% }
+      section { min-width: 0 }
+      .section-heading { flex-wrap: wrap }
+      .section-kicker { display: none }
+      .series-control { margin-left: 0 }
+      aside { display: flex }
+      .chart-grid { grid-template-columns: 1fr }
+    }
+    @media (max-width: 460px) {
+      .eyebrow { display: none }
+      header { min-height: 68px; padding: 14px }
+      h1 { font-size: 21px }
+      #frame-label { display: none }
+      dl { grid-template-columns: 1fr 1fr }
+      .button-group { width: 100% }
+      #play { flex: 1 }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <span class="eyebrow">Complex adaptive systems</span>
+      <h1>Sugarscape <span>Observatory</span></h1>
+    </div>
+    <div class="header-meta">
+      <span class="header-chip" id="headline-timestep">timestep —</span>
+      <span class="status-pill" id="status" data-state="connecting">connecting</span>
+    </div>
+  </header>
+  <main>
+    <div class="world-pane surface">
+      <div class="control-deck">
+        <div class="transport">
+          <div class="button-group">
+            <button id="play" type="button">Ⅱ Pause</button>
+            <button id="back" type="button" aria-label="Previous frame">−1</button>
+            <button id="forward" type="button" aria-label="Next frame">+1</button>
+          </div>
+          <label class="select-control"><span>Speed</span>
+            <select id="speed">
+              <option value="0.5">0.5×</option>
+              <option value="1" selected>1×</option>
+              <option value="2">2×</option>
+              <option value="4">4×</option>
+              <option value="8">8×</option>
+            </select>
+          </label>
+          <label class="timeline-wrap">
+            <span>History</span>
+            <input id="timeline" type="range" min="0" max="0" value="0"
+              aria-label="Replay frame">
+          </label>
+          <span id="frame-label">frame 0 / 0</span>
+        </div>
+        <div class="toolbar view-controls">
+          <div class="view-options">
+            <label class="select-control"><span>Cells</span>
+              <select id="cell-mode">
+                <option value="resources">sugar + spice</option>
+                <option value="pollution">pollution</option>
+              </select>
+            </label>
+            <label class="select-control"><span>Agents</span>
+              <select id="agent-mode">
+                <option value="decisionModel">decision model</option>
+                <option value="depressed">depression</option>
+                <option value="sick">disease</option>
+                <option value="metabolism">metabolism</option>
+                <option value="movement">movement</option>
+                <option value="race">race</option>
+                <option value="sex">sex</option>
+                <option value="tribe">tribe</option>
+                <option value="vision">vision</option>
+              </select>
+            </label>
+          </div>
+          <label class="toggle-control">
+            <input id="links" type="checkbox"> social links
+          </label>
+        </div>
+      </div>
+      <div class="world-shell">
+        <div class="world-caption" id="world-timestep">resource field · t—</div>
+        <canvas id="world" width="900" height="900"></canvas>
+      </div>
+    </div>
+    <aside>
+      <section class="surface">
+        <div class="section-heading">
+          <h2>Episode pulse</h2>
+          <span class="section-kicker">Live telemetry</span>
+        </div>
+        <dl id="stats"></dl>
+      </section>
+      <section class="surface">
+        <div class="section-heading">
+          <h2>Populations</h2>
+          <span class="section-kicker">Agent cohorts</span>
+        </div>
+        <div class="legend" id="legend"></div>
+      </section>
+      <section class="surface inspection-card">
+        <div class="section-heading">
+          <h2>Inspection</h2>
+          <span class="section-kicker">Cell detail</span>
+        </div>
+        <div id="inspect">Click a cell to inspect it.</div>
+      </section>
+      <section class="surface analysis-card">
+        <div class="section-heading">
+          <h2>World telemetry</h2>
+          <label class="select-control series-control"><span>Series</span>
+            <select id="series">
+              <option value="population">population</option>
+              <option value="meanWealth">mean wealth</option>
+              <option value="giniCoefficient">Gini</option>
+              <option value="meanHappiness">mean happiness</option>
+              <option value="carryingCapacity">carrying capacity</option>
+              <option value="tradeVolume">trade volume</option>
+              <option value="loanVolume">loan volume</option>
+            </select>
+          </label>
+        </div>
+        <div class="chart-grid">
+          <figure>
+            <figcaption id="series-caption">Time series</figcaption>
+            <canvas id="series-chart" width="320" height="150"></canvas>
+          </figure>
+          <figure>
+            <figcaption>Wealth distribution</figcaption>
+            <canvas id="histogram" width="320" height="150"></canvas>
+          </figure>
+          <figure>
+            <figcaption>Equality profile</figcaption>
+            <canvas id="lorenz" width="320" height="150"></canvas>
+          </figure>
+        </div>
+      </section>
+    </aside>
+  </main>
+<script>
+const world = document.querySelector("#world");
+const worldContext = world.getContext("2d");
+const statusElement = document.querySelector("#status");
+const headlineTimestep = document.querySelector("#headline-timestep");
+const worldTimestep = document.querySelector("#world-timestep");
+const statsElement = document.querySelector("#stats");
+const legendElement = document.querySelector("#legend");
+const inspectElement = document.querySelector("#inspect");
+const playButton = document.querySelector("#play");
+const backButton = document.querySelector("#back");
+const forwardButton = document.querySelector("#forward");
+const speedSelect = document.querySelector("#speed");
+const timeline = document.querySelector("#timeline");
+const frameLabel = document.querySelector("#frame-label");
+const cellMode = document.querySelector("#cell-mode");
+const agentMode = document.querySelector("#agent-mode");
+const linksToggle = document.querySelector("#links");
+const seriesSelect = document.querySelector("#series");
+const seriesCaption = document.querySelector("#series-caption");
+const seriesChart = document.querySelector("#series-chart");
+const histogram = document.querySelector("#histogram");
+const lorenz = document.querySelector("#lorenz");
+
+const palette = [
+  "#ff785f", "#46d2c4", "#aa8cff", "#f4c15d",
+  "#78d78b", "#ff7897", "#66a6ff", "#f39b59",
+];
+const linkColors = {friend: "#8ecae6", mate: "#ff7aa2", loan: "#ffd166"};
+const replayUrl = new URLSearchParams(location.search).get("replay");
+const staticReplayMode = replayUrl !== null;
+const frames = [];
+const frameIndexes = new Map();
+const seriesCache = new Map();
+let frameIndex = -1;
+let playing = !staticReplayMode;
+let inspectedCell = -1;
+let observedWealthMaximum = 1;
+let currentStreamId = null;
+let compactReplay = null;
+let compactCells = null;
+let compactCellFrame = -1;
+let decodedFrame = null;
+let decodedFrameIndex = -1;
+let timelineRuntime = null;
+
+function frameCount() {
+  return compactReplay ? compactReplay.frames.length : frames.length;
+}
+
+function applyCellDelta(cells, changes) {
+  for (const change of changes) {
+    if (!Array.isArray(change) || change.length !== 4) {
+      throw new Error("invalid compact replay cell delta");
+    }
+    const index = Number(change[0]);
+    if (!Number.isInteger(index) || index < 0 || index >= cells.length) {
+      throw new Error("compact replay cell index is out of range");
+    }
+    cells[index] = [change[1], change[2], change[3]];
+  }
+}
+
+function compactCellsAt(index) {
+  if (
+    compactCells !== null && compactCellFrame + 1 === index &&
+    compactReplay.frames[index][1] === 0
+  ) {
+    applyCellDelta(compactCells, compactReplay.frames[index][2]);
+    compactCellFrame = index;
+    return compactCells;
+  }
+
+  let keyframe = index;
+  while (keyframe > 0 && compactReplay.frames[keyframe][1] !== 1) {
+    keyframe -= 1;
+  }
+  if (compactReplay.frames[keyframe][1] !== 1) {
+    throw new Error("compact replay does not have a preceding keyframe");
+  }
+  compactCells = compactReplay.frames[keyframe][2].map((cell) => cell.slice());
+  for (let frame = keyframe + 1; frame <= index; frame += 1) {
+    const encoded = compactReplay.frames[frame];
+    if (encoded[1] === 1) {
+      compactCells = encoded[2].map((cell) => cell.slice());
+    } else {
+      applyCellDelta(compactCells, encoded[2]);
+    }
+  }
+  compactCellFrame = index;
+  return compactCells;
+}
+
+function compactFrameAt(index) {
+  if (decodedFrameIndex === index) return decodedFrame;
+  const encoded = compactReplay.frames[index];
+  if (!Array.isArray(encoded) || encoded.length !== 6) {
+    throw new Error("invalid compact replay frame");
+  }
+  const agents = encoded[3].map((row) => {
+    if (!Array.isArray(row) || row.length !== compactReplay.agentFields.length) {
+      throw new Error("invalid compact replay agent");
+    }
+    return Object.fromEntries(
+      compactReplay.agentFields.map((field, fieldIndex) => [field, row[fieldIndex]]),
+    );
+  });
+  if (!Array.isArray(encoded[5]) || encoded[5].length !== compactReplay.statFields.length) {
+    throw new Error("invalid compact replay statistics");
+  }
+  const stats = Object.fromEntries(
+    compactReplay.statFields.map((field, fieldIndex) => [field, encoded[5][fieldIndex]]),
+  );
+  decodedFrame = {
+    format: "sugarscape.frame.v1",
+    timestep: encoded[0],
+    width: compactReplay.width,
+    height: compactReplay.height,
+    cells: compactCellsAt(index),
+    agents,
+    links: encoded[4],
+    slots: compactReplay.slots,
+    stats,
+  };
+  decodedFrameIndex = index;
+  return decodedFrame;
+}
+
+function frameAt(index) {
+  if (index < 0 || index >= frameCount()) return null;
+  return compactReplay ? compactFrameAt(index) : frames[index];
+}
+
+function seriesValue(frame, key) {
+  return key === "population"
+    ? frame.agents.length
+    : Number((frame.stats || {})[key] ?? 0);
+}
+
+function appendSeriesValue(key, timestep, value) {
+  let cache = seriesCache.get(key);
+  if (!cache) {
+    cache = {points: [], minimums: [], maximums: []};
+    seriesCache.set(key, cache);
+  }
+  const previousMinimum = cache.minimums.at(-1) ?? value;
+  const previousMaximum = cache.maximums.at(-1) ?? value;
+  cache.points.push([timestep, value]);
+  cache.minimums.push(Math.min(previousMinimum, value));
+  cache.maximums.push(Math.max(previousMaximum, value));
+}
+
+function appendSeriesFrame(frame) {
+  for (const key of [
+    "population", "meanWealth", "giniCoefficient", "meanHappiness",
+    "carryingCapacity", "tradeVolume", "loanVolume",
+  ]) {
+    appendSeriesValue(key, frame.timestep, seriesValue(frame, key));
+  }
+}
+
+function indexStaticSeries() {
+  seriesCache.clear();
+  observedWealthMaximum = 1;
+  if (compactReplay) {
+    const sugarIndex = compactReplay.agentFields.indexOf("sugar");
+    const spiceIndex = compactReplay.agentFields.indexOf("spice");
+    const statisticIndexes = new Map(
+      compactReplay.statFields.map((field, index) => [field, index]),
+    );
+    for (const encoded of compactReplay.frames) {
+      for (const key of [
+        "population", "meanWealth", "giniCoefficient", "meanHappiness",
+        "carryingCapacity", "tradeVolume", "loanVolume",
+      ]) {
+        const value = key === "population"
+          ? encoded[3].length
+          : Number(encoded[5][statisticIndexes.get(key)] ?? 0);
+        appendSeriesValue(key, encoded[0], value);
+      }
+      for (const agent of encoded[3]) {
+        observedWealthMaximum = Math.max(
+          observedWealthMaximum,
+          Number(agent[sugarIndex]) + Number(agent[spiceIndex]),
+        );
+      }
+    }
+    return;
+  }
+  for (let index = 0; index < frameCount(); index += 1) {
+    const frame = frameAt(index);
+    appendSeriesFrame(frame);
+    observeChartDomains(frame);
+  }
+  decodedFrame = null;
+  decodedFrameIndex = -1;
+  compactCells = null;
+  compactCellFrame = -1;
+}
+
+function hashValue(value) {
+  const text = String(value);
+  let hash = 2166136261;
+  for (const character of text) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return Math.abs(hash);
+}
+
+function categoricalColor(value) {
+  return palette[hashValue(value) % palette.length];
+}
+
+function numericColor(value, maximum) {
+  const ratio = Math.max(0, Math.min(1, Number(value) / Math.max(1, maximum)));
+  const hue = 210 - ratio * 210;
+  return `hsl(${hue} 75% 58%)`;
+}
+
+function agentColor(agent, frame) {
+  const mode = agentMode.value;
+  if (mode === "decisionModel") {
+    return agent.slot >= 0
+      ? palette[agent.slot % palette.length]
+      : categoricalColor(agent.decisionModel);
+  }
+  if (mode === "depressed") return agent.depressed ? "#708090" : "#f1c75b";
+  if (mode === "sick") return agent.sick ? "#b76cff" : "#70c36b";
+  if (mode === "metabolism") {
+    const values = frame.agents.map(
+      (item) => item.sugarMetabolism + item.spiceMetabolism,
+    );
+    return numericColor(
+      agent.sugarMetabolism + agent.spiceMetabolism,
+      Math.max(...values, 1),
+    );
+  }
+  if (mode === "movement" || mode === "vision") {
+    return numericColor(
+      agent[mode],
+      Math.max(...frame.agents.map((item) => item[mode]), 1),
+    );
+  }
+  return categoricalColor(agent[mode]);
+}
+
+function resourceColor(cell) {
+  const [sugar, spice] = cell;
+  const magnitude = Math.min(1, (sugar + spice) / 10);
+  const total = sugar + spice || 1;
+  const sugarShare = sugar / total;
+  const spiceShare = spice / total;
+  const red = Math.round(10 + magnitude * (210 * sugarShare + 34 * spiceShare));
+  const green = Math.round(18 + magnitude * (126 * sugarShare + 150 * spiceShare));
+  const blue = Math.round(23 + magnitude * (30 * sugarShare + 164 * spiceShare));
+  return `rgb(${red} ${green} ${blue})`;
+}
+
+function pollutionColor(cell, maximum) {
+  const ratio = Math.max(0, Math.min(1, cell[2] / Math.max(1, maximum)));
+  const red = Math.round(12 + ratio * 190);
+  const green = Math.round(20 + ratio * 64);
+  const blue = Math.round(27 + ratio * 125);
+  return `rgb(${red} ${green} ${blue})`;
+}
+
+function visualNoise(value, salt = 0) {
+  const mixed = Math.imul(value + salt + 1, 2654435761) >>> 0;
+  return (mixed % 1000) / 1000;
+}
+
+function drawResourceTile(cell, index, x, y, width, height) {
+  const [sugar, spice] = cell;
+  const unit = Math.min(width, height);
+  worldContext.fillStyle = "#0b191b";
+  worldContext.fillRect(x, y, Math.ceil(width), Math.ceil(height));
+  worldContext.globalAlpha = .5;
+  worldContext.fillStyle = resourceColor(cell);
+  worldContext.fillRect(x, y, Math.ceil(width), Math.ceil(height));
+  worldContext.globalAlpha = 1;
+
+  const grainX = x + visualNoise(index, 11) * width;
+  const grainY = y + visualNoise(index, 29) * height;
+  worldContext.fillStyle = "rgba(215, 239, 224, .12)";
+  worldContext.fillRect(grainX, grainY, Math.max(1, unit * .05), Math.max(1, unit * .05));
+
+  const sugarPieces = Math.min(3, Math.ceil(sugar / 2));
+  for (let piece = 0; piece < sugarPieces; piece += 1) {
+    const centerX = x + width * (.24 + piece * .09);
+    const centerY = y + height * (.7 - (piece % 2) * .13);
+    const radius = Math.max(1.2, unit * (.08 + Math.min(4, sugar) * .008));
+    worldContext.beginPath();
+    worldContext.moveTo(centerX, centerY - radius * 1.45);
+    worldContext.lineTo(centerX + radius, centerY);
+    worldContext.lineTo(centerX, centerY + radius);
+    worldContext.lineTo(centerX - radius, centerY);
+    worldContext.lineTo(centerX, centerY - radius * 1.45);
+    worldContext.fillStyle = piece === 0 ? "#ffe078" : "#e9a938";
+    worldContext.fill();
+  }
+
+  const spicePods = Math.min(3, Math.ceil(spice / 2));
+  for (let pod = 0; pod < spicePods; pod += 1) {
+    const centerX = x + width * (.68 + pod * .08);
+    const centerY = y + height * (.68 - (pod % 2) * .14);
+    const radius = Math.max(1.1, unit * (.07 + Math.min(4, spice) * .007));
+    worldContext.beginPath();
+    worldContext.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    worldContext.fillStyle = pod === 0 ? "#d98cff" : "#9e5cce";
+    worldContext.fill();
+    worldContext.fillStyle = "rgba(255, 236, 255, .65)";
+    worldContext.fillRect(
+      centerX - radius * .3,
+      centerY - radius * .55,
+      Math.max(1, radius * .35),
+      Math.max(1, radius * .35),
+    );
+  }
+}
+
+function drawPollutionTile(cell, index, x, y, width, height, maximum) {
+  const unit = Math.min(width, height);
+  const ratio = Math.max(0, Math.min(1, cell[2] / Math.max(1, maximum)));
+  worldContext.fillStyle = pollutionColor(cell, maximum);
+  worldContext.fillRect(x, y, Math.ceil(width), Math.ceil(height));
+  worldContext.globalAlpha = .16 + ratio * .32;
+  const bubbles = Math.ceil(ratio * 4);
+  for (let bubble = 0; bubble < bubbles; bubble += 1) {
+    const centerX = x + (.2 + visualNoise(index, bubble * 17) * .6) * width;
+    const centerY = y + (.22 + visualNoise(index, bubble * 31) * .58) * height;
+    worldContext.beginPath();
+    worldContext.arc(
+      centerX,
+      centerY,
+      Math.max(1.2, unit * (.05 + bubble * .012)),
+      0,
+      Math.PI * 2,
+    );
+    worldContext.fillStyle = bubble % 2 === 0 ? "#ffbc4a" : "#ce7dff";
+    worldContext.fill();
+  }
+  worldContext.globalAlpha = 1;
+}
+
+function drawAgentSprite(agent, frame, scaleX, scaleY) {
+  const position = agentPosition(frame, agent);
+  const unit = Math.min(scaleX, scaleY);
+  const centerX = (position.x + .5) * scaleX;
+  const bob = Math.sin((frame.timestep + agent.id * 3) * .7) * unit * .025;
+  const centerY = (position.y + .5) * scaleY + bob;
+  const radius = Math.max(2, unit * .43);
+  const color = agentColor(agent, frame);
+
+  if (unit < 8) {
+    worldContext.beginPath();
+    worldContext.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    worldContext.fillStyle = color;
+    worldContext.fill();
+    return;
+  }
+
+  worldContext.beginPath();
+  worldContext.arc(centerX, centerY + radius * .58, radius * .5, 0, Math.PI * 2);
+  worldContext.fillStyle = "rgba(0, 0, 0, .38)";
+  worldContext.fill();
+
+  worldContext.fillStyle = "#172126";
+  worldContext.fillRect(
+    centerX - radius * .36,
+    centerY + radius * .34,
+    radius * .24,
+    radius * .38,
+  );
+  worldContext.fillRect(
+    centerX + radius * .12,
+    centerY + radius * .34,
+    radius * .24,
+    radius * .38,
+  );
+
+  worldContext.shadowColor = color;
+  worldContext.shadowBlur = Math.max(3, unit * .16);
+  worldContext.beginPath();
+  worldContext.moveTo(centerX - radius * .58, centerY + radius * .38);
+  worldContext.lineTo(centerX - radius * .42, centerY - radius * .28);
+  worldContext.lineTo(centerX, centerY - radius * .48);
+  worldContext.lineTo(centerX + radius * .42, centerY - radius * .28);
+  worldContext.lineTo(centerX + radius * .58, centerY + radius * .38);
+  worldContext.lineTo(centerX, centerY + radius * .56);
+  worldContext.lineTo(centerX - radius * .58, centerY + radius * .38);
+  worldContext.fillStyle = color;
+  worldContext.fill();
+  worldContext.shadowBlur = 0;
+  worldContext.strokeStyle = "rgba(2, 10, 13, .9)";
+  worldContext.lineWidth = Math.max(1, unit * .06);
+  worldContext.stroke();
+
+  const skinTones = ["#f2c6a0", "#d89a72", "#a9684b", "#70412f"];
+  const skinToneIndex = Math.min(
+    skinTones.length - 1,
+    Math.floor(
+      visualNoise(agent.id, Number(agent.race) || 0) * skinTones.length,
+    ),
+  );
+  const skinTone = skinTones[skinToneIndex];
+  worldContext.beginPath();
+  worldContext.arc(
+    centerX,
+    centerY - radius * .55,
+    radius * .34,
+    0,
+    Math.PI * 2,
+  );
+  worldContext.fillStyle = skinTone;
+  worldContext.fill();
+  worldContext.strokeStyle = "rgba(2, 10, 13, .9)";
+  worldContext.stroke();
+
+  worldContext.beginPath();
+  worldContext.arc(
+    centerX,
+    centerY - radius * .66,
+    radius * .34,
+    Math.PI,
+    Math.PI * 2,
+  );
+  worldContext.fillStyle = "#253139";
+  worldContext.fill();
+
+  const eyeSize = Math.max(1, unit * .045);
+  worldContext.fillStyle = "#10181b";
+  worldContext.fillRect(
+    centerX - radius * .15,
+    centerY - radius * .57,
+    eyeSize,
+    eyeSize,
+  );
+  worldContext.fillRect(
+    centerX + radius * .06,
+    centerY - radius * .57,
+    eyeSize,
+    eyeSize,
+  );
+
+  if (agent.sick) {
+    worldContext.beginPath();
+    worldContext.arc(
+      centerX + radius * .5,
+      centerY - radius * .62,
+      radius * .18,
+      0,
+      Math.PI * 2,
+    );
+    worldContext.fillStyle = "#c789ff";
+    worldContext.fill();
+    worldContext.fillStyle = "#fff";
+    worldContext.fillRect(
+      centerX + radius * .46,
+      centerY - radius * .74,
+      Math.max(1, radius * .08),
+      radius * .24,
+    );
+    worldContext.fillRect(
+      centerX + radius * .38,
+      centerY - radius * .66,
+      radius * .24,
+      Math.max(1, radius * .08),
+    );
+  } else if (agent.depressed) {
+    worldContext.beginPath();
+    worldContext.moveTo(centerX + radius * .5, centerY - radius * .58);
+    worldContext.lineTo(centerX + radius * .62, centerY - radius * .34);
+    worldContext.lineTo(centerX + radius * .42, centerY - radius * .34);
+    worldContext.lineTo(centerX + radius * .5, centerY - radius * .58);
+    worldContext.fillStyle = "#72b9ff";
+    worldContext.fill();
+  }
+}
+
+function addDefinition(term, value) {
+  const metric = document.createElement("div");
+  const dt = document.createElement("dt");
+  const dd = document.createElement("dd");
+  metric.className = "metric";
+  dt.textContent = term;
+  dd.textContent = value;
+  metric.append(dt, dd);
+  statsElement.append(metric);
+}
+
+function renderStats(frame) {
+  statsElement.replaceChildren();
+  headlineTimestep.textContent = `timestep ${frame.timestep}`;
+  const field = cellMode.value === "pollution" ? "pollution" : "resource";
+  worldTimestep.textContent = `${field} field · t${frame.timestep}`;
+  const stats = frame.stats || {};
+  const rows = [
+    ["timestep", frame.timestep],
+    ["population", frame.agents.length],
+    ["mean wealth", stats.meanWealth],
+    ["Gini", stats.giniCoefficient],
+    ["mean happiness", stats.meanHappiness],
+    ["carrying capacity", stats.carryingCapacity],
+    ["trade volume", stats.tradeVolume],
+    ["loan volume", stats.loanVolume],
+  ];
+  for (const [term, value] of rows) {
+    if (value !== undefined) addDefinition(term, value);
+  }
+}
+
+function renderLegend(frame) {
+  legendElement.replaceChildren();
+  if (frame.slots.length === 0) {
+    const dot = document.createElement("span");
+    const label = document.createElement("span");
+    dot.className = "dot";
+    dot.style.background = palette[5];
+    label.textContent = "Autonomous agents";
+    legendElement.append(dot, label);
+    return;
+  }
+  frame.slots.forEach((slot, index) => {
+    const dot = document.createElement("span");
+    const label = document.createElement("span");
+    dot.className = "dot";
+    dot.style.background = palette[index % palette.length];
+    label.textContent = slot.name || `population ${index + 1}`;
+    legendElement.append(dot, label);
+  });
+}
+
+function agentPosition(frame, agent) {
+  return {
+    x: Math.floor(agent.cell / frame.height),
+    y: agent.cell % frame.height,
+  };
+}
+
+function drawLinks(frame, scaleX, scaleY) {
+  if (!linksToggle.checked) return;
+  const byId = new Map(frame.agents.map((agent) => [agent.id, agent]));
+  worldContext.lineWidth = 1.5;
+  worldContext.globalAlpha = .7;
+  for (const link of frame.links || []) {
+    const source = byId.get(link.source);
+    const target = byId.get(link.target);
+    if (!source || !target) continue;
+    const first = agentPosition(frame, source);
+    const second = agentPosition(frame, target);
+    worldContext.beginPath();
+    worldContext.moveTo((first.x + .5) * scaleX, (first.y + .5) * scaleY);
+    worldContext.lineTo((second.x + .5) * scaleX, (second.y + .5) * scaleY);
+    worldContext.strokeStyle = linkColors[link.type] || "#ddd";
+    worldContext.stroke();
+  }
+  worldContext.globalAlpha = 1;
+}
+
+function renderWorld(frame) {
+  const scaleX = world.width / frame.width;
+  const scaleY = world.height / frame.height;
+  const maxPollution = Math.max(...frame.cells.map((cell) => cell[2]), 1);
+  worldContext.fillStyle = "#050504";
+  worldContext.fillRect(0, 0, world.width, world.height);
+  const drawTile = cellMode.value === "pollution"
+    ? drawPollutionTile
+    : drawResourceTile;
+  frame.cells.forEach((cell, index) => {
+    const x = Math.floor(index / frame.height);
+    const y = index % frame.height;
+    drawTile(
+      cell,
+      index,
+      x * scaleX,
+      y * scaleY,
+      scaleX,
+      scaleY,
+      maxPollution,
+    );
+  });
+  if (Math.min(scaleX, scaleY) >= 10) {
+    worldContext.beginPath();
+    for (let x = 1; x < frame.width; x += 1) {
+      worldContext.moveTo(x * scaleX, 0);
+      worldContext.lineTo(x * scaleX, world.height);
+    }
+    for (let y = 1; y < frame.height; y += 1) {
+      worldContext.moveTo(0, y * scaleY);
+      worldContext.lineTo(world.width, y * scaleY);
+    }
+    worldContext.strokeStyle = "rgba(235, 248, 250, .055)";
+    worldContext.lineWidth = 1;
+    worldContext.stroke();
+  }
+  drawLinks(frame, scaleX, scaleY);
+  for (const agent of frame.agents) {
+    drawAgentSprite(agent, frame, scaleX, scaleY);
+  }
+  if (inspectedCell >= 0) {
+    const x = Math.floor(inspectedCell / frame.height);
+    const y = inspectedCell % frame.height;
+    worldContext.shadowColor = "#f4c15d";
+    worldContext.shadowBlur = 10;
+    worldContext.strokeStyle = "#f4c15d";
+    worldContext.lineWidth = 2.5;
+    worldContext.strokeRect(x * scaleX, y * scaleY, scaleX, scaleY);
+    worldContext.shadowBlur = 0;
+  }
+}
+
+function clearChart(canvas) {
+  const context = canvas.getContext("2d");
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  return context;
+}
+
+function formatChartValue(value) {
+  const magnitude = Math.abs(value);
+  if (magnitude >= 10000) return value.toExponential(1);
+  if (magnitude >= 1000) return value.toFixed(0);
+  if (magnitude >= 10) return value.toFixed(1);
+  if (magnitude >= .1) return value.toFixed(2);
+  if (magnitude === 0) return "0";
+  return value.toExponential(1);
+}
+
+function chartArea(canvas) {
+  return {
+    left: 42,
+    right: canvas.width - 8,
+    top: 10,
+    bottom: canvas.height - 24,
+  };
+}
+
+function drawChartAxes(canvas, bounds, labels = {}) {
+  const context = clearChart(canvas);
+  const area = chartArea(canvas);
+  context.strokeStyle = "#2a3b47";
+  context.lineWidth = 1;
+  context.strokeRect(
+    area.left + .5,
+    area.top + .5,
+    area.right - area.left,
+    area.bottom - area.top,
+  );
+  context.beginPath();
+  context.moveTo(area.left, (area.top + area.bottom) / 2);
+  context.lineTo(area.right, (area.top + area.bottom) / 2);
+  context.strokeStyle = "#192a32";
+  context.stroke();
+  context.fillStyle = "#91a1a8";
+  context.font = "9px ui-monospace, SFMono-Regular, Menlo, monospace";
+  context.textBaseline = "middle";
+  context.textAlign = "right";
+  context.fillText(
+    labels.maximumY ?? formatChartValue(bounds.maximumY),
+    area.left - 5,
+    area.top + 2,
+  );
+  context.fillText(
+    labels.minimumY ?? formatChartValue(bounds.minimumY),
+    area.left - 5,
+    area.bottom,
+  );
+  context.textBaseline = "top";
+  context.textAlign = "left";
+  context.fillText(
+    labels.minimumX ?? formatChartValue(bounds.minimumX),
+    area.left,
+    area.bottom + 5,
+  );
+  context.textAlign = "right";
+  context.fillText(
+    labels.maximumX ?? formatChartValue(bounds.maximumX),
+    area.right,
+    area.bottom + 5,
+  );
+  return {context, area};
+}
+
+function chartPoint(area, bounds, point) {
+  const xRange = Math.max(Number.EPSILON, bounds.maximumX - bounds.minimumX);
+  const yRange = Math.max(Number.EPSILON, bounds.maximumY - bounds.minimumY);
+  return {
+    x: area.left + (area.right - area.left) *
+      (point[0] - bounds.minimumX) / xRange,
+    y: area.bottom - (area.bottom - area.top) *
+      (point[1] - bounds.minimumY) / yRange,
+  };
+}
+
+function drawPolyline(canvas, points, color, bounds, labels = {}, count = points.length) {
+  const {context, area} = drawChartAxes(canvas, bounds, labels);
+  if (count === 0) return;
+  context.beginPath();
+  for (let index = 0; index < count; index += 1) {
+    const point = points[index];
+    const position = chartPoint(area, bounds, point);
+    if (index === 0) context.moveTo(position.x, position.y);
+    else context.lineTo(position.x, position.y);
+  }
+  context.strokeStyle = color;
+  context.lineWidth = 2;
+  context.stroke();
+}
+
+function renderSeries() {
+  const key = seriesSelect.value;
+  const cache = seriesCache.get(key);
+  const count = Math.min(frameIndex + 1, cache?.points.length ?? 0);
+  if (!cache || count === 0) return;
+  const minimum = cache.minimums[count - 1];
+  const maximum = cache.maximums[count - 1];
+  const padding = maximum === minimum
+    ? Math.max(Math.abs(maximum) * .02, key === "giniCoefficient" ? .01 : 1)
+    : (maximum - minimum) * .08;
+  const bounds = {
+    minimumX: cache.points[0][0],
+    maximumX: Math.max(cache.points[0][0] + 1, cache.points[count - 1][0]),
+    minimumY: minimum < 0 ? minimum - padding : Math.max(0, minimum - padding),
+    maximumY: maximum + padding,
+  };
+  const selectedLabel =
+    seriesSelect.options[seriesSelect.selectedIndex].textContent;
+  seriesCaption.textContent =
+    `Time series · ${selectedLabel} · ${formatChartValue(cache.points[count - 1][1])}`;
+  drawPolyline(
+    seriesChart,
+    cache.points,
+    "#f4c15d",
+    bounds,
+    {
+      minimumX: `t${bounds.minimumX}`,
+      maximumX: `t${cache.points[count - 1][0]}`,
+    },
+    count,
+  );
+}
+
+function wealthBins(frame, maximum, binCount = 10) {
+  const bins = new Array(binCount).fill(0);
+  for (const agent of frame.agents) {
+    const wealth = Math.max(0, agent.sugar + agent.spice);
+    const index = Math.min(
+      binCount - 1,
+      Math.floor(wealth / Math.max(1, maximum) * binCount),
+    );
+    bins[index] += 1;
+  }
+  return bins;
+}
+
+function observeChartDomains(frame) {
+  for (const agent of frame.agents) {
+    observedWealthMaximum = Math.max(
+      observedWealthMaximum,
+      agent.sugar + agent.spice,
+    );
+  }
+}
+
+function renderHistogram(frame) {
+  const bounds = {
+    minimumX: 0,
+    maximumX: observedWealthMaximum,
+    minimumY: 0,
+    maximumY: 1,
+  };
+  const {context, area} = drawChartAxes(histogram, bounds, {
+    minimumX: "0 wealth",
+    maximumX: `${formatChartValue(observedWealthMaximum)} wealth`,
+    minimumY: "0%",
+    maximumY: "100%",
+  });
+  if (frame.agents.length === 0) return;
+  const bins = wealthBins(frame, observedWealthMaximum);
+  bins.forEach((count, index) => {
+    const width = (area.right - area.left) / bins.length;
+    const share = count / frame.agents.length;
+    const height = (area.bottom - area.top) *
+      share;
+    context.fillStyle = "#46d2c4";
+    context.fillRect(
+      area.left + index * width,
+      area.bottom - height,
+      Math.max(1, width - 1),
+      height,
+    );
+  });
+}
+
+function renderLorenz(frame) {
+  const wealth = frame.agents
+    .map((agent) => Math.max(0, agent.sugar + agent.spice))
+    .sort((first, second) => first - second);
+  const total = wealth.reduce((sum, value) => sum + value, 0);
+  const points = [[0, 0]];
+  let cumulative = 0;
+  wealth.forEach((value, index) => {
+    cumulative += value;
+    points.push([(index + 1) / wealth.length, total > 0 ? cumulative / total : 0]);
+  });
+  const bounds = {minimumX: 0, maximumX: 1, minimumY: 0, maximumY: 1};
+  drawPolyline(lorenz, points, "#ff7897", bounds, {
+    minimumX: "0% agents",
+    maximumX: "100% agents",
+    minimumY: "0%",
+    maximumY: "100%",
+  });
+  const context = lorenz.getContext("2d");
+  const area = chartArea(lorenz);
+  context.beginPath();
+  context.moveTo(area.left, area.bottom);
+  context.lineTo(area.right, area.top);
+  context.strokeStyle = "#52616a";
+  context.lineWidth = 1;
+  context.stroke();
+}
+
+function renderInspection(frame) {
+  if (inspectedCell < 0) {
+    inspectElement.textContent = "Click a cell to inspect it.";
+    return;
+  }
+  const cell = frame.cells[inspectedCell];
+  const agent = frame.agents.find((item) => item.cell === inspectedCell);
+  const x = Math.floor(inspectedCell / frame.height);
+  const y = inspectedCell % frame.height;
+  const lines = [
+    `cell (${x}, ${y}) · id ${inspectedCell}`,
+    `sugar ${cell[0]} · spice ${cell[1]} · pollution ${cell[2]}`,
+  ];
+  if (agent) {
+    lines.push(
+      `agent ${agent.id} · ${agent.decisionModel} · age ${agent.age}`,
+      `wealth ${agent.sugar + agent.spice} · move ${agent.movement} · vision ${agent.vision}`,
+      `race ${agent.race} · tribe ${agent.tribe} · ${agent.sex || "no sex"}` +
+        `${agent.sick ? " · sick" : ""}${agent.depressed ? " · depressed" : ""}`,
+    );
+  } else {
+    lines.push("unoccupied");
+  }
+  inspectElement.textContent = lines.join("\n");
+}
+
+function render() {
+  const frame = frameAt(frameIndex);
+  if (!frame) return;
+  timeline.max = Math.max(0, frameCount() - 1);
+  timeline.value = frameIndex;
+  frameLabel.textContent = `frame ${frameIndex + 1} / ${frameCount()}`;
+  playButton.textContent = playing ? "Ⅱ Pause" : "▶ Play";
+  renderWorld(frame);
+  renderStats(frame);
+  renderLegend(frame);
+  renderInspection(frame);
+  renderSeries();
+  renderHistogram(frame);
+  renderLorenz(frame);
+}
+
+function selectFrame(index) {
+  frameIndex = Math.max(0, Math.min(frameCount() - 1, index));
+  if (staticReplayMode && timelineRuntime) {
+    timelineRuntime.setPlaying(0);
+    timelineRuntime.seek(frameIndex);
+  }
+  render();
+}
+
+function recordFrame(frame) {
+  if (currentStreamId !== null && frame.streamId !== currentStreamId) {
+    frames.length = 0;
+    frameIndexes.clear();
+    seriesCache.clear();
+    frameIndex = -1;
+    inspectedCell = -1;
+    observedWealthMaximum = 1;
+  }
+  currentStreamId = frame.streamId;
+  const existingIndex = frameIndexes.get(frame.timestep);
+  if (existingIndex !== undefined) {
+    frames[existingIndex] = frame;
+    seriesCache.clear();
+    observedWealthMaximum = 1;
+    for (const recorded of frames) {
+      appendSeriesFrame(recorded);
+      observeChartDomains(recorded);
+    }
+    if (playing) frameIndex = frames.length - 1;
+    else if (frameIndex === existingIndex) render();
+    return;
+  }
+  observeChartDomains(frame);
+  appendSeriesFrame(frame);
+  frameIndexes.set(frame.timestep, frames.length);
+  frames.push(frame);
+  if (playing || frameIndex < 0) frameIndex = frames.length - 1;
+  render();
+}
+
+playButton.addEventListener("click", () => {
+  if (staticReplayMode) {
+    if (!timelineRuntime || frameCount() < 2) return;
+    if (!playing && frameIndex >= frameCount() - 1) {
+      frameIndex = timelineRuntime.seek(0);
+    }
+    playing = timelineRuntime.setPlaying(playing ? 0 : 1) === 1;
+  } else {
+    playing = !playing;
+    if (playing && frames.length > 0) frameIndex = frames.length - 1;
+  }
+  render();
+});
+backButton.addEventListener("click", () => {
+  playing = false;
+  selectFrame(frameIndex - 1);
+});
+forwardButton.addEventListener("click", () => {
+  playing = false;
+  selectFrame(frameIndex + 1);
+});
+timeline.addEventListener("input", () => {
+  playing = false;
+  selectFrame(Number(timeline.value));
+});
+speedSelect.addEventListener("change", () => {
+  if (timelineRuntime) timelineRuntime.setSpeed(Number(speedSelect.value));
+});
+for (const control of [cellMode, agentMode, linksToggle, seriesSelect]) {
+  control.addEventListener("change", render);
+}
+world.addEventListener("click", (event) => {
+  if (frameIndex < 0) return;
+  const frame = frameAt(frameIndex);
+  const bounds = world.getBoundingClientRect();
+  const x = Math.min(
+    frame.width - 1,
+    Math.floor((event.clientX - bounds.left) / bounds.width * frame.width),
+  );
+  const y = Math.min(
+    frame.height - 1,
+    Math.floor((event.clientY - bounds.top) / bounds.height * frame.height),
+  );
+  inspectedCell = x * frame.height + y;
+  render();
+});
+
+function connect() {
+  const protocol = location.protocol === "https:" ? "wss" : "ws";
+  const socket = new WebSocket(`${protocol}://${location.host}/global`);
+  socket.addEventListener("open", () => {
+    statusElement.textContent = "live";
+    statusElement.dataset.state = "live";
+  });
+  socket.addEventListener("message", (event) => {
+    recordFrame(JSON.parse(event.data));
+  });
+  socket.addEventListener("close", () => {
+    statusElement.textContent = "reconnecting";
+    statusElement.dataset.state = "reconnecting";
+    setTimeout(connect, 1000);
+  });
+  socket.addEventListener("error", () => socket.close());
+}
+
+async function replayText(response) {
+  if (!response.ok) throw new Error(`replay fetch failed: HTTP ${response.status}`);
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  let format = null;
+  if (bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b) {
+    format = "gzip";
+  } else if (
+    bytes.length >= 2 && (bytes[0] & 0x0f) === 8 &&
+    ((bytes[0] << 8) + bytes[1]) % 31 === 0
+  ) {
+    format = "deflate";
+  }
+  if (format !== null) {
+    if (typeof DecompressionStream !== "function") {
+      throw new Error("this browser cannot decompress Sugarscape replays");
+    }
+    const stream = new Blob([bytes]).stream().pipeThrough(
+      new DecompressionStream(format),
+    );
+    return new Response(stream).text();
+  }
+  return new TextDecoder().decode(bytes);
+}
+
+function validateCompactReplay(replay) {
+  if (
+    !Number.isInteger(replay.width) || !Number.isInteger(replay.height) ||
+    !Array.isArray(replay.slots) || !Array.isArray(replay.agentFields) ||
+    !Array.isArray(replay.statFields) || !Array.isArray(replay.frames) ||
+    replay.frames.length === 0 || replay.frames[0][1] !== 1
+  ) {
+    throw new Error("invalid sugarscape.replay.v2 artifact");
+  }
+}
+
+async function loadTimelineRuntime() {
+  const wasmUrl = new URL("./timeline.wasm", location.href);
+  const response = await fetch(wasmUrl);
+  if (!response.ok) throw new Error(`WASM fetch failed: HTTP ${response.status}`);
+  let instance;
+  if (typeof WebAssembly.instantiateStreaming === "function") {
+    try {
+      ({instance} = await WebAssembly.instantiateStreaming(response.clone(), {}));
+    } catch {
+      ({instance} = await WebAssembly.instantiate(await response.arrayBuffer(), {}));
+    }
+  } else {
+    ({instance} = await WebAssembly.instantiate(await response.arrayBuffer(), {}));
+  }
+  return instance.exports;
+}
+
+function showReplayError(error) {
+  playing = false;
+  statusElement.textContent = "replay error";
+  statusElement.dataset.state = "reconnecting";
+  inspectElement.textContent = error instanceof Error ? error.message : String(error);
+  console.error(error);
+}
+
+async function loadStaticReplay() {
+  statusElement.textContent = "loading replay";
+  try {
+    const [text, runtime] = await Promise.all([
+      fetch(replayUrl).then(replayText),
+      loadTimelineRuntime(),
+    ]);
+    const replay = JSON.parse(text);
+    if (replay.format === "sugarscape.replay.v2") {
+      validateCompactReplay(replay);
+      compactReplay = replay;
+    } else if (
+      replay.format === "sugarscape.replay.v1" && Array.isArray(replay.frames)
+    ) {
+      frames.push(...replay.frames);
+    } else {
+      throw new Error("unsupported Sugarscape replay format");
+    }
+    timelineRuntime = runtime;
+    timelineRuntime.configure(frameCount(), 40);
+    timelineRuntime.setSpeed(Number(speedSelect.value));
+    playing = false;
+    frameIndex = 0;
+    indexStaticSeries();
+    statusElement.textContent = "paused";
+    statusElement.dataset.state = "live";
+    render();
+    if (typeof requestAnimationFrame === "function") {
+      let previousTime = null;
+      const animate = (time) => {
+        if (previousTime === null) previousTime = time;
+        if (playing) {
+          const next = timelineRuntime.advance(Math.max(0, time - previousTime));
+          if (next !== frameIndex) {
+            frameIndex = next;
+            render();
+          }
+          playing = timelineRuntime.isPlaying() === 1;
+          if (!playing) render();
+        }
+        previousTime = time;
+        requestAnimationFrame(animate);
+      };
+      requestAnimationFrame(animate);
+    }
+  } catch (error) {
+    showReplayError(error);
+  }
+}
+
+if (staticReplayMode) loadStaticReplay();
+else connect();
+</script>
+</body>
+</html>

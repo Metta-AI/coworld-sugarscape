@@ -76,8 +76,8 @@ whisky/
 windy/
 ws/
 zippy/
-tests/nim/test_*
-!tests/nim/test_*.nim
+**/tests/nim/test_*
+!**/tests/nim/test_*.nim
 
 # Type checkers / linters
 .mypy_cache/
