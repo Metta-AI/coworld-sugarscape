@@ -1,8 +1,15 @@
 # Sugarscape v2 — Design
 
-**Status: design complete (2026-08-07) — all open questions A1–F6 resolved.**
-This document records decisions as they are made. Everything below is
-**Decided** unless explicitly noted; changes now require revisiting a decision
+**Status: design complete with three items reopened by review (2026-08-10).**
+All questions A1–F6 were resolved 2026-08-07; James's comment round of
+2026-08-10 revised several decisions in place (marked "revised 2026-08-10")
+and reopened three items now under discussion: **(i) the speaking phase**
+(new mechanic — post-move speech audible to von Neumann neighbors),
+**(ii) per-agent component instances** (enforcing P1 memory isolation;
+possibly obsoleting the scratchpad), and **(iii) timeout-as-no-op**
+(soft per-decision deadlines instead of seat kicks — blocked on an Arena
+limitation; see `docs/issues/arena-soft-timeout-limitation.md`).
+Everything else below is **Decided**; changes require revisiting a decision
 by name. Implementation may surface revisions — record them here with dates.
 
 Each item is tagged:
@@ -58,7 +65,13 @@ competitive benchmark shouldn't.
 
 ## 2. Players, seats, and agents
 
-- **Up to 64 seats. (Decided)** A seat is one submitted policy.
+- **Seats are unbounded config, up to `total_agents`. (Revised 2026-08-10,
+  was "up to 64")** A seat is one submitted policy; an episode admits up to
+  `total_agents` seats. Neither seats nor `total_agents` carries a hard
+  upper bound — classic-scale worlds (250 agents) are legitimate configs.
+  The flagship ranked variant stays at 64 total pending playtesting; large
+  configs raise the Arena instance-count question (§11 risk, one component
+  instance per player).
 - **A seat may control multiple agents (Decided)**, invoked per-agent per P1.
   E.g. 4 seats × 16 agents each.
 - **`total_agents` is config; seat count must divide it. (Decided — A1,
@@ -75,7 +88,7 @@ competitive benchmark shouldn't.
 
   | mode | child goes to |
   |---|---|
-  | `random_parent` | one of the two parents' seats, episode-seeded 50/50 |
+  | `random_parent` | first child of a couple: episode-seeded 50/50; **subsequent children of the same couple follow the Thue–Morse sequence** over the two parents (revised 2026-08-10 — fairer than repeated coin flips for prolific couples) |
   | `initiating_parent` | the seat whose agent initiated the mating |
   | `receiving_parent` | the seat whose agent was initiated to (closer to human mating dynamics — offspring stays with the receiving parent) |
 
@@ -148,10 +161,22 @@ competitive benchmark shouldn't.
   symmetric; the directional modes are variant levers).
 - ~~**Dead agents' contribution: Open — and load-bearing.**~~ Resolved by
   the integrated-wellness decision above (B2+B3).
+- **League rating: score-based EWMA, not Elo. (Revised 2026-08-10)**
+  Elo's all-pairs win/loss comparison is a poor fit for a game whose output
+  is a continuous welfare scalar. The platform already supports exactly
+  what we want with **no modification**: league ladder config
+  `ranking.algorithm = "score"` with `standing_aggregation = "ewma"` and a
+  `half_life_hours` (metta `app_backend v2/ladders/rankings/score.py`;
+  config in `v2/ladders/config.py`) — the leaderboard standing is an EWMA
+  over final episode scores. Within one league all episodes run the same
+  variant, so raw scores are comparable across episodes. Division
+  promotion/relegation under the score algorithm uses standing thresholds
+  (already enforced by platform validation).
 - **Ties: broken by surviving agent count, then draw. (Decided — B6,
   2026-08-07)** Equal integrals → the seat with more agents alive at
-  episode end ranks higher; still equal → a genuine draw (the platform's
-  all-pairs Elo scores draws 0.5/0.5 natively). Implementation note: the
+  episode end ranks higher; still equal → a genuine draw. (Less central
+  under score/EWMA ranking than under Elo, but scores are still compared
+  by the platform, so the encoding stays.) Implementation note: the
   platform ranks on the single `results.scores` scalar, so the survivor
   tie-break must be encoded lexicographically into the score value (e.g.
   survivor count in bits strictly below welfare precision — exact layout
@@ -210,7 +235,12 @@ Lifecycle:
   not just a lottery); the remainder, and the whole estate when no child
   lives, drops on the death cell as harvestable resource. Cell levels may
   exceed capacity; growback simply doesn't apply above capacity.
-  Inheritance is feature-flagged, ranked default on. E&A's
+  **Two independent flags (revised 2026-08-10):** `inheritance` (estates
+  split among living children) and `drop_uninherited` (whatever isn't
+  inherited — remainders, heirless estates, or everything when inheritance
+  is off — drops on the death cell; off ⇒ that wealth vanishes). Ranked
+  default: both on. All four combinations are meaningful variants (e.g.
+  inheritance on + drop off = dynasties without scavenging). E&A's
   inequality-amplifier caution doesn't bite within one bounded episode
   (P3). E6 hook: classic lending ties outstanding debts to heirs — E6
   owns that linkage.
@@ -284,12 +314,19 @@ What it costs / leaves open:
 - **Within-phase order: per-phase disciplines. (Decided — E1, 2026-08-07)**
   Different phases use different activation strategies:
   - **Movement (and therefore combat): sequential, episode-seeded shuffled
-    order each timestep.** Each agent observes fully-updated state at its
-    turn; an occupied cell is simply occupied — no conflict rules, classic
-    semantics. Runtime note, accepted deliberately: this is N serial policy
-    round-trips per timestep — negligible under Arena (in-process), slow
-    for the WS shell at full scale (Arena is the primary runtime; the WS
-    shell serves certification/local play at small configs).
+    order each timestep.** Rationale (sharpened 2026-08-10): sequential
+    activation is integral to the simulation, not a compromise — it
+    guarantees **every agent acts with full information** (the world it
+    observes is exactly the world its action applies to; no phantom moves,
+    no conflict lotteries). The performance cost is deliberately traded
+    for that property. Fairness is not truly sacrificed: reshuffling every
+    tick spreads first-action benefit over the uniform distribution, and a
+    **Thue–Morse ordering over ticks is a candidate refinement** for even
+    stronger fairness (open exploration, not committed). Runtime note:
+    N serial policy round-trips per timestep is negligible under Arena
+    (in-process — the move to Arena removes most of the WS-latency
+    concern); the WS shell serves certification/local play at small
+    configs.
   - **Harvest: order-free** (own-cell only; no agent interaction) —
     delivered as one concurrent fan-out.
   - **Trade / mating: negotiation phases** — their within-phase structure
@@ -298,8 +335,17 @@ What it costs / leaves open:
   - **Tribe: order-free.**
   (Closes fork 5's residue in `what-is-a-coworld.md`.)
 - **Trade protocol: bilateral targeted offers over R cycles. (Decided — E4,
-  2026-08-07)** The trade phase runs `trade_rounds` (default 2–3)
-  propose/respond cycles:
+  2026-08-07; round semantics revised 2026-08-10)** The trade phase runs
+  propose/respond cycles **to quiescence with a cap**: the phase ends when
+  a cycle produces zero offers, or at `trade_rounds` cycles, whichever
+  comes first. `trade_rounds` is a safety cap, not a target — default
+  raised to 8 (was 2–3; James's concern: chains of offers, where the first
+  acceptance affects the resolution of the whole chain, need enough cycles
+  to re-propose downstream; exact value is a playtest knob).
+  Implementation note (does not change semantics): agents only interact
+  within von-Neumann-connected clusters, so each cluster's cycle can run
+  in parallel with per-cluster seeded streams — determinism preserved
+  because clusters are disjoint. The cycles:
   1. *Propose:* each agent may submit **one** offer targeted at one
      von-Neumann-adjacent agent: `{give: (sugar, spice), want: (sugar,
      spice)}`, integer bundles, give clamped to holdings.
@@ -316,7 +362,9 @@ What it costs / leaves open:
   free-form negotiation channels remain buildable later as variants on the
   same encoding.
 - **Mating: E4-shaped consent, classic eligibility. (Decided — E5,
-  2026-08-07)** `mating_rounds` propose/respond cycles: one targeted
+  2026-08-07; round semantics follow E4's 2026-08-10 revision —
+  quiescence with a `mating_rounds` cap, default 8, playtest knob; same
+  per-cluster parallelization note.)** Propose/respond cycles: one targeted
   proposal per agent per cycle to an eligible adjacent partner;
   accept/decline; accepted matings execute in seeded order,
   **re-validating eligibility at execution** (E4's voiding rule reused);
@@ -331,17 +379,28 @@ What it costs / leaves open:
   *choice* is the strategy layer D5 built: proposing to good genes is
   investment; accepting prices in the endowment cost and A2's coin-flip
   seat assignment.
-- **Lending: negotiated credit contracts. (Decided — E6, 2026-08-07)**
-  Third instance of the E4 shape: proposal `{lend: (s,sp), repay: (s,sp),
-  due_tick}` to an adjacent agent; accept ⇒ principal transfers now;
-  interest is implicit and per-contract (repay > lend, negotiated).
-  Physics: **`due_tick ≤ episode end`** (no contracting past P3's
-  horizon); at due, the sim auto-collects `min(owed, holdings)`;
-  **shortfall closes the contract** — the lender eats the loss, so credit
-  risk prices into negotiated interest. Death: heirs inherit debt pro-rata
-  with the estate, **capped at what they inherited** (limited liability);
-  no heirs ⇒ write-off. Anyone holding goods may lend (classic
-  age/fertility matchmaking evicted as behavior). **Closes B4's
+- **Lending: negotiated credit contracts. (Decided — E6, 2026-08-07;
+  options extended 2026-08-10)** Third instance of the E4 shape, in
+  **either direction**: an offer `{lend: (s,sp), repay: (s,sp), due_tick}`
+  to an adjacent agent, or a **request** (proposer asks to borrow; the
+  acceptor becomes the lender and the principal flows proposer-ward on
+  accept). Interest is implicit and per-contract (repay > lend,
+  negotiated). Physics: **`due_tick ≤ episode end`** (no contracting past
+  P3's horizon). Collection at due, two config knobs:
+  - `collection_floor` flag: collect `min(owed, holdings)` (default) or
+    `min(owed, holdings − current metabolism)` — the latter prevents loan
+    upkeep from being an insta-death (repayment can't take the food out of
+    your mouth this tick).
+  - `shortfall_mode` enum:
+    | mode | on shortfall |
+    |---|---|
+    | `write_off` (ranked default) | contract closes; the lender eats the loss — credit risk prices into negotiated interest |
+    | `renew` (classic-style) | contract renews with no new transfer: principal = the uncollected remainder, repay scaled by the original contract's aggregate ratio `Σrepay/Σlend` (summed across resources), same duration as the original |
+    | `sim_covers` | if no other recourse exists (no renewal, no liable heirs), the sim makes the lender whole — mints the loss away; inflationary by design, a variant lever for credit-friendly economies |
+  Death: heirs inherit debt pro-rata with the estate, **capped at what
+  they inherited** (limited liability); no heirs ⇒ per `shortfall_mode`.
+  Anyone holding goods may lend (classic age/fertility matchmaking evicted
+  as behavior). **Closes B4's
   remainder: welfare stays over gross holdings** — under integrated
   welfare + due≤T + auto-collect, interest is the price of welfare-time
   and the market sets it; even Cobb–Douglas concavity gains (rich→poor
@@ -359,9 +418,13 @@ What it costs / leaves open:
   combat and inheritance compose with no extra rule. Wealth doubles as
   armor (poorer-only prevents kamikaze deletion). The classic retaliation
   look-ahead is evicted as behavior: the sim permits any legal attack; risk
-  assessment belongs to policies (F1 must expose neighbor wealth
-  visibility). Illegal attack attempts = illegal moves (resolution → E9's
-  illegal-action rule).
+  assessment belongs to policies. Illegal attack attempts = illegal moves
+  (resolution → E9's illegal-action rule). **Hidden-holdings variant
+  (2026-08-10, follows F1's per-attribute visibility config):** when
+  holdings are not visible, the poorer-only legality check is replaced by
+  always-legal cross-tribe attacks with unchanged resolution — the
+  strictly-richer party wins and the loser dies (ties: attacker loses;
+  aggression bears the risk). See §7.1.
 - **Harvest is explicit and optional (Decided):** unlike every classic
   Sugarscape variant, an agent on a resource cell chooses whether to harvest.
   Not harvesting is a meaningful move (e.g. leaving sugar to grow, or denying
@@ -372,12 +435,18 @@ What it costs / leaves open:
   priceable — harvesting exactly metabolic need minimizes C3's pollution
   production, self-toxicity, and growback suppression. Sustainable-yield
   farming is the strategy this buys.
-- **Tribes: chosen allegiance. (Decided — E7, 2026-08-07)** A tribe is a
+- **Tribes: chosen allegiance. (Decided — E7, 2026-08-07; initial
+  assignment + tribeless status revised 2026-08-10)** A tribe is a
   declared affiliation, not emergent culture (classic tags) or static
-  teams (v1 seat-tribes): `tribe_count` (K, ranked default 2) config;
-  initial assignment episode-seeded; **phase 5 is real** — an agent may
-  declare a switch, effective at the next timestep; combat (E2) gates
-  cross-tribe. Tribes are protection pacts: safety-in-numbers, defection,
+  teams (v1 seat-tribes): `tribe_count` (K, ranked default 2) config.
+  **Initial assignment is per-seat: all of a seat's agents start in the
+  same tribe**, seats distributed across the K tribes by a seeded balanced
+  permutation (seat cohesion at t=0; divergence after that is strategy).
+  **Phase 5 is real** — an agent may declare a switch, effective at the
+  next timestep; combat (E2) gates cross-tribe. Optional variant flag:
+  **`tribeless` as a declarable status** — a tribeless agent counts as
+  cross-tribe to everyone (attackable by all, may attack all): mercenaries
+  and loners without removing the tribe mechanic. Tribes are protection pacts: safety-in-numbers, defection,
   and betrayal (leave today, attack your ex-tribemate tomorrow) become
   policy strategy. Feature-flagged like other mechanics; tribeless
   variants gate combat on wealth alone. Novel-mechanic caveat recorded:
@@ -393,18 +462,47 @@ What a policy invocation receives and controls, per agent (P1):
   of length `vision` — no diagonals — and **vision is movement range**
   (movement targets any visible cell; occupied ⇒ combat per E2). Visible
   cells show current sugar/spice levels and pollution.
-- **Visible agents: minimal attributes.** Each visible occupant shows only
-  `{seat, holdings (sugar, spice), tribe, sick}` — the E2/E4/C4 minimums.
-  Genes (metabolisms, vision), age, sex, and fertility are **hidden**: mate
-  and rival assessment is inference, not reading — voided proposals carry
-  information, and the scratchpad (§7.2) is where courtship/reputation
-  knowledge accumulates. Fog is thus both spatial *and* attribute-deep
-  (poker, not chess). `max_age` is private to everyone, including
-  observers.
-- **Own state: complete.** Holdings, metabolisms, vision, age, own
-  max_age, sex, fertility window, tribe, sick + immune state, outstanding
-  loan contracts (both directions), position, **current-tick welfare and
-  the running integral** (the score being optimized is legible — B2).
+- **Visible-agent attributes: per-attribute visibility config. (Revised
+  2026-08-10, was a fixed minimal set)** Every attribute of a visible
+  occupant is independently configurable visible/hidden, so leagues can
+  experiment with information regimes (e.g. hide holdings so
+  price-bluffing works; expose fertility for easier courtship):
+
+  | attribute | ranked default |
+  |---|---|
+  | seat | visible |
+  | holdings (sugar, spice) | visible |
+  | tribe | visible |
+  | sick | visible |
+  | age, sex, fertile-now | hidden |
+  | metabolisms, vision (genes) | hidden |
+  | max_age | **always hidden from others** (not configurable) |
+
+  Hiding an attribute changes the *physics* it feeds, and those rules are
+  part of the config's meaning:
+  - **Hidden holdings ⇒ combat legality changes (E2):** the poorer-only
+    check requires readable wealth, so when holdings are hidden **every
+    cross-tribe attack is legal, and resolution is unchanged** — the
+    strictly-richer party wins and the loser dies (ties: the attacker
+    loses; aggression bears the risk). You can attack a richer agent; you
+    just die. Winner loots `min(α, loser wealth)`; the loser's remaining
+    estate flows through D4 as usual. A deliberately sharper combat game.
+  - **Hidden holdings ⇒ trade clamping changes (E4):** offer `want` values
+    are no longer clamped to counterparty holdings (you can't know them);
+    `give` values remain clamped to your own. An acceptance the acceptor
+    cannot pay voids exactly as today — the existing execution-time
+    voiding rule already covers it.
+  - **Hidden sickness needs no special rules (C4)** — it feeds no legality
+    check; policies just lose the quarantine signal.
+  - Mate/rival assessment under hidden attributes is inference: voided
+    proposals carry information (poker, not chess).
+- **Own state: complete, with one knob.** Holdings, metabolisms, vision,
+  age, sex, fertility window, tribe, sick + immune state, outstanding loan
+  contracts (both directions), position, **current-tick welfare and the
+  running integral** (the score being optimized is legible — B2). Own
+  `max_age`: visible to the agent itself by default, with a config flag to
+  hide it even from self (mortality as risk rather than fact — revised
+  2026-08-10).
 - **Globals:** current tick, episode length T, season state (when
   enabled). The **public game config — including the capacity map — is
   handed to every policy at start** (it's public anyway; it ships in
@@ -455,7 +553,9 @@ added behind the same seam if profiling ever demands it. (Closes fork 1 in
 ### 7.5 Time (Decided — A4, 2026-08-07)
 
 The game has no notion of wall-clock time and imposes no per-invocation
-budget. A policy is either *responsive* or *faulted* (→ A3 freeze); deadlines
+budget ("invocation" = one policy call: one agent at one gate, including
+each negotiation-cycle delivery). A policy is either *responsive* or
+*faulted* (→ A3 freeze); deadlines
 that produce faults belong to the runtime — Arena's host per-delivery
 deadline, or the WS shell's per-decision timeout (config, order of seconds).
 This is forced as well as chosen: a deterministic Arena guest has no clock,
@@ -512,6 +612,24 @@ target** (native, Arena wasm32, browser viewer). The spec:
 4. **Canonical per-tick state hash**, recorded periodically into the
    replay; native↔wasm↔viewer hash parity tests are the correctness gate
    (the coworld-ctf `gameHash` pattern).
+
+**Precision & binning analysis (added 2026-08-10, answering the review
+question).** 32.32 gives a lattice step of 2⁻³² ≈ 2.3×10⁻¹⁰ and ±2³¹
+integer range. With integer holdings and pinned polynomial `ln`/`exp`
+implementations holding a few-ulp error budget, per-tick welfare carries a
+relative error on the order of 10⁻⁹. Binning (two different game states
+mapping to the same welfare value) therefore only collapses differences
+below ~10⁻⁹ relative — while the smallest *possible* real difference (one
+unit of holdings at plausible wealth scales) moves welfare by ~10⁻³ to
+10⁻⁴ relative: about six orders of magnitude of headroom. Two notes that
+are spec, not commentary: (1) binning never threatens *determinism* (same
+inputs → same bits, always); it only bounds how fine a distinction the
+score can express, and the bound is far below anything gameplay produces.
+(2) The welfare **accumulator is wider than the lattice** — 96-bit
+(64.32) — so 1000-tick sums of large-population welfare cannot overflow
+or lose low bits; the published score quantizes welfare to a documented
+coarser step (e.g. 2⁻²⁰) with B6's survivor count occupying bits strictly
+below that step (12 bits covers 4096 survivors).
 
 ## 8. Design tensions (read before answering the open questions)
 
