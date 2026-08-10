@@ -71,8 +71,9 @@ competitive benchmark shouldn't.
   `total_agents` seats. Neither seats nor `total_agents` carries a hard
   upper bound — classic-scale worlds (250 agents) are legitimate configs.
   The flagship ranked variant stays at 64 total pending playtesting; large
-  configs raise the Arena instance-count question (§11 risk, one component
-  instance per player).
+  configs sharpen the Arena instance-count question (one component
+  instance per **agent** under F2's isolation — 250 agents ⇒ 251
+  instances).
 - **A seat may control multiple agents (Decided)**, invoked per-agent per P1.
   E.g. 4 seats × 16 agents each.
 - **`total_agents` is config; seat count must divide it. (Decided — A1,
