@@ -1,15 +1,14 @@
 # Sugarscape v2 — Design
 
-**Status: design complete with three items reopened by review (2026-08-10).**
-All questions A1–F6 were resolved 2026-08-07; James's comment round of
-2026-08-10 revised several decisions in place (marked "revised 2026-08-10")
-and reopened three items now under discussion: **(i) the speaking phase**
-(new mechanic — post-move speech audible to von Neumann neighbors),
-**(ii) per-agent component instances** (enforcing P1 memory isolation;
-possibly obsoleting the scratchpad), and **(iii) timeout-as-no-op**
-(soft per-decision deadlines instead of seat kicks — blocked on an Arena
-limitation; see `docs/issues/arena-soft-timeout-limitation.md`).
-Everything else below is **Decided**; changes require revisiting a decision
+**Status: design complete (rev. 2026-08-10, after James's review round).**
+All questions A1–F6 were resolved 2026-08-07; the 2026-08-10 review revised
+several decisions in place (marked "revised 2026-08-10"), and its three
+discussion items resolved as: **(i) speaking phase → future work** (§11 —
+desired, not in v2.0), **(ii) per-agent component instances adopted,
+scratchpad dropped** (F2 revision, §7.2), **(iii) timeouts freeze
+everywhere for now** (target semantics recorded; blocked on an Arena
+limitation — see `docs/issues/arena-soft-timeout-limitation.md`).
+Everything below is **Decided**; changes require revisiting a decision
 by name. Implementation may surface revisions — record them here with dates.
 
 Each item is tagged:
@@ -39,9 +38,11 @@ Consequences worth stating:
 
 - The observation given to a policy invocation is scoped to one agent (§7.1).
   A policy does not receive a roster of its agents or their positions.
-- The scratchpad memory (§7.2) is the only channel through which a policy
-  could coordinate its own agents, and its scope (per-agent vs per-seat) is
-  therefore a design decision with teeth — see open question F2.
+- P1 is *enforced*, not aspirational (F2 revision, 2026-08-10): under
+  Arena each agent runs in its own component instance, so a policy's
+  agents share no memory. Coordination between one seat's agents happens
+  only through the observable world — positions, trades, gifts (and
+  speech, when §11's future speaking phase lands).
 
 **P2 — The simulation defines the physics; policies define the behavior.
 (Decided)**
@@ -357,8 +358,9 @@ What it costs / leaves open:
   next cycle. A cycle with zero offers ends the phase early — quiescence
   is a trivial deterministic check, not a definition problem. The sim
   never computes MRS or prices; **prices emerge or don't**. Spot barter
-  only (credit is E6). Cross-tick price discovery is expected — the
-  scratchpad (§7.2) is where reputation lives. Order-book matching and
+  only (credit is E6). Cross-tick price discovery is expected — an
+  agent's persistent instance memory (§7.2) is where reputation lives.
+  Order-book matching and
   free-form negotiation channels remain buildable later as variants on the
   same encoding.
 - **Mating: E4-shaped consent, classic eligibility. (Decided — E5,
@@ -508,25 +510,36 @@ What a policy invocation receives and controls, per agent (P1):
   handed to every policy at start** (it's public anyway; it ships in
   replays). The map is known; the other agents are the uncertainty.
 
-### 7.2 Memory: a scratchpad (Decided — F2, 2026-08-07)
+### 7.2 Memory: per-agent instance isolation (Revised — F2, 2026-08-10; supersedes the 2026-08-07 scratchpad decision)
 
-Each **agent** has one persistent scratchpad: **8 KiB (config-adjustable) of
-validated UTF-8 text**, delivered with that agent's observation and
-rewritable with its action. Pads don't touch world state, so they're not
-needed for replay determinism; whether replays optionally snapshot them
-(spectator value vs. size) is F5's call.
+**Under Arena, every agent runs in its own component instance** — one
+store per agent, not per seat (config `agent_isolation`, ranked default
+on). Same compiled module, N instantiations; the shared compile cache
+makes this cheap. Consequences, which are the point:
 
-**Honest-rules clause.** The Arena research corrected §8.3's premise:
-component instances (and WS player processes) live for the whole episode,
-so *seat-scoped RAM persists regardless* — per-agent pad scope cannot be an
-isolation boundary, and v2 doesn't pretend it is. Intra-seat coordination
-through private memory is **legal** (unenforceable to ban); P1 governs the
-invocation shape (per-agent observations and actions), not memory
-isolation. The pad's real value is *legibility*: protocol-owned, per-agent
-keyed memory — inspectable in debugging, replay-snapshottable, and the
-natural home for courtship/reputation inference under F1's minimal
-visibility. Stateless-per-invocation policy styles (fresh-context LLM
-calls) read their pad instead of re-deriving.
+- **P1 becomes enforced physics**, not an honor rule: a policy's agents
+  cannot share memory, so population-level control through private
+  coordination is structurally impossible under Arena. Intra-seat
+  coordination happens only through the observable world.
+- **An agent's memory is its instance RAM**, persistent across all of its
+  invocations for the whole episode. No protocol memory object is needed.
+- **Newborns start blank** — a child's fresh instance inherits no parental
+  memory; family knowledge transfers only through observable channels
+  (estates via D4; speech when §11 lands). Emergent and intended.
+- **The WS shell cannot enforce isolation** (one container per seat owns
+  its process memory) — there, the pre-revision honest-rules stance
+  applies: intra-seat RAM coordination is legal because it is
+  unenforceable to ban. Ranked play runs on Arena, where the rule is
+  real. (If enforcement under WS ever matters, siloed per-agent copies of
+  a player container are possible but expensive — noted, not planned.)
+- **The scratchpad is dropped from protocol v1.** Persistent instance RAM
+  obviates its memory role entirely. What it offered beyond memory —
+  replay-inspectable agent diaries, stateless-LLM ergonomics — was not
+  worth a protocol object; it may return later as an opt-in debug channel
+  if implementation misses it.
+- Scaling note: instance count now tracks **agents**, not seats — a
+  4-seat × 16-agent episode is 65 instances, and larger `total_agents`
+  configs (A1 is unbounded) sharpen the Arena instance-count risk.
 
 ### 7.3 Actions (partially decided)
 
@@ -567,6 +580,17 @@ CTF/LLM profiles), since the episode wall clock is the only other bound on
 a slow-but-legal policy. Per-policy compute fairness is the platform's job
 (fixed CPU per component), not the game's.
 
+**Target semantics + interim (2026-08-10).** The *desired* rule is softer:
+a missed per-decision deadline should no-op that one decision and let the
+seat keep playing, reserving faults for traps and protocol violations.
+That is currently inexpressible under Arena (no guest clock; the host's
+only timeout vocabulary is the permanent drop — described, without
+prescription, in `docs/issues/arena-soft-timeout-limitation.md` for the
+Arena team). **Interim decision: freeze-on-timeout everywhere** — both
+runtimes keep A3's uniform rule until Arena gains soft-timeout semantics,
+at which point the no-op rule switches on across both shells in the same
+release.
+
 ### 7.6 Runtime and replay (Decided — F4 + F5, 2026-08-07)
 
 **Runtime (F4, closes fork 2):** one deterministic core, thin shells, built
@@ -584,11 +608,10 @@ envelope consistent with §7.4, compressed; emitted incrementally via
 Arena's `replay-append` and written to `COGAME_SAVE_REPLAY_URI` by the WS
 shell — same bytes. The viewer is a **static bundle that resimulates**
 with the same core compiled for the browser (v1's own signpost; the
-ctf/crewrift production pattern). Scratchpad snapshots are **excluded**
-from the base format (not needed for resimulation; policy memory isn't
-broadcast by default) — a flagged debug/spectator extension may add them
-later. Emscripten-vs-jco viewer build path is an implementation choice,
-not spec.
+ctf/crewrift production pattern). (The original F5 call also excluded
+scratchpad snapshots from the base format; the F2 revision of 2026-08-10
+dropped the scratchpad entirely, making that moot.) Emscripten-vs-jco
+viewer build path is an implementation choice, not spec.
 
 ### 7.7 Determinism spec (Decided — F6, 2026-08-07)
 
@@ -657,7 +680,7 @@ game. This is the biggest unspecified scoring question. (B2)
 **Resolved (2026-08-07):** dissolved by choosing time-integrated wellness —
 see §3. The pathologies above were all artifacts of end-snapshot scoring.
 
-### 8.3 The scratchpad is protocol, not storage
+### 8.3 The scratchpad is protocol, not storage (superseded 2026-08-10 — the scratchpad was dropped; per-agent instance isolation replaced it, see §7.2)
 
 Because Arena components are sandboxed WASM with no filesystem and no
 `wasi:random`, the scratchpad must live in the host—policy contract itself:
@@ -777,8 +800,9 @@ Grouped; tags reference the sections above.
   (= movement range); visible agents show only seat/holdings/tribe/sick;
   own state complete incl. welfare integral; globals tick/T/season; public
   config at start. See §7.1.
-- **F2.** ~~Scratchpad scope, size, format.~~ **Resolved (2026-08-07):**
-  per-agent, 8 KiB UTF-8, honest-rules clause on seat RAM. See §7.2.
+- **F2.** ~~Scratchpad scope, size, format.~~ **Resolved (2026-08-07),
+  then superseded (2026-08-10):** per-agent component instance isolation
+  under Arena; scratchpad dropped from the protocol. See §7.2.
 - **F3.** ~~Message encoding.~~ **Resolved (2026-08-07):** JSON, versioned
   envelope, pure-core codec. See §7.4. (Closes fork 1.)
 - **F4.** ~~Runtime target.~~ **Resolved (2026-08-07):** core → Arena
@@ -805,3 +829,31 @@ From `what-is-a-coworld.md` §"Open design forks for v2":
 | 6 — fault/fallback | **closed (A3):** faulted seat's agents freeze |
 
 All six platform forks are closed as of 2026-08-07.
+
+## 11. Future work (desired, explicitly not in v2.0)
+
+**Speaking (James, 2026-08-10).** A wholly novel mechanic: agents speak,
+audibly to nearby agents — cheap talk, unverifiable, deception legal by
+construction, public in replays. The design space sketched so far, to be
+worked when v2.0 is playable:
+
+- Probably **targeted, E4-shaped speech** rather than broadcast: an agent
+  speaks *to* specific agents (ideally multiple recipients) within some
+  region — neighbors, probably, rather than vision — with the phase
+  running to quiescence like trade/mating, rather than one utterance each
+  in seeded order.
+- Possibly **speaking phases injected between all other phases** (talk
+  before you trade, before you mate, before you move), not one fixed
+  slot after movement.
+- Open: recipient addressing, utterance byte cap, persistence window
+  (this-tick vs longer), whether hearing precedes speaking within a
+  round, and interaction with F1 visibility regimes (speech as the
+  channel that makes hidden-attribute inference *social*).
+- Interplay worth designing for: with F2's blank-slate newborns, speech
+  becomes the only way families transmit knowledge — an emergent culture
+  channel.
+
+**Also parked:** Thue–Morse activation ordering (E1 refinement beyond
+per-tick reshuffle); order-book and free-form negotiation variants (E4);
+an `llm` import for Arena player components (platform-side; v0.1.0 wit
+has none).
