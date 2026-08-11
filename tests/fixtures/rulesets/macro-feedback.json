@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "traits": {
+    "aggression": 0.25,
+    "trade": 1.0,
+    "lending": 0.5,
+    "fertility": 0.8
+  },
+  "movement": [
+    {
+      "if": [">", ["get", "world.gini"], 0.5],
+      "score": [
+        "-",
+        ["get", "cell.welfare"],
+        ["*", 0.4, ["get", "cell.distance"]],
+        ["*", 2.0, ["get", "cell.pollution"]]
+      ]
+    },
+    {
+      "score": ["+", ["get", "cell.sugar"], ["get", "cell.spice"]]
+    }
+  ]
+}

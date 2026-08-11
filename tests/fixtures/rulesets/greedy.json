@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "movement": [
+    {"score": ["get", "cell.welfare"]}
+  ]
+}

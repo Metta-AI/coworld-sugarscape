@@ -1,0 +1,20 @@
+{
+  "seed": 1729,
+  "seats": 2,
+  "timesteps": 50,
+  "measurement_window": 10,
+  "replay_histogram_interval": 5,
+  "startingAgents": 30,
+  "startingDiseases": 0,
+  "environmentWidth": 20,
+  "environmentHeight": 20,
+  "environmentSugarPeaks": [[5, 14, 4], [14, 5, 4]],
+  "environmentSpicePeaks": [[5, 5, 4], [14, 14, 4]],
+  "targets": ["wealth.skewed-gini-0.5", "wealth.egalitarian"],
+  "trait_ranges": {
+    "aggression": [0, 1],
+    "trade": [0, 1],
+    "lending": [0, 1],
+    "fertility": [0.5, 2]
+  }
+}

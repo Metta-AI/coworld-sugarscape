@@ -1,0 +1,16 @@
+{
+  "id": "disease.eradicated",
+  "variable": "sick_fraction",
+  "scope": "global",
+  "support": [0, 1],
+  "bins": [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+  "probs": [0.88, 0.10, 0.015, 0.005, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+  "window": 100,
+  "source": "Provisional disease-eradication counterfactual based on Epstein & Axtell (1996), chapter V; not observed data.",
+  "provisional": true,
+  "generation": {
+    "family": "zero-inflated-beta",
+    "parameters": {"zero_mass": 0.85, "alpha": 1, "beta": 18},
+    "description": "Zero-inflated low-prevalence distribution with nearly all mass in the first two sick-fraction bins."
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "id": "disease.endemic",
+  "variable": "sick_fraction",
+  "scope": "global",
+  "support": [0, 1],
+  "bins": [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+  "probs": [0.02, 0.08, 0.24, 0.34, 0.20, 0.08, 0.03, 0.01, 0.0, 0.0],
+  "window": 100,
+  "source": "Provisional endemic-prevalence interpretation of Epstein & Axtell (1996), chapter V; not digitized source data.",
+  "provisional": true,
+  "generation": {
+    "family": "beta",
+    "parameters": {"alpha": 5, "beta": 11},
+    "description": "Beta-like endemic equilibrium centered near thirty percent sick prevalence with moderate variation."
+  }
+}

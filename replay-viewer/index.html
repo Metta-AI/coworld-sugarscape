@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sugarscape Replay</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <div>
+      <p class="eyebrow">Generative social science</p>
+      <h1>Sugarscape</h1>
+    </div>
+    <div id="status">Waiting for replay…</div>
+  </header>
+  <main>
+    <section class="map-panel">
+      <canvas id="map" width="720" height="720" aria-label="Sugarscape map"></canvas>
+      <div class="controls">
+        <button id="play" type="button">Pause</button>
+        <input id="timeline" type="range" min="0" max="0" value="0" aria-label="Replay timestep">
+        <span id="tick">T0</span>
+        <label>Speed
+          <select id="speed">
+            <option value="500">0.5×</option>
+            <option value="250" selected>1×</option>
+            <option value="100">2.5×</option>
+            <option value="40">6×</option>
+          </select>
+        </label>
+      </div>
+    </section>
+    <aside>
+      <h2>Did the rules grow the target?</h2>
+      <div id="histograms"></div>
+    </aside>
+  </main>
+  <div id="error" role="alert" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>

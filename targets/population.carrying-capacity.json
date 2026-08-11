@@ -1,0 +1,16 @@
+{
+  "id": "population.carrying-capacity",
+  "variable": "population",
+  "scope": "global",
+  "support": [0, 2000],
+  "bins": [0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900, 2000],
+  "probs": [0.0, 0.0, 0.0, 0.001, 0.004, 0.015, 0.04, 0.09, 0.16, 0.23, 0.23, 0.14, 0.06, 0.02, 0.007, 0.002, 0.001, 0.0, 0.0, 0.0],
+  "window": 100,
+  "source": "Provisional interpretation of Epstein & Axtell (1996), chapter II carrying-capacity behavior; not digitized source data.",
+  "provisional": true,
+  "generation": {
+    "family": "discretized-normal",
+    "parameters": {"mean": 1000, "standard_deviation": 190},
+    "description": "Narrow normal-like equilibrium distribution centered near the default world's empirically observed carrying capacity."
+  }
+}

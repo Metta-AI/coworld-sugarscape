@@ -1,0 +1,39 @@
+services:
+  game:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      COGAME_HOST: 0.0.0.0
+      COGAME_PORT: "8080"
+      COGAME_CONFIG_URI: file:///data/config.json
+      COGAME_RESULTS_URI: file:///data/output/results.json
+      COGAME_SAVE_REPLAY_URI: file:///data/output/replay.bin
+      PYTHONHASHSEED: "0"
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=1)"
+      interval: 1s
+      timeout: 2s
+      retries: 30
+    volumes:
+      - ./config.json:/data/config.json:ro
+      - ./build/local:/data/output
+
+  baseline:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: players/baseline/Dockerfile
+    depends_on:
+      game:
+        condition: service_healthy
+    environment:
+      COWORLD_PLAYER_WS_URL: ws://game:8080/player?slot=0&token=local-token-0
+      PYTHONHASHSEED: "0"

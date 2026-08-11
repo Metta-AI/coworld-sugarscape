@@ -1,0 +1,16 @@
+{
+  "id": "age-at-death.survivorship",
+  "variable": "age_at_death",
+  "scope": "global",
+  "support": [0, 120],
+  "bins": [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120],
+  "probs": [0.01, 0.02, 0.04, 0.07, 0.11, 0.16, 0.19, 0.18, 0.13, 0.065, 0.02, 0.005],
+  "window": 100,
+  "source": "Provisional life-table-like interpretation of Epstein & Axtell (1996), chapters II-III rule R; not digitized source data.",
+  "provisional": true,
+  "generation": {
+    "family": "discrete-weibull",
+    "parameters": {"shape": 3.1, "scale": 72},
+    "description": "Parametric adult survivorship curve with low early mortality, a modal old-age band, and a taper near the maximum-age range."
+  }
+}

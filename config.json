@@ -1,0 +1,23 @@
+{
+  "seed": 1729,
+  "seats": 1,
+  "players": [{"name": "Local baseline"}],
+  "tokens": ["local-token-0"],
+  "timesteps": 100,
+  "measurement_window": 20,
+  "replay_histogram_interval": 5,
+  "player_connect_timeout_seconds": 180,
+  "startingAgents": 30,
+  "startingDiseases": 0,
+  "environmentWidth": 20,
+  "environmentHeight": 20,
+  "environmentSugarPeaks": [[5, 14, 4], [14, 5, 4]],
+  "environmentSpicePeaks": [[5, 5, 4], [14, 14, 4]],
+  "targets": ["wealth.skewed-gini-0.5"],
+  "trait_ranges": {
+    "aggression": [0, 1],
+    "trade": [0, 1],
+    "lending": [0, 1],
+    "fertility": [0.5, 2]
+  }
+}

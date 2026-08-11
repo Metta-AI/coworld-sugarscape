@@ -1,0 +1,16 @@
+{
+  "id": "wealth.skewed-gini-0.5",
+  "variable": "wealth",
+  "scope": "global",
+  "support": [0, 1000],
+  "bins": [0, 25, 50, 75, 100, 150, 225, 325, 450, 650, 1000],
+  "probs": [0.05, 0.12, 0.18, 0.18, 0.18, 0.13, 0.08, 0.05, 0.025, 0.005],
+  "window": 100,
+  "source": "Provisional interpretation of Epstein & Axtell (1996), chapter II, Animation II-4; not digitized source data.",
+  "provisional": true,
+  "generation": {
+    "family": "lognormal-pareto-mixture",
+    "parameters": {"body_log_mean": 4.25, "body_log_sigma": 0.55, "pareto_alpha": 2.1, "tail_weight": 0.12},
+    "description": "Parametric lognormal body with a Pareto upper tail, discretized into the canonical wealth bins and hand-tuned toward Gini approximately 0.5."
+  }
+}
