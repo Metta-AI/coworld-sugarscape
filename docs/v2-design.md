@@ -1,13 +1,21 @@
 # Sugarscape v2 — Design
 
-**Status: design complete (rev. 2026-08-10, after James's review round).**
+**Status: design complete (rev. 2026-08-11).**
 All questions A1–F6 were resolved 2026-08-07; the 2026-08-10 review revised
 several decisions in place (marked "revised 2026-08-10"), and its three
 discussion items resolved as: **(i) speaking phase → future work** (§11 —
 desired, not in v2.0), **(ii) per-agent component instances adopted,
-scratchpad dropped** (F2 revision, §7.2), **(iii) timeouts freeze
-everywhere for now** (target semantics recorded; blocked on an Arena
-limitation — see `docs/issues/arena-soft-timeout-limitation.md`).
+scratchpad dropped** (F2 revision, §7.2 — since re-revised, see below),
+**(iii) timeouts freeze everywhere for now** (target semantics recorded;
+blocked on an Arena limitation — see
+`docs/issues/arena-soft-timeout-limitation.md`).
+Two further revisions on 2026-08-11: **(a) F2 re-revised — one policy
+instance per seat**, shared by all that seat's agents; the per-agent
+isolation of 2026-08-10 is reverted and the shared-RAM hole accepted
+deliberately (§7.2). **(b) The WASM implementation is deferred to future
+work** — the Arena components and the browser-compiled core behind the
+resimulating replay viewer; v2.0 ships native core + WS shell (F4
+revision, §7.6, §11).
 Everything below is **Decided**; changes require revisiting a decision
 by name. Implementation may surface revisions — record them here with dates.
 
@@ -38,11 +46,15 @@ Consequences worth stating:
 
 - The observation given to a policy invocation is scoped to one agent (§7.1).
   A policy does not receive a roster of its agents or their positions.
-- P1 is *enforced*, not aspirational (F2 revision, 2026-08-10): under
-  Arena each agent runs in its own component instance, so a policy's
-  agents share no memory. Coordination between one seat's agents happens
-  only through the observable world — positions, trades, gifts (and
-  speech, when §11's future speaking phase lands).
+- P1 is a protocol-shape rule, not enforced memory isolation (re-revised
+  2026-08-11; the 2026-08-10 per-agent-instance enforcement is reverted).
+  One policy instance serves all of a seat's agents (§7.2), so those
+  agents share the instance's RAM and *can* privately coordinate — an
+  accepted cost, not a blessed channel. The protocol still offers no
+  population-scoped call and observations stay scoped to one agent;
+  *cross-seat* coordination still happens only through the observable
+  world — positions, trades, gifts (and speech, when §11's future
+  speaking phase lands).
 
 **P2 — The simulation defines the physics; policies define the behavior.
 (Decided)**
@@ -70,10 +82,9 @@ competitive benchmark shouldn't.
   was "up to 64")** A seat is one submitted policy; an episode admits up to
   `total_agents` seats. Neither seats nor `total_agents` carries a hard
   upper bound — classic-scale worlds (250 agents) are legitimate configs.
-  The flagship ranked variant stays at 64 total pending playtesting; large
-  configs sharpen the Arena instance-count question (one component
-  instance per **agent** under F2's isolation — 250 agents ⇒ 251
-  instances).
+  The flagship ranked variant stays at 64 total pending playtesting;
+  instance count tracks **seats**, not agents (§7.2, re-revised
+  2026-08-11), so large `total_agents` configs are cheap on any runtime.
 - **A seat may control multiple agents (Decided)**, invoked per-agent per P1.
   E.g. 4 seats × 16 agents each.
 - **`total_agents` is config; seat count must divide it. (Decided — A1,
@@ -324,11 +335,12 @@ What it costs / leaves open:
     for that property. Fairness is not truly sacrificed: reshuffling every
     tick spreads first-action benefit over the uniform distribution, and a
     **Thue–Morse ordering over ticks is a candidate refinement** for even
-    stronger fairness (open exploration, not committed). Runtime note:
-    N serial policy round-trips per timestep is negligible under Arena
-    (in-process — the move to Arena removes most of the WS-latency
-    concern); the WS shell serves certification/local play at small
-    configs.
+    stronger fairness (open exploration, not committed). Runtime note
+    (revised 2026-08-11): v2.0 runs on the WS shell (WASM/Arena deferred
+    — §7.6), so sequential movement costs N policy round-trips per
+    timestep over the socket. That latency is accepted for v2.0 — B1's
+    1000-tick episodes size it — and shrinks to negligible when the
+    deferred Arena runtime's in-process calls land.
   - **Harvest: order-free** (own-cell only; no agent interaction) —
     delivered as one concurrent fan-out.
   - **Trade / mating: negotiation phases** — their within-phase structure
@@ -359,8 +371,8 @@ What it costs / leaves open:
   next cycle. A cycle with zero offers ends the phase early — quiescence
   is a trivial deterministic check, not a definition problem. The sim
   never computes MRS or prices; **prices emerge or don't**. Spot barter
-  only (credit is E6). Cross-tick price discovery is expected — an
-  agent's persistent instance memory (§7.2) is where reputation lives.
+  only (credit is E6). Cross-tick price discovery is expected — the
+  seat's persistent instance memory (§7.2) is where reputation lives.
   Order-book matching and
   free-form negotiation channels remain buildable later as variants on the
   same encoding.
@@ -511,36 +523,47 @@ What a policy invocation receives and controls, per agent (P1):
   handed to every policy at start** (it's public anyway; it ships in
   replays). The map is known; the other agents are the uncertainty.
 
-### 7.2 Memory: per-agent instance isolation (Revised — F2, 2026-08-10; supersedes the 2026-08-07 scratchpad decision)
+### 7.2 Memory: one policy instance per seat (Re-revised — F2, 2026-08-11; supersedes the 2026-08-10 per-agent isolation revision)
 
-**Under Arena, every agent runs in its own component instance** — one
-store per agent, not per seat (config `agent_isolation`, ranked default
-on). Same compiled module, N instantiations; the shared compile cache
-makes this cheap. Consequences, which are the point:
+**One policy instance serves all of a seat's agents.** The WS shell
+already works this way (one container per seat owns its process memory);
+the deferred Arena runtime (§7.6, §11) will instantiate one component
+per seat as well. Invocation remains strictly per-agent (P1): the
+instance is called once per agent per gate, with that agent's
+observation, and answers for that agent. Consequences:
 
-- **P1 becomes enforced physics**, not an honor rule: a policy's agents
-  cannot share memory, so population-level control through private
-  coordination is structurally impossible under Arena. Intra-seat
-  coordination happens only through the observable world.
-- **An agent's memory is its instance RAM**, persistent across all of its
-  invocations for the whole episode. No protocol memory object is needed.
-- **Newborns start blank** — a child's fresh instance inherits no parental
-  memory; family knowledge transfers only through observable channels
-  (estates via D4; speech when §11 lands). Emergent and intended.
-- **The WS shell cannot enforce isolation** (one container per seat owns
-  its process memory) — there, the pre-revision honest-rules stance
-  applies: intra-seat RAM coordination is legal because it is
-  unenforceable to ban. Ranked play runs on Arena, where the rule is
-  real. (If enforcement under WS ever matters, siloed per-agent copies of
-  a player container are possible but expensive — noted, not planned.)
-- **The scratchpad is dropped from protocol v1.** Persistent instance RAM
-  obviates its memory role entirely. What it offered beyond memory —
+- **The shared-RAM hole is accepted, eyes open.** A seat's agents share
+  the instance's memory, so private intra-seat coordination — shared
+  maps, role assignment, signalling outside the world — is possible.
+  The 2026-08-10 revision closed this with per-agent component
+  instances; that is reverted: the costs (instance count scaling with
+  agents, spawning instances at every birth, and a rule the WS shell
+  could never enforce anyway, making the two runtimes play different
+  games) outweighed the enforcement. P1's memory isolation returns to
+  the honest-rules reading, now uniform across runtimes; the protocol
+  shape — no population-scoped call, single-agent observations — is
+  unchanged.
+- **A seat's memory is its instance RAM**, persistent across all the
+  seat's invocations for the whole episode. A policy that wants
+  per-agent memory keys it by agent id. No protocol memory object is
+  needed.
+- **Newborns need no new instance** — when mating assigns a child to a
+  seat (A2), that seat's existing instance simply starts receiving
+  invocations for the new agent id. An in-seat child is born into
+  whatever its policy already knows; a cross-seat child (A2's coin
+  flip) is served by the other seat's instance and inherits nothing
+  from its birth parents' seats except what reached the observable
+  world (estates via D4; speech when §11 lands).
+- **The scratchpad stays dropped from protocol v1** (2026-08-10 call,
+  unaffected by this re-revision). Persistent instance RAM obviates its
+  memory role entirely. What it offered beyond memory —
   replay-inspectable agent diaries, stateless-LLM ergonomics — was not
-  worth a protocol object; it may return later as an opt-in debug channel
-  if implementation misses it.
-- Scaling note: instance count now tracks **agents**, not seats — a
-  4-seat × 16-agent episode is 65 instances, and larger `total_agents`
-  configs (A1 is unbounded) sharpen the Arena instance-count risk.
+  worth a protocol object; it may return later as an opt-in debug
+  channel if implementation misses it.
+- Scaling note: instance count tracks **seats** (seats + 1 counting the
+  game), independent of `total_agents` — 64 seats = 65 instances stays
+  the stress case, and A1's classic-scale configs (250 agents, few
+  seats) no longer multiply instances.
 
 ### 7.3 Actions (partially decided)
 
@@ -594,30 +617,40 @@ release.
 
 ### 7.6 Runtime and replay (Decided — F4 + F5, 2026-08-07)
 
-**Runtime (F4, closes fork 2):** one deterministic core, thin shells, built
-in this order: **core → Arena components (`softmax:game`/`softmax:player`,
-per the merged coworld-ctf `arena/` recipe) → WS container shell → replay
-viewer.** Arena is the dogfood and the smallest harness for the core; the
-WS shell remains mandatory for certification/league hosting (Arena is
-experiment-scoped) and serves small configs, accepting E1's sequential-
-movement latency. The manifest **omits `engine_runtime`** — v2 builds on
-none of the listed runtimes.
+**Runtime (F4, closes fork 2; revised 2026-08-11 — WASM deferred):** one
+deterministic core, thin shells. v2.0 build order: **core → WS container
+shell.** The **WASM implementation is future work (§11)**: the Arena
+components (`softmax:game`/`softmax:player`, per the merged coworld-ctf
+`arena/` recipe) and the browser-compiled core the replay viewer
+resimulates with. The WS shell is mandatory for certification/league
+hosting and is v2.0's sole runtime, accepting E1's sequential-movement
+latency; the core keeps F6's all-integer portability discipline from day
+one so the wasm32 port lands later as a port, not a redesign. The
+manifest **omits `engine_runtime`** — v2 builds on none of the listed
+runtimes. (The original 2026-08-07 order — core → Arena → WS shell →
+viewer, with Arena as dogfood — is superseded; the dogfood role moves to
+the WS shell.)
 
 **Replay (F5, closes fork 3):** replay = **config + seed + decision log**
 (every accepted action/offer per gate in execution order), versioned JSON
-envelope consistent with §7.4, compressed; emitted incrementally via
-Arena's `replay-append` and written to `COGAME_SAVE_REPLAY_URI` by the WS
-shell — same bytes. The viewer is a **static bundle that resimulates**
-with the same core compiled for the browser (v1's own signpost; the
-ctf/crewrift production pattern). (The original F5 call also excluded
-scratchpad snapshots from the base format; the F2 revision of 2026-08-10
-dropped the scratchpad entirely, making that moot.) Emscripten-vs-jco
-viewer build path is an implementation choice, not spec.
+envelope consistent with §7.4, compressed; written to
+`COGAME_SAVE_REPLAY_URI` by the WS shell (and emitted incrementally via
+Arena's `replay-append` when that runtime lands — same bytes). The viewer
+architecture stays decided — a **static bundle that resimulates** with
+the same core compiled for the browser (v1's own signpost; the
+ctf/crewrift production pattern) — but that browser build is part of the
+deferred WASM work, so the viewer ships with it (§11), after v2.0's core
+and WS shell. (The original F5 call also excluded scratchpad snapshots
+from the base format; the F2 revision of 2026-08-10 dropped the
+scratchpad entirely, making that moot.) Emscripten-vs-jco viewer build
+path is an implementation choice, not spec.
 
 ### 7.7 Determinism spec (Decided — F6, 2026-08-07)
 
 Same config + seed + decision log ⇒ **bit-identical world state on every
-target** (native, Arena wasm32, browser viewer). The spec:
+target** — native today; Arena wasm32 and the browser viewer when the
+deferred WASM work lands (§7.6). The discipline below is in force from
+day one precisely so those ports change no behavior. The spec:
 
 1. **All-integer world state** — no floats anywhere in the game, including
    welfare: Cobb–Douglas is computed in **fixed-point (32.32)** via pinned
@@ -634,8 +667,9 @@ target** (native, Arena wasm32, browser viewer). The spec:
 3. **Defined iteration order everywhere** — arrays and explicit sort keys;
    no hash-table ordering may leak into behavior.
 4. **Canonical per-tick state hash**, recorded periodically into the
-   replay; native↔wasm↔viewer hash parity tests are the correctness gate
-   (the coworld-ctf `gameHash` pattern).
+   replay. The v2.0 correctness gate is live-run↔replay-resimulation
+   hash parity on native; native↔wasm↔viewer parity joins the gate when
+   the WASM targets land (the coworld-ctf `gameHash` pattern).
 
 **Precision & binning analysis (added 2026-08-10, answering the review
 question).** 32.32 gives a lattice step of 2⁻³² ≈ 2.3×10⁻¹⁰ and ±2³¹
@@ -681,7 +715,7 @@ game. This is the biggest unspecified scoring question. (B2)
 **Resolved (2026-08-07):** dissolved by choosing time-integrated wellness —
 see §3. The pathologies above were all artifacts of end-snapshot scoring.
 
-### 8.3 The scratchpad is protocol, not storage (superseded 2026-08-10 — the scratchpad was dropped; per-agent instance isolation replaced it, see §7.2)
+### 8.3 The scratchpad is protocol, not storage (superseded — the scratchpad was dropped 2026-08-10; memory lives in policy-instance RAM, per-seat as of 2026-08-11, see §7.2)
 
 Because Arena components are sandboxed WASM with no filesystem and no
 `wasi:random`, the scratchpad must live in the host—policy contract itself:
@@ -802,15 +836,20 @@ Grouped; tags reference the sections above.
   own state complete incl. welfare integral; globals tick/T/season; public
   config at start. See §7.1.
 - **F2.** ~~Scratchpad scope, size, format.~~ **Resolved (2026-08-07),
-  then superseded (2026-08-10):** per-agent component instance isolation
-  under Arena; scratchpad dropped from the protocol. See §7.2.
+  revised twice:** scratchpad dropped from the protocol (2026-08-10);
+  per-agent instance isolation adopted (2026-08-10) then reverted — final
+  state is **one policy instance per seat**, shared RAM accepted
+  (2026-08-11). See §7.2.
 - **F3.** ~~Message encoding.~~ **Resolved (2026-08-07):** JSON, versioned
   envelope, pure-core codec. See §7.4. (Closes fork 1.)
-- **F4.** ~~Runtime target.~~ **Resolved (2026-08-07):** core → Arena
-  shells → WS shell; `engine_runtime` omitted. See §7.6. (Closes fork 2.)
+- **F4.** ~~Runtime target.~~ **Resolved (2026-08-07), revised
+  (2026-08-11):** core → WS shell; the WASM implementation (Arena
+  components + browser core) deferred to future work; `engine_runtime`
+  omitted. See §7.6. (Closes fork 2.)
 - **F5.** ~~Replay architecture.~~ **Resolved (2026-08-07):** decision-log
-  replay + resimulating static bundle; no pad snapshots in base format.
-  See §7.6. (Closes fork 3.)
+  replay + resimulating static bundle; no pad snapshots in base format;
+  the viewer ships with the deferred WASM work (2026-08-11). See §7.6.
+  (Closes fork 3.)
 - **F6.** ~~Determinism spec.~~ **Resolved (2026-08-07):** all-integer
   world + fixed-point welfare, per-subsystem u64 RNG streams, defined
   iteration order, per-tick hash parity gates. See §7.7. (Completes
@@ -823,8 +862,8 @@ From `what-is-a-coworld.md` §"Open design forks for v2":
 | fork | status here |
 |---|---|
 | 1 — message encoding | **closed (F3):** JSON, versioned envelope |
-| 2 — engine runtime | **closed (F4):** Arena-first dual shell; `engine_runtime` omitted |
-| 3 — replay architecture | **closed (F5):** decision-log + resimulating static bundle |
+| 2 — engine runtime | **closed (F4, rev. 2026-08-11):** WS shell for v2.0; Arena/WASM future work; `engine_runtime` omitted |
+| 3 — replay architecture | **closed (F5):** decision-log + resimulating static bundle (viewer ships with the WASM work) |
 | 4 — determinism spec | **closed (D1 + F6):** own spec — all-integer, fixed-point welfare |
 | 5 — activation model | **closed (§6 + E1):** phased timestep; movement sequential seeded |
 | 6 — fault/fallback | **closed (A3):** faulted seat's agents freeze |
@@ -832,6 +871,15 @@ From `what-is-a-coworld.md` §"Open design forks for v2":
 All six platform forks are closed as of 2026-08-07.
 
 ## 11. Future work (desired, explicitly not in v2.0)
+
+**The WASM implementation (deferred 2026-08-11).** Everything that runs
+the core outside a native process: the Arena `softmax:game` /
+`softmax:player` components (one instance per seat, per §7.2), the
+wasm32 build and its cross-target hash-parity gates (F6), and the
+browser-compiled core that powers F5's resimulating replay viewer — the
+viewer therefore ships with this work. v2.0 is native core + WS shell;
+F6's all-integer discipline is maintained from day one so this lands as
+a port, not a redesign.
 
 **Speaking (James, 2026-08-10).** A wholly novel mechanic: agents speak,
 audibly to nearby agents — cheap talk, unverifiable, deception legal by
@@ -850,8 +898,10 @@ worked when v2.0 is playable:
   (this-tick vs longer), whether hearing precedes speaking within a
   round, and interaction with F1 visibility regimes (speech as the
   channel that makes hidden-attribute inference *social*).
-- Interplay worth designing for: with F2's blank-slate newborns, speech
-  becomes the only way families transmit knowledge — an emergent culture
+- Interplay worth designing for: under per-seat instances (§7.2) an
+  in-seat child is born into its policy's accumulated knowledge, but a
+  cross-seat child (A2) inherits none — speech becomes the only way
+  knowledge crosses seat lines within a family: an emergent culture
   channel.
 
 **Also parked:** Thue–Morse activation ordering (E1 refinement beyond
