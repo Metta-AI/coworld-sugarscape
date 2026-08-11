@@ -1,14 +1,21 @@
 > [!WARNING]
-> **ARCHIVAL ONLY.** The original Sugarscape implementation is frozen under
-> [`archived/v1/`](archived/v1/README.md). Do not extend or release it as the
-> current game.
+> **ARCHIVAL ONLY.** Everything under `archived/` is frozen: the original
+> implementation at [`archived/v1/`](archived/v1/README.md), and the
+> complete-but-never-implemented v2 design at
+> [`archived/v2/`](archived/v2/README.md). Do not extend, release, or
+> implement from either.
 
 # Coworld Sugarscape
 
-The repository root is reserved for a from-scratch successor. The complete
-previous implementation—including source, tests, tools, manifests, replay
-viewer, bundled player, and pinned Python reference—is retained in
-[`archived/v1/`](archived/v1/) for historical reference and reproducibility.
+The repository root is reserved for the from-scratch successor (v3). Two
+prior generations are retained for reference:
+
+- [`archived/v1/`](archived/v1/) — the complete previous implementation:
+  source, tests, tools, manifests, replay viewer, bundled player, and the
+  pinned Python reference.
+- [`archived/v2/`](archived/v2/) — a full redesign (agent-level player
+  control, phased timestep, negotiation protocols) that reached
+  design-complete but was backburnered on 2026-08-11 before implementation.
 
 New implementation work belongs outside `archived/`.
 

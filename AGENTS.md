@@ -1,15 +1,20 @@
 # Archive boundary
 
-The implementation under `archived/v1/` is **archival only**. Do not extend,
-release, or treat it as the current Sugarscape implementation. Changes there
-should be limited to preservation, security, or reproducibility fixes that are
-explicitly requested.
+Everything under `archived/` is **archival only**:
 
-The repository root is reserved for a from-scratch successor. Add new game
-code outside `archived/`, with its own architecture and behavioral contract.
-Before any platform-facing work, read
+- `archived/v1/` — the frozen original implementation (a DTL port). Do not
+  extend, release, or treat it as the current Sugarscape implementation.
+  Changes there should be limited to preservation, security, or
+  reproducibility fixes that are explicitly requested.
+- `archived/v2/` — a complete-but-never-implemented design (backburnered
+  2026-08-11 in favor of v3). Do not implement from it without explicitly
+  reviving v2. See `archived/v2/README.md`.
+
+The repository root is reserved for the from-scratch successor (v3). Add new
+game code outside `archived/`, with its own architecture and behavioral
+contract. Before any platform-facing work, read
 [docs/what-is-a-coworld.md](docs/what-is-a-coworld.md) — the coworld platform
-contract, current conventions, the experimental Arena (WASM) contract, and
-the open v2 design decisions.
+contract, current conventions, and the experimental Arena (WASM) contract.
 
-Read `archived/v1/AGENTS.md` only when working on the archived implementation.
+Read `archived/v1/AGENTS.md` only when working on the archived
+implementation.
