@@ -18,9 +18,12 @@ resimulating replay viewer; v2.0 ships native core + WS shell (F4
 revision, §7.6, §11). **(c) The canonical timestep gains a lend gate
 (phase 5)** — the 2026-08-07 phase list omitted E6's origination phase
 even though §7.3 always listed a lend action; found while drafting the
-player protocol (E8/E6 correction, §6).
-Everything below is **Decided**; changes require revisiting a decision
-by name. Implementation may surface revisions — record them here with dates.
+player protocol (E8/E6 correction, §6). **(d) A cross-model review of the
+protocol draft opened question group G** (§9) — determinism and physics
+details the settled design leaves unspecified.
+Everything below is **Decided** except the open G group (§9); changes to
+decided items require revisiting a decision by name. Implementation may
+surface revisions — record them here with dates.
 
 Each item is tagged:
 
@@ -883,6 +886,65 @@ Grouped; tags reference the sections above.
   world + fixed-point welfare, per-subsystem u64 RNG streams, defined
   iteration order, per-tick hash parity gates. See §7.7. (Completes
   fork 4.)
+
+### G. Determinism and physics details (OPEN — opened 2026-08-11 by the protocol review)
+
+A cross-model review (Codex) of the first PROTOCOL.md draft surfaced
+places where the settled design still leaves an implementer guessing —
+each one a potential determinism break (F6) or information-regime leak
+(F1) if the game, bundled policies, and replay core chose independently.
+None changes a decided mechanic or the protocol's message shapes; each
+needs one pinned answer. Recommendations recorded; all await review.
+
+- **G1. Loan collection integer algorithm (E6).** Unspecified: collection
+  order when several contracts come due against limited holdings;
+  component-wise math (no cross-resource conversion exists — the sim has
+  no prices); `renew` integer scaling and remainder rule; renewal
+  duration when it would extend past the episode; heir pro-rata rounding
+  for inherited debt; id assignment for split contracts.
+  *Recommendation:* collect in ascending `contract_id`; per resource,
+  collect `min(owed_r, available_r)` (with `collection_floor` applied
+  per resource); `renew` scales by integer floor of the original
+  aggregate ratio; renewed `due` clamps to the final tick; heirs
+  processed in ascending agent id with largest-remainder splits; split
+  contracts take fresh ids in that order.
+- **G2. Combat loot composition (E2).** Loot is `min(α, victim wealth)`
+  where wealth = sugar + spice — a scalar; the design never says which
+  resource units transfer. *Recommendation:* integer pro-rata to the
+  victim's holdings, largest-remainder, ties to sugar.
+- **G3. Newborn mid-tick activation (A2/E5).** A child born in a mating
+  cycle at tick t: does it act in the remaining gates of tick t (later
+  mating cycles, lend, tribe)? *Recommendation:* placed and observable
+  immediately, invoked at no gate until tick t+1's movement; offers or
+  proposals targeting it during the birth tick are not admitted.
+- **G4. Tick domain and `due_tick` range (B1/E6).** Pin ticks as 0..T−1
+  and the contract rule `current_tick ≤ due_tick ≤ T−1` (a same-tick due
+  collects in that tick's upkeep). Without it, `due_tick ≤ T` names a
+  tick whose upkeep never runs.
+- **G5. Grid topology and coordinate convention.** Classic Sugarscape is
+  a torus; the design never chose. Affects rays, movement range, the
+  seasonal hemisphere split (C2), and diffusion at edges (C3).
+  *Recommendation:* torus, the classic reading, with the hemisphere
+  boundary fixed at height/2; the protocol pins the coordinate
+  convention either way.
+- **G6. Pollution fixed-point scale (C3).** The design mandates
+  fixed-point integer pollution but never pins the fractional bit count
+  or the floor rules for diffusion averaging and coefficient
+  multiplication — F6-style pinning work.
+- **G7. Score/welfare quantum and wire-integer bounds (F6/B6).** F6
+  gives the published quantum (2⁻²⁰) and 12 survivor bits as *examples*;
+  the protocol serializes welfare in q20 units. Pin the quantum, the
+  survivor-bit layout, rounding, and a wire-integer bound (every
+  JSON-carried integer < 2⁵³, saturating where the accumulator could
+  exceed it) as normative.
+- **G8. Identifier opacity vs legibility (F1).** Sequential agent and
+  contract ids are always visible (targeting and reputation need
+  identity) — but a global creation counter leaks aggregate unseen
+  events (a visible newborn with id 150 reveals episode-wide birth
+  volume) under hidden-attribute regimes. *Recommendation:* keep
+  legible sequential ids — the leak is mild aggregate information, and
+  eyeball-debuggability is a stated design value (F3) — but it deserves
+  an explicit call.
 
 ## 10. Relation to the platform forks
 

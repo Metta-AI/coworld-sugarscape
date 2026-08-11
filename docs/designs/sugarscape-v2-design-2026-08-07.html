@@ -1568,7 +1568,7 @@
   <section id="risks">
     <h2>11 · Open Questions and Risks</h2>
     <ul class="key-points">
-      <li>The design is complete — nothing below blocks implementation — but real risks remain, and each has a named mitigation or escape hatch.</li>
+      <li>The design is complete except question group G (opened 2026-08-11 by the protocol review): determinism and physics details needing one pinned answer each before implementation.</li>
       <li>The two watch-items are the two most original calls: E7's chosen-allegiance tribes and F1's hidden-by-default mating attributes.</li>
       <li>Several defaults (negotiation round caps, combat α, pollution coefficients, tribe count) are placeholders pending playtesting.</li>
     </ul>
@@ -1616,6 +1616,20 @@
       coefficients — parity-tested on native (live run vs replay resimulation) for v2.0, and
       against wasm32 and the browser when the deferred WASM targets land. Until then, F6's
       bit-identical guarantee is a spec, not a demonstrated property.
+    </div>
+    <div class="callout callout-open">
+      <span class="callout-label">Open — G1–G8: determinism &amp; physics details (2026-08-11)</span>
+      A cross-model review of the PROTOCOL.md draft surfaced eight places the settled design leaves
+      an implementer guessing — each a potential F6 determinism break or F1 information leak if
+      chosen independently by game, policies, and replay core. With recommendations recorded in
+      <span class="cite">docs/v2-design.md §9 G</span>: <strong>G1</strong> loan-collection integer
+      algorithm (order, per-resource math, renew rounding, heir splits); <strong>G2</strong> combat
+      loot composition (which resource units make up <code>min(α, wealth)</code>);
+      <strong>G3</strong> newborn mid-tick activation; <strong>G4</strong> tick domain and
+      <code>due_tick</code> range; <strong>G5</strong> grid topology (torus vs bounded) and
+      coordinate convention; <strong>G6</strong> pollution fixed-point scale; <strong>G7</strong>
+      score/welfare quantum and wire-integer bounds; <strong>G8</strong> identifier opacity vs
+      legibility under hidden-attribute regimes.
     </div>
     <div class="callout callout-open">
       <span class="callout-label">Open — negotiation round caps</span>
@@ -1740,7 +1754,7 @@
       <tbody>
         <tr><td>2026-08-07</td><td>Initial design settled: all 35 open questions (A1–F6) resolved in one session; the six platform forks of <span class="cite">docs/what-is-a-coworld.md</span> closed.</td></tr>
         <tr><td>2026-08-10</td><td>James's review round. Revisions in place: A1 (seats/totals unbounded), A2 (Thue–Morse siblings), rating (score/EWMA, §3), D4 (two flags), E1 (full-information rationale), E2 (hidden-holdings variant), E4/E5 (quiescence with caps, default 8), E6 (either direction, <code>collection_floor</code>, <code>shortfall_mode</code>), E7 (per-seat initial tribes, <code>tribeless</code>), F1 (per-attribute visibility), F2 (instance isolation, scratchpad dropped), A4 (interim timeout rule), F6 (precision/binning analysis). Three discussion items resolved: the speaking phase → future work (§12); per-agent component instances adopted, scratchpad dropped (§7); timeouts freeze everywhere for now, target no-op semantics recorded (§7).</td></tr>
-        <tr><td>2026-08-11</td><td>Two revisions by James. F2 re-revised: per-agent component instance isolation reverted — one policy instance per seat serves all that seat's agents, and the shared-RAM hole is an accepted cost, uniform across runtimes (§7). F4 revised: the WASM implementation — Arena components and the browser-compiled core behind the resimulating replay viewer — deferred to future work; v2.0 is native core + WS shell, and the viewer ships with the WASM milestone (§8, §12). Same day, an E8 correction: drafting the player protocol exposed that the canonical timestep never gave E6's loan origination a phase (the gate list predated E6's design; only collection had an upkeep slot) — a lend gate was added as phase 5, after mate and before tribe, with a <code>lend_rounds</code> cap (§6).</td></tr>
+        <tr><td>2026-08-11</td><td>Two revisions by James. F2 re-revised: per-agent component instance isolation reverted — one policy instance per seat serves all that seat's agents, and the shared-RAM hole is an accepted cost, uniform across runtimes (§7). F4 revised: the WASM implementation — Arena components and the browser-compiled core behind the resimulating replay viewer — deferred to future work; v2.0 is native core + WS shell, and the viewer ships with the WASM milestone (§8, §12). Same day, an E8 correction: drafting the player protocol exposed that the canonical timestep never gave E6's loan origination a phase (the gate list predated E6's design; only collection had an upkeep slot) — a lend gate was added as phase 5, after mate and before tribe, with a <code>lend_rounds</code> cap (§6). A cross-model (Codex) review of the rewritten protocol then opened question group G — eight determinism/physics details (loan integer algorithm, loot composition, newborn activation, tick domain, topology, pollution scale, score quantum, id opacity) recorded with recommendations in <span class="cite">docs/v2-design.md §9 G</span> (§11).</td></tr>
       </tbody>
     </table>
 
