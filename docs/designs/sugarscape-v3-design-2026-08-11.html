@@ -1,0 +1,1707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sugarscape v3 — Design Proposal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700;900&family=Merriweather+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  /* ============ Ink & Print tokens ============ */
+  :root {
+    --bg: #fffdf4;            /* cream paper */
+    --surface: #fffaf0;
+    --surface-alt: #f8f6ef;
+    --fg: #111827;            /* warm near-black — never pure #000 */
+    --fg-subtle: #555555;
+    --fg-muted: #999999;
+    --ink-navy: #1a3875;
+    --ink-sage: #6e8050;
+    --ink-terracotta: #b36e4e;
+    --ink-gold: #d4a853;
+    --accent: #859ebe;
+    --accent-soft: #eef2f7;
+    --cta: #0e2758;
+    --cta-foreground: #fffdf4;
+    --border: #e4dac8;
+    --border-strong: #d4c9b5;
+    --border-subtle: #f0ebe1;
+    --serif: 'Merriweather', Georgia, serif;
+    --sans: 'Merriweather Sans', 'Helvetica Neue', sans-serif;
+    --mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.7;
+  }
+
+  /* ============ Page grid: reading column + comment rail ============ */
+  .dc-page {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 0;
+    max-width: 1240px;
+    margin: 0 auto;
+  }
+  article#doc {
+    max-width: 72ch;
+    margin: 0 auto;
+    padding: 56px 40px 120px;
+    min-width: 0;
+  }
+
+  /* ============ Typography ============ */
+  .eyebrow {
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--fg-subtle);
+  }
+  header.masthead { border-bottom: 2px solid var(--border-strong); padding-bottom: 20px; margin-bottom: 32px; }
+  header.masthead h1 {
+    font-family: var(--serif);
+    font-weight: 900;
+    font-size: 34px;
+    line-height: 1.2;
+    margin: 8px 0 10px;
+  }
+  header.masthead .context { color: var(--fg-subtle); font-size: 13.5px; margin: 0; }
+  h2 {
+    font-family: var(--serif);
+    font-weight: 700;
+    font-size: 15px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-navy);
+    margin: 48px 0 12px;
+  }
+  h3 { font-family: var(--serif); font-weight: 700; font-size: 16.5px; margin: 32px 0 8px; }
+  p { margin: 0 0 14px; }
+  a { color: var(--ink-navy); text-decoration-color: var(--accent); text-underline-offset: 3px; }
+  a:hover { color: var(--cta); }
+  strong { font-weight: 700; }
+  ul, ol { padding-left: 24px; margin: 0 0 14px; }
+  li { margin-bottom: 4px; }
+  hr { border: 0; border-top: 1px solid var(--border); margin: 40px 0; }
+
+  /* Key-points opener: every section starts with scannable bullets */
+  .key-points {
+    list-style: none;
+    padding: 0 0 0 2px;
+    margin: 0 0 18px;
+  }
+  .key-points li { padding-left: 18px; position: relative; margin-bottom: 6px; }
+  .key-points li::before { content: '—'; position: absolute; left: 0; color: var(--ink-gold); font-weight: 700; }
+
+  /* ============ TOC ============ */
+  nav.toc { margin: 28px 0 8px; }
+  nav.toc ol { list-style: none; padding: 0; column-count: 2; column-gap: 40px; margin: 10px 0 0; }
+  nav.toc li { margin-bottom: 5px; break-inside: avoid; }
+  nav.toc a { text-decoration: none; border-bottom: 1px dotted var(--border-strong); }
+  nav.toc .toc-num { font-family: var(--mono); font-size: 12px; color: var(--fg-muted); margin-right: 8px; }
+
+  /* ============ Tables ============ */
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 18px 0 22px;
+    font-size: 13.5px;
+  }
+  th {
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--fg-subtle);
+    text-align: left;
+    padding: 6px 12px 6px 0;
+    border-bottom: 2px solid var(--border-strong);
+  }
+  td { padding: 7px 12px 7px 0; border-bottom: 1px solid var(--border-subtle); vertical-align: top; }
+  td.num, th.num { text-align: right; font-family: var(--mono); font-size: 12.5px; font-feature-settings: 'tnum' 1; }
+
+  /* ============ Figures ============ */
+  figure { margin: 24px 0 28px; }
+  figure svg { max-width: 100%; height: auto; display: block; }
+  figcaption {
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--fg-subtle);
+  }
+  figcaption .fig-label {
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-size: 10.5px;
+    color: var(--ink-navy);
+    margin-right: 8px;
+  }
+
+  /* ============ Code & citations ============ */
+  code {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    background: var(--surface-alt);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+  pre {
+    background: var(--surface-alt);
+    border: 1px solid var(--border-subtle);
+    border-radius: 3px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    margin: 16px 0 20px;
+  }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.6; }
+  .cite {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--fg-subtle);
+    background: var(--surface-alt);
+    padding: 1px 6px;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+
+  /* ============ Callouts ============ */
+  .callout { padding: 12px 16px; margin: 18px 0; font-size: 13.5px; border-radius: 3px; }
+  .callout .callout-label {
+    display: block;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 4px;
+  }
+  .callout-info { background: var(--accent-soft); }
+  .callout-info .callout-label { color: var(--ink-navy); }
+  .callout-warn { background: rgba(179, 110, 78, 0.08); border-left: 3px solid var(--ink-terracotta); }
+  .callout-warn .callout-label { color: var(--ink-terracotta); }
+  .callout-open { background: rgba(212, 168, 83, 0.10); }
+  .callout-open .callout-label { color: #8a6a1f; }
+
+  /* Decision record */
+  .decision { border-top: 1px solid var(--border); padding: 14px 0 4px; margin: 14px 0; }
+  .decision .decision-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-sage); }
+  .decision p { margin-top: 6px; }
+
+  @media (max-width: 1100px) {
+    .dc-page { grid-template-columns: 1fr; }
+  }
+  @media print {
+    #dc-sidebar, #dc-fab, #dc-toggle { display: none !important; }
+    .dc-page { grid-template-columns: 1fr; }
+  }
+
+  /* ================================================================
+     DC-COMMENTS BEGIN — styles (copy verbatim; do not modify)
+     ================================================================ */
+  ::highlight(dc-hl) { background: rgba(212, 168, 83, 0.28); }
+  ::highlight(dc-hl-active) { background: rgba(212, 168, 83, 0.6); }
+
+  #dc-fab {
+    position: absolute;
+    z-index: 40;
+    display: none;
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--cta-foreground);
+    background: var(--cta);
+    border: 1px solid #0a1c42;
+    border-radius: 3px;
+    padding: 5px 10px;
+    cursor: pointer;
+  }
+  #dc-fab:hover { background: var(--ink-navy); }
+
+  #dc-sidebar {
+    border-left: 1px solid var(--border);
+    background: var(--surface);
+    padding: 24px 20px 60px;
+    font-size: 13px;
+    position: sticky;
+    top: 0;
+    height: 100dvh;
+    overflow-y: auto;
+  }
+  #dc-sidebar h2.dc-title {
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--fg-subtle);
+    margin: 0 0 4px;
+  }
+  .dc-actions { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0 18px; }
+  .dc-btn {
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--fg);
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 3px;
+    padding: 4px 9px;
+    cursor: pointer;
+  }
+  .dc-btn:hover { background: var(--surface-alt); }
+  .dc-btn:focus-visible, #dc-fab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .dc-empty { color: var(--fg-muted); font-style: italic; }
+  .dc-item { border-top: 1px solid var(--border-subtle); padding: 12px 0; cursor: pointer; }
+  .dc-item.dc-resolved { opacity: 0.5; }
+  .dc-quote {
+    border-left: 2px solid var(--ink-gold);
+    padding-left: 8px;
+    color: var(--fg-subtle);
+    font-style: italic;
+    font-size: 12px;
+    margin-bottom: 6px;
+    overflow-wrap: break-word;
+  }
+  .dc-orphan-tag {
+    font-size: 9.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-terracotta);
+    background: rgba(179, 110, 78, 0.12);
+    border-radius: 999px;
+    padding: 1px 7px;
+    margin-left: 6px;
+  }
+  .dc-text { white-space: pre-wrap; overflow-wrap: break-word; }
+  .dc-item textarea {
+    width: 100%;
+    min-height: 64px;
+    font-family: var(--sans);
+    font-size: 13px;
+    color: var(--fg);
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    border-radius: 3px;
+    padding: 6px 8px;
+    resize: vertical;
+  }
+  .dc-item textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .dc-meta { display: flex; align-items: center; gap: 10px; margin-top: 6px; font-size: 11px; color: var(--fg-muted); }
+  .dc-meta label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+  .dc-meta .dc-del { margin-left: auto; color: var(--ink-terracotta); background: none; border: none; font-size: 11px; cursor: pointer; padding: 0; }
+  .dc-meta .dc-del:hover { text-decoration: underline; }
+  #dc-status { font-size: 11px; color: var(--ink-sage); min-height: 16px; margin-top: 8px; }
+
+  #dc-toggle { display: none; }
+  @media (max-width: 1100px) {
+    #dc-sidebar {
+      position: fixed;
+      right: 0;
+      top: 0;
+      width: 320px;
+      max-width: 90vw;
+      transform: translateX(100%);
+      transition: transform 200ms ease-out;
+      z-index: 50;
+      box-shadow: -4px 0 16px rgba(0, 0, 0, 0.08);
+    }
+    #dc-sidebar.dc-open { transform: translateX(0); }
+    #dc-toggle {
+      display: block;
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      z-index: 51;
+      font-family: var(--sans);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--cta-foreground);
+      background: var(--cta);
+      border: 1px solid #0a1c42;
+      border-radius: 999px;
+      padding: 9px 15px;
+      cursor: pointer;
+    }
+  }
+  /* ============ DC-COMMENTS END — styles ============ */
+</style>
+</head>
+<body>
+<div class="dc-page">
+<article id="doc">
+
+  <!-- ============ Masthead ============ -->
+  <header class="masthead">
+    <span class="eyebrow">Design Proposal · 2026-08-11 · Rev 2 — comment round 1 applied</span>
+    <h1>Sugarscape v3</h1>
+    <p class="context">One-shot ruleset submission over a direct DTL Sugarscape clone, scored by
+    how closely the emergent outcome distribution matches a literature-grounded or real-world target.
+    The player is a computational social scientist; the score is explanatory power.</p>
+  </header>
+
+  <!-- ============ Executive summary ============ -->
+  <section id="summary">
+    <h2>Executive Summary</h2>
+    <p>Sugarscape v3 replaces per-tick agent control — the defining (and persistently painful)
+    feature of v1 and the never-implemented v2 — with a single up-front submission: each player
+    hands the game a <strong>ruleset</strong>, a small declarative program of behavioral trait
+    dials plus a movement decision list, and the simulation then free-runs to completion with zero
+    player I/O. Because no per-tick control edge exists, the one argument for building our own
+    simulator (v2's decision D1) dissolves, and v3 becomes a <strong>direct clone of the DTL
+    Python Sugarscape</strong> (<code>nkremerh/sugarscape</code>, Unlicense) extended with one
+    custom Agent subclass that interprets rulesets, plus a thin coworld WebSocket edge. Each seat
+    is assigned a <strong>target outcome distribution</strong> — drawn from the Sugarscape
+    literature or from real-world observed data — and scored by
+    <strong>1&nbsp;−&nbsp;normalized Wasserstein-1 distance</strong> between the measured and
+    target histograms. Leaderboards rank players by an EWMA of these absolute scores, which the
+    platform ladder already supports natively, so single-player episodes are first-class.</p>
+    <p>The most consequential choices a reviewer should weigh: the ruleset DSL (a budgeted
+    decision list over JSON s-expressions — expressive enough to be a real game, total and
+    deterministic by construction, legible enough that winning rulesets read as explanations);
+    the scoring metric (W1 chosen over KL divergence, which is argued to be a trap in §7); and
+    the fault model (a seat that never submits gets the null ruleset, which is by definition
+    vanilla DTL behavior — no timeout machinery survives into the run). Measured performance
+    gives ample headroom: a full 1,000-tick default episode runs in 52.5&nbsp;s on an M-series
+    laptop, about 4% of the 20-minute hosted episode budget. Ten open questions were flagged for James; comment
+    round 1 (2026-08-11) resolved seven of them — including the DSL's name,
+    <strong>SugarLang</strong>, and the flip to <strong>global-scope targets by default</strong>
+    (§15).</p>
+  </section>
+
+  <!-- ============ TOC ============ -->
+  <nav class="toc">
+    <span class="eyebrow">Contents</span>
+    <ol>
+      <li><span class="toc-num">1</span><a href="#context">Where This Comes From</a></li>
+      <li><span class="toc-num">2</span><a href="#concept">Game Concept</a></li>
+      <li><span class="toc-num">3</span><a href="#episode-flow">Episode Flow &amp; Player Protocol</a></li>
+      <li><span class="toc-num">4</span><a href="#ruleset-dsl">The Ruleset DSL — SugarLang</a></li>
+      <li><span class="toc-num">5</span><a href="#seats">Seats, Agents &amp; Lifecycle</a></li>
+      <li><span class="toc-num">6</span><a href="#targets">Targets: Outcome Distributions</a></li>
+      <li><span class="toc-num">7</span><a href="#scoring">Scoring</a></li>
+      <li><span class="toc-num">8</span><a href="#config">Config Surface</a></li>
+      <li><span class="toc-num">9</span><a href="#leaderboard">Leaderboard</a></li>
+      <li><span class="toc-num">10</span><a href="#architecture">Architecture &amp; Repo Layout</a></li>
+      <li><span class="toc-num">11</span><a href="#replay">Replay &amp; Spectator</a></li>
+      <li><span class="toc-num">12</span><a href="#performance">Performance Evidence</a></li>
+      <li><span class="toc-num">13</span><a href="#risks">Risks</a></li>
+      <li><span class="toc-num">14</span><a href="#alternatives">Alternatives Considered</a></li>
+      <li><span class="toc-num">15</span><a href="#open-questions">Open Questions</a></li>
+      <li><span class="toc-num">16</span><a href="#sources">Sources</a></li>
+    </ol>
+  </nav>
+
+  <!-- ============ 1 · Where this comes from ============ -->
+  <section id="context">
+    <h2>1 · Where This Comes From</h2>
+    <ul class="key-points">
+      <li>v1 (frozen) bolted per-tick movement control onto a Nim port of DTL; it worked but the synchronous decision edge was slow — worst case ~6.4&nbsp;s per timestep with 64 seats timing out.</li>
+      <li>v2 (design-complete, never implemented) justified a from-scratch rewrite with exactly one argument: DTL has no seam for external per-tick controllers.</li>
+      <li>v3 removes per-tick control entirely, which dissolves that argument — cloning DTL becomes the cheapest correct choice.</li>
+    </ul>
+    <p>This is the third generation of the Sugarscape coworld, and each generation is defined by
+    its answer to one question: <em>how do players touch the simulation?</em></p>
+    <p><strong>v1</strong> (<code>archived/v1/</code>, frozen) was a byte-parity Nim port of the
+    DTL Python Sugarscape with per-tick, per-agent movement control bolted on over WebSocket. It
+    worked and was certified, but the decision edge was synchronous and slow — worst case
+    ~6.4&nbsp;s per timestep with 64 seats timing out — and only movement could be delegated.</p>
+    <p><strong>v2</strong> (<code>archived/v2/</code>, design-complete, never implemented) was a
+    from-scratch deterministic Nim implementation with agent-level player control, a phased
+    timestep, and negotiation. Its decision <strong>D1</strong> ("v2 is our own implementation of
+    Sugarscape, not DTL" — <span class="cite">docs/what-is-a-coworld.md §Decisions</span>) rested
+    on exactly one thing: DTL is a batch social-science simulator with no seam for external
+    per-tick controllers, so per-tick control could only ever be bolted on.</p>
+    <p><strong>v3</strong> is James's direction of 2026-08-11: players do <em>not</em> control
+    agents per tick. Each player submits, once, a <strong>ruleset</strong> — a declarative
+    specification of the movement rule their agents will follow — and the simulation runs to
+    completion with no further player interaction. This dissolves D1's rationale entirely. With no
+    per-tick control edge, DTL's batch architecture stops being an obstacle and becomes the
+    cheapest correct choice.</p>
+    <div class="decision">
+      <span class="decision-label">Decision — clone DTL, don't rewrite</span>
+      <p><strong>v3 is a direct clone of the DTL Python implementation</strong>
+      (<code>nkremerh/sugarscape</code>, Unlicense, pinned copy at
+      <span class="cite">archived/v1/reference/dtl-python/</span>), extended with one custom Agent
+      subclass that interprets rulesets, plus a thin coworld edge. D1's sole justification was the
+      per-tick control seam; with that gone, cloning is fastest and truest to the literature the
+      game is built on.</p>
+    </div>
+    <p>James's framing of the goal: across episodes, the winning player is the one with the
+    <strong>most explanatory ruleset (or ruleset generator)</strong> — one that, applied to many
+    different Sugarscape configurations and many different target distributions (drawn from the
+    Sugarscape literature and from real-world observed distributions), reliably makes the
+    simulation's emergent outcome match the target.</p>
+    <div class="callout callout-info">
+      <span class="callout-label">Framing</span>
+      This is Epstein's generative social science motto operationalized as a game: <em>"If you
+      didn't grow it, you didn't explain it."</em> The player is cast as a computational social
+      scientist; the score is explanatory power.
+    </div>
+  </section>
+
+  <!-- ============ 2 · Game concept ============ -->
+  <section id="concept">
+    <h2>2 · Game Concept</h2>
+    <ul class="key-points">
+      <li>Each seat gets a target outcome distribution — delivered as binned data, never prose — plus the full game config; it answers with one ruleset.</li>
+      <li>The DTL simulation runs N ticks (default 1,000) with no further interaction, then measures each seat's actual outcome distribution.</li>
+      <li>Score = closeness of measured to target; leaderboards use an EWMA of episode scores, not Elo, so single-player episodes are first-class.</li>
+    </ul>
+    <p>An episode assigns each player (seat) a <strong>target outcome distribution</strong> — for
+    example "a wealth distribution with a Pareto tail and Gini ≈ 0.5" or "endemic disease at 20%
+    prevalence" — plus the full game config. The target is delivered as <strong>pure data</strong>:
+    the observation carries the declared support, bin edges, and target probabilities (plus the
+    measurement window and a citation string for humans) — never a natural-language description a
+    policy would have to parse. Each player answers with a single
+    <strong>ruleset</strong>: a small declarative program (traits plus a movement decision list)
+    that all agents assigned to that seat will follow. The DTL simulation then runs N ticks
+    (default 1,000). At the end, the game measures the actual outcome distribution for each seat
+    and scores it by distance to that seat's target — closer is better. Leaderboards rank players
+    by an EWMA of episode scores rather than Elo, so single-player episodes are first-class
+    rather than a degenerate case.</p>
+  </section>
+
+  <!-- ============ 3 · Episode flow ============ -->
+  <section id="episode-flow">
+    <h2>3 · Episode Flow &amp; Player Protocol</h2>
+    <ul class="key-points">
+      <li>Four phases: boot → submission window → free run → score &amp; write. All player I/O happens in the submission window.</li>
+      <li>The window closes when every seat has a valid ruleset, or after <code>player_connect_timeout_seconds</code> (default 180&nbsp;s).</li>
+      <li>Fault semantics are trivial by construction: a non-submitting seat gets the null ruleset, which is exactly vanilla DTL behavior, and is still scored honestly.</li>
+      <li>Every phase and sub-phase is timed precisely; the timings ship as structured logs plus a <code>timings</code> block in the results.</li>
+    </ul>
+    <p>An episode proceeds through four phases:</p>
+    <ol>
+      <li><strong>Boot.</strong> The game container reads config from
+      <code>COGAME_CONFIG_URI</code>, seeds the RNG, builds the DTL world, and serves
+      <code>/healthz</code>.</li>
+      <li><strong>Submission window.</strong> Each player connects to
+      <code>WS /player?slot=n&amp;token=t</code> (a bad token is rejected at the handshake, per the
+      platform contract). The game immediately sends one observation. The player replies with one
+      action — the ruleset — and may disconnect. The window closes when all seats have submitted
+      valid rulesets, or after <code>player_connect_timeout_seconds</code> (default 180&nbsp;s).</li>
+      <li><strong>Run.</strong> The simulation free-runs N ticks with zero player I/O. Spectator
+      frames stream to <code>WS /global</code> as it runs.</li>
+      <li><strong>Score &amp; write.</strong> The game measures distributions over the final
+      window, computes scores, writes the results JSON to <code>COGAME_RESULTS_URI</code> and the
+      replay artifact to <code>COGAME_SAVE_REPLAY_URI</code>, sends a final <code>result</code>
+      message to any still-connected clients, and exits.</li>
+    </ol>
+    <p><strong>Instrumentation</strong> (added in comment round 1). The game image records precise
+    wall-clock timings for every phase <em>and</em> sub-phase: world construction, per-seat
+    connect time, observation and action transit times, validation cost, per-tick simulation cost
+    with a sub-step breakdown (movement/ruleset evaluation, trade, reproduction, lending, disease,
+    stats collection), measurement, scoring, and each artifact write. Timings are emitted as
+    structured log lines and aggregated into a <code>timings</code> block in the results JSON, so
+    every hosted episode doubles as a profile. This is the substrate for knowing what — if
+    anything — is worth optimizing (§12).</p>
+
+    <figure>
+      <svg viewBox="0 0 720 322" role="img" aria-label="Episode lifecycle: boot, submission window, free run with measurement window, score and write, plus a time-budget bar">
+        <defs>
+          <marker id="arr" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8" fill="none" stroke="#859ebe" stroke-width="1.2"/>
+          </marker>
+        </defs>
+        <!-- Phase boxes -->
+        <rect x="8" y="36" width="82" height="88" rx="3" fill="#fffaf0" stroke="#d4c9b5"/>
+        <text x="49" y="58" text-anchor="middle" font-family="Merriweather Sans" font-size="12.5" font-weight="700" fill="#111827">Boot</text>
+        <text x="49" y="76" text-anchor="middle" font-family="Merriweather Sans" font-size="9.5" fill="#555555">config · seed</text>
+        <text x="49" y="90" text-anchor="middle" font-family="Merriweather Sans" font-size="9.5" fill="#555555">DTL world</text>
+        <text x="49" y="104" text-anchor="middle" font-family="Merriweather Sans" font-size="9.5" fill="#555555">/healthz</text>
+
+        <line x1="90" y1="80" x2="106" y2="80" stroke="#859ebe" stroke-width="1.5" marker-end="url(#arr)"/>
+
+        <rect x="108" y="36" width="168" height="88" rx="3" fill="#eef2f7" stroke="#859ebe"/>
+        <text x="192" y="55" text-anchor="middle" font-family="Merriweather Sans" font-size="12.5" font-weight="700" fill="#1a3875">Submission window</text>
+        <text x="122" y="75" font-family="Merriweather Sans" font-size="10" fill="#1a3875">&#8594; observation</text>
+        <text x="122" y="91" font-family="Merriweather Sans" font-size="10" fill="#1a3875">&#8592; action (ruleset)</text>
+        <text x="122" y="107" font-family="Merriweather Sans" font-size="10" fill="#1a3875">&#8594; ack (valid | errors)</text>
+        <text x="192" y="140" text-anchor="middle" font-family="Merriweather Sans" font-size="9.5" fill="#555555">closes on all-seats-valid, or 180 s timeout</text>
+
+        <line x1="276" y1="80" x2="292" y2="80" stroke="#859ebe" stroke-width="1.5" marker-end="url(#arr)"/>
+
+        <!-- Free run box, with measurement window as gold tail (last 10% = W/N = 100/1000) -->
+        <rect x="294" y="36" width="250" height="88" rx="3" fill="#fffaf0" stroke="#d4c9b5"/>
+        <rect x="519" y="37" width="24" height="86" fill="rgba(212,168,83,0.30)" stroke="#d4a853"/>
+        <text x="410" y="58" text-anchor="middle" font-family="Merriweather Sans" font-size="12.5" font-weight="700" fill="#111827">Free run · N = 1,000 ticks</text>
+        <text x="410" y="78" text-anchor="middle" font-family="Merriweather Sans" font-size="9.5" fill="#555555">zero player I/O</text>
+        <text x="410" y="92" text-anchor="middle" font-family="Merriweather Sans" font-size="9.5" fill="#555555">frames &#8594; /global</text>
+        <line x1="531" y1="124" x2="531" y2="138" stroke="#d4a853" stroke-width="1"/>
+        <text x="531" y="152" text-anchor="middle" font-family="Merriweather Sans" font-size="9.5" fill="#8a6a1f">measure window</text>
+        <text x="531" y="165" text-anchor="middle" font-family="Merriweather Sans" font-size="9.5" fill="#8a6a1f">W = final 100 ticks</text>
+
+        <line x1="544" y1="80" x2="560" y2="80" stroke="#859ebe" stroke-width="1.5" marker-end="url(#arr)"/>
+
+        <rect x="562" y="36" width="150" height="88" rx="3" fill="#fffaf0" stroke="#d4c9b5"/>
+        <text x="637" y="58" text-anchor="middle" font-family="Merriweather Sans" font-size="12.5" font-weight="700" fill="#111827">Score &amp; write</text>
+        <text x="637" y="76" text-anchor="middle" font-family="Merriweather Sans" font-size="9.5" fill="#555555">W1 scores · results JSON</text>
+        <text x="637" y="90" text-anchor="middle" font-family="Merriweather Sans" font-size="9.5" fill="#555555">replay artifact</text>
+        <text x="637" y="104" text-anchor="middle" font-family="Merriweather Sans" font-size="9.5" fill="#555555">final result msg · exit</text>
+
+        <!-- Time budget bar: 704 px = 1,200 s (20 min) -->
+        <text x="8" y="212" font-family="Merriweather Sans" font-size="10.5" font-weight="700" fill="#555555" letter-spacing="1">EPISODE TIME BUDGET, TO SCALE</text>
+        <rect x="8" y="222" width="704" height="26" fill="#f8f6ef" stroke="#d4c9b5"/>
+        <!-- submission worst case: 180 s of 1200 s = 105.6 px -->
+        <rect x="8" y="222" width="105.6" height="26" fill="#eef2f7" stroke="#859ebe"/>
+        <!-- measured run: 52.5 s of 1200 s = 30.8 px -->
+        <rect x="113.6" y="222" width="30.8" height="26" fill="#1a3875"/>
+        <line x1="60" y1="248" x2="60" y2="262" stroke="#859ebe" stroke-width="1"/>
+        <text x="8" y="276" font-family="Merriweather Sans" font-size="9.5" fill="#1a3875">submission &#8804; 180 s (worst case)</text>
+        <line x1="129" y1="222" x2="129" y2="204" stroke="#1a3875" stroke-width="1"/>
+        <text x="152" y="200" font-family="Merriweather Sans" font-size="9.5" fill="#1a3875">1,000-tick run: 52.5 s measured &#8776; 4% of budget</text>
+        <text x="712" y="276" text-anchor="end" font-family="Merriweather Sans" font-size="9.5" fill="#555555">20 min episode_timeout_minutes (default)</text>
+        <text x="420" y="240" text-anchor="middle" font-family="Merriweather Sans" font-size="9.5" fill="#999999">headroom</text>
+      </svg>
+      <figcaption><span class="fig-label">Figure 1</span>Episode lifecycle. All player interaction
+      is confined to the submission window (observation → action → ack, repeatable until valid or
+      the 180&nbsp;s deadline). The measurement window W is the final 100 of N = 1,000 ticks — the
+      gold tail of the run box, drawn at its true 10% share. The budget bar is to scale: the
+      measured 52.5&nbsp;s full run (Apple Silicon; hosted CPUs are slower, but the margin is
+      ~19× even after reserving the full submission window) occupies about 4% of the 20-minute
+      hosted episode budget.</figcaption>
+    </figure>
+
+    <h3>Messages</h3>
+    <p>Messages are game-owned JSON over WebSocket — the platform fixes only routes and tokens
+    (<span class="cite">docs/what-is-a-coworld.md §1.2</span>):</p>
+    <table>
+      <thead>
+        <tr><th>Direction</th><th>Message</th><th>Payload</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Game → player</td><td><code>observation</code></td>
+          <td><code>{type, protocol:"sugarscape-v3/1", seat:n, config:{…full effective game config…},
+          target:{id, variable, scope, support:[lo,hi], bins:[…], probs:[…], window, source},
+          ruleset_schema:{version:1, limits:{max_nodes:256, max_depth:16, max_bytes:32768}}}</code></td>
+        </tr>
+        <tr>
+          <td>Player → game</td><td><code>action</code></td>
+          <td><code>{type:"action", ruleset:{…}}</code></td>
+        </tr>
+        <tr>
+          <td>Game → player</td><td><code>ack</code></td>
+          <td><code>{type:"ack", valid:true}</code> or <code>{type:"ack", valid:false,
+          errors:[…]}</code> — an invalid ruleset can be corrected and resubmitted until the
+          window closes</td>
+        </tr>
+        <tr>
+          <td>Game → all</td><td><code>result</code></td>
+          <td>Per-seat scores + summary, sent at episode end</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="decision">
+      <span class="decision-label">Decision — fault semantics: null ruleset = vanilla DTL</span>
+      <p><strong>Fault handling is trivial by construction.</strong> After the submission window
+      there is nothing left for a player to fault on — contrast v1's 100&nbsp;ms fallback
+      machinery and v2's frozen-agent rule A3. A seat that never submits a valid ruleset gets the
+      <strong>null ruleset</strong> — no trait overrides, no movement rules — which by definition
+      (§4 semantics) is <em>exactly</em> vanilla DTL behavior. The seat is still scored honestly
+      against its target, and the results record <code>submitted:false</code> for it. No timeout,
+      reconnect, or degraded-mode logic survives into the run phase at all.</p>
+    </div>
+  </section>
+
+  <!-- ============ 4 · Ruleset DSL ============ -->
+  <section id="ruleset-dsl">
+    <h2>4 · The Ruleset DSL — SugarLang</h2>
+    <ul class="key-points">
+      <li>Two optional blocks: <code>traits</code> (scalar dials onto per-agent factors DTL already implements) and <code>movement</code> (an ordered decision list of budgeted score expressions).</li>
+      <li>Total and deterministic by construction — it is data, not code; nothing to sandbox, nothing that can fail to halt.</li>
+      <li>Budgets: ≤ 256 nodes, depth ≤ 16, ≤ 32&nbsp;KB JSON, validated at submission; expressions compile once to closures.</li>
+      <li>Both blocks absent = the null ruleset = a vanilla DTL agent.</li>
+    </ul>
+    <p>The DSL — named <strong>SugarLang</strong> (decided in comment round 1) — is the heart of
+    the design. The requirements pull in four directions at once: it
+    must be expressive enough that ruleset design is a real intellectual game; total and
+    deterministic (no halting problem, no sandbox escape — it is data, not code); cheap to
+    evaluate inside the per-tick movement loop; and legible enough that a leaderboard-topping
+    ruleset can be read and understood — that legibility is the scientific payoff.</p>
+
+    <h3>Shape</h3>
+<pre><code>{
+  "version": 1,
+  "traits": { "aggression": 0.0, "trade": 1.0, "lending": 0.0, "fertility": 1.0 },
+  "movement": [
+    { "if":    ["&lt;", ["get","agent.ttl"], 3],
+      "score": ["get","cell.welfare"] },
+    { "score": ["-", ["get","cell.welfare"],
+                ["*", 0.4, ["get","cell.distance"]],
+                ["*", 2.0, ["get","cell.pollution"]]] }
+  ]
+}</code></pre>
+    <p>Two blocks, both optional — and both absent is the null ruleset, i.e. a vanilla DTL
+    agent:</p>
+    <p><strong><code>traits</code></strong> are scalar behavioral dials applied to every agent of
+    the seat at spawn, clamped into per-variant allowed ranges. The v3.0 traits map directly onto
+    per-agent factors DTL already implements: <code>aggression</code> →
+    <code>aggressionFactor</code> (combat, <span class="cite">agent.py:717</span>);
+    <code>trade</code> → <code>tradeFactor</code> (<span class="cite">agent.py:601-603</span> —
+    0 disables trading); <code>lending</code> → <code>lendingFactor</code>
+    (<span class="cite">agent.py:432</span>); <code>fertility</code> →
+    <code>fertilityFactor</code> (<span class="cite">agent.py:501</span>). This buys player
+    control over combat, trade, lending, and reproduction intensity <em>without touching those
+    subsystems' code</em> — DTL already parameterizes them per agent. A variant locks a dial by
+    declaring a degenerate range.</p>
+    <p><strong><code>movement</code></strong> is an ordered <strong>decision list</strong>. Each
+    tick, when the agent moves, the <code>if</code> conditions (expressions over agent/world
+    state) are evaluated top-down; the first matching rule supplies the <strong>score
+    expression</strong> (a rule with no <code>if</code> always matches, and the list must end with
+    one). The score expression is evaluated once per candidate cell, and the agent moves to the
+    argmax cell. Ties break by smaller travel distance, then DTL's existing shuffled iteration
+    order — the identical tie policy to stock DTL
+    (<span class="cite">agent.py:1430-1434</span>), preserving determinism.</p>
+
+    <h3>Expressions</h3>
+    <p>Expressions are JSON s-expressions: <code>["op", arg, arg, …]</code>, numbers as literals,
+    <code>["get", "name"]</code> for features. The operator set:
+    <code>+ - * / min max abs neg pow &lt; &lt;= &gt; &gt;= == != and or not if</code>.
+    Totality rules make every expression a total function: division by zero yields 0;
+    <code>pow</code> with base &lt; 0 or |exponent| &gt; 8 is clamped; all results are finite
+    floats (NaN/Inf → 0). Budgets, validated at submission time: at most 256 nodes total per
+    ruleset, depth at most 16, at most 32&nbsp;KB of JSON. Evaluation is O(nodes) per candidate
+    cell; the interpreter compiles each expression once to nested Python closures at submission
+    time, so per-eval cost is small.</p>
+
+    <h3>Feature vocabulary (v3.0)</h3>
+    <table>
+      <thead>
+        <tr><th>Namespace</th><th>Features</th><th>Source in DTL</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>agent.*</code></td>
+          <td><code>sugar, spice, wealth, sugarMetabolism, spiceMetabolism, vision, movement, age,
+          ttl, mrs</code></td>
+          <td>direct attributes; <code>ttl</code> = <code>findTimeToLive()</code>
+          (<span class="cite">agent.py:1114</span>), <code>mrs</code> =
+          <code>findMarginalRateOfSubstitution()</code> (<span class="cite">agent.py:1024</span>)</td>
+        </tr>
+        <tr>
+          <td><code>cell.*</code></td>
+          <td><code>sugar, spice, pollution, distance, occupied, preyWealth, welfare</code></td>
+          <td>candidate record from <code>rankCellsInRange()</code>
+          (<span class="cite">agent.py:1396-1444</span>); <code>welfare</code> = DTL's own
+          Cobb–Douglas <code>findWelfare()</code> for this agent at this cell
+          (<span class="cite">agent.py:1171-1202</span>), so the stock greedy rule is expressible
+          as <code>["get","cell.welfare"]</code></td>
+        </tr>
+        <tr>
+          <td><code>world.*</code></td>
+          <td><code>timestep, population, gini, meanWealth</code></td>
+          <td>per-tick <code>runtimeStats</code> DTL already computes
+          (<span class="cite">sugarscape.py:82-95</span>)</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="callout callout-info">
+      <span class="callout-label">Why world.* matters</span>
+      The <code>world.*</code> namespace is a deliberate differentiator: it lets rulesets be
+      <strong>macro-feedback controllers</strong> ("if Gini is above target, favor
+      poor-agent-friendly moves"), which is precisely the skill the game wants to reward —
+      steering emergent distributions.
+    </div>
+
+    <h3>Semantics guarantees</h3>
+    <ul>
+      <li>The candidate cell set is <strong>unchanged from DTL</strong> — vision, occupancy,
+      prey-validity and retaliation filtering all still apply
+      (<span class="cite">agent.py:1413-1428</span>). The ruleset only replaces the
+      <em>ranking</em> among valid candidates. Combat stays a movement consequence exactly as in
+      DTL: moving onto a valid prey cell is an attack, so rules can seek or avoid combat via
+      <code>cell.occupied</code>/<code>cell.preyWealth</code>.</li>
+      <li>Everything downstream of movement — collection, metabolism, trade, reproduction,
+      lending, disease, aging, death, inheritance (<span class="cite">agent.py:569-599</span>
+      <code>doTimestep</code>) — runs stock DTL code, modulated only through the trait dials.</li>
+      <li>Deterministic: one seeded <code>random.Random</code> stream (DTL uses the global
+      <code>random</code> module, seeded once), a pure interpreter, and a fixed tie policy. Same
+      config + seed + rulesets ⇒ an identical run on the same CPython version. The container pins
+      the Python version, so hosted runs are reproducible; we do not promise cross-version
+      bit-stability.</li>
+    </ul>
+
+    <h3>Alternatives rejected for the DSL</h3>
+    <ul>
+      <li><strong>Arbitrary code submission (Python snippet / WASM blob).</strong> Maximum
+      expressivity, but the sandboxing, resource-abuse, and determinism burdens are all severe,
+      and winning rulesets would be unreadable. The DSL is data; there is nothing to escape.</li>
+      <li><strong>Flat weight vector over fixed features</strong> (score = w·f). Trivially safe
+      but no conditionality; the game collapses into linear regression and the expressivity
+      ceiling is hit in a week.</li>
+      <li><strong>Turing-complete rule language (loops/recursion, full GP).</strong> Halting and
+      performance problems inside a 1,000-tick × ~1,000-agent × ~24-candidate loop; audit burden;
+      overkill for movement.</li>
+    </ul>
+    <p>A side benefit of the chosen design: s-expression trees are the standard representation
+    that genetic programming evolves (Koza 1992), so SugarLang is naturally friendly to players
+    who want to <em>evolve</em> rulesets offline. (An earlier draft called this "the classic
+    GP-on-Sugarscape formulation" — softened on review: GP has been applied to Sugarscape-style
+    agent rules, but no specific canonical paper is being claimed.)</p>
+  </section>
+
+  <!-- ============ 5 · Seats ============ -->
+  <section id="seats">
+    <h2>5 · Seats, Agents &amp; Lifecycle</h2>
+    <ul class="key-points">
+      <li>Initial agents are dealt round-robin; validation requires <code>startingAgents % seats == 0</code>, so allocation at t=0 is equal.</li>
+      <li>Replacements inherit the replaced agent's seat; newborns take a parent's seat by seeded 50/50 draw.</li>
+      <li>RulesetAgent plugs into DTL's existing decision-model registration seam — the same one the ethics subclasses already use.</li>
+    </ul>
+    <p>Config declares <code>seats</code> (the number of player slots) alongside DTL's
+    <code>startingAgents</code>. Validation requires <code>startingAgents % seats == 0</code>, and
+    initial agents are assigned round-robin, so the allocation at t=0 is equal across seats.</p>
+    <p>Two lifecycle events can add agents mid-run, and each has a seat rule.
+    <strong>Replacements</strong> (DTL's <code>agentReplacements</code> rule R): a replacement
+    agent inherits the seat of the agent it replaces. <strong>Newborns</strong> (DTL
+    reproduction): the child is assigned to one of its two parents' seats by a 50/50 draw from the
+    simulation's seeded RNG stream. v2's fancier Thue–Morse alternation is noted as an option if
+    the 50/50 draw proves noisy, but it is not in v3.0 (open question O8).</p>
+    <p><strong>RulesetAgent instantiation</strong> follows DTL's existing decision-model seam:
+    <span class="cite">sugarscape.py:221-251</span> already switches on the
+    <code>agentDecisionModels</code> config to instantiate
+    <code>Bentham</code>/<code>Asimov</code>/<code>Leader</code>/<code>Temperance</code>
+    subclasses from <code>ethics.py</code>, each of which overrides
+    <code>findBestEthicalCell</code> (e.g. <span class="cite">ethics.py:101-142</span>). v3
+    registers one more model, <code>"ruleset"</code>, backed by our subclass. Children are spawned
+    via the existing <code>spawnChild</code> override pattern
+    (<span class="cite">ethics.py:98</span>, <span class="cite">ethics.py:259</span>, …) and carry
+    the seat and ruleset with them.</p>
+  </section>
+
+  <!-- ============ 6 · Targets ============ -->
+  <section id="targets">
+    <h2>6 · Targets: Literature-Grounded Outcome Distributions</h2>
+    <ul class="key-points">
+      <li>Every target is a normalized histogram over a declared support, plus a measurement recipe; one representation covers per-agent and per-tick variables.</li>
+      <li>The catalog has two families: canonical emergent results from the Sugarscape literature, and real-world empirical distributions.</li>
+      <li>The catalog is data (<code>targets/*.json</code>) — growing it is not a code change.</li>
+      <li><strong>Global scope is the default</strong> (comment round 1): every seat is scored on the same shared outcome, so rulesets compete to steer it. Seat scope ships at launch as a variant option.</li>
+    </ul>
+    <p>Every target is a <strong>normalized histogram over a declared support</strong>, plus a
+    measurement recipe. One uniform representation covers two kinds of variable:</p>
+    <ul>
+      <li><strong>Per-agent variables</strong> (wealth, age, age-at-death, …): at each of the
+      final <code>window</code> W ticks (default 100), the variable is sampled over the scope's
+      living agents — <em>all</em> living agents under the default global scope, the seat's own
+      under seat scope — and all samples are pooled into the histogram. Pooling over a window
+      smooths small-population noise.</li>
+      <li><strong>Per-tick scalar variables</strong> (population, mean trade price, sick fraction,
+      …): one sample per tick over the window; the histogram is of the W samples. This captures
+      both level and variability — an equilibrium target is a narrow histogram, an oscillation
+      target is a wide or bimodal one.</li>
+    </ul>
+    <p>The target spec is <code>{id, variable, scope: "global"&nbsp;(default)&nbsp;|&nbsp;"seat",
+    support:[lo,hi], bins:[edges], probs:[…], window, source}</code>. Values outside the support
+    clamp to the edge bins. This spec — bin edges and probabilities as plain data — is exactly
+    what the observation message delivers to the player (§3); the <code>source</code> citation
+    string is for humans, and no policy ever parses natural language.</p>
+
+    <h3>Catalog (v3.0)</h3>
+    <p><strong>Family A — canonical emergent results from the Sugarscape literature</strong>,
+    targets a Sugarscape scientist recognizes on sight:</p>
+    <table>
+      <thead>
+        <tr><th>id</th><th>Variable</th><th>Shape</th><th>Source</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>wealth.skewed-gini-0.5</code></td><td>wealth</td>
+          <td>right-skewed, fat upper tail, Gini ≈ 0.5</td>
+          <td>Epstein &amp; Axtell 1996, ch. II (emergent inequality under G1+M; Animation II-4)</td></tr>
+        <tr><td><code>wealth.egalitarian</code></td><td>wealth</td>
+          <td>compressed, Gini ≤ 0.25</td>
+          <td>counterfactual: "grow equality" — the interesting inverse problem</td></tr>
+        <tr><td><code>population.carrying-capacity</code></td><td>population</td>
+          <td>narrow histogram at the G1+M carrying capacity</td>
+          <td>E&amp;A ch. II</td></tr>
+        <tr><td><code>age-at-death.survivorship</code></td><td>age at death</td>
+          <td>life-table-like distribution under rule R</td>
+          <td>E&amp;A ch. II–III</td></tr>
+        <tr><td><code>tribe.convergence</code></td><td>majority-tribe share</td>
+          <td>mass near 1.0 (cultural convergence)</td>
+          <td>E&amp;A ch. III (tag-flipping rule K)</td></tr>
+        <tr><td><code>tribe.diversity</code></td><td>majority-tribe share</td>
+          <td>mass near 0.5 (stable split)</td>
+          <td>E&amp;A ch. III</td></tr>
+        <tr><td><code>disease.endemic</code> / <code>disease.eradicated</code></td><td>sick fraction</td>
+          <td>mass near a set prevalence / near 0</td>
+          <td>E&amp;A ch. V</td></tr>
+        <tr><td><code>price.equilibrium</code></td><td>mean trade price</td>
+          <td>narrow histogram at p ≈ 1</td>
+          <td>E&amp;A ch. IV (bilateral trade converges toward equilibrium price with dispersion
+          shrinking but persisting under finite vision)</td></tr>
+      </tbody>
+    </table>
+    <p>Every catalog entry defaults to <strong>global scope</strong> — including the per-agent
+    variables like wealth and age-at-death, which are then measured over the whole population. A
+    variant may override any entry to seat scope.</p>
+    <p><strong>Family B — real-world empirical distributions.</strong> Per James's direction,
+    targets should ultimately be <em>observed real-world distributions</em>, so that the most
+    explanatory ruleset is the one that grows reality: for example a national wealth distribution
+    (US wealth Gini ≈ 0.85, lognormal body plus Pareto tail), an observed life table for
+    age-at-death, or an epidemic prevalence curve. These enter the catalog as binned empirical
+    histograms with citations to the underlying dataset. v3.0 ships a handful; the catalog is data
+    (<code>targets/*.json</code>), so growing it is not a code change.</p>
+    <div class="callout callout-info">
+      <span class="callout-label">Status of the data (comment round 1)</span>
+      Neither family's histograms have been gathered yet — the tables above name the shapes and
+      their sources, not finished data files. Assembling, binning, and citing the actual target
+      histograms (digitizing the E&amp;A results for Family A; sourcing real datasets for
+      Family B) is an <strong>explicit implementation task</strong>, and Family A entries
+      additionally need the R3 calibration runs before a variant ships them.
+    </div>
+    <p>The DTL measurement machinery mostly exists already: per-tick <code>runtimeStats</code>
+    includes Gini, wealth aggregates, trade price/volume, disease prevalence, and tribe sizes
+    (<span class="cite">sugarscape.py:82-95</span>,
+    <span class="cite">sugarscape.py:1365-1385</span>), and <code>graphStats</code> already bins
+    age/sugar/spice and Lorenz points (<span class="cite">sugarscape.py:94</span>). v3 adds
+    per-seat filtering on top.</p>
+    <div class="decision">
+      <span class="decision-label">Decision — global scope is the default (comment round 1)</span>
+      <p><code>global</code>-scoped targets score every seat against the <em>same realized macro
+      outcome</em>, while seats may hold <em>different</em> targets. That makes multiplayer a
+      contest of rulesets competing to steer one shared system: other players' targets will
+      sometimes be amenable to yours, sometimes orthogonal — and occasionally directly
+      incompatible. Direct incompatibility is a <em>benefit</em>, not something to avoid; it is
+      where the steering skill shows. <code>seat</code>-scoped targets (each seat scored on its
+      own subpopulation, interacting through the shared world) remain a supported variant option
+      at launch for leagues that want cleaner attribution. This flips the first draft's
+      recommendation, which had the flagship starting seat-scoped.</p>
+    </div>
+  </section>
+
+  <!-- ============ 7 · Scoring ============ -->
+  <section id="scoring">
+    <h2>7 · Scoring</h2>
+    <ul class="key-points">
+      <li>Score = 1 − normalized Wasserstein-1 distance between measured and target histograms, in [0,1], higher is better.</li>
+      <li>KL divergence — James's initial prompt — was considered and rejected: empty-bin infinities, no metric structure, and it breaks cross-target comparability.</li>
+      <li>Jensen–Shannon divergence is computed and reported as a diagnostic, but ranking is on W1.</li>
+      <li>An empty measurement scores 0 — population extinction under global scope, own-agents extinction under seat scope. Extinction is never a scoring dodge.</li>
+    </ul>
+    <p>Both histograms live on the same declared support and bins. W1 is computed from the two
+    CDFs — the sum over bins of |CDF<sub>measured</sub> − CDF<sub>target</sub>| × bin width — and
+    normalized by the support range, giving a distance in [0,1]. The score is
+    <code>1 − W1_norm</code> ∈ [0,1], higher is better. Intuitively, W1 is the <em>work required
+    to move probability mass</em> from where the simulation put it to where the target wants it;
+    the score rewards getting the mass close even when the shape is not yet exact.</p>
+
+    <figure>
+      <svg viewBox="0 0 720 268" role="img" aria-label="Two histogram panels comparing a measured distribution against a target silhouette: a close match with small W1 and a poor match with large W1">
+        <!-- Legend -->
+        <rect x="472" y="8" width="12" height="12" fill="#1a3875" fill-opacity="0.45"/>
+        <text x="490" y="18" font-family="Merriweather Sans" font-size="10" fill="#555555">measured (bars)</text>
+        <path d="M594,14 h14" stroke="#b36e4e" stroke-width="2.5" fill="none"/>
+        <text x="614" y="18" font-family="Merriweather Sans" font-size="10" fill="#555555">target silhouette</text>
+
+        <!-- Panel A title -->
+        <text x="194" y="34" text-anchor="middle" font-family="Merriweather Sans" font-size="11.5" font-weight="700" fill="#111827">Close match</text>
+        <!-- Panel A measured bars -->
+        <g fill="#1a3875" fill-opacity="0.45">
+          <rect x="50" y="120" width="22" height="60"/>
+          <rect x="74" y="96" width="22" height="84"/>
+          <rect x="98" y="100" width="22" height="80"/>
+          <rect x="122" y="124" width="22" height="56"/>
+          <rect x="146" y="146" width="22" height="34"/>
+          <rect x="170" y="156" width="22" height="24"/>
+          <rect x="194" y="160.8" width="22" height="19.2"/>
+          <rect x="218" y="164" width="22" height="16"/>
+          <rect x="242" y="170" width="22" height="10"/>
+          <rect x="266" y="174" width="22" height="6"/>
+          <rect x="290" y="177.2" width="22" height="2.8"/>
+          <rect x="314" y="178" width="22" height="2"/>
+        </g>
+        <!-- Panel A target silhouette (right-skewed, fat tail) -->
+        <path d="M50,180 V112 H74 V92 H98 V108 H122 V128 H146 V144 H170 V154 H194 V160 H218 V166 H242 V170.8 H266 V174.4 H290 V176.8 H314 V178 H338 V180 Z"
+              fill="rgba(179,110,78,0.08)" stroke="#b36e4e" stroke-width="2"/>
+        <!-- Panel A axis -->
+        <line x1="46" y1="180" x2="342" y2="180" stroke="#d4c9b5" stroke-width="1.5"/>
+        <line x1="46" y1="180" x2="46" y2="60" stroke="#d4c9b5" stroke-width="1"/>
+        <text x="194" y="200" text-anchor="middle" font-family="Merriweather Sans" font-size="9.5" fill="#555555">variable, binned over declared support [lo, hi]</text>
+        <text x="40" y="120" text-anchor="middle" font-family="Merriweather Sans" font-size="9.5" fill="#555555" transform="rotate(-90 40 120)">probability mass</text>
+        <text x="194" y="224" text-anchor="middle" font-family="Merriweather Sans" font-size="10.5" fill="#1a3875" font-weight="600">little mass to move &#8594; W1 small &#8594; score near 1</text>
+
+        <!-- Panel B title -->
+        <text x="544" y="34" text-anchor="middle" font-family="Merriweather Sans" font-size="11.5" font-weight="700" fill="#111827">Poor match</text>
+        <!-- Panel B measured bars (compressed, egalitarian-shaped) -->
+        <g fill="#1a3875" fill-opacity="0.45">
+          <rect x="400" y="164" width="22" height="16"/>
+          <rect x="424" y="68" width="22" height="112"/>
+          <rect x="448" y="36" width="22" height="144"/>
+          <rect x="472" y="92" width="22" height="88"/>
+          <rect x="496" y="152" width="22" height="28"/>
+          <rect x="520" y="172" width="22" height="8"/>
+          <rect x="544" y="177.6" width="22" height="2.4"/>
+          <rect x="568" y="179.2" width="22" height="0.8"/>
+          <rect x="592" y="179.6" width="22" height="0.4"/>
+          <rect x="616" y="179.6" width="22" height="0.4"/>
+        </g>
+        <!-- Panel B target silhouette (same target) -->
+        <path d="M400,180 V112 H424 V92 H448 V108 H472 V128 H496 V144 H520 V154 H544 V160 H568 V166 H592 V170.8 H616 V174.4 H640 V176.8 H664 V178 H688 V180 Z"
+              fill="rgba(179,110,78,0.08)" stroke="#b36e4e" stroke-width="2"/>
+        <!-- mass-transport arrow -->
+        <path d="M470,52 C560,40 620,90 650,150" fill="none" stroke="#b36e4e" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#arrB)"/>
+        <defs>
+          <marker id="arrB" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8" fill="none" stroke="#b36e4e" stroke-width="1.2"/>
+          </marker>
+        </defs>
+        <text x="596" y="66" text-anchor="middle" font-family="Merriweather Sans" font-size="9.5" fill="#b36e4e">mass must travel to the tail</text>
+        <!-- Panel B axis -->
+        <line x1="396" y1="180" x2="692" y2="180" stroke="#d4c9b5" stroke-width="1.5"/>
+        <line x1="396" y1="180" x2="396" y2="60" stroke="#d4c9b5" stroke-width="1"/>
+        <text x="544" y="200" text-anchor="middle" font-family="Merriweather Sans" font-size="9.5" fill="#555555">same support, same bins, same target</text>
+        <text x="544" y="224" text-anchor="middle" font-family="Merriweather Sans" font-size="10.5" fill="#b36e4e" font-weight="600">mass far from target &#8594; W1 large &#8594; score low</text>
+
+        <text x="360" y="252" text-anchor="middle" font-family="Merriweather Sans" font-size="10" fill="#555555">score = 1 &#8722; W1 / support range &#8712; [0, 1]</text>
+      </svg>
+      <figcaption><span class="fig-label">Figure 2</span>Scoring by Wasserstein-1. Both panels show
+      a seat's measured histogram (bars) against the same right-skewed, fat-tailed target
+      silhouette. W1 is the <em>work to move mass</em>: in the left panel the mass is nearly where
+      the target wants it, so W1 is small and the score approaches 1; in the right panel the
+      compressed shape must transport mass a long way into the tail, so W1 is large and the score
+      is low. Because W1 respects the metric structure of the support, nearby shapes score
+      nearby — incremental ruleset improvement is smoothly rewarded.</figcaption>
+    </figure>
+
+    <div class="decision">
+      <span class="decision-label">Decision — W1, not KL divergence</span>
+      <p><strong>KL divergence (James's "KL div?" prompt) was considered and rejected</strong> for
+      three concrete reasons:</p>
+      <ul>
+        <li><strong>KL is undefined or infinite on empty bins</strong>, which are routine in a
+        250-sample histogram. Players would face score cliffs unrelated to actual closeness — or
+        we would smooth with pseudo-counts and the metric would become a tuning artifact.</li>
+        <li><strong>KL ignores the metric structure of the support</strong>: mass one bin away
+        from the target costs the same as mass at the far end. W1 is exactly "how far must mass
+        move," so nearby shapes score nearby — a smooth gradient that rewards incremental ruleset
+        improvement, which is what makes hill-climbing the game fun.</li>
+        <li><strong>Bounded and comparable</strong>: after normalization W1 lives in [0,1]
+        regardless of variable units, so scores are comparable across targets and variants —
+        important for the EWMA leaderboard.</li>
+      </ul>
+      <p>Jensen–Shannon divergence (symmetric, bounded, always finite) is the respectable middle
+      ground; v3 computes and <strong>reports</strong> it in the results as a diagnostic, but
+      ranks on W1.</p>
+    </div>
+
+    <h3>Edge cases</h3>
+    <p>An empty measurement scores 0, with a flag in the results — under the default global scope
+    that means the whole population went extinct before or during the window (every seat scores
+    0); under seat scope it means that seat's own agents did. Either way, extinction is never a
+    scoring dodge. Ties need no special encoding: scores are continuous and the platform compares
+    the scalar.</p>
+
+    <h3>Results schema (sketch)</h3>
+<pre><code>scores: [per-seat match score]        // the platform's ranking scalar
+                                      // (docs/what-is-a-coworld.md §1.4)
+per-seat details:
+  { target_id, score, w1, js_divergence, submitted,
+    ruleset_nodes, agents_final, histogram: [...] }
+histograms:                           // all measured stat histograms, for
+  global:   { wealth: [...], age: [...], age_at_death: [...],   // completeness
+              population: [...], trade_price: [...], sick_fraction: [...], ... }
+  per_seat: [ { wealth: [...], age: [...], ... }, ... ]         // one per seat
+timings:                              // the §3 instrumentation block
+  { boot, world_build, submission_window, per_seat_connect: [...],
+    run_total, per_tick_mean, sub_steps: {...}, measure, score, writes }
+episode-level scalars for qualification gates:
+  score.match_mean, score.match_min,
+  result.population_final, result.gini_final, result.extinct</code></pre>
+    <p>The full histogram set — every measured stat variable, both per seat and global — rides in
+    the results regardless of which variable the episode's targets used (comment round 1:
+    completeness makes results self-sufficient for later analysis and for growing the catalog
+    against recorded episodes).</p>
+    <p>Qualification gates evaluate <code>score.*</code>/<code>result.*</code> scalars — trap #3
+    in the platform doc.</p>
+  </section>
+
+  <!-- ============ 8 · Config ============ -->
+  <section id="config">
+    <h2>8 · Config Surface</h2>
+    <ul class="key-points">
+      <li>Game config = curated DTL passthrough + a coworld block; GUI/debug/logging options are excluded because the coworld edge owns I/O.</li>
+      <li>Scenario pools are the mechanism that makes "most explanatory ruleset <em>generator</em>" measurable — and they ship in v3.0 (comment round 1).</li>
+    </ul>
+    <p><strong>DTL passthrough.</strong> The useful subset of <code>sugarscapeOptions</code>
+    (<span class="cite">archived/v1/reference/dtl-python/config.json</span>): world geometry and
+    resource peaks/regrowth, seasons, pollution, agent endowment ranges (vision, movement,
+    metabolism, max age), reproduction/replacement, combat
+    (<code>environmentMaxCombatLoot</code>, aggression ranges), trade, lending, the disease list
+    and dynamics, and tag/tribe settings. Excluded: GUI, debug, logging, and profiling options
+    (<code>headlessMode</code>, <code>interfaceWidth</code>, <code>screenshots</code>,
+    <code>debugMode</code>, <code>logfile*</code>, …) — the coworld edge owns I/O.</p>
+    <p>Concretely, the world-shape keys look like this (values from the DTL default config —
+    the classic two-resource map: sugar mountains in the NE/SW corners, spice in NW/SE):</p>
+<pre><code>"environmentWidth": 50, "environmentHeight": 50, "environmentWraparound": true,
+"environmentSugarPeaks": [[15, 35, 4], [35, 15, 4]],   // [x, y, peak height]
+"environmentSpicePeaks": [[15, 15, 4], [35, 35, 4]],   // resources decay radially
+"environmentMaxSugar": 4, "environmentSugarRegrowRate": 1,      // per-cell cap, α
+"environmentSeasonInterval": 0,          // &gt;0 enables N/S seasonal growback (S rule)
+"environmentPollutionTimeframe": [0, 0], // enables production/consumption pollution
+"agentVision": [1, 6], "agentMovement": [1, 6],        // per-agent endowment ranges
+"agentSugarMetabolism": [1, 4], "agentSpiceMetabolism": [1, 4],
+"agentMaxAge": [60, 100], "agentFertilityFactor": [1, 1], ...</code></pre>
+    <p>Endowment ranges are <code>[min,&nbsp;max]</code> pairs rolled per agent at spawn; peak
+    lists are arbitrary — a variant can build one-peak, three-peak, or asymmetric maps by editing
+    data alone.</p>
+    <p><strong>Coworld block.</strong> <code>players:[{name}]</code>, <code>tokens:[…]</code>
+    (runner-injected), <code>seats</code>, <code>timesteps</code> (default 1,000),
+    <code>measurement_window</code> (default 100), the per-seat <code>targets</code> assignment,
+    <code>trait_ranges</code> (allowed [lo,hi] per trait), <code>ruleset_limits</code>, and
+    <code>player_connect_timeout_seconds</code>.</p>
+    <p><strong>Scenario pools</strong> — the mechanism for "most explanatory ruleset generator." A
+    variant may declare <code>scenario_pool: [{config_overrides, targets}, …]</code>; at boot the
+    game picks one scenario deterministically from the episode seed. Players only learn the drawn
+    scenario from their observation, so a competitive submitter must be a <em>generator</em>:
+    observation → ruleset. A league running a pooled variant measures, via EWMA over episodes,
+    exactly the cross-scenario explanatory power James wants. Fixed-scenario variants remain the
+    simple case — and the certification fixture. <strong>Scenario pools ship in v3.0</strong>
+    (decided — O4, comment round 1), not deferred to a later release.</p>
+  </section>
+
+  <!-- ============ 9 · Leaderboard ============ -->
+  <section id="leaderboard">
+    <h2>9 · Leaderboard: EWMA Over Scores</h2>
+    <ul class="key-points">
+      <li>The platform ladder natively supports score-based EWMA ranking — no platform modification needed.</li>
+      <li>Because the score is an absolute distribution match in [0,1], single-player episodes are first-class; Elo is rejected.</li>
+    </ul>
+    <p>Verified during the v2 design (<span class="cite">archived/v2/v2-design.md §3</span>,
+    2026-08-10) and still the plan: the platform ladder natively supports
+    <code>ranking.algorithm = "score"</code> with <code>standing_aggregation = "ewma"</code> and
+    <code>half_life_hours</code> (metta
+    <span class="cite">app_backend v2/ladders/rankings/score.py</span>; config in
+    <span class="cite">v2/ladders/config.py</span>). <strong>No platform modification is
+    needed.</strong></p>
+    <p>Because the score is an absolute distribution match in [0,1] — not relative to opponents —
+    single-player episodes are first-class: a 1-seat variant scores identically in kind to an
+    8-seat one, and the ladder needs no opponent pairing for the rating to be meaningful. Elo is
+    rejected: all-pairs win/loss comparison is meaningless for single-player episodes and lossy
+    for absolute continuous scores. Within a league all episodes run one variant, so raw scores
+    are EWMA-comparable; different targets and scenarios live in different leagues, or inside one
+    pooled variant (§8).</p>
+  </section>
+
+  <!-- ============ 10 · Architecture ============ -->
+  <section id="architecture">
+    <h2>10 · Architecture &amp; Repo Layout</h2>
+    <ul class="key-points">
+      <li>Vendored DTL fork kept as untouched as possible; all v3 behavior lives in <code>src/coworld/</code> via existing subclass/registration seams.</li>
+      <li>The WS edge is thin and async-confined; the simulation itself is fully synchronous.</li>
+      <li>A deliberately beatable baseline player and a sub-second certification fixture ship in-repo.</li>
+    </ul>
+<pre><code>coworld_manifest.json          # template, {{GAME_IMAGE}} placeholders
+compose.yaml                   # service names = role names, linux/amd64
+Dockerfile                     # python:3.x-slim, pinned
+config.json                    # local dev default
+src/sugarscape/                # vendored DTL fork; UPSTREAM.md pins upstream commit
+src/coworld/                   # the v3 edge (all new code):
+    server.py                  #   WS edge: /healthz, /player, /global, /client/*
+    ruleset.py                 #   DSL: parse, validate, compile-to-closures, interpret
+    ruleset_agent.py           #   Agent subclass; registers as decision model "ruleset"
+    seats.py                   #   seat assignment, inheritance on birth/replacement
+    targets.py                 #   target catalog loading + measurement
+    scoring.py                 #   histograms, W1, JS, results assembly
+    replay.py                  #   frame log writer
+targets/                       # catalog JSON, one file per target, with sources
+players/baseline/              # bundled baseline player (Dockerfile + README)
+replay-viewer/                 # static bundle source; output gitignored
+tools/build_replay_viewer.sh
+docs/PROTOCOL.md  docs/RULES.md  docs/TARGETS.md
+tests/</code></pre>
+    <p><strong>DTL fork policy.</strong> Vendor a fresh pin of current upstream
+    <code>nkremerh/sugarscape</code> HEAD at implementation time (decided — O9, comment round 1;
+    not v1's older copy), record the commit in <code>UPSTREAM.md</code>, and keep the DTL files as
+    untouched as possible; all v3
+    behavior lives in <code>src/coworld/</code> via the existing subclass and registration seams.
+    The intended DTL-file diff is small: registering the decision model, a seat tag on the agent,
+    a per-seat stats hook, and a headless entry point that skips GUI construction
+    (<span class="cite">sugarscape.py:77</span> already guards on <code>headlessMode</code>).</p>
+    <p><strong>The WS edge is thin and the sim is synchronous.</strong> Python WS servers are
+    async-flavored; the async stays confined to <code>server.py</code> (the submission window plus
+    spectator fan-out), which hands a plain dict of rulesets to a fully synchronous
+    <code>run_episode()</code>. During the run the sim thread emits frames into a queue the edge
+    drains. The library choice — <code>websockets</code> vs <code>aiohttp</code> vs threaded
+    <code>simple-websocket</code> — is an implementation detail; the candidate default is
+    <code>websockets</code>.</p>
+    <p><strong>Baseline player.</strong> Reads the observation, picks from a small library of
+    canned rulesets keyed on target variable and shape (greedy for skewed-wealth, a
+    pollution-averse spread-out rule for egalitarian, …), submits, and exits. It is deliberately
+    beatable; it gives the qualification gate and certification something real to test against.</p>
+    <p><strong>Certification fixture.</strong> A 20×20 world, ~30 agents, 2 seats, 50 ticks, fixed
+    seed — it runs in well under a second of sim time.</p>
+  </section>
+
+  <!-- ============ 11 · Replay ============ -->
+  <section id="replay">
+    <h2>11 · Replay &amp; Spectator</h2>
+    <ul class="key-points">
+      <li>Replay artifact: zlib-compressed JSON frame log — header (config, seed, targets, rulesets, scores) plus per-tick frames.</li>
+      <li>The static JS/canvas viewer's star pane is each seat's measured histogram morphing toward its target silhouette with a running score.</li>
+      <li>Frame log vs. WASM re-simulation is gated on the measured zlib size of real episode logs; James reviews the implemented viewer before it ships.</li>
+    </ul>
+    <p><strong>Replay artifact</strong> (game-owned bytes): a zlib-compressed JSON frame log — an
+    episode header (config, seed, per-seat targets plus submitted rulesets plus scores) followed
+    by per-tick frames (agent id/seat/position/wealth, cell resource grid deltas, per-tick
+    <code>runtimeStats</code>, and every K ticks each seat's running measured histogram). Config +
+    seed + rulesets alone would suffice to <em>re-simulate</em>, but the browser can't run
+    CPython, so v3.0 records presentation frames — v1's approach, with a leaner encoding.</p>
+    <p><strong>Static replay-viewer bundle</strong> — the platform's recommended path
+    (<span class="cite">docs/what-is-a-coworld.md §1.6</span>): plain JS/canvas, no WASM needed
+    since it only plays frames. Two panes: the map, and the star of the show — <strong>each
+    seat's measured histogram morphing over time against its target silhouette, with the running
+    score</strong>. The distribution-convergence view is the game's identity; the replay should
+    make "did my rule grow the target?" visible at a glance. A <code>?chrome=off</code> thumbnail
+    mode is supported. <em>Review checkpoint (comment round 1): James reviews the implemented
+    viewer and iterates on it before it ships — the pane layout above is a starting point, not a
+    settled spec.</em></p>
+    <p>Live spectating (<code>/global</code>) streams the same frames.</p>
+    <div class="callout callout-info">
+      <span class="callout-label">Decision gate — frame log vs. WASM resimulation (comment round 1)</span>
+      Measure the zlib-compressed frame-log size on real episodes <em>first</em>. If it lands in
+      the expected single-digit-MB range, the frame log stays and browser re-simulation remains
+      future work. If it comes out too heavy, revisit compiling the sim to WASM
+      (Pyodide/py2wasm) so the replay artifact shrinks to config + seed + rulesets. The known
+      cost of that path: CPython-in-WASM typically runs several times slower than native, so a
+      52.5&nbsp;s episode could take minutes to resimulate in-browser — viable only with
+      progressive playback (simulate ahead of the playhead), which is real viewer complexity. The
+      artifact format is game-owned bytes either way, so the choice can change without a platform
+      contract change.
+    </div>
+  </section>
+
+  <!-- ============ 12 · Performance ============ -->
+  <section id="performance">
+    <h2>12 · Performance Evidence</h2>
+    <ul class="key-points">
+      <li>Measured this session: a full 1,000-tick default episode takes 52.5&nbsp;s wall — about 4% of the 20-minute hosted episode budget.</li>
+      <li>Budget headroom is not a license: the SugarLang interpreter targets ≤ 2× stock ranking cost, verified by the §3 instrumentation.</li>
+      <li>Validation item V2: re-benchmark with RulesetAgent in the loop before freezing ranked-variant sizes.</li>
+    </ul>
+    <p>The pinned DTL Python was benchmarked headless on James's machine (Apple Silicon, CPython
+    3.14.4) with the default <code>config.json</code>: a 50×50 world, 250 starting agents, the
+    bentham decision model, reproduction on — population grows to ~1,050 by t=500 and stabilizes
+    around ~930 at t=999.</p>
+    <table>
+      <thead>
+        <tr><th>Run</th><th class="num">Wall time</th><th>Context</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>100 ticks</td><td class="num">1.37 s</td><td>default config, headless</td></tr>
+        <tr><td>1,000 ticks (full default episode)</td><td class="num">52.5 s</td>
+          <td>≈ 19 ticks/s at ~1,000 agents — <strong>~4% of the 20-minute hosted episode
+          budget</strong> (<code>episode_timeout_minutes</code> default 20)</td></tr>
+      </tbody>
+    </table>
+    <p>Headroom conclusions: the ruleset interpreter <em>can</em> cost several times the stock
+    ranking cost before the budget matters (compiled closures over ≤ 24 candidate cells × ≤ 256
+    nodes). Hosted CPUs are slower than an M-series laptop, but the margin is ~19× even after
+    reserving the full 180&nbsp;s submission window ((1,200&nbsp;s − 180&nbsp;s) / 52.5&nbsp;s).
+    Validation item <strong>V2</strong>: re-benchmark with RulesetAgent in the loop before
+    freezing ranked-variant sizes.</p>
+    <p><strong>Headroom is not a license</strong> (comment round 1): the interpreter should still
+    be as efficient as reasonably possible — expressions compile once to nested closures (no
+    tree-walking per evaluation), per-agent features are computed once per tick and shared across
+    candidate cells, world features once per tick and shared across agents, and the hot path
+    allocates nothing per evaluation. Working target: <strong>≤ 2× stock ranking cost</strong>,
+    measured by the §3 sub-step instrumentation.</p>
+    <p><strong>Future work — speeding up the sim itself.</strong> The DTL implementation is
+    unoptimized research code; profiling-guided improvement (hot-loop micro-optimization,
+    caching neighborhood computations, or simply running the container under PyPy, which is
+    often several-fold faster on pure-Python workloads) is a real option once the §3
+    instrumentation shows where the time goes. Not v3.0 scope; the instrumentation exists
+    precisely so this can be decided from data.</p>
+  </section>
+
+  <!-- ============ 13 · Risks ============ -->
+  <section id="risks">
+    <h2>13 · Risks</h2>
+    <ul class="key-points">
+      <li>The two design-level risks are DSL expressivity-vs-legibility (R1) and degenerate strategies against targets (R2).</li>
+      <li>The two dependency-level risks are DTL code quality (R4) and CPython version pinning (R5); target achievability (R3) is closed by calibration runs.</li>
+    </ul>
+    <div class="callout callout-warn">
+      <span class="callout-label">R1 — DSL expressivity vs. legibility</span>
+      Too weak → solved and boring; too strong → winning rulesets are opaque blobs and the
+      "explanatory" framing dies. Mitigations: the node budget, the curated feature vocabulary,
+      and results echoing rulesets so the community can read winners. Tune after playtesting.
+    </div>
+    <div class="callout callout-warn">
+      <span class="callout-label">R2 — Degenerate strategies</span>
+      E.g. hitting an egalitarian target by keeping agents poor-but-alive, or extinction-adjacent
+      play. The zero-agents rule and window pooling close the worst cases; expect a balancing pass
+      on the catalog after real episodes.
+    </div>
+    <div class="callout callout-warn">
+      <span class="callout-label">R3 — Target achievability</span>
+      Some literature targets may be unreachable under some configs — or trivially reached by the
+      null ruleset. Each catalog entry needs a baseline calibration run recording the null-ruleset
+      score, so variants can pick targets with real skill spread. (Validation V3.)
+    </div>
+    <div class="callout callout-warn">
+      <span class="callout-label">R4 — DTL code quality as a dependency</span>
+      DTL is a research codebase (a 1,662-line <code>agent.py</code>, global RNG, floats
+      everywhere). We accept it as-is per the premise — clone, don't rewrite. The risk is
+      contained by keeping our code at the subclass seam and pinning the fork.
+    </div>
+    <div class="callout callout-warn">
+      <span class="callout-label">R5 — CPython version pinning</span>
+      The determinism promise is per-pinned-interpreter; the container pin makes hosted runs
+      reproducible, but local reproduction requires the same version. Documented, not solved.
+    </div>
+  </section>
+
+  <!-- ============ 14 · Alternatives ============ -->
+  <section id="alternatives">
+    <h2>14 · Alternatives Considered</h2>
+    <ul class="key-points">
+      <li>Every major decision had a live alternative; the losing branches are recorded so the design can be trusted (and revisited).</li>
+      <li>The two biggest reversals from prior generations: no per-tick control, and no from-scratch simulator.</li>
+    </ul>
+    <table>
+      <thead>
+        <tr><th>Decision</th><th>Chosen</th><th>Rejected</th><th>Why</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Control model</td><td>one-shot ruleset submission</td>
+          <td>per-tick policy control (v1/v2)</td>
+          <td>premise of v3; kills the latency edge, makes DTL viable, makes episodes cheap</td></tr>
+        <tr><td>Sim implementation</td><td>direct DTL Python clone</td>
+          <td>from-scratch rewrite (v2's D1)</td>
+          <td>D1's rationale was the per-tick control seam; with it gone, cloning is fastest and
+          truest to the literature</td></tr>
+        <tr><td>Ruleset form</td><td>declarative DSL (data)</td>
+          <td>code submission (Python/WASM)</td>
+          <td>sandboxing / determinism / legibility</td></tr>
+        <tr><td>DSL power</td><td>decision list + expr trees, budgeted</td>
+          <td>flat weight vector / Turing-complete</td>
+          <td>expressivity floor vs. halting + perf + audit ceiling</td></tr>
+        <tr><td>Scoring metric</td><td>1 − normalized W1 (JS reported)</td>
+          <td>KL divergence</td>
+          <td>empty-bin infinities; no support metric; unbounded</td></tr>
+        <tr><td>Rating</td><td>platform-native score EWMA</td>
+          <td>Elo</td>
+          <td>single-player first-class; absolute continuous scores</td></tr>
+        <tr><td>Replay</td><td>frame log + static JS viewer</td>
+          <td>Pyodide/WASM resimulation</td>
+          <td>CPython in browser is heavy; frames are small at this scale</td></tr>
+        <tr><td>Async</td><td>thin async WS edge only, sync sim</td>
+          <td>async through the sim</td>
+          <td>James's no-async rule; the sim has no I/O anyway</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============ 15 · Open questions ============ -->
+  <section id="open-questions">
+    <h2>15 · Open Questions for James</h2>
+    <ul class="key-points">
+      <li>Comment round 1 (2026-08-11) resolved seven of the ten: O2–O5, O7 (with a measurement gate), O9, and O10; O1 is resolved by implication.</li>
+      <li>Still open: O6 (episode defaults) and O8 (newborn seat assignment) — neither blocks the start of implementation.</li>
+    </ul>
+    <div class="callout callout-open">
+      <span class="callout-label">O1 — Traits block in v3.0? · resolved by implication</span>
+      It's cheap (DTL already has the per-agent factors) and widens explanatory space beyond
+      movement. <strong>Resolved 2026-08-11 (inferred):</strong> the O2 answer approved the DSL
+      "as-is", and the shape shown includes the traits block — so traits are in. Flag if that
+      inference is wrong.
+    </div>
+    <div class="callout callout-open">
+      <span class="callout-label">O2 — DSL confirmation · RESOLVED</span>
+      Decision-list + s-expression trees + budgets (256 nodes / depth 16 / 32&nbsp;KB).
+      <strong>Resolved 2026-08-11:</strong> "Looks good as-is. Call it <strong>SugarLang</strong>."
+    </div>
+    <div class="callout callout-open">
+      <span class="callout-label">O3 — Target scope · RESOLVED</span>
+      <strong>Resolved 2026-08-11:</strong> <strong>global scope is the default</strong> — the
+      first draft's seat-scoped-flagship recommendation is flipped. Seat scope remains a variant
+      option and is present at launch. See the §6 decision record.
+    </div>
+    <div class="callout callout-open">
+      <span class="callout-label">O4 — Scenario pools · RESOLVED</span>
+      <strong>Resolved 2026-08-11:</strong> "Pools in v3.0, don't defer."
+    </div>
+    <div class="callout callout-open">
+      <span class="callout-label">O5 — Scoring metric · RESOLVED</span>
+      W1 primary + JS reported. <strong>Resolved 2026-08-11:</strong> confirmed ("good catch
+      against KL").
+    </div>
+    <div class="callout callout-open">
+      <span class="callout-label">O6 — Defaults · still open</span>
+      N = 1,000 ticks, window W = 100, and seat count for the flagship ranked variant (proposal:
+      a single-player flagship plus a 4-seat competitive variant).
+    </div>
+    <div class="callout callout-open">
+      <span class="callout-label">O7 — Replay investment · RESOLVED, with a gate</span>
+      <strong>Resolved 2026-08-11:</strong> at least the frame-log + static JS viewer as scoped in
+      §11 — and measure the zlib-compressed replay size on real episodes to decide whether frame
+      logs are the most efficient format or a WASM resimulation path is worth building (§11
+      decision gate).
+    </div>
+    <div class="callout callout-open">
+      <span class="callout-label">O8 — Newborn seat assignment · still open</span>
+      Seeded 50/50 between the two parents' seats — OK? (Thue–Morse alternation is the noted
+      fallback if 50/50 proves noisy.)
+    </div>
+    <div class="callout callout-open">
+      <span class="callout-label">O9 — DTL fork freshness · RESOLVED</span>
+      <strong>Resolved 2026-08-11:</strong> re-pin to current upstream
+      <code>nkremerh/sugarscape</code> HEAD (§10).
+    </div>
+    <div class="callout callout-open">
+      <span class="callout-label">O10 — Manifest metadata · RESOLVED</span>
+      <strong>Resolved 2026-08-11:</strong> game name is <code>sugarscape</code>, and per James
+      there is no <code>engine_runtime</code> field in the current manifest schema — nothing to
+      declare. (The first draft cited an optional field from the 2026-08-06 platform notes;
+      James's answer supersedes those notes, which should be re-verified on the next metta pull.)
+    </div>
+  </section>
+
+  <!-- ============ 16 · Sources ============ -->
+  <section id="sources">
+    <h2>16 · Sources</h2>
+    <ul>
+      <li><strong>DTL Sugarscape (pinned):</strong>
+      <span class="cite">archived/v1/reference/dtl-python/</span> — <code>agent.py</code>,
+      <code>sugarscape.py</code>, <code>ethics.py</code>, <code>config.json</code> (cited inline
+      throughout). Upstream: <code>github.com/nkremerh/sugarscape</code> (Unlicense).</li>
+      <li><strong>Platform contract:</strong> <span class="cite">docs/what-is-a-coworld.md</span>
+      (2026-08-06 research; metta checkout at <code>2480fb3fba</code>, 2026-08-10 — the pull
+      failed this session with an SSH publickey error; flagged).</li>
+      <li><strong>v2 design (archived):</strong>
+      <span class="cite">archived/v2/v2-design.md</span> — especially §3, the scoring/EWMA
+      verification against metta <span class="cite">app_backend v2/ladders/rankings/score.py</span>.</li>
+      <li><strong>Epstein, J. &amp; Axtell, R. (1996), <em>Growing Artificial Societies</em></strong> —
+      ch. II (wealth inequality, carrying capacity), ch. III (culture/tribes), ch. IV (trade),
+      ch. V (disease).</li>
+      <li><strong>Koza, J. (1992), <em>Genetic Programming</em></strong> — s-expression trees as
+      the standard GP representation (§4).</li>
+      <li><strong>Benchmark:</strong> this session, 2026-08-11, CPython 3.14.4, Apple Silicon
+      (§12).</li>
+      <li><strong>Comment round 1:</strong> James's review comments, 2026-08-11
+      (<code>dc-comments/1</code> export) — resolutions applied throughout Rev 2.</li>
+    </ul>
+  </section>
+
+</article>
+
+<!-- ================================================================
+     DC-COMMENTS BEGIN — markup + script (copy verbatim; do not modify)
+     ================================================================ -->
+<aside id="dc-sidebar" aria-label="Comments">
+  <h2 class="dc-title">Comments <span id="dc-count"></span></h2>
+  <div class="dc-actions">
+    <button class="dc-btn" id="dc-export">Export JSON</button>
+    <button class="dc-btn" id="dc-copy">Copy JSON</button>
+    <button class="dc-btn" id="dc-import">Import…</button>
+    <input type="file" id="dc-file" accept=".json,application/json" hidden>
+  </div>
+  <div id="dc-status" role="status"></div>
+  <div id="dc-list"><p class="dc-empty">No comments yet. Select text in the document to add one.</p></div>
+</aside>
+<button id="dc-fab" type="button">+ Comment</button>
+<button id="dc-toggle" type="button">Comments</button>
+
+<script>
+(() => {
+  'use strict';
+  const FORMAT = 'dc-comments/1';
+  const CTX = 32; // prefix/suffix context length, chars
+  const doc = document.getElementById('doc');
+  const fab = document.getElementById('dc-fab');
+  const listEl = document.getElementById('dc-list');
+  const countEl = document.getElementById('dc-count');
+  const statusEl = document.getElementById('dc-status');
+  const sidebar = document.getElementById('dc-sidebar');
+  const storeKey = 'dc:' + document.title;
+
+  let comments = []; // {id, exact, prefix, suffix, text, created, resolved}
+  let ranges = new Map(); // id -> Range (null if orphaned)
+  let seq = 0;
+
+  // ---- text indexing: one global string over #doc's text nodes ----
+  function docText() {
+    const r = document.createRange();
+    r.selectNodeContents(doc);
+    return r.toString();
+  }
+  function globalOffset(container, offset) {
+    const r = document.createRange();
+    r.setStart(doc, 0);
+    r.setEnd(container, offset);
+    return r.toString().length;
+  }
+  function offsetsToRange(start, end) {
+    const walker = document.createTreeWalker(doc, NodeFilter.SHOW_TEXT);
+    let pos = 0, range = document.createRange(), haveStart = false;
+    while (walker.nextNode()) {
+      const node = walker.currentNode, len = node.data.length;
+      if (!haveStart && pos + len >= start) {
+        range.setStart(node, start - pos);
+        haveStart = true;
+      }
+      if (haveStart && pos + len >= end) {
+        range.setEnd(node, end - pos);
+        return range;
+      }
+      pos += len;
+    }
+    return null;
+  }
+
+  // ---- anchoring: TextQuoteSelector-style exact + prefix/suffix ----
+  function selectorFromRange(range) {
+    const text = docText();
+    const start = globalOffset(range.startContainer, range.startOffset);
+    const end = globalOffset(range.endContainer, range.endOffset);
+    return {
+      exact: text.slice(start, end),
+      prefix: text.slice(Math.max(0, start - CTX), start),
+      suffix: text.slice(end, end + CTX),
+    };
+  }
+  function locate(c) {
+    const text = docText();
+    let i = text.indexOf(c.prefix + c.exact + c.suffix);
+    if (i >= 0) return offsetsToRange(i + c.prefix.length, i + c.prefix.length + c.exact.length);
+    i = text.indexOf(c.exact);
+    if (i >= 0) return offsetsToRange(i, i + c.exact.length);
+    return null;
+  }
+  function reanchorAll() {
+    ranges = new Map(comments.map(c => [c.id, locate(c)]));
+    paint();
+  }
+
+  // ---- painting via CSS Custom Highlight API ----
+  const hl = typeof Highlight !== 'undefined' ? new Highlight() : null;
+  const hlActive = typeof Highlight !== 'undefined' ? new Highlight() : null;
+  if (hl) { CSS.highlights.set('dc-hl', hl); CSS.highlights.set('dc-hl-active', hlActive); }
+  function paint(activeId) {
+    if (!hl) return;
+    hl.clear(); hlActive.clear();
+    for (const [id, r] of ranges) {
+      if (!r) continue;
+      (id === activeId ? hlActive : hl).add(r);
+    }
+  }
+
+  // ---- persistence (best-effort; file:// storage varies by browser) ----
+  function save() {
+    try { localStorage.setItem(storeKey, JSON.stringify(comments)); } catch (e) { /* unavailable on some file:// setups */ }
+  }
+  function load() {
+    try {
+      const raw = localStorage.getItem(storeKey);
+      if (raw) comments = JSON.parse(raw);
+    } catch (e) { /* ignore */ }
+  }
+
+  // ---- sidebar rendering ----
+  function flash(msg) {
+    statusEl.textContent = msg;
+    setTimeout(() => { if (statusEl.textContent === msg) statusEl.textContent = ''; }, 2500);
+  }
+  function sortedComments() {
+    const pos = c => {
+      const r = ranges.get(c.id);
+      return r ? globalOffset(r.startContainer, r.startOffset) : Infinity; // orphans last
+    };
+    return [...comments].sort((a, b) => pos(a) - pos(b));
+  }
+  function render(editingId) {
+    countEl.textContent = comments.length ? '(' + comments.length + ')' : '';
+    listEl.textContent = '';
+    if (!comments.length) {
+      const p = document.createElement('p');
+      p.className = 'dc-empty';
+      p.textContent = 'No comments yet. Select text in the document to add one.';
+      listEl.appendChild(p);
+      return;
+    }
+    for (const c of sortedComments()) {
+      const item = document.createElement('div');
+      item.className = 'dc-item' + (c.resolved ? ' dc-resolved' : '');
+      item.dataset.id = c.id;
+
+      const quote = document.createElement('div');
+      quote.className = 'dc-quote';
+      quote.textContent = c.exact.length > 90 ? c.exact.slice(0, 90) + '…' : c.exact;
+      if (!ranges.get(c.id)) {
+        const tag = document.createElement('span');
+        tag.className = 'dc-orphan-tag';
+        tag.textContent = 'orphaned';
+        quote.appendChild(tag);
+      }
+      item.appendChild(quote);
+
+      if (c.id === editingId) {
+        const ta = document.createElement('textarea');
+        ta.value = c.text;
+        ta.placeholder = 'Write a comment… (⌘/Ctrl+Enter to save, Esc to cancel)';
+        ta.addEventListener('keydown', e => {
+          if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') commit();
+          if (e.key === 'Escape') cancel();
+        });
+        ta.addEventListener('click', e => e.stopPropagation());
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'dc-btn';
+        saveBtn.textContent = 'Save';
+        saveBtn.style.marginTop = '6px';
+        saveBtn.addEventListener('click', e => { e.stopPropagation(); commit(); });
+        function commit() {
+          c.text = ta.value.trim();
+          if (!c.text) return cancel();
+          save(); render();
+        }
+        function cancel() {
+          if (!c.text) { comments = comments.filter(x => x.id !== c.id); ranges.delete(c.id); paint(); }
+          save(); render();
+        }
+        item.appendChild(ta);
+        item.appendChild(saveBtn);
+        listEl.appendChild(item);
+        requestAnimationFrame(() => ta.focus());
+        continue;
+      }
+
+      const text = document.createElement('div');
+      text.className = 'dc-text';
+      text.textContent = c.text;
+      item.appendChild(text);
+
+      const meta = document.createElement('div');
+      meta.className = 'dc-meta';
+      const when = document.createElement('span');
+      when.textContent = c.created.slice(0, 10);
+      const resolved = document.createElement('label');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = !!c.resolved;
+      cb.addEventListener('click', e => e.stopPropagation());
+      cb.addEventListener('change', () => { c.resolved = cb.checked; save(); render(); });
+      resolved.append(cb, 'resolved');
+      const del = document.createElement('button');
+      del.className = 'dc-del';
+      del.textContent = 'delete';
+      del.addEventListener('click', e => {
+        e.stopPropagation();
+        comments = comments.filter(x => x.id !== c.id);
+        ranges.delete(c.id);
+        paint(); save(); render();
+      });
+      meta.append(when, resolved, del);
+      item.appendChild(meta);
+
+      item.addEventListener('click', () => {
+        const r = ranges.get(c.id);
+        if (!r) return flash('Anchor not found in this version of the document.');
+        const rect = r.getBoundingClientRect();
+        window.scrollTo({ top: window.scrollY + rect.top - 160, behavior: 'smooth' });
+        paint(c.id);
+        setTimeout(() => paint(), 2000);
+      });
+      // double-click text to edit
+      text.addEventListener('dblclick', e => { e.stopPropagation(); render(c.id); });
+      listEl.appendChild(item);
+    }
+  }
+
+  // ---- selection -> floating Comment button ----
+  document.addEventListener('mouseup', e => {
+    if (fab.contains(e.target)) return;
+    setTimeout(() => {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !sel.rangeCount) { fab.style.display = 'none'; return; }
+      const range = sel.getRangeAt(0);
+      if (!doc.contains(range.commonAncestorContainer) || !range.toString().trim()) {
+        fab.style.display = 'none';
+        return;
+      }
+      const rect = range.getBoundingClientRect();
+      fab.style.display = 'block';
+      fab.style.left = Math.min(rect.right + 8 + window.scrollX, window.scrollX + document.documentElement.clientWidth - 120) + 'px';
+      fab.style.top = (rect.top + window.scrollY - 4) + 'px';
+      fab.dataset.pending = '1';
+    }, 0);
+  });
+  fab.addEventListener('click', () => {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed) return;
+    const range = sel.getRangeAt(0);
+    const c = Object.assign({ id: 'c' + Date.now().toString(36) + (seq++), text: '', created: new Date().toISOString(), resolved: false }, selectorFromRange(range));
+    comments.push(c);
+    ranges.set(c.id, range.cloneRange());
+    paint(c.id);
+    sel.removeAllRanges();
+    fab.style.display = 'none';
+    sidebar.classList.add('dc-open');
+    render(c.id);
+  });
+
+  // ---- export / import ----
+  function payload() {
+    return JSON.stringify({
+      format: FORMAT,
+      doc: document.title,
+      exported: new Date().toISOString(),
+      comments: comments,
+    }, null, 2);
+  }
+  document.getElementById('dc-export').addEventListener('click', () => {
+    const blob = new Blob([payload()], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = (document.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'doc') + '.comments.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    flash('Downloaded.');
+  });
+  document.getElementById('dc-copy').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(payload()); flash('Copied to clipboard.'); }
+    catch (e) { flash('Clipboard blocked — use Export instead.'); }
+  });
+  document.getElementById('dc-import').addEventListener('click', () => document.getElementById('dc-file').click());
+  document.getElementById('dc-file').addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    file.text().then(raw => {
+      const data = JSON.parse(raw);
+      if (data.format !== FORMAT || !Array.isArray(data.comments)) { flash('Not a dc-comments file.'); return; }
+      const byId = new Map(comments.map(c => [c.id, c]));
+      for (const c of data.comments) byId.set(c.id, c);
+      comments = [...byId.values()];
+      reanchorAll(); save(); render();
+      flash('Imported ' + data.comments.length + ' comment(s).');
+    }).catch(() => flash('Could not parse that file.'));
+    e.target.value = '';
+  });
+
+  document.getElementById('dc-toggle').addEventListener('click', () => sidebar.classList.toggle('dc-open'));
+
+  // ---- init ----
+  load();
+  reanchorAll();
+  render();
+})();
+</script>
+<!-- ============ DC-COMMENTS END ============ -->
+</div>
+</body>
+</html>
