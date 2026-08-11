@@ -1,0 +1,9 @@
+{
+    "__README__": "Agent sugar collection with immediate sugar growback (pgs. 21-26 of Growing Artificial Societies).",
+    "agentMovement": [1000, 1000],
+    "agentStartingSugar": [3, 10],
+    "environmentSugarRegrowRate": 100,
+    "seed": 12345,
+    "startingAgents": 400,
+    "timesteps": 500
+}

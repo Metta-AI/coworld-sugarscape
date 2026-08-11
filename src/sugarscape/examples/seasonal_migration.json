@@ -1,0 +1,10 @@
+{
+    "__README__": "Agent migration with seasonal sugar growback (pgs. 44-46 of Growing Artificial Societies).",
+    "agentMovement": [1000, 1000],
+    "agentStartingSugar": [3, 10],
+    "environmentSeasonalGrowbackDelay": 8,
+    "environmentSeasonInterval": 50,
+    "seed": 12345,
+    "startingAgents": 400,
+    "timesteps": 500
+}
