@@ -371,7 +371,7 @@
     <span class="cite">docs/v2-design.md</span>. The most consequential calls: scoring is
     <strong>time-integrated Cobb–Douglas welfare</strong>, summed across a seat's agents and divided by
     episode length (B2+B3+B5) — the one scheme under which survival, prosperity, and reproduction all
-    point the same way; the timestep is <strong>phased</strong> — world physics, then five action gates,
+    point the same way; the timestep is <strong>phased</strong> — world physics, then six action gates,
     then upkeep (E8); and determinism is total — no floats anywhere, bit-identical state on every
     target the core is built for (F6). Two decisions — E1 (sequential seeded movement) and F1 (limited
     visibility, "poker, not chess") — were originally recorded as deliberate human overrides of the
@@ -765,14 +765,14 @@
   <section id="timestep">
     <h2>6 · The Timestep and Its Action Gates</h2>
     <ul class="key-points">
-      <li>A phased timestep across the whole population — not the classic one-agent-does-everything sequential turn: world physics → five action gates → upkeep (E8).</li>
+      <li>A phased timestep across the whole population — not the classic one-agent-does-everything sequential turn: world physics → six action gates → upkeep (E8; the lend gate was added 2026-08-11, correcting an omission in the original phase list).</li>
       <li>Each gate is a named point where policies are consulted, with a defined observation before it and a defined resolution after it — the structure DTL lacked and v1 could not retrofit.</li>
       <li>Movement/combat run sequentially in episode-seeded order (E1) — sequential activation is integral: every agent acts with full information; trade, mating, and lending share one propose/respond negotiation shape (E4/E5/E6), run to quiescence under a cap (default 8, revised 2026-08-10).</li>
       <li>Inaction is legal at every gate, and illegal actions resolve as no-ops (E9) — A3's freeze rule depends on this.</li>
     </ul>
 
     <figure>
-      <svg viewBox="0 0 640 732" role="img" aria-label="The canonical timestep: phase 0 world updates, five action gates, phase 6 upkeep">
+      <svg viewBox="0 0 640 816" role="img" aria-label="The canonical timestep: phase 0 world updates, six action gates, phase 7 upkeep">
         <defs>
           <marker id="arrow-ts" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
             <path d="M0,0 L8,4 L0,8" fill="none" stroke="#859ebe" stroke-width="1.2"/>
@@ -783,8 +783,8 @@
         </defs>
 
         <!-- next-tick loop -->
-        <path d="M 260 704 L 260 718 L 40 718 L 40 72 L 54 72" fill="none" stroke="#d4c9b5" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrow-loop)"/>
-        <text x="150" y="713" font-family="Merriweather Sans" font-size="12" fill="#999999">next tick</text>
+        <path d="M 260 788 L 260 802 L 40 802 L 40 72 L 54 72" fill="none" stroke="#d4c9b5" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrow-loop)"/>
+        <text x="150" y="797" font-family="Merriweather Sans" font-size="12" fill="#999999">next tick</text>
 
         <!-- Phase 0 -->
         <rect x="60" y="20" width="400" height="104" rx="3" fill="#f8f6ef" stroke="#d4c9b5"/>
@@ -838,35 +838,56 @@
         <rect x="60" y="482" width="400" height="64" rx="3" fill="#eef2f7" stroke="#859ebe"/>
         <circle cx="84" cy="514" r="13" fill="#1a3875"/>
         <text x="84" y="519" text-anchor="middle" font-family="Merriweather Sans" font-size="13" font-weight="700" fill="#fffdf4">5</text>
-        <text x="108" y="508" font-family="Merriweather Sans" font-size="13.5" font-weight="700" fill="#1a3875">Tribe</text>
-        <text x="108" y="528" font-family="Merriweather Sans" font-size="12" fill="#555555">declare a switch, effective next timestep (E7)</text>
-
-        <!-- gates bracket -->
-        <line x1="472" y1="146" x2="472" y2="546" stroke="#d4a853" stroke-width="2.5"/>
-        <text x="484" y="330" font-family="Merriweather Sans" font-size="12" font-weight="700" fill="#1a3875">policies invoked</text>
-        <text x="484" y="347" font-family="Merriweather Sans" font-size="12" fill="#555555">one call per agent</text>
-        <text x="484" y="364" font-family="Merriweather Sans" font-size="12" fill="#555555">at each gate</text>
+        <text x="108" y="508" font-family="Merriweather Sans" font-size="13.5" font-weight="700" fill="#1a3875">Lend</text>
+        <text x="108" y="528" font-family="Merriweather Sans" font-size="12" fill="#555555">propose / respond to quiescence · cap lend_rounds (E6)</text>
 
         <line x1="260" y1="546" x2="260" y2="564" stroke="#859ebe" stroke-width="1.5" marker-end="url(#arrow-ts)"/>
 
-        <!-- Phase 6 -->
-        <rect x="60" y="566" width="400" height="138" rx="3" fill="#f8f6ef" stroke="#d4c9b5"/>
-        <text x="76" y="590" font-family="Merriweather Sans" font-size="13.5" font-weight="700" fill="#1a3875">Phase 6 — upkeep</text>
-        <text x="76" y="610" font-family="Merriweather Sans" font-size="12" fill="#555555">loan collections due this tick (E6)</text>
-        <text x="76" y="627" font-family="Merriweather Sans" font-size="12" fill="#555555">metabolism burn — base + sickness (C4) + toxicity (C3)</text>
-        <text x="76" y="644" font-family="Merriweather Sans" font-size="12" fill="#555555">aging +1 · death checks: starvation, max age (D2)</text>
-        <text x="76" y="661" font-family="Merriweather Sans" font-size="12" fill="#555555">estate settlement for upkeep deaths (D4)</text>
-        <text x="76" y="678" font-family="Merriweather Sans" font-size="12" fill="#555555">welfare accrual → running integral (B2)</text>
-        <line x1="472" y1="566" x2="472" y2="704" stroke="#6e8050" stroke-width="2.5"/>
-        <text x="484" y="620" font-family="Merriweather Sans" font-size="12" font-weight="700" fill="#6e8050">pure physics</text>
-        <text x="484" y="637" font-family="Merriweather Sans" font-size="12" fill="#555555">no policy invocations</text>
+        <!-- Gate 6 -->
+        <rect x="60" y="566" width="400" height="64" rx="3" fill="#eef2f7" stroke="#859ebe"/>
+        <circle cx="84" cy="598" r="13" fill="#1a3875"/>
+        <text x="84" y="603" text-anchor="middle" font-family="Merriweather Sans" font-size="13" font-weight="700" fill="#fffdf4">6</text>
+        <text x="108" y="592" font-family="Merriweather Sans" font-size="13.5" font-weight="700" fill="#1a3875">Tribe</text>
+        <text x="108" y="612" font-family="Merriweather Sans" font-size="12" fill="#555555">declare a switch, effective next timestep (E7)</text>
+
+        <!-- gates bracket -->
+        <line x1="472" y1="146" x2="472" y2="630" stroke="#d4a853" stroke-width="2.5"/>
+        <text x="484" y="372" font-family="Merriweather Sans" font-size="12" font-weight="700" fill="#1a3875">policies invoked</text>
+        <text x="484" y="389" font-family="Merriweather Sans" font-size="12" fill="#555555">one call per agent</text>
+        <text x="484" y="406" font-family="Merriweather Sans" font-size="12" fill="#555555">at each gate</text>
+
+        <line x1="260" y1="630" x2="260" y2="648" stroke="#859ebe" stroke-width="1.5" marker-end="url(#arrow-ts)"/>
+
+        <!-- Phase 7 -->
+        <rect x="60" y="650" width="400" height="138" rx="3" fill="#f8f6ef" stroke="#d4c9b5"/>
+        <text x="76" y="674" font-family="Merriweather Sans" font-size="13.5" font-weight="700" fill="#1a3875">Phase 7 — upkeep</text>
+        <text x="76" y="694" font-family="Merriweather Sans" font-size="12" fill="#555555">loan collections due this tick (E6)</text>
+        <text x="76" y="711" font-family="Merriweather Sans" font-size="12" fill="#555555">metabolism burn — base + sickness (C4) + toxicity (C3)</text>
+        <text x="76" y="728" font-family="Merriweather Sans" font-size="12" fill="#555555">aging +1 · death checks: starvation, max age (D2)</text>
+        <text x="76" y="745" font-family="Merriweather Sans" font-size="12" fill="#555555">estate settlement for upkeep deaths (D4)</text>
+        <text x="76" y="762" font-family="Merriweather Sans" font-size="12" fill="#555555">welfare accrual → running integral (B2)</text>
+        <line x1="472" y1="650" x2="472" y2="788" stroke="#6e8050" stroke-width="2.5"/>
+        <text x="484" y="704" font-family="Merriweather Sans" font-size="12" font-weight="700" fill="#6e8050">pure physics</text>
+        <text x="484" y="721" font-family="Merriweather Sans" font-size="12" fill="#555555">no policy invocations</text>
       </svg>
-      <figcaption><span class="fig-label">Figure 2</span>The canonical timestep (E8). World physics
-      run first with no policy involvement; policies are then consulted at five named gates; upkeep
-      settles debts, metabolism, aging, deaths, estates, and finally accrues the tick's welfare.
-      Combat deaths in gate 1 settle estates immediately, event-driven; phase 6 checks only
-      starvation and age <span class="cite">docs/v2-design.md §6</span>.</figcaption>
+      <figcaption><span class="fig-label">Figure 2</span>The canonical timestep (E8; lend gate
+      added 2026-08-11). World physics run first with no policy involvement; policies are then
+      consulted at six named gates; upkeep settles debts, metabolism, aging, deaths, estates, and
+      finally accrues the tick's welfare. Combat deaths in gate 1 settle estates immediately,
+      event-driven; phase 7 checks only starvation and age
+      <span class="cite">docs/v2-design.md §6</span>.</figcaption>
     </figure>
+
+    <p><strong>The lend gate (added 2026-08-11, correcting an E8 omission).</strong> The original
+    phase list was sketched on day one from the classic agent-turn verbs plus tribe, before E6
+    existed as a settled design; E8 then ordered that list as given, and E6 specified lending's
+    contract semantics — with collection slotted into upkeep — without ever assigning
+    <em>origination</em> a phase, even though the actions-per-gate table (§7) listed a lend gate
+    from the start. Phase 5 is that gate. Its placement after mate is deliberate: E5's
+    wealth-≥-endowment fertility check cannot be passed with principal borrowed the same tick —
+    cross-tick leveraged breeding remains possible, and remains dangerous under E6's collection
+    seniority — while placement before upkeep means distress borrowing can still pay tonight's
+    metabolism and today's due loans.</p>
 
     <p>Classic Sugarscape (and DTL) activates one agent at a time, which does <em>everything</em> —
     move, harvest, mate, trade — before the next agent acts. v2 runs phases across the whole
@@ -976,7 +997,7 @@
         <text x="528" y="76" text-anchor="middle" font-family="Merriweather Sans" font-size="12" fill="#555555">episode-seeded order;</text>
         <text x="528" y="92" text-anchor="middle" font-family="Merriweather Sans" font-size="12" fill="#555555">unpayable offers void</text>
         <path d="M 528 102 L 528 138 L 112 138 L 112 104" fill="none" stroke="#859ebe" stroke-width="1.5" marker-end="url(#arrow-e4)"/>
-        <text x="320" y="158" text-anchor="middle" font-family="Merriweather Sans" font-size="12" fill="#555555">next cycle — to quiescence, capped at trade_rounds / mating_rounds (default 8)</text>
+        <text x="320" y="158" text-anchor="middle" font-family="Merriweather Sans" font-size="12" fill="#555555">next cycle — to quiescence, capped at trade_rounds / mating_rounds / lend_rounds (default 8)</text>
         <text x="320" y="184" text-anchor="middle" font-family="Merriweather Sans" font-size="12" fill="#8a6a1f">a cycle with zero offers ends the phase early — quiescence is a trivial deterministic check</text>
       </svg>
       <figcaption><span class="fig-label">Figure 3</span>The E4 negotiation cycle. The same
@@ -1010,7 +1031,12 @@
     accepting prices in the endowment cost and A2's coin-flip seat assignment.</p>
 
     <h3>Lending (E6)</h3>
-    <p>Lending is the third instance of the E4 shape, and it runs in <strong>either direction</strong>
+    <p>Lending is the third instance of the E4 shape, running in <strong>its own phase-5 gate</strong>
+    (added 2026-08-11, correcting an E8 omission — see the timestep note above) — propose/respond
+    cycles to quiescence under a <code>lend_rounds</code> cap (default 8, same knob family and
+    per-cluster parallelization as E4/E5), acceptances executed in seeded order with execution-time
+    re-validation (both parties alive and adjacent, the lender still holding the principal). It runs
+    in <strong>either direction</strong>
     (options extended 2026-08-10): a proposal is a credit contract
     <code>{lend: (s, sp), repay: (s, sp), due_tick}</code> offered to an adjacent agent, or a
     <strong>request</strong> — the proposer asks to borrow, the acceptor becomes the lender, and the
@@ -1048,7 +1074,7 @@
     teams (v1's seat-tribes). Config sets <code>tribe_count</code> (K, ranked default 2).
     <strong>Initial assignment is per-seat (revised 2026-08-10): all of a seat's agents start in the
     same tribe</strong>, seats distributed across the K tribes by a seeded balanced permutation —
-    seat cohesion at t=0; divergence after that is strategy. Phase 5 is real — an agent may declare
+    seat cohesion at t=0; divergence after that is strategy. Phase 6 is real — an agent may declare
     a switch, effective at the next timestep. Combat gates on cross-tribe (E2). An optional variant
     flag adds <strong><code>tribeless</code> as a declarable status</strong> (revised 2026-08-10): a
     tribeless agent counts as cross-tribe to everyone — attackable by all, may attack all —
@@ -1061,9 +1087,10 @@
       <span class="decision-label">Decision — E7 (2026-08-07)</span>
       <p><strong>Chosen allegiance is the design's one explicitly novel mechanic — and its biggest
       untested bet.</strong> There is no literature precedent; the dynamics will be observed in
-      playtesting, and the feature flag is the fallback if they disappoint (§11). It was chosen over
+      playtesting, and the feature flag is the fallback if they disappoint (§11). It was chosen
+      over
       classic cultural tags (emergent and passive — nearly invisible to a policy trying to
-      <em>play</em> them, and no phase 5 at all) and v1's seat-tribes (which degenerate to
+      <em>play</em> them, and no switch gate at all) and v1's seat-tribes (which degenerate to
       everyone-their-own-tribe at 64 single-agent seats — zero strategic content).</p>
     </div>
   </section>
@@ -1492,7 +1519,7 @@
     welfare-time, and Cobb–Douglas concavity gains from rich→poor transfers — including E4 gifts —
     are legitimate distribution management under <code>sum</code>, not exploits.</p>
     <p><strong>E7 — tribes.</strong> Rejected classic cultural tags (emergent and passive — nearly
-    invisible to a policy trying to <em>play</em> them; no phase 5), v1's seat-tribes (degenerates
+    invisible to a policy trying to <em>play</em> them; no switch gate), v1's seat-tribes (degenerates
     to everyone-their-own-tribe at 64 single-agent seats; zero strategic content), and deferral.
     Chosen allegiance is the one explicitly novel mechanic — flagged as the design's biggest
     untested bet (§11).</p>
@@ -1592,9 +1619,10 @@
     </div>
     <div class="callout callout-open">
       <span class="callout-label">Open — negotiation round caps</span>
-      <code>trade_rounds</code> and <code>mating_rounds</code> are safety caps on run-to-quiescence
-      phases, default 8 (raised 2026-08-10 so offer chains can re-propose downstream); the exact
-      value is a playtest knob trading convergence depth against per-tick policy invocations.
+      <code>trade_rounds</code>, <code>mating_rounds</code>, and <code>lend_rounds</code> are safety
+      caps on run-to-quiescence phases, default 8 (raised 2026-08-10 so offer chains can re-propose
+      downstream; <code>lend_rounds</code> added with the lend gate, 2026-08-11); the exact value is
+      a playtest knob trading convergence depth against per-tick policy invocations.
     </div>
     <div class="callout callout-open">
       <span class="callout-label">Open — balance unknowns</span>
@@ -1681,9 +1709,9 @@
         <tr><td>E3</td><td>Harvest semantics</td><td>Optional; partial per-resource amounts, clamped to the cell</td></tr>
         <tr><td>E4</td><td>Trade protocol</td><td>Bilateral targeted offers, run to quiescence with cap <code>trade_rounds</code> (default 8); seeded execution with voiding; per-cluster parallelizable <em>(rev. 2026-08-10)</em></td></tr>
         <tr><td>E5</td><td>Mating</td><td>E4-shaped consent; classic eligibility as physics; at most one mating per agent per tick; quiescence with <code>mating_rounds</code> cap (default 8) <em>(rev. 2026-08-10)</em></td></tr>
-        <tr><td>E6</td><td>Lending</td><td>E4-shaped credit contracts, offers or requests; due ≤ T; <code>collection_floor</code> flag; <code>shortfall_mode</code> {write_off default, renew, sim_covers}; heirs capped at inheritance; gross-holdings welfare <em>(rev. 2026-08-10)</em></td></tr>
+        <tr><td>E6</td><td>Lending</td><td>E4-shaped credit contracts negotiated in their own phase-5 gate (<code>lend_rounds</code>, default 8), offers or requests; due ≤ T; <code>collection_floor</code> flag; <code>shortfall_mode</code> {write_off default, renew, sim_covers}; heirs capped at inheritance; gross-holdings welfare <em>(rev. 2026-08-11)</em></td></tr>
         <tr><td>E7</td><td>Tribes</td><td>Chosen allegiance; <code>tribe_count</code> K (default 2); per-seat seeded initial assignment; declarable <code>tribeless</code> variant; phase-5 switches effective next tick <em>(rev. 2026-08-10)</em></td></tr>
-        <tr><td>E8</td><td>Phase composition and order</td><td>World → gates → upkeep; loans → metabolism → aging → deaths → estates → welfare accrual</td></tr>
+        <tr><td>E8</td><td>Phase composition and order</td><td>World → six gates → upkeep; loans → metabolism → aging → deaths → estates → welfare accrual; the original five-gate list omitted E6's lend phase — added as phase 5 <em>(rev. 2026-08-11)</em></td></tr>
         <tr><td>E9</td><td>Is "stay put" legal?</td><td>Yes, at every gate; illegal actions resolve as no-ops</td></tr>
         <tr><td>F1</td><td>Observation contents</td><td>Classic rays (= movement range); per-attribute visibility config — ranked defaults show seat/holdings/tribe/sick, <code>max_age</code> never visible to others; own state complete; config public <em>(rev. 2026-08-10)</em></td></tr>
         <tr><td>F2</td><td>Policy memory</td><td>One policy instance per seat — shared RAM accepted; scratchpad dropped from protocol v1; per-agent isolation adopted 2026-08-10 then reverted <em>(rev. 2026-08-11)</em></td></tr>
@@ -1712,7 +1740,7 @@
       <tbody>
         <tr><td>2026-08-07</td><td>Initial design settled: all 35 open questions (A1–F6) resolved in one session; the six platform forks of <span class="cite">docs/what-is-a-coworld.md</span> closed.</td></tr>
         <tr><td>2026-08-10</td><td>James's review round. Revisions in place: A1 (seats/totals unbounded), A2 (Thue–Morse siblings), rating (score/EWMA, §3), D4 (two flags), E1 (full-information rationale), E2 (hidden-holdings variant), E4/E5 (quiescence with caps, default 8), E6 (either direction, <code>collection_floor</code>, <code>shortfall_mode</code>), E7 (per-seat initial tribes, <code>tribeless</code>), F1 (per-attribute visibility), F2 (instance isolation, scratchpad dropped), A4 (interim timeout rule), F6 (precision/binning analysis). Three discussion items resolved: the speaking phase → future work (§12); per-agent component instances adopted, scratchpad dropped (§7); timeouts freeze everywhere for now, target no-op semantics recorded (§7).</td></tr>
-        <tr><td>2026-08-11</td><td>Two revisions by James. F2 re-revised: per-agent component instance isolation reverted — one policy instance per seat serves all that seat's agents, and the shared-RAM hole is an accepted cost, uniform across runtimes (§7). F4 revised: the WASM implementation — Arena components and the browser-compiled core behind the resimulating replay viewer — deferred to future work; v2.0 is native core + WS shell, and the viewer ships with the WASM milestone (§8, §12).</td></tr>
+        <tr><td>2026-08-11</td><td>Two revisions by James. F2 re-revised: per-agent component instance isolation reverted — one policy instance per seat serves all that seat's agents, and the shared-RAM hole is an accepted cost, uniform across runtimes (§7). F4 revised: the WASM implementation — Arena components and the browser-compiled core behind the resimulating replay viewer — deferred to future work; v2.0 is native core + WS shell, and the viewer ships with the WASM milestone (§8, §12). Same day, an E8 correction: drafting the player protocol exposed that the canonical timestep never gave E6's loan origination a phase (the gate list predated E6's design; only collection had an upkeep slot) — a lend gate was added as phase 5, after mate and before tribe, with a <code>lend_rounds</code> cap (§6).</td></tr>
       </tbody>
     </table>
 

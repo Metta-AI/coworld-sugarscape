@@ -15,7 +15,10 @@ isolation of 2026-08-10 is reverted and the shared-RAM hole accepted
 deliberately (§7.2). **(b) The WASM implementation is deferred to future
 work** — the Arena components and the browser-compiled core behind the
 resimulating replay viewer; v2.0 ships native core + WS shell (F4
-revision, §7.6, §11).
+revision, §7.6, §11). **(c) The canonical timestep gains a lend gate
+(phase 5)** — the 2026-08-07 phase list omitted E6's origination phase
+even though §7.3 always listed a lend action; found while drafting the
+player protocol (E8/E6 correction, §6).
 Everything below is **Decided**; changes require revisiting a decision
 by name. Implementation may surface revisions — record them here with dates.
 
@@ -273,30 +276,49 @@ Lifecycle:
 
 ## 6. The timestep
 
-**Decided (upgraded from Leaning; E8 fixed the order, 2026-08-07): a phased
-timestep rather than per-agent sequential turns.** Classic Sugarscape (and
-DTL) activates one agent at a time, which does *everything* — move, harvest,
-mate, trade — before the next agent acts. v2 runs phases across the whole
-population. The canonical timestep:
+**Decided (upgraded from Leaning; E8 fixed the order, 2026-08-07; lend
+gate added 2026-08-11): a phased timestep rather than per-agent sequential
+turns.** Classic Sugarscape (and DTL) activates one agent at a time, which
+does *everything* — move, harvest, mate, trade — before the next agent
+acts. v2 runs phases across the whole population. The canonical timestep:
 
 ```
 Phase 0 — world updates (no policy invocations):
    growback (seasons C2 + pollution suppression C3 applied)
    pollution: diffusion (on interval ticks), then decay (every tick)
    disease: transmission from neighbors, then one immune-response bit-step
-Phases 1–5 — action gates (policies invoked):
+Phases 1–6 — action gates (policies invoked):
    1. move/combat   (sequential, seeded order — E1)
    2. harvest       (order-free fan-out)
    3. trade         (E4 propose/respond cycles)
    4. mate          (E5 propose/respond cycles)
-   5. tribe         (declare switch — E7)
-Phase 6 — upkeep (no policy invocations):
+   5. lend          (E6 propose/respond cycles)
+   6. tribe         (declare switch — E7)
+Phase 7 — upkeep (no policy invocations):
    loan collections due this tick (E6)
    metabolism burn (base + disease sickness penalty + pollution toxicity)
    aging (+1); death checks: starvation, max age
    estate settlement (D4) for upkeep deaths
    welfare accrual: per-tick Cobb–Douglas on post-upkeep holdings → integral
 ```
+
+**The lend gate (added 2026-08-11, correcting an E8 omission).** The
+original phase list was sketched on day one from the classic agent-turn
+verbs plus tribe, before E6 existed as a settled design; E8 then ordered
+that list as given, and E6 defined lending's contract semantics — with
+collection slotted into upkeep — without ever assigning *origination* a
+phase, even though the §7.3 action table listed a lend gate from the
+start. Phase 5 is that gate: E6's propose/respond cycles run to
+quiescence under a `lend_rounds` cap (default 8 — same knob family and
+per-cluster parallelization as E4/E5), one credit proposal per agent per
+cycle, acceptances executed in seeded order with execution-time
+re-validation (both parties alive and adjacent, the lender still holding
+the principal — E4's voiding rule). Placement after mate is deliberate:
+E5's wealth-≥-endowment fertility check cannot be passed with principal
+borrowed the same tick (cross-tick leveraged breeding remains possible —
+and remains dangerous, per E6's collection seniority); placement before
+upkeep means distress borrowing can still pay tonight's metabolism and
+today's due loans.
 
 Load-bearing ordering choices (E8): **metabolism at end of tick** — an agent
 can harvest in the morning to pay for dinner; starvation is failing to feed
@@ -307,7 +329,7 @@ genuinely dangerous while E6's write-off keeps lender risk real too.
 **Welfare accrues once per tick, post-upkeep, after deaths** — the day's
 actions count the same day; a death tick contributes 0 (B2-consistent).
 Combat deaths (phase 1) settle estates immediately, event-driven (E2);
-phase 6 checks only starvation and age.
+phase 7 checks only starvation and age.
 
 **Inaction is legal at every gate. (Decided — E9, 2026-08-07)** No-move /
 no-action is always a valid choice (the classic's forced best-cell move was
@@ -343,9 +365,10 @@ What it costs / leaves open:
     deferred Arena runtime's in-process calls land.
   - **Harvest: order-free** (own-cell only; no agent interaction) —
     delivered as one concurrent fan-out.
-  - **Trade / mating: negotiation phases** — their within-phase structure
-    (pairing, proposal rounds, quiescence) is part of the protocol design
-    in E4/E5, explicitly not a simple activation-order question.
+  - **Trade / mating / lending: negotiation phases** — their within-phase
+    structure (pairing, proposal rounds, quiescence) is part of the
+    protocol design in E4/E5/E6, explicitly not a simple activation-order
+    question.
   - **Tribe: order-free.**
   (Closes fork 5's residue in `what-is-a-coworld.md`.)
 - **Trade protocol: bilateral targeted offers over R cycles. (Decided — E4,
@@ -395,12 +418,14 @@ What it costs / leaves open:
   investment; accepting prices in the endowment cost and A2's coin-flip
   seat assignment.
 - **Lending: negotiated credit contracts. (Decided — E6, 2026-08-07;
-  options extended 2026-08-10)** Third instance of the E4 shape, in
-  **either direction**: an offer `{lend: (s,sp), repay: (s,sp), due_tick}`
-  to an adjacent agent, or a **request** (proposer asks to borrow; the
-  acceptor becomes the lender and the principal flows proposer-ward on
-  accept). Interest is implicit and per-contract (repay > lend,
-  negotiated). Physics: **`due_tick ≤ episode end`** (no contracting past
+  options extended 2026-08-10; origination gate = phase 5, added
+  2026-08-11)** Third instance of the E4 shape, running in its own
+  phase-5 gate (`lend_rounds` cap, default 8 — see the timestep note
+  above), in **either direction**: an offer `{lend: (s,sp), repay:
+  (s,sp), due_tick}` to an adjacent agent, or a **request** (proposer
+  asks to borrow; the acceptor becomes the lender and the principal
+  flows proposer-ward on accept). Interest is implicit and per-contract
+  (repay > lend, negotiated). Physics: **`due_tick ≤ episode end`** (no contracting past
   P3's horizon). Collection at due, two config knobs:
   - `collection_floor` flag: collect `min(owed, holdings)` (default) or
     `min(owed, holdings − current metabolism)` — the latter prevents loan
@@ -457,7 +482,7 @@ What it costs / leaves open:
   **Initial assignment is per-seat: all of a seat's agents start in the
   same tribe**, seats distributed across the K tribes by a seeded balanced
   permutation (seat cohesion at t=0; divergence after that is strategy).
-  **Phase 5 is real** — an agent may declare a switch, effective at the
+  **Phase 6 is real** — an agent may declare a switch, effective at the
   next timestep; combat (E2) gates cross-tribe. Optional variant flag:
   **`tribeless` as a declarable status** — a tribeless agent counts as
   cross-tribe to everyone (attackable by all, may attack all): mercenaries
@@ -817,15 +842,19 @@ Grouped; tags reference the sections above.
 - **E5.** ~~Mating.~~ **Resolved (2026-08-07):** E4-shaped consent protocol,
   classic eligibility as physics, once-per-tick cap, seeded child placement.
   See §6.
-- **E6.** ~~Lending.~~ **Resolved (2026-08-07):** E4-shaped contracts,
-  due ≤ T, auto-collect, write-off on shortfall, heirs liable capped at
-  inheritance, gross-holdings welfare (closes B4's deferral). See §6.
+- **E6.** ~~Lending.~~ **Resolved (2026-08-07), gate added (2026-08-11):**
+  E4-shaped contracts negotiated in their own phase-5 gate
+  (`lend_rounds`), due ≤ T, auto-collect, write-off on shortfall, heirs
+  liable capped at inheritance, gross-holdings welfare (closes B4's
+  deferral). See §6.
 - **E7.** ~~Tribes.~~ **Resolved (2026-08-07):** chosen allegiance —
-  K-tribe config, seeded initial assignment, phase 5 declares switches
+  K-tribe config, seeded initial assignment, phase 6 declares switches
   (next-tick effective), combat gates cross-tribe. See §6.
 - **E8.** ~~Simulation-phase composition and order.~~ **Resolved
-  (2026-08-07):** world → gates → upkeep; loans → metabolism → aging →
-  deaths → estates → welfare accrual. See §6.
+  (2026-08-07), corrected (2026-08-11):** world → gates → upkeep; loans →
+  metabolism → aging → deaths → estates → welfare accrual. The original
+  gate list omitted E6's lend phase — added as phase 5 (after mate,
+  before tribe). See §6.
 - **E9.** ~~Is "stay put" legal?~~ **Resolved (2026-08-07):** yes, at every
   gate; illegal actions no-op. See §6.
 
