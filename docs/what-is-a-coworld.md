@@ -1,6 +1,7 @@
 # What is a Coworld?
 
-Reference document for coding agents working on the Sugarscape v2 coworld.
+Reference document for coding agents working on the Sugarscape coworld
+(researched during v2 design; still the platform-contract reference for v3).
 Read this before touching platform-facing code (manifest, server routes,
 results, replays, release tooling).
 
@@ -543,6 +544,12 @@ experiment measuring what the pod-per-episode ladder costs. A v2 that wants
 both league hosting and Arena dogfooding ships both shells over one core.
 
 ## Decisions taken for v2
+
+> **v3 note (2026-08-11).** v2 was archived unimplemented, and v3 **reversed
+> D1**: with per-tick player control removed, v3 is a direct clone of the DTL
+> Python implementation (vendored in `src/sugarscape/`). See
+> `docs/designs/sugarscape-v3-design-2026-08-11.html` §1 for the reversal
+> rationale. D1 is preserved below as the v2-era record.
 
 **D1 — v2 is our own implementation of Sugarscape, not DTL.** (2026-08-07)
 v2 is written from scratch. It is not a port of the DTL Python model

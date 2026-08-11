@@ -23,6 +23,23 @@ Start with [`docs/what-is-a-coworld.md`](docs/what-is-a-coworld.md) — the
 platform contract, current conventions, and an assessment of v1 — before
 touching platform-facing code.
 
+## Sugarscape v3
+
+The current implementation is a Python coworld in `src/coworld/` backed by a
+minimally patched, pinned DTL simulation in `src/sugarscape/`. Each seat receives
+one target distribution and submits one declarative SugarLang ruleset; the world
+then runs without player I/O and scores how closely the measured outcome matches
+the target.
+
+Run the offline suite with `.venv/bin/python -m pytest`. For local container
+development, `docker compose up` starts the one-seat config in `config.json` and
+the bundled target-aware baseline. Protocol, language, and target references are
+in `docs/PROTOCOL.md`, `docs/RULES.md`, and `docs/TARGETS.md`.
+
+Reproducibility assumes `PYTHONHASHSEED=0`; both Dockerfiles set it, and the
+server re-executes itself with that value when necessary. A recorded results or
+replay seed reproduces an episode on the pinned interpreter.
+
 ## Credits
 
 This project is based on the **Digital Terraria Lab (DTL) Sugarscape**
