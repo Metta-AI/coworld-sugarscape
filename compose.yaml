@@ -1,5 +1,6 @@
 services:
   game:
+    image: sugarscape-game
     platform: linux/amd64
     build:
       context: .
@@ -27,6 +28,7 @@ services:
       - ./build/local:/data/output
 
   baseline:
+    image: sugarscape-baseline
     platform: linux/amd64
     build:
       context: .
