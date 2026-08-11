@@ -72,17 +72,21 @@ Engine-generated (`tools/generate_targets.py`; validation stats in each file's
 - `tribe.convergence` — `examples/cultural_tagging.json`; mean majority share
   0.79
 
+Engine-generated counterfactuals (no empirical or GAS anchor — deliberately
+aspirational shapes; a target need not be perfectly reachable in a variant to
+be a target, players simply get as close as their rulesets allow):
+
+- `wealth.egalitarian` — equalized endowments + universal income + short
+  lifespans compress wealth to Gini ≈ 0.30 (vs ~0.47 default); no real-world
+  wealth distribution is this equal (empirical Ginis ≥ ~0.5)
+- `tribe.diversity` — quadrant-separated tribes hold a stable split (mean
+  majority share 0.64)
+
 Still provisional:
 
-- `wealth.egalitarian` — counterfactual; no empirical wealth distribution is
-  egalitarian (real Ginis ≥ ~0.5). An engine-counterfactual generation config
-  (equalized endowments + universal income + short lifespans) reaches Gini
-  ≈ 0.30 and is staged in `tools/generate_targets.py`.
 - `age-at-death.survivorship` — empirical source: HMD life-table `dx` (CC BY
   4.0); convert with `tools/convert_hmd_survivorship.py` once the life table
   is downloaded (UN WPP abridged tables, CC BY 3.0 IGO, are the fallback)
-- `tribe.diversity` — engine-counterfactual config staged (quadrant-separated
-  tribes hold a stable ~0.6 majority share)
 
 Shelved (2026-08-11): `disease.endemic` and `disease.eradicated`. No DTL
 configuration we found sustains a stable endemic equilibrium — immune systems
