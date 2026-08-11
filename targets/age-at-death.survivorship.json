@@ -2,15 +2,49 @@
   "id": "age-at-death.survivorship",
   "variable": "age_at_death",
   "scope": "global",
-  "support": [0, 120],
-  "bins": [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120],
-  "probs": [0.01, 0.02, 0.04, 0.07, 0.11, 0.16, 0.19, 0.18, 0.13, 0.065, 0.02, 0.005],
+  "support": [
+    0,
+    120
+  ],
+  "bins": [
+    0,
+    10,
+    20,
+    30,
+    40,
+    50,
+    60,
+    70,
+    80,
+    90,
+    100,
+    110,
+    120
+  ],
+  "probs": [
+    0.007360073600736008,
+    0.003000030000300003,
+    0.01021010210102101,
+    0.015650156501565017,
+    0.025320253202532027,
+    0.05362053620536205,
+    0.1024710247102471,
+    0.1915419154191542,
+    0.32401324013240135,
+    0.24294242942429425,
+    0.023760237602376024,
+    0.00011000110001100011
+  ],
   "window": 100,
-  "source": "Provisional life-table-like interpretation of Epstein & Axtell (1996), chapters II-III rule R; not digitized source data.",
-  "provisional": true,
+  "source": "Human Mortality Database (mortality.org), USA, both sexes, period life table 1x1, year 2019, dx column (deaths at age x per 100,000 births) summed into the canonical bins. HMD constructed data are CC BY 4.0; redistribution of this derived histogram with attribution is permitted per the HMD User Agreement.",
+  "provisional": false,
   "generation": {
-    "family": "discrete-weibull",
-    "parameters": {"shape": 3.1, "scale": 72},
-    "description": "Parametric adult survivorship curve with low early mortality, a modal old-age band, and a taper near the maximum-age range."
+    "description": "Empirical: HMD USA, both sexes 2019 life-table dx column binned into the canonical 12 bins.",
+    "method": "hmd-life-table",
+    "input_file": "bltper_1x1.txt",
+    "year": 2019,
+    "population": "USA, both sexes",
+    "dx_total": 99999.0,
+    "regenerate_with": "tools/convert_hmd_survivorship.py"
   }
 }
