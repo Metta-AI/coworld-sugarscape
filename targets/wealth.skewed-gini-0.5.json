@@ -2,15 +2,56 @@
   "id": "wealth.skewed-gini-0.5",
   "variable": "wealth",
   "scope": "global",
-  "support": [0, 1000],
-  "bins": [0, 25, 50, 75, 100, 150, 225, 325, 450, 650, 1000],
-  "probs": [0.05, 0.12, 0.18, 0.18, 0.18, 0.13, 0.08, 0.05, 0.025, 0.005],
+  "support": [
+    0,
+    1000
+  ],
+  "bins": [
+    0,
+    25,
+    50,
+    75,
+    100,
+    150,
+    225,
+    325,
+    450,
+    650,
+    1000
+  ],
+  "probs": [
+    0.37767466666666666,
+    0.20487466666666668,
+    0.14134133333333335,
+    0.10684,
+    0.116924,
+    0.051257333333333335,
+    0.001088,
+    0.0,
+    0.0,
+    0.0
+  ],
   "window": 100,
-  "source": "Provisional interpretation of Epstein & Axtell (1996), chapter II, Animation II-4; not digitized source data.",
-  "provisional": true,
+  "source": "Generated from the vendored DTL Sugarscape engine (commit a46ec6ff909e2bc73a4c9e9f36b2aed160eccad8, Unlicense) running examples/agent_replacement.json under DTL internal defaults (decision model 'none'). Literature anchor: GAS ch. II, Animation II-4 region: {G1},{M},{R[60,100]} (Epstein & Axtell 1996). No tabulated data for this result was ever published; the engine run is the primary source per the 2026-08-11 sourcing research.",
+  "provisional": false,
   "generation": {
-    "family": "lognormal-pareto-mixture",
-    "parameters": {"body_log_mean": 4.25, "body_log_sigma": 0.55, "pareto_alpha": 2.1, "tail_weight": 0.12},
-    "description": "Parametric lognormal body with a Pareto upper tail, discretized into the canonical wealth bins and hand-tuned toward Gini approximately 0.5."
+    "description": "Engine run: examples/agent_replacement.json under DTL internal defaults ('none' decision model), 30 seeds, variable pooled over the final 100 ticks and binned canonically.",
+    "method": "engine-run",
+    "engine_commit": "a46ec6ff909e2bc73a4c9e9f36b2aed160eccad8",
+    "example_config": "agent_replacement.json",
+    "decision_model": "none (DTL internal defaults)",
+    "seeds": 30,
+    "window_ticks": 100,
+    "validation": "final-tick Gini within [0.40, 0.60] (GAS reports ~0.5)",
+    "stats": {
+      "seeds": 30,
+      "seeds_survived": 30,
+      "pooled_samples": 750000,
+      "pooled_mean": 53.5807,
+      "mean_final_gini": 0.4718,
+      "mean_final_population": 250.0
+    },
+    "generated": "2026-08-11",
+    "regenerate_with": "tools/generate_targets.py"
   }
 }

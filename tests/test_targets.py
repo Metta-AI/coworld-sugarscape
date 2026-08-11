@@ -8,13 +8,31 @@ import pytest
 from coworld.targets import load_target_catalog, resolve_seat_targets
 
 
-def test_shipped_catalog_has_nine_honest_global_provisional_targets() -> None:
+ENGINE_GENERATED = {
+    "wealth.skewed-gini-0.5",
+    "population.carrying-capacity",
+    "price.equilibrium",
+    "tribe.convergence",
+}
+
+
+def test_shipped_catalog_has_nine_honest_global_targets() -> None:
     catalog = load_target_catalog()
 
     assert len(catalog.targets) == 9
     assert all(target.scope == "global" for target in catalog.targets.values())
-    assert all(target.provisional for target in catalog.targets.values())
-    assert all(target.generation.get("description") for target in catalog.targets.values())
+    # Engine-generated targets (tools/generate_targets.py, 2026-08-11) are
+    # non-provisional and carry full engine-run provenance; the rest remain
+    # honestly provisional parametric placeholders.
+    for target_id, target in catalog.targets.items():
+        if target_id in ENGINE_GENERATED:
+            assert not target.provisional
+            assert target.generation.get("method") == "engine-run"
+            assert target.generation.get("engine_commit")
+            assert target.generation.get("seeds", 0) >= 30
+        else:
+            assert target.provisional
+            assert target.generation.get("description")
     assert catalog.get("wealth.skewed-gini-0.5").bins == catalog.get("wealth.egalitarian").bins
 
 
