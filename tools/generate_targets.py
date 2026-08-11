@@ -94,16 +94,57 @@ SPECS = [
         gas_reference="GAS ch. III, rule K: cultural convergence",
         overrides={},
     ),
+    # The disease targets were shelved on 2026-08-11: no DTL configuration we
+    # found sustains a stable endemic equilibrium (immune systems eradicate in
+    # ~10 ticks, or penalties/transmission collapse the population — see
+    # docs/TARGETS.md). Revisit with a reintroduction mechanism if disease
+    # variants return.
     GenerationSpec(
-        target_id="disease.endemic",
-        example_config="disease_basic.json",
-        variable="sick_fraction",
-        gas_reference="GAS ch. V: disease transmission E with immune response I",
-        overrides={},
+        target_id="wealth.egalitarian",
+        example_config="agent_replacement.json",
+        variable="wealth",
+        gas_reference=(
+            "Counterfactual (no GAS or empirical anchor): equalized endowments "
+            "and per-tick universal income compress the wealth distribution"
+        ),
+        overrides={
+            "agentVision": [3, 3],
+            "agentMovement": [2, 2],
+            "agentSugarMetabolism": [3, 3],
+            "agentMaxAge": [30, 45],
+            "agentStartingSugar": [20, 25],
+            "agentUniversalSugar": [1, 1],
+            "environmentUniversalSugarIncomeInterval": 1,
+            # DTL quirk: the universal-income endowment machinery assigns
+            # universalSpice to half the agents even under [0, 0]; a nonzero
+            # spice interval avoids findTimeToLive's division by zero and is
+            # otherwise inert (spice metabolism is 0 in this config).
+            "environmentUniversalSpiceIncomeInterval": 1,
+        },
         validation=(
-            "pooled mean sick fraction > 0.05 (otherwise the run demonstrates "
-            "eradication, not endemicity — leave this target provisional)",
-            "stats['pooled_mean'] > 0.05",
+            "final-tick Gini <= 0.30 (target shape asks for <= 0.25 mass)",
+            "stats['mean_final_gini'] <= 0.30",
+        ),
+    ),
+    GenerationSpec(
+        target_id="tribe.diversity",
+        example_config="cultural_tagging.json",
+        variable="majority_tribe_share",
+        gas_reference=(
+            "Counterfactual (GAS rule K converges): quadrant-separated tribes "
+            "with slowed mixing hold a stable multi-tribe split"
+        ),
+        overrides={
+            "environmentMaxTribes": 2,
+            "environmentTribePerQuadrant": True,
+            # Two opposite starting corners: with tribe-per-quadrant, DTL sets
+            # tribe = starting-quadrant index, so quadrant count must equal
+            # environmentMaxTribes.
+            "environmentStartingQuadrants": [1, 3],
+        },
+        validation=(
+            "pooled mean majority share <= 0.65 (diversity must persist)",
+            "stats['pooled_mean'] <= 0.65",
         ),
     ),
 ]

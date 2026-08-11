@@ -13,6 +13,13 @@ DEFAULT_CATALOG_PATH = Path(__file__).resolve().parents[2] / "targets"
 DEFAULT_TARGET_ID = "wealth.skewed-gini-0.5"
 MEASUREMENT_BIN_ALIASES = {"age": "age_at_death"}
 
+# Measurement-only variables with no shipped target keep fixed canonical bins
+# so results histograms stay complete. sick_fraction lost its catalog source
+# when the disease targets were shelved (2026-08-11) but remains measured.
+MEASUREMENT_ONLY_BINS: dict[str, tuple[tuple[float, ...], tuple[float, float]]] = {
+    "sick_fraction": (tuple(i / 10 for i in range(11)), (0.0, 1.0)),
+}
+
 
 @dataclass(frozen=True, slots=True)
 class Target:
@@ -95,6 +102,14 @@ def load_target_catalog(path: Path | str = DEFAULT_CATALOG_PATH) -> TargetCatalo
                 f'measurement variable "{variable}" requires canonical bins for '
                 f'"{source_variable}"'
             ) from error
+    for variable, (bins, support) in MEASUREMENT_ONLY_BINS.items():
+        if variable in bins_by_variable and bins_by_variable[variable] != bins:
+            raise ValueError(
+                f'target catalog bins for "{variable}" conflict with its '
+                f"measurement-only canonical bins"
+            )
+        bins_by_variable.setdefault(variable, bins)
+        support_by_variable.setdefault(variable, support)
     return TargetCatalog(targets, bins_by_variable, support_by_variable)
 
 

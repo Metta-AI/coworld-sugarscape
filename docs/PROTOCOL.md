@@ -57,6 +57,12 @@ Connected players receive a terminal `result` containing per-seat `scores`,
 details, and summary scalars after artifacts are written. Players may exit after
 a valid acknowledgement; the bundled baseline does so.
 
+Scoring includes a survival rule (2026-08-11): a seat's score is 0 unless its
+target's scope population is alive at the final tick — any living agent for
+global-scope targets, the seat's own agents for seat scope. Window samples
+banked before a collapse do not count; the per-seat detail records the outcome
+under `died_before_end`.
+
 ## Spectator connection
 
 `WS /global` streams the same `frame` objects stored in the replay, followed by

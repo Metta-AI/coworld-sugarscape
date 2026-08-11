@@ -75,15 +75,22 @@ Engine-generated (`tools/generate_targets.py`; validation stats in each file's
 Still provisional:
 
 - `wealth.egalitarian` — counterfactual; no empirical wealth distribution is
-  egalitarian (real Ginis ≥ ~0.5)
-- `age-at-death.survivorship` — planned empirical source: HMD life-table `dx`
-  (CC BY 4.0, registration) or UN WPP abridged life tables (CC BY 3.0 IGO)
-- `tribe.diversity`, `disease.eradicated` — counterfactuals pending engine
-  counterfactual runs
-- `disease.endemic` — pending a disease variant redesign: DTL's default disease
-  configs either eradicate within ~10 ticks (immune systems win) or collapse
-  the population (penalties/transmission win); a stable endemic equilibrium
-  needs tuned transmission/cure/penalty parameters
+  egalitarian (real Ginis ≥ ~0.5). An engine-counterfactual generation config
+  (equalized endowments + universal income + short lifespans) reaches Gini
+  ≈ 0.30 and is staged in `tools/generate_targets.py`.
+- `age-at-death.survivorship` — empirical source: HMD life-table `dx` (CC BY
+  4.0); convert with `tools/convert_hmd_survivorship.py` once the life table
+  is downloaded (UN WPP abridged tables, CC BY 3.0 IGO, are the fallback)
+- `tribe.diversity` — engine-counterfactual config staged (quadrant-separated
+  tribes hold a stable ~0.6 majority share)
+
+Shelved (2026-08-11): `disease.endemic` and `disease.eradicated`. No DTL
+configuration we found sustains a stable endemic equilibrium — immune systems
+eradicate within ~10 ticks, or transmission/penalty pressure collapses the
+population (an 81.8%-prevalence configuration existed but killed its hosts).
+Revisit with a disease-reintroduction mechanism if disease variants return.
+`sick_fraction` remains measured (measurement-only canonical bins in
+`src/coworld/targets.py`) so results histograms stay complete.
 
 Replacing a provisional histogram with generated or empirical data requires
 preserving that variable's canonical support and bins, updating the provenance,

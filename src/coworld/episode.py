@@ -105,14 +105,25 @@ def run_episode(
                 seat=seat if target.scope == "seat" else None,
             )
             distribution_score = score_histogram(histogram, target.probs)
-            scores.append(distribution_score.score)
+            # Survival rule (decided 2026-08-11): a distribution only counts if
+            # its population survived to the final tick. Under global scope
+            # that is any living agent; under seat scope, the seat's own.
+            # Without this, a population that banks good window samples and
+            # then collapses would still score on per-agent variables.
+            scope_alive = (
+                len(world.agents) if target.scope == "global" else seat_population[seat]
+            )
+            died_before_end = scope_alive == 0
+            score = 0.0 if died_before_end else distribution_score.score
+            scores.append(score)
             details.append(
                 {
                     "seat": seat,
                     "target_id": target.id,
                     "target_scope": target.scope,
                     "target_variable": target.variable,
-                    "score": distribution_score.score,
+                    "score": score,
+                    "died_before_end": died_before_end,
                     "w1": distribution_score.w1,
                     "js_divergence": distribution_score.js_divergence,
                     "submitted": submitted_flags[seat],

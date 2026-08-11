@@ -230,3 +230,35 @@ def test_reproduction_runs_are_seed_deterministic_with_intentional_newborn_draw(
     second, _, _ = run_episode(config, [None, None], emit_timing_logs=False)
     assert first["result.population_final"] > config["startingAgents"]
     assert canonical_results_payload(first) == canonical_results_payload(second)
+
+
+def test_extinction_before_final_tick_scores_zero(tiny_episode_config: dict[str, object]) -> None:
+    """Survival rule (2026-08-11): banked window samples do not count if the
+    scope's population is gone at the final tick."""
+
+    config = dict(tiny_episode_config)
+    config.update(
+        {
+            # High metabolism and tiny endowments starve everyone within a few
+            # ticks; the window spans the whole episode, so wealth samples
+            # exist from the pre-extinction ticks.
+            "timesteps": 12,
+            "measurement_window": 12,
+            "agentStartingSugar": [3, 4],
+            "agentStartingSpice": [3, 4],
+            # 6+6 metabolism outruns the 4+4 max a fresh cell can yield, so
+            # even a perfect scavenger starves within a few ticks.
+            "agentSugarMetabolism": [6, 6],
+            "agentSpiceMetabolism": [6, 6],
+            "agentFertilityFactor": [0, 0],
+            "environmentSugarRegrowRate": 0,
+            "environmentSpiceRegrowRate": 0,
+        }
+    )
+    results, _replay, _timings = run_episode(config, [None, None], emit_timing_logs=False)
+
+    assert results["result.extinct"] is True
+    wealth_hist = results["histograms"]["global"]["wealth"]
+    assert wealth_hist["sample_count"] > 0  # samples were banked pre-extinction
+    assert results["scores"] == [0.0, 0.0]
+    assert all(detail["died_before_end"] for detail in results["details"])

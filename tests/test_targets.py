@@ -8,32 +8,32 @@ import pytest
 from coworld.targets import load_target_catalog, resolve_seat_targets
 
 
-ENGINE_GENERATED = {
-    "wealth.skewed-gini-0.5",
-    "population.carrying-capacity",
-    "price.equilibrium",
-    "tribe.convergence",
-}
+def test_shipped_catalog_is_honest_global_and_provenance_complete() -> None:
+    """Catalog invariants that hold regardless of which targets are generated.
 
-
-def test_shipped_catalog_has_nine_honest_global_targets() -> None:
+    The disease targets were shelved 2026-08-11 (no stable endemic equilibrium
+    exists in DTL's parameter space — see docs/TARGETS.md), leaving seven.
+    Non-provisional targets must carry real generation provenance (engine-run
+    or an empirical dataset recipe); provisional ones must describe their
+    parametric placeholder.
+    """
     catalog = load_target_catalog()
 
-    assert len(catalog.targets) == 9
+    assert len(catalog.targets) == 7
+    assert not any(target_id.startswith("disease.") for target_id in catalog.targets)
     assert all(target.scope == "global" for target in catalog.targets.values())
-    # Engine-generated targets (tools/generate_targets.py, 2026-08-11) are
-    # non-provisional and carry full engine-run provenance; the rest remain
-    # honestly provisional parametric placeholders.
-    for target_id, target in catalog.targets.items():
-        if target_id in ENGINE_GENERATED:
-            assert not target.provisional
-            assert target.generation.get("method") == "engine-run"
-            assert target.generation.get("engine_commit")
-            assert target.generation.get("seeds", 0) >= 30
-        else:
-            assert target.provisional
-            assert target.generation.get("description")
+    for target in catalog.targets.values():
+        assert target.generation.get("description")
+        if not target.provisional:
+            method = target.generation.get("method")
+            assert method in {"engine-run", "hmd-life-table"}
+            if method == "engine-run":
+                assert target.generation.get("engine_commit")
+                assert target.generation.get("seeds", 0) >= 30
     assert catalog.get("wealth.skewed-gini-0.5").bins == catalog.get("wealth.egalitarian").bins
+    # Shelving the disease targets must not drop sick_fraction from
+    # measurement: it keeps measurement-only canonical bins.
+    assert "sick_fraction" in catalog.bins_by_variable
 
 
 def test_catalog_rejects_inconsistent_binning_for_same_variable(tmp_path: Path) -> None:
