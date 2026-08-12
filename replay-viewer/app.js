@@ -27,6 +27,8 @@ let timer = null;
 let cells = [];
 let agents = new Map();
 let scoreSeries = []; // per seat: [{tick, score}, ...] extracted once at load
+let populationSeries = []; // per seat: [count per frame], reconstructed at load
+let maxWealthSeen = 1; // for stable agent-dot radius scaling across the episode
 
 const params = new URLSearchParams(location.search);
 if (params.get("chrome") === "off") document.body.classList.add("chrome-off");
@@ -48,19 +50,39 @@ async function loadBytes(bytes) {
   replay = documentValue;
   timeline.max = String(replay.frames.length);
   statusLabel.textContent = `${replay.frames.length} ticks · seed ${replay.header.seed}`;
-  extractScoreSeries();
+  extractSeries();
   buildSeatSections();
   seek(0);
   schedule();
 }
 
-function extractScoreSeries() {
+// One pass over all frames at load: score snapshots, per-seat population
+// per tick, and the episode-wide wealth maximum for dot-radius scaling.
+function extractSeries() {
+  const seatCount = replay.header.targets.length;
   scoreSeries = replay.header.targets.map(() => []);
+  populationSeries = replay.header.targets.map(() => []);
+  maxWealthSeen = 1;
+  const liveSeat = new Map(
+    replay.header.initial_agents.map((agent) => [agent[0], agent[1]])
+  );
+  for (const agent of replay.header.initial_agents) {
+    maxWealthSeen = Math.max(maxWealthSeen, agent[4]);
+  }
   replay.frames.forEach((frame) => {
-    if (!frame.running) return;
-    for (const entry of frame.running) {
-      scoreSeries[entry.seat].push({ tick: frame.timestep, score: entry.score });
+    if (frame.running) {
+      for (const entry of frame.running) {
+        scoreSeries[entry.seat].push({ tick: frame.timestep, score: entry.score });
+      }
     }
+    for (const agent of frame.agent_deltas.upsert) {
+      liveSeat.set(agent[0], agent[1]);
+      maxWealthSeen = Math.max(maxWealthSeen, agent[4]);
+    }
+    for (const agentId of frame.agent_deltas.remove) liveSeat.delete(agentId);
+    const counts = new Array(seatCount).fill(0);
+    for (const seat of liveSeat.values()) counts[seat % seatCount] += 1;
+    counts.forEach((count, seat) => populationSeries[seat].push(count));
   });
 }
 
@@ -90,13 +112,13 @@ function applyDeltas(frame) {
   for (const agentId of frame.agent_deltas.remove) agents.delete(agentId);
 }
 
-// Print-cartography terrain: paper where bare, an amber (sugar) ramp and a
-// terracotta (spice) ramp that mix toward umber where both resources sit.
-// Pollution greys the cell. Values are blended in linear channel space from
-// the house palette anchors.
+// Print-cartography terrain, two independent channels per cell: sugar is an
+// amber (ink-gold) FILL ramp, spice is a terracotta diagonal HATCH whose
+// weight tracks the spice stock — each amount stays readable on its own, the
+// way a printed map separates tint from line work. Pollution greys the fill.
 const PAPER_RGB = [255, 253, 244];
 const SUGAR_RGB = [212, 168, 83]; // --ink-gold
-const SPICE_RGB = [179, 110, 78]; // --ink-terracotta
+const SPICE_HATCH = "#b36e4e"; // --ink-terracotta
 const POLLUTION_RGB = [138, 138, 138];
 
 function mix(base, tint, amount) {
@@ -113,22 +135,49 @@ function renderMap(frame) {
   const scaleY = mapCanvas.height / height;
   mapContext.fillStyle = PAPER;
   mapContext.fillRect(0, 0, mapCanvas.width, mapCanvas.height);
+  // Pass 1 — sugar fill (plus pollution grey).
   cells.forEach((cell, index) => {
     const x = Math.floor(index / height);
     const y = index % height;
     const sugar = Math.min(1, cell[0] / Math.max(1, cell[3]));
-    const spice = Math.min(1, cell[1] / Math.max(1, cell[4]));
     const pollution = Math.min(1, cell[2] / 20);
     let rgb = PAPER_RGB;
     // Resource intensity eases (sqrt) so low stocks still read on paper.
-    if (sugar > 0) rgb = mix(rgb, SUGAR_RGB, Math.sqrt(sugar) * 0.85);
-    if (spice > 0) rgb = mix(rgb, SPICE_RGB, Math.sqrt(spice) * 0.7);
+    if (sugar > 0) rgb = mix(rgb, SUGAR_RGB, Math.sqrt(sugar) * 0.9);
     if (pollution > 0) rgb = mix(rgb, POLLUTION_RGB, pollution * 0.6);
     mapContext.fillStyle = `rgb(${Math.round(rgb[0])},${Math.round(rgb[1])},${Math.round(rgb[2])})`;
     mapContext.fillRect(x * scaleX, y * scaleY, Math.ceil(scaleX), Math.ceil(scaleY));
   });
-  const radius = Math.max(1.5, Math.min(scaleX, scaleY) * 0.3);
-  for (const [, seat, x, y] of agents.values()) {
+  // Pass 2 — spice hatch: 1–3 diagonal strokes per cell by stock level.
+  mapContext.strokeStyle = SPICE_HATCH;
+  mapContext.lineWidth = Math.max(1, scaleX * 0.09);
+  mapContext.lineCap = "round";
+  cells.forEach((cell, index) => {
+    const spice = Math.min(1, cell[1] / Math.max(1, cell[4]));
+    if (spice <= 0) return;
+    const x = Math.floor(index / height) * scaleX;
+    const y = (index % height) * scaleY;
+    const strokes = spice > 0.66 ? 3 : spice > 0.33 ? 2 : 1;
+    mapContext.globalAlpha = 0.45 + 0.45 * spice;
+    mapContext.beginPath();
+    for (let line = 1; line <= strokes; line += 1) {
+      const offset = (line / (strokes + 1)) * (scaleX + scaleY);
+      const startX = x + Math.max(0, offset - scaleY);
+      const startY = y + Math.min(scaleY, offset);
+      const endX = x + Math.min(scaleX, offset);
+      const endY = y + Math.max(0, offset - scaleX);
+      mapContext.moveTo(startX, startY);
+      mapContext.lineTo(endX, endY);
+    }
+    mapContext.stroke();
+  });
+  mapContext.globalAlpha = 1;
+  // Agents: seat-colored dots sized by wealth (sqrt ramp, episode-stable
+  // scale) with a paper outline — the canonical mark, made data-bearing.
+  const baseRadius = Math.max(1.5, Math.min(scaleX, scaleY) * 0.22);
+  const maxRadius = Math.min(scaleX, scaleY) * 0.46;
+  for (const [, seat, x, y, wealth] of agents.values()) {
+    const radius = baseRadius + (maxRadius - baseRadius) * Math.sqrt((wealth || 0) / maxWealthSeen);
     mapContext.beginPath();
     mapContext.arc((x + 0.5) * scaleX, (y + 0.5) * scaleY, radius, 0, Math.PI * 2);
     mapContext.fillStyle = seatColors[seat % seatColors.length];
@@ -154,6 +203,8 @@ function buildSeatSections() {
       '<div class="pane-caption">Measured (bars) vs target (line)</div>',
       '<canvas class="scoreline" width="420" height="46"></canvas>',
       '<div class="pane-caption">Match score over the episode</div>',
+      '<canvas class="popline" width="420" height="46"></canvas>',
+      '<div class="pane-caption popline-caption">Living agents</div>',
     ].join("");
     section.querySelector(".seat-dot").style.background = seatColors[seat % seatColors.length];
     section.querySelector(".target-name").textContent = `${target.id} · ${target.variable}`;
@@ -180,7 +231,58 @@ function renderSeatPanes(frame) {
     const color = seatColors[seat % seatColors.length];
     drawHistogram(sections[seat].querySelector(".histogram"), target.probs, measured, color);
     drawScoreline(sections[seat].querySelector(".scoreline"), scoreSeries[seat], currentTick, color);
+    const populationNow = frameIndex > 0 ? populationSeries[seat][frameIndex - 1] : populationSeries[seat][0] || 0;
+    sections[seat].querySelector(".popline-caption").textContent =
+      `Living agents · now ${populationNow}`;
+    drawPopline(sections[seat].querySelector(".popline"), populationSeries[seat], currentTick, color);
   });
+}
+
+function drawPopline(canvas, series, currentTick, color) {
+  const context = canvas.getContext("2d");
+  const width = canvas.width;
+  const height = canvas.height;
+  context.fillStyle = PAPER_ALT;
+  context.fillRect(0, 0, width, height);
+  const totalTicks = replay.frames.length || 1;
+  const maximum = Math.max(1, ...populationSeries.flat());
+  context.strokeStyle = HAIRLINE;
+  context.lineWidth = 1;
+  [4.5, height - 4.5].forEach((y) => {
+    context.beginPath();
+    context.moveTo(0, y);
+    context.lineTo(width, y);
+    context.stroke();
+  });
+  if (!series.length) return;
+  const yFor = (count) => height - 4.5 - (count / maximum) * (height - 9);
+  // Filled area under the line makes population read as mass, not a trace.
+  context.beginPath();
+  context.moveTo(0, yFor(series[0]));
+  series.forEach((count, index) => {
+    context.lineTo(((index + 1) / totalTicks) * width, yFor(count));
+  });
+  context.lineTo((series.length / totalTicks) * width, height - 4.5);
+  context.lineTo(0, height - 4.5);
+  context.closePath();
+  context.fillStyle = `${color}22`;
+  context.fill();
+  context.strokeStyle = color;
+  context.lineWidth = 1.5;
+  context.beginPath();
+  series.forEach((count, index) => {
+    const x = ((index + 1) / totalTicks) * width;
+    if (index === 0) context.moveTo(x, yFor(count)); else context.lineTo(x, yFor(count));
+  });
+  context.stroke();
+  context.strokeStyle = INK_MUTED;
+  context.setLineDash([2, 3]);
+  context.beginPath();
+  const playheadX = (currentTick / totalTicks) * width;
+  context.moveTo(playheadX, 0);
+  context.lineTo(playheadX, height);
+  context.stroke();
+  context.setLineDash([]);
 }
 
 function drawHistogram(canvas, target, measured, color) {
