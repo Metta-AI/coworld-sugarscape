@@ -862,6 +862,87 @@ assert.equal(sheet.width, sheet.box, "and it is ONE arrangement wide: no baked l
 assert.equal(sheet.height, sheet.box, "one bled cell tall");
 assert.ok(sheet.nothingForNothing, "an empty cell has no tile; it is left as bare plate");
 
+/* A TILE HOLDS UP TO FOUR OF EACH, AND THEY ARE COUNTABLE.
+ *
+ * The board draws one dot per unit held, on two interleaved lattices — sugar on
+ * the square, spice on the diamond — so four of each reads as four and four
+ * rather than as eight of something. This pins the properties that make them
+ * countable at all: enough slots for the cap, no slot shared between the two
+ * resources, and every dot far enough from its neighbours to stay a separate
+ * mark at the radius they are drawn with. */
+const dots = JSON.parse(vm.runInContext(`
+  const span = 2 * (DOT_RADIUS + DOT_HALO);
+  let worstGap = Infinity, outside = 0, missing = 0;
+  const layouts = [];
+  for (let index = 0; index < 400; index += 1) {
+    const points = cellDotLayout(index, 4, 4);
+    layouts.push(points);
+    if (points.length !== 8 || points.some((p) => !p)) missing += 1;
+    for (let i = 0; i < points.length; i += 1) {
+      const [px, py] = points[i];
+      const edge = DOT_RADIUS + DOT_HALO;
+      if (px - edge < 0 || px + edge > 1 || py - edge < 0 || py + edge > 1) outside += 1;
+      for (let j = i + 1; j < points.length; j += 1) {
+        worstGap = Math.min(worstGap, Math.hypot(px - points[j][0], py - points[j][1]));
+      }
+    }
+  }
+  const shapes = new Set(layouts.map((points) =>
+    points.map(([px, py]) => px.toFixed(3) + "," + py.toFixed(3)).join("|")));
+  const again = cellDotLayout(7, 4, 4);
+  JSON.stringify({
+    perCell: layouts[0].length, missing, outside, worstGap, span,
+    distinctLayouts: shapes.size, cells: layouts.length,
+    stable: JSON.stringify(again) === JSON.stringify(layouts[7]),
+  });
+`, viewerContext));
+/* The strapline states the win condition, and it shares its band with the clock.
+ *
+ * It has overflowed into that panel twice now — once as "populations forage one
+ * lattice", and again when v3's rules had to be described in the same space. So
+ * both wordings are measured here rather than eyeballed, at the width where the
+ * two actually meet. */
+const strapline = JSON.parse(vm.runInContext(`
+  setStageWidth(1600); state.largeText = false; measureDensity();
+  const scored = { slots: [{ name: "A" }], coworld: { seats: [{ variable: "wealth" }] } };
+  const race = { slots: [{ name: "A" }, { name: "B" }] };
+  JSON.stringify({
+    v3: mastheadStrapline(scored, false),
+    v1: mastheadStrapline(race, false),
+    onePopulation: mastheadStrapline({ slots: [{ name: "A" }] }, false),
+    twoSeats: mastheadStrapline(
+      { slots: [{ name: "A" }], coworld: { seats: [{ variable: "wealth" }, { variable: "wealth" }] } },
+      false),
+  });
+`, viewerContext));
+// 506 is where the clock panel starts; 18 units is the strapline's type size.
+// 0.5 em per character is a deliberate OVER-estimate for this face, so a wording
+// that passes here has margin rather than sitting exactly on the boundary.
+const strapFits = (line) => 32 + line.length * (18 * 0.5) < 506;
+assert.ok(strapFits(strapline.v3), `v3 strapline must clear the clock panel: "${strapline.v3}"`);
+assert.ok(strapFits(strapline.v1), `and so must the race one: "${strapline.v1}"`);
+assert.match(strapline.v3, /match the target/,
+  "a v3 world is won by matching a target, and must not claim otherwise");
+assert.doesNotMatch(strapline.v3, /most .* wins/,
+  "v3 is not won by holding the most of anything");
+assert.match(strapline.v1, /most .* wins/, "a v1 replay is still a race and still says so");
+// The plural has to agree, in both directions.
+assert.match(strapline.onePopulation, /^1 population,/, "one population, not '1 populations'");
+assert.match(strapline.v3, /^1 seat ·/, "one seat, not '1 seats'");
+assert.match(strapline.twoSeats, /^2 seats ·/, "and two seats takes the plural");
+
+assert.equal(dots.perCell, 8, "four sugar plus four spice positions per cell");
+assert.equal(dots.missing, 0, "every position must be placed");
+assert.equal(dots.outside, 0, "and every dot stays wholly inside its own cell");
+assert.ok(dots.worstGap > dots.span,
+  `no two dots may touch anywhere on the board: worst gap ${dots.worstGap} vs span ${dots.span}`);
+// The whole point of the exercise: the plate must not repeat one motif. A fixed
+// lattice with a small nudge passed every separation check above and STILL read
+// as a pattern, so the property that actually matters is pinned directly.
+assert.equal(dots.distinctLayouts, dots.cells,
+  `every cell must draw its own arrangement, got ${dots.distinctLayouts} for ${dots.cells} cells`);
+assert.ok(dots.stable, "and a cell's arrangement must not change between repaints");
+
 /* Density is a RAMP SWITCH, not a scale factor, and the viewer's own larger-text
  * control forces it at any size. */
 const density = JSON.parse(vm.runInContext(`

@@ -1836,6 +1836,123 @@ function paintHeightWash(frame, cell) {
  * the queue is ever part-transparent — the ones behind it are still solid and the
  * ones ahead are simply not drawn — so at no point is the plate a double exposure
  * of itself, which is what the crossfade this replaced could never avoid. */
+/* COUNTABLE DOTS, one per unit held. A tile carries up to four of each.
+ *
+ * This replaces the sand cloud, and the reason the cloud existed no longer
+ * holds. The cloud drew many particles per unit and let local DENSITY carry the
+ * amount; one-dot-per-unit had been tried before it and rejected, because on a
+ * 50x50 board a cell is about fourteen pixels and four dots inside that is a
+ * speckle the eye cannot integrate into a massif.
+ *
+ * v3's world is 20x20. The same board gives a cell roughly six times the area,
+ * which is the measurement that changed — enough room to lay eight dots out on
+ * fixed slots and still see plate between them. So the amount is now exactly
+ * what it is in the model: a count you can point at, not a texture you estimate.
+ * Density was always a proxy for counting; at this cell size we can just count.
+ *
+ * Sugar takes the square, spice takes the diamond. Two interleaved lattices that
+ * never collide, so a tile holding four of each reads as four and four rather
+ * than as eight of something. Slots fill in a fixed order, so one more unit is
+ * one more dot in a place the eye already knows to look.
+ */
+const DOT_RADIUS = 0.055;   // of a cell
+const DOT_HALO = 0.016;     // plate-coloured rim so touching dots stay separate
+/* Each cell gets its OWN scattered layout, not a shared lattice.
+ *
+ * The first attempt kept one fixed constellation — sugar on a square, spice on a
+ * diamond — and nudged each dot off it. That still printed a pattern, and the
+ * arithmetic says why: the nudge was 0.038 of a cell against a slot spacing of
+ * 0.40, about two pixels at the size these draw. Every cell repeated the same
+ * motif in the same places, so the eye read the repeat straight through the
+ * jitter, and dots stayed aligned in columns across neighbouring cells.
+ *
+ * So the positions themselves are drawn per cell now, by rejection sampling
+ * against a minimum separation: genuinely irregular placement, with the gap that
+ * keeps every dot a countable mark preserved as a CONSTRAINT rather than as a
+ * consequence of sitting on a grid. Deterministic — hashed off the cell index,
+ * never Math.random — because the plate repaints every tick and anything drawn
+ * fresh each time would boil. Cached, because rejection sampling per repaint
+ * would be wasted work for an answer that never changes.
+ */
+const DOT_MARGIN = 0.085;   // keep a whole dot inside its own cell
+const DOT_MIN_GAP = 0.20;   // centre-to-centre, comfortably over the dot span
+const DOT_TRIES = 48;
+const dotLayouts = new Map();
+
+/** Up to `sugarCap + spiceCap` separated points in one cell, sugar taking the
+ *  first `sugarCap` of them. Stable for the life of the page. */
+function cellDotLayout(index, sugarCap, spiceCap) {
+  const key = `${index}:${sugarCap}:${spiceCap}`;
+  const cached = dotLayouts.get(key);
+  if (cached) return cached;
+  const span = 1 - 2 * DOT_MARGIN;
+  const points = [];
+  let salt = 1;
+  for (let n = 0; n < sugarCap + spiceCap; n += 1) {
+    let best = null;
+    let bestGap = -1;
+    for (let attempt = 0; attempt < DOT_TRIES; attempt += 1) {
+      salt += 1;
+      const x = DOT_MARGIN + grainOffset(index, salt, 61) * span;
+      const y = DOT_MARGIN + grainOffset(index, salt, 67) * span;
+      let gap = Infinity;
+      for (const point of points) {
+        gap = Math.min(gap, Math.hypot(point[0] - x, point[1] - y));
+      }
+      if (gap >= DOT_MIN_GAP) { best = [x, y]; bestGap = gap; break; }
+      // Nothing cleared the gap yet — keep the roomiest candidate so a crowded
+      // cell degrades to "as far apart as we found" rather than to a collision.
+      if (gap > bestGap) { best = [x, y]; bestGap = gap; }
+    }
+    points.push(best);
+  }
+  dotLayouts.set(key, points);
+  return points;
+}
+// Terrain pixels on the supersampled canvas. A dot is a countable OBJECT, so it
+// gets a floor: at the 640 embed width the fraction alone would put a grain of
+// sand at each slot and the count would stop being readable as a count.
+const DOT_MIN_PX = 1.6;
+
+function paintResourceDots(frame, cell) {
+  const radius = Math.max(cell * DOT_RADIUS, DOT_MIN_PX);
+  const halo = Math.max(cell * DOT_HALO, 0.5);
+  for (let index = 0; index < frame.cells.length; index += 1) {
+    const holds = frame.cells[index];
+    if (holds[0] <= 0 && holds[1] <= 0) continue;
+    // cellId = x * height + y (column-major).
+    const originX = Math.floor(index / frame.height) * cell;
+    const originY = (index % frame.height) * cell;
+    // The model's own caps, so a board configured for more than four still draws
+    // every unit it holds rather than silently clipping at four.
+    const sugarCap = frame.environmentMaxSugar || 4;
+    const spiceCap = frame.environmentMaxSpice || 4;
+    const layout = cellDotLayout(index, sugarCap, spiceCap);
+    for (let resource = 0; resource < 2; resource += 1) {
+      const cap = resource === 0 ? sugarCap : spiceCap;
+      const units = Math.max(0, Math.min(cap, Math.round(holds[resource])));
+      if (units <= 0) continue;
+      terrainContext.fillStyle = resource === 0 ? SUGAR_HEX : SPICE_HEX;
+      for (let unit = 0; unit < units; unit += 1) {
+        const point = layout[resource === 0 ? unit : sugarCap + unit];
+        if (!point) continue;
+        const cx = originX + point[0] * cell;
+        const cy = originY + point[1] * cell;
+        if (halo > 0) {
+          terrainContext.beginPath();
+          terrainContext.arc(cx, cy, radius + halo, 0, Math.PI * 2);
+          terrainContext.fillStyle = PLATE_HEX;
+          terrainContext.fill();
+          terrainContext.fillStyle = resource === 0 ? SUGAR_HEX : SPICE_HEX;
+        }
+        terrainContext.beginPath();
+        terrainContext.arc(cx, cy, radius, 0, Math.PI * 2);
+        terrainContext.fill();
+      }
+    }
+  }
+}
+
 function buildTerrain(frame, from, clock, dissolved) {
   const size = Math.round(BOARD.w * RENDER_SCALE);
   if (terrain.width !== size) terrain.width = terrain.height = size;
@@ -1844,72 +1961,7 @@ function buildTerrain(frame, from, clock, dissolved) {
   terrainContext.clearRect(0, 0, terrain.width, terrain.height);
   terrainContext.fillStyle = PLATE_HEX;
   terrainContext.fillRect(0, 0, cell * frame.width, cell * frame.height);
-  paintHeightWash(frame, cell);
-
-  buildGrainSheet(cell);
-  buildGrainDrift(frame.cells.length);
-  const box = grainSheet.box;
-  const bleed = grainSheet.bleed;
-  const float = grainSheet.float;
-  const ceiling = grainCeiling();
-  const seconds = clock / 1000;
-  const leaving = from && from.cells.length === frame.cells.length ? from.cells : null;
-  let alpha = 1;
-  terrainContext.globalAlpha = 1;
-
-  for (let index = 0; index < frame.cells.length; index += 1) {
-    const holds = frame.cells[index];
-    const held = leaving ? leaving[index] : holds;
-    if (holds[0] <= 0 && holds[1] <= 0 && held[0] <= 0 && held[1] <= 0) continue;
-    // cellId = x * height + y (column-major).
-    const x = Math.floor(index / frame.height);
-    const y = index % frame.height;
-    // The variant is chosen per CELL, so the same amount does not print the same
-    // arrangement across a whole massif.
-    const variant = Math.floor(grainOffset(index, 7, 11) * TILE_VARIANTS);
-    // One margin up and to the left of the cell it belongs to, so the sand that
-    // overhangs lands on the neighbours. Nothing is erased by the neighbour's own
-    // blit: the margins are transparent, so the two fields simply overlap and the
-    // boundary stops existing.
-    const left = Math.round(x * cell) - bleed;
-    const top = Math.round(y * cell) - bleed;
-    for (let layer = 0; layer < GRAIN_LAYERS; layer += 1) {
-      const slot = index * GRAIN_LAYERS + layer;
-      // Sub-pixel, and deliberately not rounded: a fractional blit costs the same
-      // as an integer one and is the whole reason this motion is continuous.
-      const dx = left + float * Math.sin(seconds * grainDrift.rateX[slot] + grainDrift.phaseX[slot]);
-      const dy = top + float * Math.sin(seconds * grainDrift.rateY[slot] + grainDrift.phaseY[slot]);
-      for (let resource = 0; resource < 2; resource += 1) {
-        const now = grainUnits(holds, resource, ceiling);
-        const was = grainUnits(held, resource, ceiling);
-        const settled = Math.min(now, was);
-        if (settled > 0) {
-          const tile = grainSolid(resource, settled, variant, layer);
-          if (tile) {
-            if (alpha !== 1) { alpha = 1; terrainContext.globalAlpha = 1; }
-            terrainContext.drawImage(tile, dx, dy, box, box);
-          }
-        }
-        if (now === was) continue;
-        const rising = now > was;
-        const top_ = Math.max(now, was);
-        const queue = (top_ - settled) * GRAIN_SIPS;
-        let place = 0;
-        for (let unit = rising ? settled + 1 : top_; rising ? unit <= top_ : unit > settled;
-          unit += rising ? 1 : -1) {
-          for (let sip = 0; sip < GRAIN_SIPS; sip += 1) {
-            const share = grainShare(dissolved, queue, place, rising);
-            place += 1;
-            if (share <= 0.004) continue;
-            const tile = grainSipTile(resource, unit, sip, variant, layer);
-            if (!tile) continue;
-            if (alpha !== share) { alpha = share; terrainContext.globalAlpha = share; }
-            terrainContext.drawImage(tile, dx, dy, box, box);
-          }
-        }
-      }
-    }
-  }
+  paintResourceDots(frame, cell);
   terrainContext.globalAlpha = 1;
 }
 
@@ -2062,6 +2114,13 @@ function interpolate(previous, frame, t) {
       // promised "about to starve"; at < 2x metabolism it over-warned sevenfold.
       starving: agent.sugar <= agent.sugarMetabolism
         || (agent.spiceMetabolism > 0 && agent.spice <= agent.spiceMetabolism),
+      tribe: agent.tribe,
+      // A settler that changed culture between the frame it came from and this
+      // one. The comparison has to be against the SAME agent's previous tag, so
+      // it is made here where the pairing already exists; a newborn has no
+      // previous tag and so is never a sway.
+      swayed: Boolean(source) && source.tribe !== undefined
+        && agent.tribe !== undefined && source.tribe !== agent.tribe,
     };
   });
 }
@@ -2138,9 +2197,33 @@ function drawBoard(frame, previous, t, now) {
   // field. Keep it thin: a first attempt at cell*0.13 swallowed the body and the
   // settlers read as asterisks at the embed floor.
   const ring = Math.max(1, cell * 0.075);
+  /* A settler's BODY is its culture, when the world has cultures.
+   *
+   * Cultural tagging is live in the shipped world and every settler carries a
+   * tribe, so the dot that was a population marker now carries the one attribute
+   * that actually changes during a run. Tribes are a property of the world, not
+   * of a seat, so this reads correctly however many seats there are — but it
+   * does mean seat identity is no longer in the body colour. With one seat that
+   * costs nothing; a multi-seat world would need the seat back as a second ring.
+   */
+  const tribal = frame.agents.some((agent) => typeof agent.tribe === "number" && agent.tribe >= 0);
   for (const body of bodies) {
     const seat = seatOf(body.slot);
+    const skin = tribal && typeof body.tribe === "number" && body.tribe >= 0
+      ? TRIBE_INK[body.tribe % TRIBE_INK.length]
+      : seat.color;
     const size = radius * (0.82 + 0.36 * Math.min(1, Math.log10(1 + body.wealth) / 2.4));
+    // SWAYED — this settler took a neighbour's culture on this timestep. Drawn
+    // UNDER the body as a halo so it never hides the colour it just changed to,
+    // which is the whole point of the event.
+    if (body.swayed) {
+      context.beginPath();
+      context.arc(body.px, body.py, size + ring * 2.6, 0, Math.PI * 2);
+      context.fillStyle = C.paper;
+      context.globalAlpha = 0.5;
+      context.fill();
+      context.globalAlpha = 1;
+    }
     context.beginPath();
     context.arc(body.px, body.py, size, 0, Math.PI * 2);
     if (body.starving) {
@@ -2150,12 +2233,12 @@ function drawBoard(frame, previous, t, now) {
       context.fillStyle = PLATE_HEX;
       context.fill();
       context.lineWidth = Math.max(1.2, cell * 0.12);
-      context.strokeStyle = seat.color;
+      context.strokeStyle = skin;
       context.stroke();
     } else {
       // seat.color, not seat.board: the board variants were darkened to sit on a
       // white field and disappear into this one.
-      context.fillStyle = seat.color;
+      context.fillStyle = skin;
       context.fill();
       context.lineWidth = ring;
       context.strokeStyle = C.ink;
@@ -2185,10 +2268,66 @@ function format(value) {
  *  the masthead, the chart caption and the end card, so they cannot disagree. */
 /** Total wealth held by everything alive. Used to tell an engine gini SENTINEL
  *  (0 for an empty world, 1 for a destitute one) from a real measurement. */
+/* The ACTUAL value of a target's variable, from the engine's own per-tick stats.
+ *
+ * A distribution match of 0.930 says how closely the shape was hit but not what
+ * the world actually did, and those are different questions — a run can match a
+ * skewed-wealth target well while you still want to know the Gini it landed on.
+ * Every one of these is a stat DTL already publishes, so none of it is re-derived
+ * here and none of it can disagree with the score beside it.
+ */
+function targetActual(frame, variable) {
+  const stats = frame.stats ?? {};
+  const living = Number(stats.population ?? frame.agents.length) || 0;
+  const num = (key, fallback = 0) => Number(stats[key] ?? fallback);
+  switch (variable) {
+    case "wealth":
+      return { label: "Gini", value: num("giniCoefficient").toFixed(3) };
+    case "population":
+      return { label: "alive", value: `${Math.round(living)}` };
+    case "age":
+      return { label: "mean age", value: num("meanAge").toFixed(1) };
+    case "age_at_death":
+      return { label: "mean age at death", value: num("meanAgeAtDeath").toFixed(1) };
+    case "majority_tribe_share":
+      return {
+        label: "largest tribe",
+        value: living > 0 ? `${Math.round((num("largestTribeSize") / living) * 100)}%` : "—",
+      };
+    case "sick_fraction":
+      return { label: "sick", value: `${num("sickAgentsPercentage").toFixed(0)}%` };
+    case "mean_trade_price":
+      return { label: "mean price", value: num("meanTradePrice").toFixed(2) };
+    default:
+      return null;
+  }
+}
+
 function wealthTotal(frame) {
   let total = 0;
   for (const agent of frame.agents) total += agent.sugar + agent.spice;
   return total;
+}
+
+/** What this world is won by, in one line. See the masthead for why it varies. */
+function mastheadStrapline(frame, big) {
+  const seats = frame.coworld?.seats ?? [];
+  if (seats.length > 0) {
+    const variable = seats[0].variable ?? "wealth";
+    // Measured, like the wording it replaces: the sparse line shares its band
+    // with the clock panel, which starts at 506. "one ruleset each · closest
+    // wealth to target wins" ended at 508.1 and printed into it.
+    return big
+      ? `match the target ${variable}`
+      : `${count(seats.length, "seat")} · one ruleset · match the target ${variable}`;
+  }
+  if (big) return `most ${resourceName()} wins`;
+  return `${count(frame.slots.length, "population")}, one lattice · most ${resourceName()} wins`;
+}
+
+/** "1 seat", "2 seats" — the plural has to agree with the world it describes. */
+function count(value, noun) {
+  return `${value} ${noun}${value === 1 ? "" : "s"}`;
 }
 
 function resourceName() {
@@ -2285,9 +2424,10 @@ function boardKey(frame) {
   // BOTH sugar and spice peaks, so most of the plate is the rust of spice while
   // the key taught only the yellow of sugar — the dominant colour on the board
   // was the one thing the legend did not explain.
-  // The key has to teach what the board actually encodes. It used to show a
-  // colour ramp because the board WAS a colour ramp; the board is grain density
-  // now, so the swatches count grains — none, one, two, three, four.
+  // The key has to teach what the board actually encodes, and it has been wrong
+  // twice by lagging it: a colour ramp after the board became grain density, and
+  // grain density after the board became countable dots. The swatches now draw
+  // the SAME dots at the same sizes — none, one, two, three, four.
   const ramps = [["sugar", SUGAR_HEX, state.maxSugar]];
   if (state.maxSpice > 0) ramps.push(["spice", SPICE_HEX, state.maxSpice]);
   for (const [label, grainColour, peak] of ramps) {
@@ -2297,14 +2437,16 @@ function boardKey(frame) {
       markup += `<rect x="${cellX}" y="${y - swatchW + 2}" `
         + `width="${swatchW}" height="${swatchW}" fill="${PLATE_HEX}" `
         + `stroke="${GRID_HEX}" stroke-width="0.8"/>`;
-      // The same cloud the board draws, at the same relative density, so the key
-      // teaches the encoding rather than a different notation for it.
-      const particle = Math.max(0.7, swatchW * 0.11);
-      const count = Math.round(step * 9);
-      for (let index = 0; index < count; index += 1) {
-        markup += `<rect x="${cellX + 1 + grainOffset(step, index, 0) * (swatchW - particle - 2)}" `
-          + `y="${y - swatchW + 3 + grainOffset(step, index, 1) * (swatchW - particle - 2)}" `
-          + `width="${particle}" height="${particle}" fill="${grainColour}"/>`;
+      // One dot per unit, laid out by the board's own sampler so the key is the
+      // same picture a cell holding that much would print.
+      const spot = Math.max(0.8, swatchW * DOT_RADIUS * 2.2);
+      const layout = cellDotLayout(step + 900, 4, 4);
+      for (let unit = 0; unit < step; unit += 1) {
+        const point = layout[unit];
+        if (!point) continue;
+        markup += `<circle cx="${(cellX + point[0] * swatchW).toFixed(1)}" `
+          + `cy="${(y - swatchW + 2 + point[1] * swatchW).toFixed(1)}" `
+          + `r="${spot.toFixed(2)}" fill="${grainColour}"/>`;
       }
     }
     x += (steps + 1) * (swatchW + 2) + 8;
@@ -2321,8 +2463,29 @@ function boardKey(frame) {
   // manifest, not from here. Shorten until the run fits.
   const rightEdge = BOARD.x + BOARD.w;
   const tailWidth = dot + G(7) + advance("about to starve", size) + gap;
+  // When the world has cultures the settlers are coloured by TRIBE, so the key
+  // has to teach tribes — a seat swatch here would name a colour the board never
+  // draws. One swatch per surviving tribe, in the board's own inks.
+  const tribes = [...new Set(frame.agents
+    .map((agent) => agent.tribe)
+    .filter((tribe) => typeof tribe === "number" && tribe >= 0))].sort((a, b) => a - b);
+  if (tribes.length > 0) {
+    markup += text("cultures", x, y, style);
+    x += advance("cultures", size) + G(8);
+    for (const tribe of tribes) {
+      markup += `<circle cx="${x}" cy="${y - dot}" r="${dot}" `
+        + `fill="${TRIBE_INK[tribe % TRIBE_INK.length]}"/>`;
+      x += dot * 2 + G(5);
+    }
+    x += gap - G(5);
+    markup += `<circle cx="${x}" cy="${y - dot}" r="${dot}" fill="none" `
+      + `stroke="${C.paper}" stroke-width="${G(2.4)}" opacity="0.6"/>`;
+    markup += text("just swayed", x + dot + G(7), y, style);
+    x += dot + G(7) + advance("just swayed", size) + gap;
+  }
   const budget = (rightEdge - x - tailWidth) / Math.max(1, frame.slots.length);
   frame.slots.forEach((slot, index) => {
+    if (tribes.length > 0) return; // the seat is not what the body colour says
     markup += `<circle cx="${x}" cy="${y - dot}" r="${dot}" fill="${seatOf(index).color}"/>`;
     const full = slot.name || `Population ${index + 1}`;
     let label = dense() ? full.split(/\s+/).at(-1) : full;
@@ -2369,9 +2532,13 @@ function scorebug(frame) {
     // of the seed, not of the config. Do not assert what the board can show.
     // Measured, not eyeballed: at 18 units the old "populations forage one
     // lattice" wording ran 524 units against a clock panel starting at 506.
-    big
-      ? `most ${resourceName()} wins`
-      : `${frame.slots.length} populations, one lattice · most ${resourceName()} wins`,
+    // The strapline states the WIN CONDITION, so it has to follow the world.
+    // v3 hands each seat a target distribution and scores how closely its
+    // ruleset grew that shape; nothing is won by holding the most of anything,
+    // and printing "most sugar + spice wins" over it was simply false. A v1
+    // replay is still a race and still says so. The plural also has to agree:
+    // a one-seat world was reading "1 populations".
+    mastheadStrapline(frame, big),
     MARGIN + 2, big ? 88 : 66, { size: T(18), weight: 500, fill: C.muted });
 
   // Clock — counts to the SCHEDULED end of the match, so an early extinction
@@ -2498,12 +2665,32 @@ function scorebug(frame) {
         { size: T(20), weight: 500, family: F.mono, fill: C.muted },
       );
     }
-    // White at the same size out-punches gold, so the LOSING number was winning
-    // the eye. The leader is gold and bright; everyone else steps back.
-    markup += text(format(row.score), x + chipW - 20, big ? 58 : 62, {
-      size: T(40), weight: 700, family: F.mono, anchor: "end",
-      fill: leader ? C.gold : C.muted,
-    });
+    /* THE HEADLINE NUMBER IS WHAT THE EPISODE IS SCORED ON.
+     *
+     * On a v3 world that is the distribution match, not accumulated wealth. The
+     * chip used to print total sugar + spice with a "+1,600" margin beside it,
+     * which was the seat's own total restated as a lead over a rival that does
+     * not exist in a one-seat world — a number that could only mislead. The
+     * match score is the same figure the end card settles on, and the actual
+     * value of the targeted variable rides underneath it. */
+    const seatScore = frame.coworld?.seats?.find((entry) => entry.seat === row.index);
+    const matched = seatScore && typeof seatScore.score === "number";
+    markup += text(
+      matched ? seatScore.score.toFixed(3) : format(row.score),
+      x + chipW - 20, big ? 58 : 62,
+      {
+        size: T(40), weight: 700, family: F.mono, anchor: "end",
+        fill: leader ? C.gold : C.muted,
+      },
+    );
+    if (matched) {
+      const actual = targetActual(frame, seatScore.variable);
+      markup += text(
+        actual ? `${actual.label} ${actual.value}` : "distribution match",
+        x + chipW - 20, big ? 96 : 84,
+        { size: big ? T(18) : T(20), weight: 600, family: F.mono, anchor: "end", fill: C.muted },
+      );
+    }
     /* THE GAP IS ONE FACT, so a two-horse race states it ONCE.
      *
      * Every chip used to carry a margin, so a two-population match printed "+236"
@@ -2514,7 +2701,7 @@ function scorebug(frame) {
      * With three or more it stops being redundant \u2014 each chip's distance to the
      * leader is a different number \u2014 so they keep it, and the leader keeps its
      * margin over second place, which is a different quantity again. */
-    const worthSaying = rank === 0 || rows.length > 2;
+    const worthSaying = !matched && (rank === 0 || rows.length > 2);
     if (worthSaying) {
       markup += text(
         margin === 0 ? "level" : margin > 0 ? `+${format(margin)}` : `\u2212${format(-margin)}`,
@@ -3184,6 +3371,255 @@ function eventFeed(frame, x, y, width, height) {
  *  beside it and was removed - the engine's `carryingCapacity` is a lagging
  *  average of the headcount with a ceil() ratchet, so presenting it as a ceiling
  *  the world imposes was simply false.) */
+/* WHAT v3 IS ACTUALLY PLAYING.
+ *
+ * This world is not a race. Each seat submits one declarative ruleset, the world
+ * runs with no further input, and the seat is scored on how closely the
+ * distribution it GREW matches a target distribution it was handed. So the rail
+ * asks v3's own question, with v3's own readouts — the measured histogram
+ * against the target, and the match score over the episode.
+ *
+ * The measured bars and the target line share one vertical scale, because the
+ * whole claim is "these two shapes are/aren't the same" and two scales would let
+ * a mismatch print as a match.
+ */
+function targetHistogram(frame, x, y, width, height) {
+  const big = dense();
+  const seats = frame.coworld?.seats ?? [];
+  let markup = panel(x, y, width, height);
+  markup += eyebrow("Did the rules grow the target?", x + 18, y + (big ? 46 : 26));
+  if (seats.length === 0) return markup;
+
+  const seat = seats[0];
+  const headY = y + (big ? 46 : 26) + 34;
+  const score = typeof seat.score === "number" ? seat.score : null;
+  // The score is the headline, so it takes the figure treatment; the target it
+  // is scored against is named right under it, never left as a bare number.
+  markup += text(score === null ? "—" : score.toFixed(3), x + 18, headY + T(40), {
+    size: T(40), weight: 600, family: F.mono, fill: score === null ? C.muted : C.gold,
+  });
+  markup += text("distribution match", x + 18, headY + T(40) + 22, {
+    size: T(18), weight: 600, fill: C.muted, spacing: 1.4,
+  });
+  markup += text(`${seat.variable ?? "wealth"} · ${seat.targetId ?? "target"}`,
+    x + 18, headY + T(40) + 44, { size: T(17), weight: 500, family: F.mono, fill: C.dim });
+
+  const plotTop = headY + T(40) + 60;
+  const plotH = Math.max(30, y + height - plotTop - 30);
+  const plotX = x + 18;
+  const plotW = width - 36;
+  const target = seat.targetProbs ?? [];
+  const measured = seat.measuredProbs ?? [];
+  const buckets = Math.max(target.length, measured.length);
+  if (buckets === 0 || plotH < 24) return markup;
+  const ceiling = Math.max(0.0001, ...target, ...measured);
+  const barW = plotW / buckets;
+  const yFor = (p) => plotTop + plotH - (p / ceiling) * plotH;
+
+  // Measured first, as filled bars: it is the thing that happened.
+  for (let index = 0; index < buckets; index += 1) {
+    const value = measured[index] ?? 0;
+    if (value <= 0) continue;
+    const top = yFor(value);
+    markup += `<rect x="${(plotX + index * barW + 1).toFixed(1)}" y="${top.toFixed(1)}" `
+      + `width="${Math.max(1, barW - 2).toFixed(1)}" height="${(plotTop + plotH - top).toFixed(1)}" `
+      + `fill="${seatOf(seat.seat).color}" opacity="0.55"/>`;
+  }
+  // Target as a STEP line, not a smooth one: it is a histogram, and a curve
+  // through bin centres would imply a continuity the bins do not have.
+  if (target.length) {
+    const steps = [];
+    for (let index = 0; index < target.length; index += 1) {
+      const top = yFor(target[index]);
+      steps.push(`${(plotX + index * barW).toFixed(1)},${top.toFixed(1)}`);
+      steps.push(`${(plotX + (index + 1) * barW).toFixed(1)},${top.toFixed(1)}`);
+    }
+    markup += `<polyline points="${steps.join(" ")}" fill="none" `
+      + `stroke="${C.paper}" stroke-width="2" stroke-linejoin="round"/>`;
+  }
+  markup += `<line x1="${plotX}" y1="${plotTop + plotH}" x2="${plotX + plotW}" `
+    + `y2="${plotTop + plotH}" stroke="${C.axis}" stroke-width="1"/>`;
+  markup += text("measured", plotX, plotTop + plotH + 20,
+    { size: T(17), weight: 600, family: F.mono, fill: seatOf(seat.seat).text });
+  markup += text("target", plotX + plotW, plotTop + plotH + 20,
+    { size: T(17), weight: 600, family: F.mono, fill: C.paper, anchor: "end" });
+  return markup;
+}
+
+/* INEQUALITY OVER TIME — the Gini coefficient, tick by tick.
+ *
+ * This replaced a Lorenz square with a Gini figure beside it, which the owner
+ * rejected as broken and unclear, and was both: it printed "53 of 30 settlers"
+ * because the readout assumed a population can only shrink, and the curve was
+ * unlabelled apart from "poorest → richest" with an unexplained diagonal, so it
+ * asked the viewer to already know what a Lorenz curve is before it said
+ * anything. A single number at one instant also hid the thing worth seeing —
+ * inequality is INTERESTING because of how it moves. The famous Sugarscape
+ * result is not that Gini is 0.37, it is that fair rules drive it upward.
+ *
+ * The trade footer rides here because exchange is the mechanism the wealth is
+ * moving through. Volume and mean price are all the replay carries; DTL records
+ * no partner pairs, so this cannot say WHO traded, only how much trading there
+ * was, and it says exactly that.
+ */
+function inequalityOverTime(frame, x, y, width, height) {
+  const big = dense();
+  let markup = panel(x, y, width, height);
+  markup += eyebrow("Inequality over time", x + 18, y + (big ? 46 : 26));
+
+  const upto = currentIndex();
+  const plotX = x + 52;
+  const plotW = width - 70;
+  const plotTop = y + (big ? 46 : 26) + 18;
+  const plotH = Math.max(24, height - (plotTop - y) - 54);
+  const span = Math.max(1, frames.length - 1);
+  // Gini is a 0..1 quantity and the whole point is where it SITS on that scale,
+  // so the axis is the scale. Autoscaling would make any run look dramatic.
+  const xFor = (index) => plotX + (index / span) * plotW;
+  const yFor = (value) => plotTop + plotH - Math.max(0, Math.min(1, value)) * plotH;
+  const giniAt = (each) => Number(each?.stats?.giniCoefficient ?? 0);
+
+  markup += `<line x1="${plotX}" y1="${plotTop + plotH}" x2="${plotX + plotW}" `
+    + `y2="${plotTop + plotH}" stroke="${C.axis}" stroke-width="1"/>`;
+  // A named landmark beats a bare axis: 0.4 is the conventional "high" line, and
+  // the classic Sugarscape run settles around 0.5.
+  markup += `<line x1="${plotX}" y1="${yFor(0.4).toFixed(1)}" x2="${plotX + plotW}" `
+    + `y2="${yFor(0.4).toFixed(1)}" stroke="${C.guide}" stroke-width="1" stroke-dasharray="4 4"/>`;
+  markup += text("0.4", plotX - 6, yFor(0.4) + 5,
+    { size: T(16), weight: 500, family: F.mono, fill: C.dim, anchor: "end" });
+  markup += text("1", plotX - 6, plotTop + 10,
+    { size: T(16), weight: 500, family: F.mono, fill: C.dim, anchor: "end" });
+  markup += text("0", plotX - 6, plotTop + plotH,
+    { size: T(16), weight: 500, family: F.mono, fill: C.dim, anchor: "end" });
+
+  const points = [];
+  for (let index = 0; index <= upto && index < frames.length; index += 1) {
+    points.push(`${xFor(index).toFixed(1)},${yFor(giniAt(frames[index])).toFixed(1)}`);
+  }
+  if (points.length > 1) {
+    markup += `<polyline points="${points.join(" ")}" fill="none" `
+      + `stroke="${C.gold}" stroke-width="2.5" stroke-linejoin="round"/>`;
+  }
+  const now = giniAt(frame);
+  const opened = giniAt(frames[0]);
+  if (points.length) {
+    markup += `<circle cx="${xFor(upto).toFixed(1)}" cy="${yFor(now).toFixed(1)}" r="4" fill="${C.gold}"/>`;
+  }
+  // Never a bare number: the value, which way it has moved since the start, and
+  // what that means in words.
+  const drift = now - opened;
+  const way = Math.abs(drift) < 0.005 ? "level with the start"
+    : `${drift > 0 ? "up" : "down"} ${Math.abs(drift).toFixed(3)} from ${opened.toFixed(3)}`;
+  markup += text(now.toFixed(3), plotX, plotTop + plotH + 22,
+    { size: T(22), weight: 600, family: F.mono, fill: C.paper });
+  markup += text(way, plotX + advance(now.toFixed(3), T(22)) + 10, plotTop + plotH + 22,
+    { size: T(17), weight: 500, family: F.mono, fill: C.dim });
+
+  // Trade, as a footer — see the note above on what the replay does and does not
+  // record. Zero is a real reading here, not a missing one.
+  const stats = frame.stats ?? {};
+  if (stats.tradeVolume !== undefined) {
+    const volume = Number(stats.tradeVolume) || 0;
+    const price = Number(stats.meanTradePrice) || 0;
+    const line = volume === 0
+      ? "no trades this tick"
+      : `${volume} trade${volume === 1 ? "" : "s"} this tick · mean price ${price.toFixed(2)}`;
+    markup += text(line, plotX + plotW, plotTop + plotH + 22,
+      { size: T(17), weight: 500, family: F.mono, fill: C.muted, anchor: "end" });
+  }
+  return markup;
+}
+
+/* CULTURE — each tribe's share of the living population, over time.
+ *
+ * The other readout worth showing in any episode. Epstein and Axtell's cultural
+ * tagging is live in the shipped world (three tribes, ten agents each at t0) and
+ * `majority_tribe_share` is a target variable with two shipped targets pulling
+ * opposite ways — `tribe.convergence` toward one culture swallowing the rest,
+ * `tribe.diversity` toward pluralism holding. Which of those a run produced is
+ * exactly what this plot shows, and nothing else on the stage said it.
+ *
+ * Shares, not counts, so convergence reads as a line climbing to the top while
+ * the others fall away, independently of whether the population is growing or
+ * dying. Drawn from the frames, so it works on any replay carrying tribes.
+ */
+const TRIBE_INK = ["#f0a63c", "#7fb3d5", "#c9d17a", "#d98cae", "#8fd1c0", "#e8c07d"];
+
+function tribeShares(frame, x, y, width, height) {
+  const big = dense();
+  let markup = panel(x, y, width, height);
+  markup += eyebrow("Culture", x + 18, y + (big ? 46 : 26));
+
+  const sharesAt = (each) => {
+    const counts = new Map();
+    for (const agent of each.agents) {
+      const tribe = agent.tribe;
+      if (tribe === undefined || tribe === null || tribe < 0) continue;
+      counts.set(tribe, (counts.get(tribe) ?? 0) + 1);
+    }
+    let total = 0;
+    for (const value of counts.values()) total += value;
+    return { counts, total };
+  };
+
+  const tribes = new Set();
+  for (const each of frames) for (const tribe of sharesAt(each).counts.keys()) tribes.add(tribe);
+  const order = [...tribes].sort((a, b) => a - b);
+  const plotX = x + 44;
+  const plotW = width - 62;
+  const plotTop = y + (big ? 46 : 26) + 20;
+  const plotH = Math.max(24, height - (plotTop - y) - 46);
+  const span = Math.max(1, frames.length - 1);
+  const xFor = (index) => plotX + (index / span) * plotW;
+  const yFor = (share) => plotTop + plotH - Math.max(0, Math.min(1, share)) * plotH;
+
+  markup += `<line x1="${plotX}" y1="${plotTop + plotH}" x2="${plotX + plotW}" `
+    + `y2="${plotTop + plotH}" stroke="${C.axis}" stroke-width="1"/>`;
+  markup += text("all", plotX - 6, plotTop + 12,
+    { size: T(16), weight: 500, family: F.mono, fill: C.dim, anchor: "end" });
+  markup += text("0", plotX - 6, plotTop + plotH,
+    { size: T(16), weight: 500, family: F.mono, fill: C.dim, anchor: "end" });
+
+  if (order.length === 0) {
+    markup += text("this world has no tribes", plotX, plotTop + plotH / 2,
+      { size: T(18), weight: 500, family: F.mono, fill: C.dim });
+    return markup;
+  }
+
+  const upto = currentIndex();
+  let leader = null;
+  let leaderShare = 0;
+  order.forEach((tribe, position) => {
+    const points = [];
+    for (let index = 0; index <= upto && index < frames.length; index += 1) {
+      const { counts, total } = sharesAt(frames[index]);
+      if (total <= 0) continue;
+      points.push(`${xFor(index).toFixed(1)},${yFor((counts.get(tribe) ?? 0) / total).toFixed(1)}`);
+    }
+    if (points.length > 1) {
+      markup += `<polyline points="${points.join(" ")}" fill="none" `
+        + `stroke="${TRIBE_INK[position % TRIBE_INK.length]}" stroke-width="2.5" `
+        + `stroke-linejoin="round"/>`;
+    }
+  });
+  const { counts, total } = sharesAt(frame);
+  for (const tribe of order) {
+    const share = total > 0 ? (counts.get(tribe) ?? 0) / total : 0;
+    if (share > leaderShare) { leaderShare = share; leader = tribe; }
+  }
+  // Never a bare number, and never a bare chart: say which way it went.
+  const verdict = leaderShare >= 0.999 ? "one culture left"
+    : leaderShare >= 0.6 ? "converging on one"
+      : "holding apart";
+  markup += text(`${order.length} tribes · ${verdict}`, plotX, plotTop + plotH + 20,
+    { size: T(17), weight: 600, family: F.mono, fill: C.paper });
+  if (leader !== null) {
+    markup += text(`largest ${Math.round(leaderShare * 100)}%`, plotX + plotW, plotTop + plotH + 20,
+      { size: T(17), weight: 500, family: F.mono, fill: C.dim, anchor: "end" });
+  }
+  return markup;
+}
+
 function emergence(frame, x, y, width, height) {
   const big = dense();
   const stats = frame.stats ?? {};
@@ -3311,22 +3747,42 @@ function endCard(frame) {
     : trailedAtHalfway
       ? ` Won from behind, after ${leadChanges} lead change${leadChanges === 1 ? "" : "s"}.`
       : ` ${leadChanges} lead change${leadChanges === 1 ? "" : "s"} along the way.`;
-  const verdict = tie
-    ? `${winner.name} and ${runnerUp.name} finish level on ${format(winner.score)}.${arc}`
-    : (() => {
-      const share = ((margin / Math.max(1, winner.score)) * 100).toFixed(1);
-      return `${winner.name} finishes ${format(margin)} ahead of `
-        + `${runnerUp?.name ?? "the field"} — ${article(share)} ${share}% margin.${arc}`;
-    })();
+  /* THE FINAL SCORE IS THE DISTRIBUTION MATCH.
+   *
+   * On a v3 world the card used to close on accumulated wealth and a margin over
+   * "the field" — with one seat that read "finishes 7,750 ahead of the field — a
+   * 100.0% margin", which is a race result for a game that holds no race. The
+   * score the episode is actually settled on is the match against the target,
+   * and it is the same figure the histogram panel has been showing all along.
+   * The actual value of the targeted variable goes beside it, because the match
+   * says how close the SHAPE came and not what the world did. */
+  const seatScore = frame.coworld?.seats?.find((entry) => entry.seat === winner.index);
+  const matched = seatScore && typeof seatScore.score === "number";
+  const actual = matched ? targetActual(frame, seatScore.variable) : null;
+  const verdict = matched
+    ? `${winner.name} scores ${seatScore.score.toFixed(3)} against `
+      + `${seatScore.targetId ?? "its target"}`
+      + `${actual ? ` — ${actual.label} ${actual.value}` : ""}.`
+    : tie
+      ? `${winner.name} and ${runnerUp.name} finish level on ${format(winner.score)}.${arc}`
+      : (() => {
+        const share = ((margin / Math.max(1, winner.score)) * 100).toFixed(1);
+        return `${winner.name} finishes ${format(margin)} ahead of `
+          + `${runnerUp?.name ?? "the field"} — ${article(share)} ${share}% margin.${arc}`;
+      })();
   // Gated, not asserted: the same sentence used to print at any Gini.
   const spread = gini > 0.4
     ? ` A few of them ended up holding almost all the ${resourceName()}.`
     : gini > 0.28
       ? ` The richest of them ended up holding most of the ${resourceName()}.`
       : ` What they held ended up spread fairly evenly.`;
-  const context = state.sawStart
-    ? `${survivors} of ${state.startingPopulation} settlers survived.${spread}`
-    : `${survivors} settlers still standing.${spread}`;
+  // "51 of 30 settlers survived" — the old wording assumed a population can only
+  // shrink, and this world breeds. Say "grew to" when it did.
+  const context = !state.sawStart
+    ? `${survivors} settlers still standing.${spread}`
+    : survivors > state.startingPopulation
+      ? `${survivors} settlers alive, up from ${state.startingPopulation}.${spread}`
+      : `${survivors} of ${state.startingPopulation} settlers survived.${spread}`;
 
   /* The card is SIZED FROM ITS CONTENT.
    *
@@ -3407,15 +3863,27 @@ function endCard(frame) {
     markup += text(`${row.population} alive`, x + cardW - pad - G(194), rowY + rowH * 0.64, {
       size: T(20), weight: 500, family: F.mono, fill: C.muted, anchor: "end",
     });
-    markup += text(format(row.score), x + cardW - pad - 36, rowY + rowH * 0.66, {
-      size: T(34), weight: 700, family: F.mono, fill: leader ? C.gold : C.paper, anchor: "end",
-    });
+    // The result row states the SCORE, and on a v3 world the score is the match,
+    // not the pile. Printing accumulated wealth here left the card leading with
+    // 0.930 and closing with 7,750 — two different numbers both presented as
+    // the result.
+    const rowMatch = frame.coworld?.seats?.find((entry) => entry.seat === row.index);
+    markup += text(
+      rowMatch && typeof rowMatch.score === "number"
+        ? rowMatch.score.toFixed(3)
+        : format(row.score),
+      x + cardW - pad - 36, rowY + rowH * 0.66, {
+        size: T(34), weight: 700, family: F.mono, fill: leader ? C.gold : C.paper, anchor: "end",
+      });
     rowY += rowStep;
   }
+  const scoredCard = frame.coworld?.seats?.some((entry) => typeof entry.score === "number");
   markup += text(
-    big
-      ? `Score is all the ${resourceName()} still held by living settlers.`
-      : `Score is all the ${resourceName()} still held by a population's living settlers.`,
+    scoredCard
+      ? "Score is how closely the measured distribution matches the target — 1.000 is exact."
+      : big
+        ? `Score is all the ${resourceName()} still held by living settlers.`
+        : `Score is all the ${resourceName()} still held by a population's living settlers.`,
     x + pad, footY, { size: footSize, weight: 500, fill: C.muted });
   markup += `</g>`;
   return markup;
@@ -3491,9 +3959,36 @@ function drawHud(frame, index) {
   const raceH = dense() ? 320 : 358;
   const feedH = dense() ? 278 : 250;
   const emergenceH = RAIL.h - raceH - feedH - railGap * 2;
-  let markup = raceChart(frame, RAIL.x, RAIL.y, RAIL.w, raceH);
-  markup += eventFeed(frame, RAIL.x, RAIL.y + raceH + railGap, RAIL.w, feedH);
-  markup += emergence(frame, RAIL.x, RAIL.y + raceH + feedH + railGap * 2, RAIL.w, emergenceH);
+  /* Which world is this?
+   *
+   * A v3 replay carries a `coworld` block: a target distribution per seat, the
+   * histogram the ruleset actually grew, and a running match score. That is the
+   * whole of what v3 scores, and none of it is a race — so the rail asks its
+   * question instead of the race's. A v1 replay has no such block and keeps the
+   * race band and the Lorenz panel, which are the right readouts for THAT game.
+   * The feed sits between them either way: "what just happened" is true of both.
+   */
+  const scored = Array.isArray(frame.coworld?.seats) && frame.coworld.seats.length > 0;
+  /* Below the headline panel sit the two readouts that mean something in ANY
+   * episode, rather than two that only mean something in this one.
+   *
+   * What it grew, how unequal it got, how it converged — and all three are
+   * TIME SERIES on the same axis, so the rail reads as one episode rather than
+   * as three unrelated instruments.
+   *
+   * What each replaced, and why: the event feed narrated what had just happened,
+   * which is a broadcast job rather than a research one. The match-score plot
+   * only meant anything in a targeted run and drew a flat line near the top
+   * whenever the ruleset was already good. The Lorenz-and-Gini panel was
+   * rejected outright — it printed "53 of 30 settlers" and asked the viewer to
+   * already know what a Lorenz curve is; inequality over time says the thing
+   * that panel was reaching for and says it plainly.
+   */
+  let markup = scored
+    ? targetHistogram(frame, RAIL.x, RAIL.y, RAIL.w, raceH)
+    : raceChart(frame, RAIL.x, RAIL.y, RAIL.w, raceH);
+  markup += inequalityOverTime(frame, RAIL.x, RAIL.y + raceH + railGap, RAIL.w, feedH);
+  markup += tribeShares(frame, RAIL.x, RAIL.y + raceH + feedH + railGap * 2, RAIL.w, emergenceH);
   markup += scorebug(frame);
   markup += boardKey(frame);
   standingsLayer.innerHTML = markup;
