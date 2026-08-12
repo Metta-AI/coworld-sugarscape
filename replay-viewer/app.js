@@ -51,8 +51,15 @@ async function inflate(bytes) {
 async function loadBytes(bytes) {
   const raw = await inflate(bytes);
   const documentValue = JSON.parse(new TextDecoder().decode(raw));
-  if (documentValue.format !== "sugarscape.replay.v3" || documentValue.version !== 2) {
+  if (documentValue.format !== "sugarscape.replay.v3") {
     throw new Error("Unsupported Sugarscape replay format.");
+  }
+  if (documentValue.version !== 2) {
+    throw new Error(
+      `This replay was recorded in an incompatible format version (${documentValue.version}); ` +
+      "this viewer plays version 2 replays. Episodes recorded before the format change " +
+      "cannot be replayed here."
+    );
   }
   replay = documentValue;
   timeline.max = String(replay.frames.length);
