@@ -259,6 +259,23 @@ class SugarscapeServer:
         queue: asyncio.Queue[str] = asyncio.Queue(maxsize=SPECTATOR_QUEUE_SIZE)
         self._spectators.add(queue)
         try:
+            # The hosted runner's viewer probe requires the first /global
+            # message within 10 seconds of connecting, while the simulation
+            # only emits frames after every player has submitted — tens of
+            # seconds into a hosted episode. Greet every spectator immediately
+            # so the stream is never silent (v1 satisfied the same probe via
+            # its catch-up frame buffer).
+            await connection.send(
+                _json_message(
+                    {
+                        "type": "status",
+                        "protocol": PROTOCOL,
+                        "phase": "run" if self._window_closed else "submission_window",
+                        "seats": len(self._submitted),
+                        "submitted": sum(self._submitted),
+                    }
+                )
+            )
             while True:
                 message = await queue.get()
                 await connection.send(message)

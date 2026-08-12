@@ -65,10 +65,14 @@ under `died_before_end`.
 
 ## Spectator connection
 
-`WS /global` streams the same `frame` objects stored in the replay, followed by
-one terminal `result`. Each spectator has a bounded queue; a slow spectator may
-drop old presentation frames but cannot slow the simulation. `GET /client/global`
-is a minimal raw-message browser client.
+`WS /global` sends an immediate
+`{"type":"status","protocol":"sugarscape-v3/1","phase":"submission_window"|"run","seats":N,"submitted":M}`
+greeting on connect (the hosted runner's viewer probe requires a first message
+within 10 seconds, long before players may have submitted), then streams the
+same `frame` objects stored in the replay, followed by one terminal `result`.
+Each spectator has a bounded queue; a slow spectator may drop old presentation
+frames but cannot slow the simulation. `GET /client/global` is a minimal
+raw-message browser client.
 
 `GET /healthz` returns HTTP 200 once the submission server is ready.
 

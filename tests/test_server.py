@@ -143,6 +143,13 @@ def test_server_end_to_end_contract(tmp_path: Path) -> None:
             proxy=None,
         )
         spectator = connect(f"ws://127.0.0.1:{port}/global", proxy=None)
+        # The hosted runner's viewer probe fails the episode unless /global
+        # produces a message within 10 s of connecting — long before any
+        # player has submitted. The greeting must arrive immediately.
+        greeting = json.loads(spectator.recv(timeout=5))
+        assert greeting["type"] == "status"
+        assert greeting["phase"] == "submission_window"
+        assert greeting["seats"] == 2
         observation_zero = json.loads(player_zero.recv())
         observation_one = json.loads(player_one.recv())
         assert observation_zero["type"] == "observation"
