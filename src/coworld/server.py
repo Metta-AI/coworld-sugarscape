@@ -22,10 +22,11 @@ import logging
 from pathlib import Path
 import secrets
 import tempfile
-from time import perf_counter_ns
+from time import perf_counter_ns, sleep
 from typing import Any, Mapping
+from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, unquote, urlsplit
-from urllib.request import urlopen
+from urllib.request import Request as UploadRequest, urlopen
 
 from websockets.asyncio.server import ServerConnection, serve
 from websockets.datastructures import Headers
@@ -409,12 +410,27 @@ def read_json_uri(uri: str) -> tuple[dict[str, object], int]:
     return value, perf_counter_ns() - started
 
 
-def atomic_write_uri(uri: str, data: bytes) -> None:
-    """Atomically replace a file:// artifact; HTTP uploads are a documented TODO."""
+_UPLOAD_ATTEMPTS = 4
+_UPLOAD_RETRY_DELAY_SECONDS = 2.0
+
+
+def atomic_write_uri(
+    uri: str,
+    data: bytes,
+    *,
+    retry_delay_seconds: float = _UPLOAD_RETRY_DELAY_SECONDS,
+) -> None:
+    """Publish an artifact: atomic replace for file://, PUT for http(s)://.
+
+    HTTP uploads retry transient failures (connection errors and 5xx) with a
+    linear backoff; 4xx responses fail fast — the platform handed us a URI the
+    server rejects, and retrying cannot fix a client error.
+    """
 
     parsed = urlsplit(uri)
     if parsed.scheme in {"http", "https"}:
-        raise NotImplementedError("TODO: HTTP(S) artifact uploads aren't implemented")
+        _put_with_retries(uri, data, retry_delay_seconds=retry_delay_seconds)
+        return
     path = _file_uri_path(uri)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary_path: Path | None = None
@@ -428,6 +444,39 @@ def atomic_write_uri(uri: str, data: bytes) -> None:
     finally:
         if temporary_path is not None and temporary_path.exists():
             temporary_path.unlink()
+
+
+def _put_with_retries(uri: str, data: bytes, *, retry_delay_seconds: float) -> None:
+    last_error: Exception | None = None
+    for attempt in range(1, _UPLOAD_ATTEMPTS + 1):
+        try:
+            request = UploadRequest(
+                uri,
+                data=data,
+                method="PUT",
+                headers={"Content-Type": "application/octet-stream"},
+            )
+            with urlopen(request, timeout=60):  # noqa: S310 - platform-provided URI.
+                return  # urlopen raises on any non-success status
+        except HTTPError as error:
+            if 400 <= error.code < 500:
+                raise RuntimeError(
+                    f"artifact upload to {uri} rejected with HTTP {error.code}"
+                ) from error
+            last_error = error
+        except (URLError, OSError, TimeoutError) as error:
+            last_error = error
+        if attempt < _UPLOAD_ATTEMPTS:
+            _log(
+                "artifact_upload_retry",
+                uri=uri,
+                attempt=attempt,
+                error=str(last_error),
+            )
+            sleep(retry_delay_seconds * attempt)
+    raise RuntimeError(
+        f"artifact upload to {uri} failed after {_UPLOAD_ATTEMPTS} attempts: {last_error}"
+    )
 
 
 def ensure_python_hash_seed() -> None:
