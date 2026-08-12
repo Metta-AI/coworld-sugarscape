@@ -38,6 +38,150 @@ two-axis interpolation, agents as plain filled circles coloured red-then-blue by
 decision model. Served document went 738 KB → ~138 KB; there is no image
 pipeline at all. Details and the corrected art-direction lock: `docs/replay-brief.md` §0c.
 
+## The world is sugar AND spice, on the oracle's own peaks (owner call, 2026-08-05)
+
+*"Where's the spice?"* — James, on the team screen. Settled: there is supposed to
+be both. This section previously argued the opposite; read the reversal before
+re-litigating it.
+
+**What the earlier reasoning got right.** Turning spice on does tile the plate.
+Sugar and spice on crossed diagonals leave **1.2% of cells bare** against 27.6%
+for sugar alone — on the 50x50 grid and on any other. That measurement stands.
+
+**What it got wrong.** It read "no bare ground" as "no mountains" and switched the
+second resource off to get bare ground back. The massifs were never missing —
+they are HEIGHT, not presence. Dump frame 0 and the field is a textbook
+Sugarscape landscape: cells ramping 1→4 around each of four peaks, with each
+resource's own bare ground sitting exactly where the other one's mountain is.
+Nothing was wrong with the world. What was wrong was the **board**, and it was
+measurable: sampling the rendered plate cell by cell against the frame it was
+drawn from, one unit of sugar to the next moved mean luminance by 4–9 values
+(**1.06:1 to 1.13:1**, where a non-text graphic needs 3:1), while the scatter
+WITHIN a single level was 7–13. The encoding was quieter than its own noise —
+gap/σ of 0.32 to 0.92 — so a 1-cell and a 4-cell were not distinguishable and
+four mountains printed as an even speckle. Grain density saturates: past the
+first unit each new grain lands on sand that is already lit.
+
+**So the fix is in the renderer, not the config.** `paintHeightWash` puts the sand
+on a deterministic wash — one source pixel per cell, blended off the plate toward
+each resource's hue in proportion to what the cell holds, upscaled smoothed so
+the field interpolates between cell centres instead of terracing into squares. It
+is gui.py's two-axis ramp restored as a floor UNDER the sand, so the grains keep
+texture and the harvest animation and stop having to carry depth alone. Measured
+after: adjacent levels 1.19–1.26:1 at gap/σ 1.0–3.9, bare→full 2.20:1 for sugar.
+`WASH_GAIN` is set at 0.16 by the settlers rather than by the terrain — a seat
+colour is ~115 inside a C.ink ring, and the brightest joint cell has to stay
+clearly under it.
+
+`config.json` now omits every SUGAR key — the oracle's command-line defaults
+already equal what `reference/dtl-python/config.json` ships, so restating them
+could only drift — and states the five SPICE keys, which those defaults would
+otherwise zero. The reference is documented to run `python sugarscape.py --conf
+config.json`, and that file has maxSpice 4, regrow 1, metabolism [1,4], starting
+[10,40], peaks (15,15) and (35,35). Two keys stay at the CLI default on purpose:
+`timesteps` 200 (episode length is a Coworld call) and `agentMaxAge` [-1,-1]. This
+is a variant of the reference world, not a restatement of it, and the manifest
+description says exactly that.
+
+**It is also the better match.** The sugar-only recording had ZERO lead changes —
+the one beat this broadcast exists to catch never happened in its own reference
+data, so every path to it was exercised only by the test suite. With spice:
+three, at t9, t10 and t12. Two metabolisms also make the die-off real (164 of 250,
+half of them by t16) and put 69 of those deaths on spice alone, so the second
+resource is load-bearing rather than decorative.
+
+If you ever need TIGHTER mountains, the lever is peak POSITION —
+`radialDispersion` scales with `max(px, W-px)`, so peaks nearer the centre make
+tighter ones (32x32 at 14/18 instead of 10/22 measures 37.8% bare with both
+resources present). The generator is not the lever: `sugarRadiusScale` is
+hardcoded upstream and the byte-parity suites pin it.
+
+The replay is 10 MB (201 frames x 2,500 cells). Under the 300-frame live backlog
+cap, but worth knowing before adding frames.
+
+## The lead plot diverges, and its band is stacked (owner call, 2026-08-05)
+
+*"The lead should be blue on one side and red on the other, not both on the same
+side."* — James. This plot has now been changed in both directions, so the
+reasoning on each side is worth keeping.
+
+**It was diverging, then it wasn't.** Commit 47924ab moved it to plot the
+ABSOLUTE lead always upward, on the argument that a viewer applying the
+near-universal "up is winning" would see a descending band contradict the
+scoreboard. Real, but it costs more than it buys: with both spells drawn upward,
+SIDE carries nothing and the whole question of who leads rests on telling two
+hues apart. Diverging gives it a second, redundant channel, which is what a
+colour-blind viewer or a compressed stream has left when hue fails. The old
+objection is answered by NAMING THE POLES — each half carries its population's
+dot and name — so "up" decodes as "A" rather than as "good". Do not undo that
+half of it: without the pole labels the original objection comes straight back.
+
+**The scale is symmetric and that is not free.** A peaks at +4,254 and B at only
+201, so B's spells are genuinely thin. That is the episode being lopsided, not
+the axis lying about it; scaling each half to its own maximum would draw a 201
+lead at the same height as a 4,254 one. The crossings stay legible because the
+line changes side AND colour at the same point, with the gold dashed rules on top.
+
+**The band is stacked by resource**, spice against the line and sugar outside it
+(owner call, flipped from sugar-first). Height is still the true lead, but the
+seam says what the lead is MADE of, which is a different fact: on the shipped
+recording A's lead is 99% sugar at t25 and 54% by t200, and on 9.5% of timesteps
+the two resources favour different populations. The denser tone is always the
+INNER band — that is a property of the stack, not of a resource — so if the two
+are ever swapped again, `along("spice")` and the key's label list are the two
+places that move together. When the resources disagree the outer band folds back
+across the line; that is the fact rather than a fault, since ink on a side is
+that side's advantage whichever band it belongs to.
+
+**Cut at the midline with a clipPath**, not by segmenting at the crossings: a
+spell that changes hands does so BETWEEN two plotted points, and the clip finds
+that intersection exactly and for free. Each band and the lead stroke are drawn
+twice, once into each half.
+
+Pinned in `tools/test_viewer.mjs`: one band per resource per side, the upper half
+only ever seat 0's colour and the lower only seat 1's, both poles named, the two
+shades keyed, the caption inside the plot, and the inner band tracing the SPICE
+lead — that last one read off the geometry, because renaming assertions when the
+two were swapped would otherwise have proved nothing. Every one was
+mutation-tested against the regression it guards.
+
+## The die-off is a line now, not a banner (owner call, 2026-07-30)
+
+*"Instead of DIE OFF being this flashing banner every tick that covers the middle
+of the game, why not just make it a population line chart by the lead-in-sugar
+chart that updates tick by tick."*
+
+Done, in `viewer/broadcast.js`:
+
+- `onFrameEntered` queues a beat for a **lead change only**. The `count >= 3`
+  death branch is gone, and `stinger()` no longer has a die-off variant. On the
+  shipped config a die-off clears three settlers most timesteps, so the plate was
+  up more often than it was down, over the one surface the broadcast is about.
+- `settlerStrip()` is the replacement: one line per population, on the SAME time
+  axis as the lead band directly above it, so a collapse and the lead it cost sit
+  on the same vertical. Scaled 0 → the largest headcount any one population has
+  held (not `startingPopulation`: reproduction climbs past it and a late joiner
+  never saw it).
+- The race panel carries both plots. Sparse pays for it with 78 units off the
+  emergence panel, which still clears the 235 its two stacked readouts need.
+  **Dense cannot pay** — at 194 units emergence is exactly its own content — so at
+  the embed floor the strip is carved out of the lead plot and the panel keeps its
+  height. The gap between the plots is one caption tall at either ramp, and the
+  strip drops its "0" at the floor where two 34-unit gutter figures filled the
+  76-unit plot they were scaling.
+- `headCounts()` sets each population's live figure beside its head dot, in that
+  seat's lifted `text` colour: two populations dying at the same rate draw two
+  lines on top of each other, so the shape alone cannot say which is which. The
+  figures sit AFTER the head, in the stretch of axis the episode has not reached,
+  and flip in front of it at the end; heads at nearly the same value are pushed
+  apart from the top down. Dropped entirely when the stack cannot span the plot
+  — the sixteen-population case the manifest permits.
+- Pinned by `tools/test_viewer.mjs`: deaths queue nothing, a lead change still
+  raises LEAD CHANGE, the strip is labelled, it carries one point per population
+  per timestep delivered, each head carries its own figure, the figure flips at
+  the end of the axis, and sixteen of them are dropped rather than piled up.
+  `DIE-OFF` may not appear in the document.
+
 ## Two sessions are working this branch — read this before touching the plate
 
 The owner has two sessions open on this worktree at once. Both are editing

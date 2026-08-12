@@ -1,6 +1,10 @@
 {
   "$schema": "https://raw.githubusercontent.com/Metta-AI/metta/main/packages/coworld/src/coworld/coworld_manifest_schema.json",
-  "tags": ["agent-based-model", "economics", "population-policy"],
+  "tags": [
+    "agent-based-model",
+    "economics",
+    "population-policy"
+  ],
   "game": {
     "name": "sugarscape",
     "version": "0.1.0",
@@ -10,14 +14,21 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
       "additionalProperties": true,
-      "required": ["tokens", "players", "slots"],
+      "required": [
+        "tokens",
+        "players",
+        "slots"
+      ],
       "properties": {
         "tokens": {
           "description": "One authenticated WebSocket token per population slot.",
           "type": "array",
           "minItems": 1,
           "maxItems": 16,
-          "items": {"type": "string", "minLength": 1}
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
         },
         "players": {
           "description": "Display names indexed by population slot.",
@@ -27,9 +38,14 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["name"],
+            "required": [
+              "name"
+            ],
             "properties": {
-              "name": {"type": "string", "minLength": 1}
+              "name": {
+                "type": "string",
+                "minLength": 1
+              }
             }
           }
         },
@@ -41,13 +57,20 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["decisionModels"],
+            "required": [
+              "decisionModels"
+            ],
             "properties": {
-              "token": {"type": "string"},
+              "token": {
+                "type": "string"
+              },
               "decisionModels": {
                 "type": "array",
                 "minItems": 1,
-                "items": {"type": "string", "minLength": 1}
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
               }
             }
           }
@@ -71,7 +94,10 @@
         "agentDecisionModels": {
           "type": "array",
           "minItems": 1,
-          "items": {"type": "string", "minLength": 1}
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
         },
         "decisionTimeoutMs": {
           "type": "integer",
@@ -94,22 +120,31 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
       "additionalProperties": true,
-      "required": ["names", "scores"],
+      "required": [
+        "names",
+        "scores"
+      ],
       "properties": {
         "names": {
           "type": "array",
-          "items": {"type": "string"}
+          "items": {
+            "type": "string"
+          }
         },
         "scores": {
           "type": "array",
-          "items": {"type": "number"}
+          "items": {
+            "type": "number"
+          }
         }
       }
     },
     "runnable": {
       "type": "game",
       "image": "{{GAME_IMAGE}}",
-      "run": ["/bin/sugarscape_coworld"],
+      "run": [
+        "/bin/sugarscape_coworld"
+      ],
       "source_url": "https://github.com/Metta-AI/coworld-sugarscape/tree/main"
     },
     "protocols": {
@@ -147,7 +182,9 @@
       "type": "player",
       "description": "Reference population policy that selects the DTL-compatible greedy-best candidate.",
       "image": "{{PLAYER_IMAGE}}",
-      "run": ["/bin/sugarscape_greedy"],
+      "run": [
+        "/bin/sugarscape_greedy"
+      ],
       "source_url": "https://github.com/Metta-AI/coworld-sugarscape/tree/main/players/greedy"
     }
   ],
@@ -155,42 +192,55 @@
     {
       "id": "default",
       "name": "Two-population Sugarscape",
-      "description": "Two policy populations share a 32 by 32 sugar-and-spice world for 100 timesteps. Two sugar mountains lie on one diagonal and two spice mountains on the other, so neither resource can be held from a single position.",
+      "description": "Two policy populations share the pinned DTL Sugarscape: a 50 by 50 lattice, 250 settlers, 200 timesteps, and four resource mountains \u2014 sugar at (15,35) and (35,15), spice on the opposite diagonal at (15,15) and (35,35). Every settler carries a sugar metabolism and a spice metabolism and burns both every timestep, so neither resource can be held from a single position. The sugar half of the world is left unconfigured and takes the oracle's own defaults; the spice half is set to the values reference/dtl-python/config.json ships, which the command-line defaults would otherwise zero out. The only thing the two policies can do is choose where their settlers move; the native rules do the rest.",
       "game_config": {
         "seed": -1,
-        "timesteps": 100,
-        "startingAgents": 64,
-        "environmentWidth": 32,
-        "environmentHeight": 32,
-        "environmentMaxSugar": 4,
         "environmentMaxSpice": 4,
-        "environmentSugarRegrowRate": 1,
         "environmentSpiceRegrowRate": 1,
-        "environmentSugarPeaks": [[22, 10, 4], [10, 22, 4]],
-        "environmentSpicePeaks": [[10, 10, 4], [22, 22, 4]],
-        "agentSugarMetabolism": [1, 4],
+        "environmentSpicePeaks": [
+          [15, 15, 4],
+          [35, 35, 4]
+        ],
         "agentSpiceMetabolism": [1, 4],
-        "agentStartingSugar": [10, 40],
         "agentStartingSpice": [10, 40],
-        "agentDecisionModels": ["population-a", "population-b"],
+        "agentDecisionModels": [
+          "population-a",
+          "population-b"
+        ],
         "connectionWaitMs": 5000,
         "decisionTimeoutMs": 100,
         "frameInterval": 1,
         "players": [
-          {"name": "Population A"},
-          {"name": "Population B"}
+          {
+            "name": "Population A"
+          },
+          {
+            "name": "Population B"
+          }
         ],
         "slots": [
-          {"decisionModels": ["population-a"]},
-          {"decisionModels": ["population-b"]}
+          {
+            "decisionModels": [
+              "population-a"
+            ]
+          },
+          {
+            "decisionModels": [
+              "population-b"
+            ]
+          }
         ]
       }
     }
   ],
   "certification": {
     "players": [
-      {"player_id": "greedy"},
-      {"player_id": "greedy"}
+      {
+        "player_id": "greedy"
+      },
+      {
+        "player_id": "greedy"
+      }
     ],
     "game_config": {
       "seed": 24680,
@@ -198,16 +248,31 @@
       "startingAgents": 16,
       "environmentWidth": 16,
       "environmentHeight": 16,
-      "agentDecisionModels": ["population-a", "population-b"],
+      "agentDecisionModels": [
+        "population-a",
+        "population-b"
+      ],
       "connectionWaitMs": 5000,
       "decisionTimeoutMs": 100,
       "players": [
-        {"name": "Population A"},
-        {"name": "Population B"}
+        {
+          "name": "Population A"
+        },
+        {
+          "name": "Population B"
+        }
       ],
       "slots": [
-        {"decisionModels": ["population-a"]},
-        {"decisionModels": ["population-b"]}
+        {
+          "decisionModels": [
+            "population-a"
+          ]
+        },
+        {
+          "decisionModels": [
+            "population-b"
+          ]
+        }
       ]
     }
   },

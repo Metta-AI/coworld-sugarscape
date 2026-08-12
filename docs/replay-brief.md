@@ -44,45 +44,47 @@ a concrete bar rather than a vibe.
 | Choreography | walk-in → work → fly-home arc → gain pop → spotlight, effect-on-arrival (`revealDelayMs`) | settlers interpolate between timesteps (they jump several cells, so without it they teleport); a starving settler goes hollow before it dies; death leaves an expanding ring |
 | Timing levers | `animFactor = max(1/speed, 1/2)`; `turnDwellMs = max(BASE/speed, beat)`, `BASE_TURN_MS=2600`, `READ_PAUSE=600` | same two levers, ported: motion capped at 3× real time (`ANIM_MAX`), frame dwell floored to the walk length |
 | Ambient life | ~8 desynced loops (bob, roam, sway, smoke, glow, pulse), all `/ var(--speed)`, all killed by `prefers-reduced-motion` | **none, deliberately** — the lattice is a scientific plate and idle motion on it is noise; the movement in this game is the swarm itself |
-| Beat FX | ~10 keyframes (`chip-pop`, `gain-pop`, `curtain`, `roundbeat`, `endcard`, `stamp-pop`…), all `calc(Xs / var(--beat-speed,1))` | lead-change stinger, die-off callout, hold-on end card — speed-aware, in a beats layer kept SEPARATE from the standings layer so rebuilding one never restarts the other's animation |
+| Beat FX | ~10 keyframes (`chip-pop`, `gain-pop`, `curtain`, `roundbeat`, `endcard`, `stamp-pop`…), all `calc(Xs / var(--beat-speed,1))` | lead-change stinger and hold-on end card — speed-aware, in a beats layer kept SEPARATE from the standings layer so rebuilding one never restarts the other's animation. A die-off used to raise the same plate over the board whenever three settlers went at once; on the shipped config that is most timesteps, so it is a LINE now — the settler strip under the lead band (`settlerStrip`) — and only a lead change interrupts |
 
 ## 0 — The replay brief (each bullet traced to engine truth)
 
-Recorded episode: 32×32, 100 timesteps, 64 agents, two policy populations, sugar AND
-spice. **Re-measured against `.build/replay.json` after the shipped variant changed.**
-An earlier revision of this section described the single-resource world the variant used
-to run, and every figure in it was wrong once `config.json` gained spice and grid-scaled
-peaks — under a heading promising each bullet was traced to a recording. The numbers below
-were recomputed from all 101 frames of the current one.
+Recorded episode: 50×50, 200 timesteps, 250 settlers, two policy populations, sugar AND
+spice. **Re-measured against `.build/replay.spice.json`, all 201 frames.** This section
+has now been wrong twice for the same reason — it was written against one recording and
+left standing when the shipped variant changed under it, under a heading promising every
+bullet was traced to a recording. It described a 32×32 sugar-and-spice world, then that
+world was replaced by the 50×50 sugar-only one, and spice has since been restored on the
+oracle's own peaks. **If you change `config.json`, re-run these numbers or delete them.**
 
 1. **Standing axis — total living wealth (sugar + spice) per population.**
    `coworld.nim buildResults` scores `int(totalWealth)` over each slot's living agents,
-   and `docs/coworld-protocol.md` confirms it. **Running ≠ win:** population count is the
-   visible race (20 v 20 at the end) but the SCORE is wealth (5,994 v 4,894). The scorebug
-   goes on wealth; population rides as the secondary figure.
+   and `docs/coworld-protocol.md` confirms it. **Running ≠ win** is not academic here:
+   A ends with 54 settlers to B's 32 AND the higher score (19,033 v 14,779), but the two
+   figures move independently through the episode. The scorebug goes on wealth; population
+   rides as the secondary figure and as the settler strip.
 2. **Dramatic beats**, ranked by what actually happened in the recording:
-   - **Starvation deaths — the crush.** 24 of 64 agents die, all starvation (diffed
-     frame-to-frame; `stats.agentStarvationDeaths` confirms the cause). They fall on 21
-     separate timesteps between t6 and t75, 13 of them by t40, and never more than two in
-     one timestep. That shape is why the feed folds: a raw row per beat is 21 rows of
-     "1 settler starved", and the drama is the accumulation, not any single one.
-   - **Lead changes — the race.** **Zero.** B leads from t0 and never gives it up, closing
-     1,100 ahead (18.4%). No frame is tied. This matters for the design more than it looks:
-     the beat the broadcast is built to catch does not occur in the reference recording, so
-     every lead-change path — the stinger, the transport's gold marks, the chart's spell
-     bands, the end card's "won from behind" arc — is exercised only by the test suite.
-   - **The migration.** Agents converge on the resource. Sugar and spice sit on CROSSED
-     diagonals (`environmentSugarPeaks` `[[22,10,4],[10,22,4]]`, `environmentSpicePeaks`
-     `[[10,10,4],[22,22,4]]`), so a settler needing both cannot camp on one summit. This is
-     the iconic Sugarscape image and it is what the board must show.
-   - **Emergent selection.** Survivors have better vision (3.60 v 3.17) and markedly lower
-     metabolism (sugar 2.15 v 3.08, spice 2.10 v 3.17) than the dead, measured on their t0
-     endowments. Nobody programmed that — it emerges.
-   - **Inequality.** Gini climbs 0.140 → 0.299 at its peak and settles at 0.267; final
-     wealth spread 8 → 517, top five agents hold 21%. The founding result of the model.
-     Note the shipped world lands BELOW the viewer's 0.28 "richest hold most" threshold at
-     the buzzer, so the end card's spread sentence reads "spread fairly evenly" — correct,
-     and a reminder that those thresholds are the viewer's editorial line, not the engine's.
+   - **Starvation deaths — the crush.** 164 of 250 settlers die, all starvation (diffed
+     frame-to-frame; `stats.agentStarvationDeaths` matches the disappearances exactly on
+     all 58 timesteps that carry one, and no other cause ever fires). They fall between t3
+     and t177, half of them by t16, and up to 10 in a single timestep. That front-loaded
+     shape is why the feed folds: the drama is the accumulation, not any single row.
+   - **Lead changes — the race. Three**, at t9, t10 and t12, with A holding it from t12 to
+     the buzzer and closing 4,254 ahead (28.8%). No frame is tied. This is new: the
+     sugar-only recording this replaced had ZERO, so every lead-change path — the stinger,
+     the transport's gold marks, the chart's spell bands, the end card's "won from behind"
+     arc — was exercised only by the test suite. Restoring the second resource gave the
+     broadcast the one beat it is built to catch.
+   - **The migration.** Settlers converge on the resource. Sugar and spice sit on CROSSED
+     diagonals (`environmentSugarPeaks` `[[15,35,4],[35,15,4]]`, `environmentSpicePeaks`
+     `[[15,15,4],[35,35,4]]` — the oracle's own), so a settler needing both cannot camp on
+     one summit. This is the iconic Sugarscape image and it is what the board must show.
+   - **Emergent selection.** Survivors have better vision (3.85 v 3.29) and markedly lower
+     metabolism on BOTH resources (sugar 1.81 v 2.85, spice 1.84 v 2.84) than the dead,
+     measured on their t0 endowments. Nobody programmed that — it emerges.
+   - **Inequality.** Gini climbs 0.132 at t0 → 0.287 at the buzzer. The founding result of
+     the model. Note it lands just above the viewer's 0.28 "richest hold most" threshold,
+     having sat below it for most of the episode — a reminder that those thresholds are
+     the viewer's editorial line, not the engine's.
 3. **Board — a single shared 32×32 lattice.** `environment.nim cellId = x * height + y`
    (column-major; the incumbent viewer decodes this correctly). Cells carry
    `[sugar, spice, pollution]`. Both resources peak at 4; 868 of 1,024 cells carry spice at

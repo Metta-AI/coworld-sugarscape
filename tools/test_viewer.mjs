@@ -34,6 +34,9 @@ const gradient = { addColorStop() {} };
 const pattern = { setTransform() {} };
 const canvasContext = new Proxy({
   createRadialGradient: () => gradient,
+  // The grain tiles are feathered with a pair of linear ramps at build time, so
+  // this one is reached by buildGrainSheet rather than only by a draw call.
+  createLinearGradient: () => gradient,
   createPattern: () => pattern,
   createImageData: (width, height) => ({ data: new Uint8ClampedArray(width * height * 4) }),
   measureText: () => ({ width: 0 }),
@@ -115,6 +118,9 @@ const viewerContext = vm.createContext({
     querySelector: (selector) => elementFor(selector.replace(/^#/, "")),
     activeElement: null,
     body: null,
+    // layoutStage publishes the live board width to the stylesheet through a
+    // custom property, so the transport lane can follow a board that moves.
+    documentElement: fakeElement("documentElement"),
   },
   // The sandbox exercises the pure model; setInterval is stubbed out below so
   // playback never starts.
@@ -326,6 +332,110 @@ for (const seats of [1, 2, 3, 5, 16]) {
   assert.ok(standing > 0, `${seats} populations must render a standings overlay`);
   assert.ok(beats > 0, `${seats} populations must render an end card`);
 }
+
+/* NO beat plate covers the board. Every beat is a LINE, a row or a marker.
+ *
+ * Two plates died the same death. The die-off went first: it dropped across the
+ * middle of the board for two seconds whenever three settlers went at once,
+ * which on the shipped config is most timesteps. The LEAD CHANGE plate outlived
+ * it and then failed the same test — owner call, on a plate covering roughly a
+ * third of the lattice.
+ *
+ * Neither reading was lost with its plate, and that is what makes the removal
+ * safe rather than merely quieter: a lead change is still a marked step in the
+ * lead band, a "takes the lead" row in the feed, the running count over the race
+ * panel and a clause on the end card. This pins all of it — that neither kind of
+ * event queues a beat, that no plate text survives in the document, that the
+ * end card still renders, and that the strip carries one point per timestep. */
+assert.doesNotMatch(viewerHtml, /DIE-OFF/,
+  "no die-off plate may survive anywhere in the served document");
+assert.doesNotMatch(viewerHtml, /LEAD CHANGE/,
+  "no lead-change plate may survive anywhere in the served document");
+assert.doesNotMatch(viewerHtml, /moves ahead by/,
+  "nor the plate's detail line");
+
+const dieOff = JSON.parse(vm.runInContext(`
+  (() => {
+    const at = (id, slot, cell, sugar) => (${settler.toString()})(id, slot, cell, sugar);
+    resetStream();
+    const open = ${sandboxFrame(0, [])};
+    open.agents = [at(1, 0, 0, 10), at(2, 0, 1, 10), at(3, 0, 2, 10), at(4, 1, 3, 4)];
+    recordFrame(open);
+    // Three of Alpha's four settlers go at once - the old die-off threshold.
+    const cull = ${sandboxFrame(1, [])};
+    cull.agents = [at(1, 0, 0, 11), at(4, 1, 3, 5)];
+    recordFrame(cull);
+    onFrameEntered(1, 0);
+    // beatsSignature short-circuits a repaint that would not change anything, so
+    // clear it or the second read below returns the first read's markup.
+    beatsSignature = "";
+    drawBeats(frames[1]);
+    const afterDeaths = beatsLayer.innerHTML;
+    // And now Beta overtakes, which used to earn the surviving plate.
+    const overtake = ${sandboxFrame(2, [])};
+    overtake.agents = [at(1, 0, 0, 11), at(4, 1, 3, 90)];
+    recordFrame(overtake);
+    onFrameEntered(2, 0);
+    beatsSignature = "";
+    drawBeats(frames[2]);
+    const afterLead = beatsLayer.innerHTML;
+    // The overtake must still be RECORDED even though it no longer interrupts -
+    // this is what the lead band, the feed row and the end card's clause read.
+    const leadsRecorded = events.filter((event) => event.kind === "lead").length;
+    const deathsRecorded = events.filter((event) => event.kind === "death").length;
+    // The strip itself, at two timesteps, against a scale of its own.
+    const strip = (until, at = (t) => t) => settlerStrip(frames[until], {
+      big: false, left: 0, plotW: 100, scaleX: at, scheduled: 40, footY: 60,
+      top: 0, height: 50,
+      visible: wealthSeries.filter((point) => point.timestep <= until),
+    });
+    const pointsIn = (markup) => (markup.match(/points="[^"]*"/g) || [])
+      .map((run) => run.split(" ").length);
+    drawHud(frames[1], 1);
+    return JSON.stringify({
+      afterDeaths, afterLead, leadsRecorded, deathsRecorded,
+      railNamesTheStrip: /settlers alive/.test(standingsLayer.innerHTML),
+      atFirst: pointsIn(strip(0)),
+      atThird: pointsIn(strip(2)),
+      labelled: /settlers alive/.test(strip(2)),
+      // Alpha opens with three settlers and Beta with one, so each head must
+      // carry its OWN figure - set after the head while the episode still has
+      // axis to run, and flipped in front of it once the head reaches the end.
+      // (The ">3<" set to the end is the cap in the gutter, hence the "1" here.)
+      headsAfter: /text-anchor="start"[^>]*>3</.test(strip(0))
+        && /text-anchor="start"[^>]*>1</.test(strip(0)),
+      headsFlipped: /text-anchor="end"[^>]*>1</.test(strip(0, () => 100)),
+      // Sixteen populations cannot carry sixteen figures in a strip this short.
+      crowded: /text-anchor="start"[^>]*>1</.test(settlerStrip(
+        { slots: Array.from({ length: 16 }, (_, index) => ({ name: \`P\${index}\` })) },
+        {
+          big: false, left: 0, plotW: 100, scaleX: (t) => t, scheduled: 40, footY: 60,
+          top: 0, height: 50,
+          visible: [{ timestep: 0, population: Array.from({ length: 16 }, () => 1) }],
+        },
+      )),
+    });
+  })()
+`, viewerContext));
+assert.equal(dieOff.afterDeaths, "",
+  "three settlers lost in one timestep must put nothing over the board");
+assert.equal(dieOff.afterLead, "",
+  "and neither may a lead change - no beat plate covers the lattice mid-episode");
+// The half that makes the removal safe: the events are still there to be read,
+// they are just read off the band, the feed and the end card instead of a plate.
+assert.equal(dieOff.leadsRecorded, 1, "the overtake must still be recorded as a lead change");
+assert.ok(dieOff.deathsRecorded > 0, "and the cull as deaths");
+assert.ok(dieOff.railNamesTheStrip, "the race panel must name its headcount plot");
+assert.ok(dieOff.labelled, "and the strip must carry that label itself");
+// One line per population, one point per timestep delivered - which is what
+// "updates tick by tick" has to mean for a chart that replaced a per-tick banner.
+assert.deepEqual(dieOff.atFirst, [1, 1], "one point per population at the first frame");
+assert.deepEqual(dieOff.atThird, [3, 3], "and one more on every timestep after it");
+assert.ok(dieOff.headsAfter, "every head must carry its population's own live count");
+assert.ok(dieOff.headsFlipped,
+  "and set it in front of the head once there is no axis left to set it after");
+assert.ok(!dieOff.crowded,
+  "sixteen figures may not pile up in a strip that cannot separate them");
 
 // The playback engine itself: nothing used to drive tick(), which is where the
 // end-card off-by-one lived.
@@ -545,42 +655,50 @@ assert.equal(settle.cut, 1, "a scrub, a step or a pause cuts straight to the sta
 assert.ok(settle.withinDwell,
   "a dissolve must finish inside one dwell, or the next harvest cuts it off");
 
-/* THE SAND KEEPS ITS OWN CLOCK.
+/* THE SAND KEEPS ITS OWN CLOCK, AND IT RUNS CONTINUOUSLY.
  *
- * The stir is the wind, not the replay. It goes on blowing while the transport is
- * paused, it does NOT speed up when playback does — every other motion on this
+ * The drift is the wind, not the replay. It goes on blowing while the transport
+ * is paused, it does NOT speed up when playback does — every other motion on this
  * stage is scaled by animFactor and this one must not be, or the world would look
  * windier at 4x — and it stops dead for a viewer who asked for reduced motion,
- * which also stops the plate being repainted at all. */
-const stir = JSON.parse(vm.runInContext(`
+ * which also stops the plate being repainted at all.
+ *
+ * And it is a CLOCK, not a frame counter. Two earlier versions baked the motion
+ * into a strip of phases and stepped through it, which is why this reads the way
+ * it does now: a baked loop cannot be slowed without holding each frame longer,
+ * so slower and smoother fought each other, and every cell took its step on the
+ * same instant, which is a strobe rather than a drift. */
+const drift = JSON.parse(vm.runInContext(`
   fireMotionChange(false);
-  const step = GRAIN_PERIOD_MS / GRAIN_PHASES;
   state.speed = 1;
-  const one = stirAt(step) - stirAt(0);
-  const part = stirAt(step * 0.4) - stirAt(0);
-  const loop = stirAt(GRAIN_PERIOD_MS) - stirAt(0);
+  const beat = driftAt(GRAIN_TICK_MS * 4) - driftAt(0);
+  const within = driftAt(GRAIN_TICK_MS * 0.3) - driftAt(0);
   state.speed = 4;
-  const fast = stirAt(step) - stirAt(0);
+  const fast = driftAt(GRAIN_TICK_MS * 4) - driftAt(0);
   state.speed = 1;
   fireMotionChange(true);
-  const reduced = [stirAt(0), stirAt(step * 7), stirAt(GRAIN_PERIOD_MS * 3)];
+  const reduced = [driftAt(0), driftAt(GRAIN_TICK_MS * 7), driftAt(90000)];
   fireMotionChange(false);
-  JSON.stringify({ one, part, loop, fast, reduced, phases: GRAIN_PHASES });
+  JSON.stringify({ beat, within, fast, reduced, tick: GRAIN_TICK_MS, rate: GRAIN_DRIFT_RATE });
 `, viewerContext));
-assert.equal(stir.one, 1, "one step of the clock is one frame of the loop");
-assert.equal(stir.part, 0, "and part of a step is none of one");
-assert.equal(stir.loop, stir.phases, "a period is exactly one time round");
-assert.equal(stir.fast, 1, "the wind does not blow harder at 4x; it is not the clock");
-assert.deepEqual(stir.reduced, [0, 0, 0],
+assert.equal(drift.beat, drift.tick * 4, "the clock is real time, not a frame index");
+assert.equal(drift.within, 0, "quantised to the repaint beat, so a tick is not wasted");
+assert.equal(drift.fast, drift.tick * 4, "the wind does not blow harder at 4x; it is not the clock");
+assert.deepEqual(drift.reduced, [0, 0, 0],
   "reduced motion freezes the sand, which also stops the plate being repainted");
+// The point of the whole rewrite: one repaint must move a grain far less than a
+// pixel, or it is a step and not a drift. Peak speed of a sine of amplitude A and
+// rate w is A*w, and the tile drifts by at most `float` = 0.05 of a cell.
+const perBeat = 0.05 * 38 * (drift.rate * 1.38) * (drift.tick / 1000);
+assert.ok(perBeat < 0.1,
+  `a repaint must move a grain a small fraction of a pixel, got ${perBeat.toFixed(4)}`);
 
 /* `?stir=off` holds the sand still so the two motions on this plate can be told
  * apart — the wind, which never stops, and the harvest, which is the resource
  * changing hands. Nobody can answer "does the board still flicker?" while both
  * are running. Default is ON: a viewer who does not ask gets the sand blowing. */
 const switched = JSON.parse(vm.runInContext(`
-  const onByDefault = stirAt((GRAIN_PERIOD_MS / GRAIN_PHASES) * 5) !== stirAt(0);
-  JSON.stringify({ onByDefault, wanted: stirWanted });
+  JSON.stringify({ onByDefault: driftAt(GRAIN_TICK_MS * 5) !== driftAt(0), wanted: stirWanted });
 `, viewerContext));
 assert.ok(switched.onByDefault, "with no query the sand blows");
 assert.ok(switched.wanted, "and the switch reads as on");
@@ -589,69 +707,122 @@ assert.ok(switched.wanted, "and the switch reads as on");
 assert.equal(new URLSearchParams("?stir=off").get("stir") !== "off", false,
   "?stir=off is what holds the sand still");
 
-/* THE CELLS BLEED INTO EACH OTHER.
+/* EVERY (CELL, LAYER) DRIFTS ON ITS OWN PATH.
  *
- * Two earlier attempts at containing the orbit are worth keeping on the record.
- * Insetting the homes so no grain could reach an edge printed a two-pixel dark
- * gutter around all 1,024 cells — the woven-mesh artefact the sand cloud exists
- * to avoid. Wrapping the cell as a torus fixed the gutter and kept density flat
- * across the boundary, but nothing ever CROSSED one, so every cell stayed a
- * closed box and the lattice could still be read off the plate.
+ * A tile moved as one rigid thing is a raft, and a plate of rafts rocking is what
+ * the first attempt at this looked like. So the cloud is cut into GRAIN_LAYERS
+ * interleaved by grain index, each drifting separately — and the paths are per
+ * CELL as well as per layer, or every layer would march across the board in step.
+ * The two rates of a path are never equal, so x and y never come back into phase
+ * and the path never closes. */
+const paths = JSON.parse(vm.runInContext(`
+  buildGrainDrift(64);
+  const slots = 64 * GRAIN_LAYERS;
+  const keys = new Set();
+  let closed = 0;
+  for (let slot = 0; slot < slots; slot += 1) {
+    keys.add(grainDrift.phaseX[slot] + ":" + grainDrift.phaseY[slot]
+      + ":" + grainDrift.rateX[slot] + ":" + grainDrift.rateY[slot]);
+    if (grainDrift.rateX[slot] === grainDrift.rateY[slot]) closed += 1;
+  }
+  JSON.stringify({
+    layers: GRAIN_LAYERS,
+    slots,
+    distinct: keys.size,
+    closed,
+    interleaved: [0, 1, 2, 3, 4, 5].map((index) => grainLayer(index)),
+    sipsSpread: [0, 1, 2, 3].map((sip) =>
+      Array.from({ length: 64 }, (unused, index) => index)
+        .filter((index) => grainSip(index) === sip).length),
+  });
+`, viewerContext));
+assert.ok(paths.layers >= 3, `a cell needs several independent drifts, got ${paths.layers}`);
+assert.equal(paths.distinct, paths.slots, "no two (cell, layer) pairs drift alike");
+assert.equal(paths.closed, 0, "and no path closes on itself: the two rates always differ");
+assert.deepEqual(paths.interleaved, [0, 1, 2, 0, 1, 2],
+  "layers are interleaved THROUGH the cloud, not stacked in bands of it");
+assert.ok(paths.sipsSpread.every((count) => count > 0),
+  "and every slice of a unit gets grains");
+
+/* A HARVEST DISSOLVES ONE SLICE AT A TIME. This is the whole difference between
+ * what is drawn now and the crossfade it replaced.
  *
- * The tile is drawn with a margin now and the grain carries on into it, over the
- * neighbour. The margin has to be at least what an orbit plus a grade can reach,
- * or the clip cuts grains off at the tile edge and the gutter comes back. */
+ * A crossfade is a property of the whole image: halfway through, all 1,024 cells
+ * are at 50% — including the 800 that did not change — so the plate goes soft
+ * everywhere to animate a fifth of it. Walking a queue instead, at most ONE slice
+ * is part-transparent at any moment; the ones behind it are solid and the ones in
+ * front are not drawn at all. */
+const dissolve = JSON.parse(vm.runInContext(`
+  const queue = 3 * GRAIN_SIPS;
+  const walk = (dissolved, rising) => Array.from({ length: queue },
+    (unused, place) => grainShare(dissolved, queue, place, rising));
+  const partial = (row) => row.filter((share) => share > 0.001 && share < 0.999).length;
+  const steps = [0, 0.17, 0.33, 0.5, 0.66, 0.84, 1];
+  JSON.stringify({
+    sips: GRAIN_SIPS,
+    fallingStart: walk(0, false),
+    fallingEnd: walk(1, false),
+    risingStart: walk(0, true),
+    risingEnd: walk(1, true),
+    mostPartial: Math.max(...steps.map((at) => Math.max(partial(walk(at, false)), partial(walk(at, true))))),
+    monotonic: steps.slice(1).every((at, index) =>
+      walk(at, false).reduce((sum, share) => sum + share, 0)
+      <= walk(steps[index], false).reduce((sum, share) => sum + share, 0) + 1e-9),
+  });
+`, viewerContext));
+assert.ok(dissolve.fallingStart.every((share) => share === 1),
+  "a cell that has just lost sand still shows all of it");
+assert.ok(dissolve.fallingEnd.every((share) => share === 0), "and by the end, none of it");
+assert.ok(dissolve.risingStart.every((share) => share === 0),
+  "a cell that has just gained sand shows none of it yet");
+assert.ok(dissolve.risingEnd.every((share) => share === 1), "and by the end, all of it");
+assert.equal(dissolve.mostPartial, 1,
+  "at most ONE slice is ever part-transparent — that is what a crossfade cannot do");
+assert.ok(dissolve.monotonic, "and sand only ever leaves; a dissolve does not flicker back");
+
+/* NO CELL HAS AN EDGE: the tiles are feathered and the feathers SUM TO ONE.
+ *
+ * Three attempts are on the record. Insetting the grains so none could reach an
+ * edge printed a dark gutter around all 1,024 cells. Wrapping the cell as a torus
+ * fixed the gutter but left every cell a closed box, so an emptied one printed as
+ * a hard black square. Letting tiles simply overhang brings the seam back with the
+ * opposite sign — two full cells overlapping is a BRIGHT rule.
+ *
+ * So the cloud repeats into the margin and the tile's alpha is a triangular ramp.
+ * Tiles sit one cell apart and overlap by exactly two margins, so the falling ramp
+ * of one lands on the rising ramp of the next and they sum to one: uniform sand
+ * stays uniform. Next to an emptied cell there is no neighbour to complete the
+ * sum, so the sand ramps down into the hole and the void gets a soft shore. */
 const bleeding = JSON.parse(vm.runInContext(`
   state.maxSugar = 4; state.maxSpice = 4;
   grainSheet.key = "";
   buildGrainSheet(38);
-  const particle = Math.max(0.6, 38 * 0.026);
-  const drift = Math.max(0.4, particle * 0.55);
   JSON.stringify({
     bleed: grainSheet.bleed,
     box: grainSheet.box,
     size: grainSheet.size,
-    reach: drift + particle * 1.6,
-    strips: grainSheet.strips[0].length + grainSheet.strips[1].length,
+    float: grainSheet.float,
+    reach: Math.max(0.5, 38 * 0.021) * GRAIN_HALO,
   });
 `, viewerContext));
 assert.ok(bleeding.bleed >= 1, `the tile must carry a margin, got ${bleeding.bleed}`);
 assert.equal(bleeding.box, bleeding.size + bleeding.bleed * 2, "one margin on every side");
 assert.ok(bleeding.bleed >= bleeding.reach,
-  `the margin must cover an orbit plus a grade (${bleeding.reach}), got ${bleeding.bleed}`);
-assert.ok(bleeding.bleed < bleeding.size / 4,
-  "and it is a spill, not a second cell: a grain crosses the line, it does not move house");
+  `the margin must cover a grain's glow (${bleeding.reach}), got ${bleeding.bleed}`);
+// The partition of unity needs a flat middle to ramp between: the two ramps are
+// each two margins wide, so they cannot be allowed to meet.
+assert.ok(bleeding.bleed * 2 <= bleeding.size,
+  "the ramps must not overlap each other, or the sum stops being one");
+assert.ok(bleeding.float > 0 && bleeding.float < bleeding.size * 0.12,
+  "and the drift is a nudge, not a relocation: a grain never leaves its neighbourhood");
 
-/* AND THE STIR ARRIVES AS A RIPPLE.
- *
- * Every cell showing the same frame of the loop makes the whole plate twitch at
- * once, which reads as a fault rather than as weather. The frame a cell shows is
- * offset by where it stands, so a crest travels the diagonal instead — down and
- * to the left, the same way the haze in the surround blows. One wind. */
-const ripple = JSON.parse(vm.runInContext(`
-  JSON.stringify({
-    neighbours: grainColumn(0, 4, 4) !== grainColumn(0, 5, 4),
-    wavelength: grainColumn(0, 4, 4) === grainColumn(0, 4 + GRAIN_WAVELENGTH, 4),
-    diagonal: grainColumn(0, 4, 4) === grainColumn(0, 5, 5),
-    downwind: grainColumn(GRAIN_RIPPLE, 3, 4) === grainColumn(0, 4, 4)
-      && grainColumn(GRAIN_RIPPLE, 4, 5) === grainColumn(0, 4, 4),
-    upwind: grainColumn(GRAIN_RIPPLE, 5, 4) !== grainColumn(0, 4, 4),
-    bounded: Array.from({ length: 64 }, (unused, cell) => grainColumn(7, cell, 3))
-      .every((column) => Number.isInteger(column) && column >= 0 && column < GRAIN_PHASES),
-  });
-`, viewerContext));
-assert.ok(ripple.neighbours, "two cells side by side do not turn over together");
-assert.ok(ripple.wavelength, "a wavelength away they do; that is what makes it a wave");
-assert.ok(ripple.diagonal, "crests lie along x - y, so it is one wave and not two");
-assert.ok(ripple.downwind, "and it MOVES: a step of the clock walks the crest left and down");
-assert.ok(ripple.upwind, "not into the wind");
-assert.ok(ripple.bounded, "every cell indexes a real frame of the loop");
-
-/* The sheet is keyed by RESOURCE and AMOUNT, and every strip carries the loop.
+/* The sheet is keyed by RESOURCE and AMOUNT, and carries ONE arrangement.
  *
  * Keyed by the (sugar, spice) PAIR it stored every combination of two clouds that
- * never interact — 200 tiles on the shipped 4/4 board to say what 8 strips say —
- * and there is no room for 24 frames of each on top of that. */
+ * never interact. Keyed by phase as well, it stored a whole baked loop per tile —
+ * which is what had to go for the motion to be continuous. What is left is a tile
+ * per (resource, amount, variant, layer) for the settled sand, and one per slice
+ * on top of that, drawn only while a cell is actually changing. */
 const sheet = JSON.parse(vm.runInContext(`
   const heldSugar = state.maxSugar;
   const heldSpice = state.maxSpice;
@@ -659,31 +830,37 @@ const sheet = JSON.parse(vm.runInContext(`
   state.maxSpice = 3;
   grainSheet.key = "";
   buildGrainSheet(38);
-  const strip = grainStrip(0, 4, 0);
+  const tile = grainSolid(0, 4, 0, 0);
   const out = JSON.stringify({
     size: grainSheet.size,
-    sugar: grainSheet.strips[0].filter(Boolean).length,
-    spice: grainSheet.strips[1].filter(Boolean).length,
-    width: strip.width,
-    height: strip.height,
     box: grainSheet.box,
-    nothingForNothing: grainStrip(0, 0, 0) === undefined,
+    sugar: grainSheet.solid[0].filter(Boolean).length,
+    spice: grainSheet.solid[1].filter(Boolean).length,
+    sugarSips: grainSheet.sips[0].filter(Boolean).length,
+    width: tile.width,
+    height: tile.height,
+    nothingForNothing: grainSolid(0, 0, 0, 0) === undefined,
     variants: TILE_VARIANTS,
-    phases: GRAIN_PHASES,
+    layers: GRAIN_LAYERS,
+    sips: GRAIN_SIPS,
   });
   state.maxSugar = heldSugar;
   state.maxSpice = heldSpice;
   grainSheet.key = "";
   out;
 `, viewerContext));
-assert.equal(sheet.sugar, 4 * sheet.variants, "one strip per sugar amount, per variant");
-assert.equal(sheet.spice, 3 * sheet.variants, "and per spice amount, which need not match it");
-assert.equal(sheet.size, 38, "the strip is built for the cell size it was asked for");
-// A cell plus its two margins — the sand overhangs, so the tile is wider than
-// the cell it belongs to (see THE CELLS BLEED INTO EACH OTHER).
-assert.equal(sheet.width, sheet.box * sheet.phases, "and lays the whole loop out along it");
+assert.equal(sheet.sugar, 4 * sheet.variants * sheet.layers,
+  "one settled tile per sugar amount, per variant, per layer");
+assert.equal(sheet.spice, 3 * sheet.variants * sheet.layers,
+  "and per spice amount, which need not match it");
+assert.equal(sheet.sugarSips, 4 * sheet.sips * sheet.variants * sheet.layers,
+  "and one per slice of each unit, for the dissolve");
+assert.equal(sheet.size, 38, "the tile is built for the cell size it was asked for");
+// A cell plus its two margins — the field carries on past the cell, so the tile is
+// bigger than the cell it belongs to (see NO CELL HAS AN EDGE).
+assert.equal(sheet.width, sheet.box, "and it is ONE arrangement wide: no baked loop");
 assert.equal(sheet.height, sheet.box, "one bled cell tall");
-assert.ok(sheet.nothingForNothing, "an empty cell has no strip; it is left as bare plate");
+assert.ok(sheet.nothingForNothing, "an empty cell has no tile; it is left as bare plate");
 
 /* Density is a RAMP SWITCH, not a scale factor, and the viewer's own larger-text
  * control forces it at any size. */
@@ -700,14 +877,28 @@ const density = JSON.parse(vm.runInContext(`
   JSON.stringify({ base, floor, forced, pressed, off: [17, 25, 40].map((s) => T(s)) });
 `, viewerContext));
 assert.deepEqual(density.base, [17, 25, 40], "at full size the ramp is the design's own sizes");
-// 34 stage units is 11.3 CSS px once the 1920-unit stage is letterboxed into a
-// 640px embed. Below that the rail was printing six-pixel type.
-assert.ok(density.floor.every((size) => size >= 34),
-  `no type may fall below 34 units at the embed floor, got ${density.floor}`);
+/* The compact ramp is a PHYSICAL FLOOR, so the assertion is in CSS pixels.
+ *
+ * It used to be "at least 34 stage units", which was the same statement only at
+ * the one width the constants were tuned for. Held as fixed units, that floor
+ * printed the caption at 11.3px at the 640 embed and at 20.8px on an 800px stage
+ * — type built for a phone, rendered half again as large on a laptop, which is
+ * exactly what the owner saw. */
+const floorPx = density.floor.map((size) => size * (640 / 1920));
+assert.ok(floorPx.every((pixels) => pixels >= 11),
+  `no type may print below 11 CSS px at the embed floor, got ${floorPx.map((p) => p.toFixed(1))}`);
 assert.ok(density.floor[0] < density.floor[1] && density.floor[1] < density.floor[2],
   `the floor ramp must keep its hierarchy, got ${density.floor}`);
-assert.deepEqual(density.forced, density.floor,
-  "the larger-text control must reach the same ramp at full size");
+/* And the larger-text control is a MULTIPLIER, not that floor.
+ *
+ * It used to be asserted equal to the embed floor's ramp, which only held while
+ * the floor was fixed units. A floor is the wrong shape for this control: on a
+ * 1600px stage the design's own sizes already clear it, so expressing "larger
+ * text" as a floor would have made the button do nothing on any desktop — a
+ * silent failure of the one affordance in the product for someone who needs
+ * bigger type. */
+assert.deepEqual(density.forced, density.base.map((size) => size * 1.5),
+  `larger text must magnify the design's sizes at any width, got ${density.forced}`);
 assert.equal(density.pressed, "true", "and report its state to assistive technology");
 assert.deepEqual(density.off, density.base, "turning it off must restore the design's sizes");
 // A sandboxed iframe can refuse storage outright; the toggle must still work.
@@ -904,5 +1095,163 @@ const throughTie = JSON.parse(vm.runInContext(`
 `, viewerContext));
 assert.deepEqual(throughTie, [[2, "Beta"]],
   "a lead that changes hands across a tied frame is still one lead change");
+
+/* The lead plot DIVERGES, and its band is stacked by resource.
+ *
+ * Both halves were drawn upward once, with hue the only thing saying who held
+ * the lead. Owner call: blue on one side, red on the other. Position is now a
+ * second, redundant channel for the one question the panel exists to answer, and
+ * the poles are named so "up" decodes as a population rather than as a verdict.
+ * The band is stacked sugar-then-spice because a lead can be made of either —
+ * on the shipped recording the two resources favour different populations on
+ * 9.5% of timesteps. */
+const diverging = JSON.parse(vm.runInContext(`
+  (() => {
+    resetStream();
+    const pair = (aSugar, aSpice, bSugar, bSpice) => [
+      { id: 1, slot: 0, cell: 0, sugar: aSugar, spice: aSpice, age: 1, decisionModel: 'p0',
+        sugarMetabolism: 1, spiceMetabolism: 1, movement: 1, vision: 1,
+        depressed: false, sick: false, race: -1, sex: 'male', tribe: -1 },
+      { id: 2, slot: 1, cell: 1, sugar: bSugar, spice: bSpice, age: 1, decisionModel: 'p1',
+        sugarMetabolism: 1, spiceMetabolism: 1, movement: 1, vision: 1,
+        depressed: false, sick: false, race: -1, sex: 'male', tribe: -1 },
+    ];
+    const at = (step, as, ap, bs, bp) => recordFrame(Object.assign(${sandboxFrame(0, [])}, {
+      timestep: step, maxTimestep: 40, environmentMaxSpice: 4, agents: pair(as, ap, bs, bp),
+    }));
+    at(0, 10, 10, 40, 10);   // B ahead by 30
+    at(1, 60, 10, 40, 10);   // A ahead by 20, through the line
+    // The LAST lead is the running peak, so the head sits hard against the top
+    // of the plot - the normal case for a lead that grows, and the one that put
+    // the caption outside the panel.
+    at(2, 140, 30, 40, 10);  // A ahead by 120, the maximum
+    state.maxSpice = 4;
+    // The chart ALONE, not the whole hud: the scorebug names both populations
+    // too, so asserting the poles are named against the full overlay would pass
+    // whether or not the plot carries a single label of its own.
+    const markup = raceChart(frames[2], 0, 0, 600, 300);
+    const polys = [...markup.matchAll(/<polygon[^>]*>/g)].map((m) => m[0]);
+    const clipped = (clip, opacity) => polys.filter((p) =>
+      p.includes(clip) && p.includes('opacity="' + opacity + '"'));
+    return JSON.stringify({
+      // One band per resource per SIDE. The INNER band, against the line, is the
+      // denser .46 and is spice; sugar is stacked outside it at .24.
+      baseAbove: clipped('lead-above', '.46').length,
+      baseBelow: clipped('lead-below', '.46').length,
+      stackedAbove: clipped('lead-above', '.24').length,
+      stackedBelow: clipped('lead-below', '.24').length,
+      // Each half is drawn in its own seat's colour, never both in one.
+      aboveIsSeat0: clipped('lead-above', '.46').every((p) => p.includes('#f5504a')),
+      belowIsSeat1: clipped('lead-below', '.46').every((p) => p.includes('#5a7cff')),
+      polesNamed: /&gt;Alpha&lt;|>Alpha</.test(markup) && /&gt;Beta&lt;|>Beta</.test(markup),
+      keyed: /lead:/.test(markup) && /&gt;sugar&lt;|>sugar</.test(markup),
+      captionY: Number((markup.match(/<text x="[^"]*" y="([\\d.]+)"[^>]*>[^<]*ahead</) || [])[1] ?? -1),
+      // The top of the plot, read off the band itself: the head is AT the peak
+      // on this frame, so the band's highest point IS the plot's top edge. Any
+      // caption above that has left the plot and is over the panel's heading.
+      plotTop: Math.min(...polys.flatMap((p) => (p.match(/points="([^"]*)"/) || ["", ""])[1]
+        .split(" ").filter(Boolean).map((pair) => Number(pair.split(",")[1])))),
+      /* WHICH resource is at the base, read off the geometry rather than trusted.
+       * This frame gives A a sugar lead of 100 and a spice lead of 20, so the
+       * inner band reaching a sixth of the way to the peak is spice and five
+       * sixths would be sugar. Renaming the assertions when the two were swapped
+       * would otherwise have proved nothing. */
+      baseShare: (() => {
+        const ys = (clipped('lead-above', '.46')[0].match(/points="([^"]*)"/) || ["", ""])[1]
+          .split(" ").filter(Boolean).map((pair) => Number(pair.split(",")[1]));
+        const midline = Math.max(...ys);
+        const top = Math.min(...polys.flatMap((p) => (p.match(/points="([^"]*)"/) || ["", ""])[1]
+          .split(" ").filter(Boolean).map((pair) => Number(pair.split(",")[1]))));
+        return (midline - Math.min(...ys)) / (midline - top);
+      })(),
+    });
+  })()
+`, viewerContext));
+assert.equal(diverging.baseAbove, 1, "the spice band is drawn into the upper half");
+assert.equal(diverging.baseBelow, 1, "and into the lower half, clipped at the line");
+assert.equal(diverging.stackedAbove, 1, "with the sugar band stacked on it above");
+assert.equal(diverging.stackedBelow, 1, "and below");
+assert.ok(diverging.aboveIsSeat0,
+  "the half above the line may only ever be the first seat's colour");
+assert.ok(diverging.belowIsSeat1,
+  "and the half below it the second's - never both leads on one side");
+assert.ok(diverging.polesNamed,
+  "both poles must be named, so 'up' reads as a population and not as winning");
+assert.ok(diverging.keyed, "and the two stacked shades must be keyed to their resources");
+// The head caption stays BELOW the panel's heading. `peak` is the running
+// maximum, so a growing lead puts the head at the very top of the plot on most
+// frames; offset upward from there, the caption printed straight through that
+// heading at the embed floor — "LEAD, IN SUGAR + SPICA ahead".
+assert.ok(Math.abs(diverging.baseShare - 20 / 120) < 0.02,
+  `the band against the line must trace the SPICE lead, a sixth of this frame's `
+  + `total, not the sugar lead which is five sixths (was ${diverging.baseShare.toFixed(3)})`);
+assert.ok(diverging.captionY > diverging.plotTop,
+  `the leader caption must stay inside the plot `
+  + `(caption ${diverging.captionY} vs plot top ${diverging.plotTop})`);
+
+/* The strip's caption takes the far side from the heads.
+ *
+ * Pinned to the bottom-left it was correct only at the END of an episode. At the
+ * start the head is barely off the axis, its figure prints a few units to the
+ * right of it, and a steep early die-off drives both straight through the label
+ * — which restoring spice made the common case, two metabolisms burning a
+ * settler down while the episode is still near t0. */
+const caption = JSON.parse(vm.runInContext(`
+  (() => {
+    const at = (id, slot, cell, sugar) => (${settler.toString()})(id, slot, cell, sugar);
+    resetStream();
+    const open = ${sandboxFrame(0, [])};
+    open.agents = [at(1, 0, 0, 10), at(2, 1, 1, 10)];
+    recordFrame(open);
+    const strip = (scaleX) => settlerStrip(frames[0], {
+      big: false, left: 0, plotW: 100, scaleX, scheduled: 40, footY: 60,
+      top: 0, height: 50, visible: wealthSeries,
+    });
+    const sideOf = (markup) => {
+      const found = markup.match(/<text[^>]*text-anchor="([^"]*)"[^>]*>settlers alive</);
+      return found ? found[1] : null;
+    };
+    return JSON.stringify({ early: sideOf(strip(() => 0)), late: sideOf(strip(() => 100)) });
+  })()
+`, viewerContext));
+assert.equal(caption.early, "end",
+  "while the heads are in the left half the caption must sit at the right");
+assert.equal(caption.late, "start",
+  "and move to the left once the heads have crossed to the right");
+
+/* The feed's summary row is budgeted against the panel it sits in.
+ *
+ * It is the longest line the feed prints — a count, a cause, a per-population
+ * breakdown and a folded lead-change tally — and it drew with no measurement, so
+ * at the 640 embed floor it ran off the right edge, losing the very tally the
+ * clause exists to disclose. It sheds instead: the tally first (the race panel's
+ * header carries the same count), then the breakdown, never the count or cause. */
+const budgeted = JSON.parse(vm.runInContext(`
+  (() => {
+    const at = (id, slot, cell, sugar) => (${settler.toString()})(id, slot, cell, sugar);
+    resetStream();
+    const open = ${sandboxFrame(0, [])};
+    open.agents = [at(1, 0, 0, 10), at(2, 1, 1, 10)];
+    recordFrame(open);
+    events.length = 0;
+    events.push({
+      index: 1, timestep: 0, kind: "summary", since: 0, until: 0,
+      count: 164, cause: "starved", leads: 2,
+      bySlot: [[0, 71], [1, 93]], agents: [],
+    });
+    const line = (width) => {
+      const found = eventFeed(frames[0], 0, 0, width, 300)
+        .match(/>([^<]*starved[^<]*)</);
+      return found ? found[1] : null;
+    };
+    return JSON.stringify({ narrow: line(420), wide: line(1400) });
+  })()
+`, viewerContext));
+assert.ok(budgeted.narrow && !/lead change/.test(budgeted.narrow),
+  "a summary that cannot fit its panel must shed the folded lead-change tally");
+assert.match(budgeted.narrow, /164 starved/,
+  "but never the count and the cause it is reporting");
+assert.match(budgeted.wide, /lead change/,
+  "and a panel with room for the tally must still print it");
 
 console.log("Viewer model passed");

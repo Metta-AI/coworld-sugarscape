@@ -143,18 +143,23 @@ html, body {
    24x24 CSS-px minimum target size. Every dimension below is a clamp with an
    accessible floor, so the chrome stays operable at the smallest embed and
    grows to comfortable at full size. */
-/* The transport lives in its OWN LANE, reserved in broadcast.js as TRANSPORT_H
-   (104 of 1080 stage units = 9.63%). It used to float over the board: two
-   lattice rows at 1280 and three at 640, where the pixel floors below bite while
-   the board scales down, so the compact variant covered MORE of the primary read
-   surface than the full-size one. Every number here is that lane, expressed as a
-   percentage of the same stage. */
+/* The transport lives in its OWN LANE, reserved in broadcast.js by layoutStage.
+   It used to float over the board: two lattice rows at 1280 and three at 640,
+   where the pixel floors below bite while the board scales down, so the compact
+   variant covered MORE of the primary read surface than the full-size one.
+
+   The lane is measured in CSS PIXELS now rather than being a fixed 9.63% of the
+   stage, because what the pill needs is a physical 34px and nothing else. The
+   width below is likewise no longer the hardcoded 798/1920 = 41.6%: the board
+   grows as the chrome around it shrinks, so layoutStage publishes its width as
+   --board-width and this follows it. */
 .controls {
   position: absolute;
   left: 1.6%;
   bottom: 2.3%;
-  /* BOARD.w / W = 798 / 1920 */
-  width: 41.6%;
+  /* Set by layoutStage from the live BOARD.w; the fallback is the old fixed
+     798 / 1920 in case the script has not laid out yet. */
+  width: var(--board-width, 41.6%);
   min-width: 260px;
   max-width: calc(100% - 3.2%);
   display: flex;
@@ -401,7 +406,6 @@ const C = {
   // over the board or over another panel and must let it through.
   card: "rgba(31,24,14,.985)",     // the end card's plate
   cardScrim: "rgba(10,7,4,.965)",  // full-stage dim behind the end card
-  stingerBack: "rgba(16,12,6,.93)",
   rowBack: "rgba(20,15,8,.72)",    // a result row inside the card
   wash: "rgba(246,234,210,.07)",   // the Lorenz square's fill
   hairline: "rgba(246,234,210,.34)",
@@ -429,6 +433,10 @@ const C = {
   hollow: "rgba(8,5,2,.5)",
   dust: "rgba(246,234,210,.05)",     // far sand, lit by nothing
   dustWarm: "rgba(240,166,60,.05)",  // the same spice, a long way downwind
+  // Not colours: the two ends of the alpha ramp that feathers a grain tile into
+  // its neighbours. Here rather than inline so the block really is every literal.
+  maskIn: "rgba(0,0,0,1)",
+  maskOut: "rgba(0,0,0,0)",
 };
 
 // The original assigns palette colours to decision models in order
@@ -439,9 +447,10 @@ const C = {
 // and each carries a redundant shape so the read never depends on hue alone.
 //
 // `text` is the second value, for the places a seat colour carries INK rather
-// than filling a shape — the chart's pole label and the stinger's headline,
-// which sit on the lead band itself where the chip hues measure 3.3-3.6:1. The
-// chips themselves are used only as fills, where they are not text at all.
+// than filling a shape — the chart's pole label, the strip's head figures and
+// the lead readout, which sit on the lead band itself where the chip hues
+// measure 3.3-3.6:1. The chips themselves are used only as fills, where they
+// are not text at all.
 // (An earlier note here claimed the C.ink halo behind every label was the
 // binding background. It is not: at three stage units the halo is a sub-pixel
 // rim, and the surface underneath is the panel — darker than the ink, so the
@@ -467,9 +476,11 @@ const H = 1080;
 const RENDER_SCALE = 1.5;          // canvas supersampling; see setTransform below
 const MARGIN = 30;
 const BUG_H = 92;
-const TOP_INSET = BUG_H + 22;
+// The clear space under the scorebug band. 22 was generous for a band whose type
+// has since come down by a quarter.
+const BAND_GAP = 12;
 const KEY_H = 34;
-/* The transport gets its OWN LANE.
+/* The transport gets its OWN LANE, and the lane is measured in PIXELS.
  *
  * The floating pill is laid out in CSS percentages of the stage; the board is
  * laid out here in stage units; the two were never reconciled, so the pill sat
@@ -477,16 +488,56 @@ const KEY_H = 34;
  * floors bite while the board scales down. The compact variant occluded more of
  * the primary read surface than the full-size one.
  *
- * 104 units is what the pill needs at the embed floor: a 24px minimum target
- * plus padding and border is ~34 CSS px, and 34/360 of a 1080-unit stage is 102.
- * Reserving it costs the board 11% of its height everywhere and buys back every
- * row of the lattice. The CSS lane below is derived from the same constant.
+ * What the pill actually needs is a physical 34 CSS px: a 24px minimum target
+ * plus padding and border. As a CONSTANT 104 units that was right at the 640
+ * floor and wrong everywhere above it — at 1280 it reserved 104 units for a pill
+ * that needed 51, and the board paid the difference in every row of its lattice.
+ * Derived from the live width it costs exactly what it needs at any size.
  */
-const TRANSPORT_H = 104;
-const BOARD_SIZE = H - TOP_INSET - KEY_H - MARGIN - TRANSPORT_H;
-const BOARD = { x: MARGIN, y: TOP_INSET + KEY_H, w: BOARD_SIZE, h: BOARD_SIZE };
-const RAIL = { x: BOARD.x + BOARD.w + 26, y: TOP_INSET, w: W - (BOARD.x + BOARD.w + 26) - MARGIN };
-RAIL.h = H - TOP_INSET - MARGIN - TRANSPORT_H;
+const TRANSPORT_PX = 34;
+const RAIL_GUTTER = 26;
+
+/* The board is as big as the chrome will let it be, and the chrome is now honest
+ * about what it costs.
+ *
+ * Every number this is made of used to be a constant tuned at one width, so the
+ * board was fixed at 798 of 1080 units — 74% of the height and 42% of the width —
+ * while the rail beside it took 54% of the width to hold three panels of short
+ * text. Once the type became pixel-anchored the chrome around the board was
+ * provably oversized at every width above the floor: the scorebug reserved a
+ * fixed 92 units for two lines that had shrunk by a quarter, the key reserved its
+ * own 34-unit row for one line of legend, and the transport reserved twice what
+ * it needed. Reclaiming those puts ~30% more area under the lattice, which is the
+ * thing the broadcast is actually about.
+ *
+ * Recomputed on every resize rather than at load, because all three of those
+ * depend on the width the stage is being shown at. BOARD and RAIL are mutated in
+ * place: everything downstream reads their fields at draw time. */
+const BOARD = { x: MARGIN, y: 0, w: 0, h: 0 };
+const RAIL = { x: 0, y: 0, w: 0, h: 0 };
+let transportH = 104;
+let keyH = KEY_H;
+
+function layoutStage() {
+  const perPixel = unitsPerPixel();
+  transportH = Math.max(44, Math.round(TRANSPORT_PX * perPixel));
+  // The key is ONE LINE of legend and had a fixed 34-unit row for it, which is
+  // the caption step plus 16 units of nothing at any width above the floor.
+  keyH = Math.max(20, Math.round(T(18) * 1.12));
+  const top = BUG_H + BAND_GAP + keyH;
+  BOARD.y = top;
+  BOARD.w = H - top - MARGIN - transportH;
+  BOARD.h = BOARD.w;
+  RAIL.x = BOARD.x + BOARD.w + RAIL_GUTTER;
+  RAIL.y = BUG_H + BAND_GAP;
+  RAIL.w = W - RAIL.x - MARGIN;
+  RAIL.h = H - RAIL.y - MARGIN - transportH;
+  // The transport is laid out in CSS and must span the board it belongs to. That
+  // was a hardcoded 41.6% (798/1920); the board moves now, so the width goes over
+  // as a custom property rather than being restated in the stylesheet.
+  document.documentElement.style.setProperty(
+    "--board-width", `${(BOARD.w / W * 100).toFixed(2)}%`);
+}
 
 // ---------------------------------------------------------------------------
 // Tempo — two independent levers (the Agricogla model).
@@ -528,7 +579,6 @@ const ANIM_MAX = 3;
 const BASE_FRAME_MS = 620;
 const READ_PAUSE = 150;
 const MOTE_MS = 1500;
-const STINGER_MS = 2100;
 const SPEEDS = [0.5, 1, 2, 4];
 
 // With ANIM_MAX at 2 both levers saturated there, so pressing 4x changed the
@@ -585,8 +635,6 @@ const state = {
   maxWealth: 1,
   startingPopulation: 0,
   lastDrawnIndex: -1,
-  stingerUntil: 0,
-  stinger: null,
   holdUntil: 0,
   truncated: false,
   // Whether the very first timestep was seen. A spectator joining past the
@@ -609,35 +657,76 @@ const state = {
  * not fix it: 18 x 1.28 is still 7.7px, and pushing the constant high enough to
  * clear 11px blew the panels apart because the BIG type grew by the same factor.
  *
- * So compact does not scale — it SWITCHES RAMPS. Four steps, chosen so the
- * smallest lands at 11.3 CSS px at the floor and the hierarchy between them
- * survives, with everything below the caption step collapsing INTO it. The
- * panels pay for that in content, not in overflow: compact drops the Lorenz
- * curve, the chart's axis annotations, the crown, a feed row, and the scorebug's
- * secondary line, and shortens population names to their last word.
+ * So compact does not scale — it SWITCHES RAMPS. Five steps, with everything
+ * below the caption step collapsing INTO it. The panels pay for that in content,
+ * not in overflow: compact drops the Lorenz curve, the chart's axis annotations,
+ * the crown, a feed row, and the scorebug's secondary line, and shortens
+ * population names to their last word.
  *
- *   caption 34u = 11.3px · label 40u = 13.3px · body 52u = 17.3px · figure 76u = 25.3px
+ * THE RAMP IS IN CSS PIXELS, NOT STAGE UNITS, and that is the whole point of this
+ * rewrite. It used to be five constants in stage units — 34, 40, 52, 66, 92 —
+ * picked so the smallest landed at 11.3 CSS px at the 640 floor. But a stage unit
+ * is 1/3 of a pixel at 640 and 1/1.64 of one at the 1174 switch-over, so those
+ * same constants printed the caption at 11.3px at the floor and at 20.8px just
+ * under the threshold, and the hero at 30.7px and 56px. The ramp was doing its
+ * job at exactly one width and shouting everywhere else — which is what a stage
+ * at 800 looked like: type built for a phone, rendered half again as large.
+ *
+ * Anchored to pixels it is the same physical size at every width in the band, and
+ * it meets the sparse ramp exactly at DENSE_BELOW by construction rather than by
+ * a constant that has to be re-tuned whenever the threshold moves.
+ *
+ *   caption 11.3px · label 13.3px · body 17.3px · figure 22px · hero 30.7px
  */
-const COMPACT_RAMP = [
-  [18, 34],        // caption   11.3px
-  [22, 40],        // label     13.3px
-  [30, 52],        // body      17.3px
-  [44, 66],        // figure    22.0px
-  [Infinity, 92],  // hero      30.7px
+const COMPACT_PX = [
+  [18, 11.3],       // caption
+  [22, 13.3],       // label
+  [30, 17.3],       // body
+  [44, 22.0],       // figure
+  [Infinity, 30.7], // hero
 ];
+
+/** Stage units per CSS pixel at the width the stage is actually being shown at. */
+function unitsPerPixel() {
+  return W / Math.max(1, state.stageWidth || W);
+}
+
+/* The two reasons type gets bigger are NOT the same reason, and conflating them
+ * broke the accessibility control.
+ *
+ * A SMALL STAGE needs a physical floor: whatever the width, nothing may print
+ * below ~11 CSS px. That is a floor, so it does nothing once the stage is wide
+ * enough to clear it on its own.
+ *
+ * A VIEWER ASKING FOR LARGER TEXT needs a multiplier: half again the design's own
+ * size, at any width, including a 1600px stage that is nowhere near the floor.
+ * Written as a floor it would have been a no-op at exactly the sizes where
+ * someone reaching for it is most likely to be sitting — the control would have
+ * silently done nothing on a desktop. */
+const LARGE_TEXT_SCALE = 1.5;
 
 /** Map a type size onto the current density's ramp. */
 function T(size) {
-  if (!dense()) return size;
-  for (const [limit, mapped] of COMPACT_RAMP) if (size <= limit) return mapped;
-  return size;
+  let mapped = size;
+  if (state.compact) {
+    const perPixel = unitsPerPixel();
+    // Never BELOW the sparse size: compact exists to make small stages legible,
+    // and a step that came out smaller than the size it replaced would be a
+    // regression dressed as a ramp.
+    for (const [limit, pixels] of COMPACT_PX) {
+      if (size <= limit) { mapped = Math.max(size, pixels * perPixel); break; }
+    }
+  }
+  return state.largeText ? mapped * LARGE_TEXT_SCALE : mapped;
 }
 
 /** Geometry that must stay proportional to the stage — a swatch, a dot radius, a
- *  rule's width. These do NOT take the type ramp: floored to 34 units a 6-unit
- *  dot becomes a blob that eats the label beside it. */
+ *  rule's width. These do NOT take the type ramp: floored to a caption step a
+ *  6-unit dot becomes a blob that eats the label beside it. Tracks the same
+ *  pixel anchor as the type, so marks and labels shrink together. */
 function G(size) {
-  return dense() ? size * 1.34 : size;
+  const mapped = state.compact ? size * Math.max(1, 1.34 * unitsPerPixel() / 3) : size;
+  return state.largeText ? mapped * LARGE_TEXT_SCALE : mapped;
 }
 
 /** The advance to leave after a run of text set at `size`. The overlay lays its
@@ -671,7 +760,19 @@ const DENSE_BELOW = Math.ceil((MIN_TYPE_PX / MIN_SPARSE) * W);   // 1174
 function measureDensity() {
   const width = document.getElementById("stage").getBoundingClientRect().width;
   const compact = width > 0 && width < DENSE_BELOW;
-  if (compact === state.compact) return;
+  // The width itself is now a live input, not just the side that chose the ramp:
+  // the compact steps are pixel-anchored, so every T() and G() reads it.
+  const moved = width > 0 && width !== state.stageWidth;
+  if (width > 0) state.stageWidth = width;
+  if (moved) layoutStage();
+  if (compact === state.compact) {
+    if (moved) {
+      standingsSignature = "";
+      beatsSignature = "";
+      terrainShown = null;
+    }
+    return;
+  }
   state.compact = compact;
   syncLargeText();
   standingsSignature = "";
@@ -797,11 +898,20 @@ function standings(frame) {
     index,
     name: slot.name || `Population ${index + 1}`,
     wealth: 0,
+    sugar: 0,
+    spice: 0,
     population: 0,
   }));
   for (const agent of frame.agents) {
     const row = rows[slotOf(agent)];
     if (!row) continue;
+    // Kept apart as well as summed. The score is the sum and only the sum, but
+    // the lead plot stacks the two, and WHICH resource a lead is made of is a
+    // different fact from how big it is: a population can be ahead overall while
+    // behind on one of them. On the shipped recording that happens on 9.5% of
+    // timesteps, and for the first 25 it is nearly the whole story.
+    row.sugar += agent.sugar;
+    row.spice += agent.spice;
     row.wealth += agent.sugar + agent.spice;
     row.population += 1;
   }
@@ -925,6 +1035,8 @@ function recordFrame(frame) {
     wealthSeries[existing] = {
       timestep: frame.timestep,
       scores: rows.map((row) => row.score),
+      sugar: rows.map((row) => row.sugar),
+      spice: rows.map((row) => row.spice),
       population: rows.map((row) => row.population),
     };
     for (let index = events.length - 1; index >= 0; index -= 1) {
@@ -992,6 +1104,8 @@ function recordFrame(frame) {
   wealthSeries.push({
     timestep: frame.timestep,
     scores: rows.map((row) => row.score),
+    sugar: rows.map((row) => row.sugar),
+    spice: rows.map((row) => row.spice),
     population: rows.map((row) => row.population),
   });
 
@@ -1013,11 +1127,8 @@ function resetStream() {
   state.maxTimestep = 0;
   state.startingPopulation = 0;
   state.sawStart = false;
-  state.stinger = null;
-  state.stingerUntil = 0;
   state.holdUntil = 0;
   terrainShown = null;
-  pendingBeat = null;
   state.finished = false;
   state.truncated = false;
   rejectedFormat = false;
@@ -1067,30 +1178,45 @@ const PLATE_HEX = "#1d1811";          // the field the grains lie on; NEVER pure
 const GRID_HEX = "#332a1e";           // one step up from the plate
 
 let terrainShown = null;
-let pendingBeat = null;
-/* TWO plates, not one: the one being shown and the one being left.
+/* ONE plate, and only the sand that CHANGED HANDS dissolves on it.
  *
  * A harvest is instantaneous in the model and used to be instantaneous on the
- * board — four units of sugar were simply gone on the tick a settler landed,
- * and one unit came back, whole, on each of the four ticks after it. Across the
- * ~250 cells that change every timestep on the shipped 32x32 board that reads as
- * a flicker rather than as eating. The outgoing plate is kept and the incoming
- * one dissolved over it, so grains drain and fill instead of blinking. */
-let terrain = document.createElement("canvas");
-let terrainOut = document.createElement("canvas");
-let terrainContext = terrain.getContext("2d");
-let terrainSettledAt = 0;             // when the current plate began fading in; 0 = shown whole
-let terrainStir = -1;                 // which frame of the grain loop it is painted at
+ * board — four units of sugar were simply gone on the tick a settler landed, and
+ * one unit came back, whole, on each of the four ticks after it. Across the ~222
+ * cells that change every timestep on the shipped 32x32 board that reads as a
+ * flicker rather than as eating.
+ *
+ * The first fix for that was a CROSSFADE: keep the outgoing plate and dissolve
+ * the incoming one over it. It does not work, and why is worth keeping. A
+ * crossfade is a property of the whole image, so for as long as it ran, all 1,024
+ * cells were drawn twice at partial alpha — including the 800 that had not
+ * changed at all. Most of every dwell the entire plate was a half-transparent
+ * double exposure of itself: contrast spent everywhere to animate a fifth of the
+ * board. It reads as the picture going soft, not as sand moving.
+ *
+ * What actually happened is far more specific, and that is what is drawn now. A
+ * cell going 4 -> 3 keeps three units of grains EXACTLY where they were, at full
+ * strength, and loses the fourth unit's. Only those animate; every other grain on
+ * the plate is untouched and solid. And they do not fade as a block — a unit is
+ * baked as GRAIN_SIPS separate slices which go one after another, so the sand
+ * thins in waves and the last of it lingers. That is a dissolve. The other thing
+ * was a video transition. */
+const terrain = document.createElement("canvas");
+const terrainContext = terrain.getContext("2d");
+let terrainFrom = null;               // the frame being dissolved FROM; null when settled
+let terrainSettledAt = 0;             // when the dissolve began; 0 = nothing in flight
+let terrainPainted = -1;              // the drift clock the plate currently stands at
 
 /* How long the sand takes to settle after a timestep lands.
  *
- * Scaled by animFactor with everything else, and deliberately shorter than the
- * gap between two harvests (a dwell, 770ms at 1x) so a fade always finishes
- * before the next one starts — a swap mid-dissolve would throw away the
- * half-blended plate and put back the cut this removes. */
-const SETTLE_MS = 380;
+ * Scaled by animFactor with everything else, and shorter than the gap between two
+ * harvests (a dwell, 770ms at 1x) so a dissolve always finishes before the next
+ * one starts. Longer than the 380ms the crossfade used, because this one costs
+ * the picture nothing while it runs — the only grains in motion are the ones that
+ * genuinely changed hands, so there is no reason to hurry it. */
+const SETTLE_MS = 620;
 
-/** How much of the current plate to show over the one it replaced. */
+/** How far through the dissolve the plate stands, 0 to 1. */
 function terrainBlend(now) {
   if (!terrainSettledAt) return 1;
   const age = (now - terrainSettledAt) / (SETTLE_MS * animFactor(state.speed));
@@ -1098,25 +1224,27 @@ function terrainBlend(now) {
   return age * age * (3 - 2 * age);   // smoothstep; a linear dissolve pops at both ends
 }
 
-/** Swap the plates and paint `frame` into the fresh one. `fade` carries the
- *  dissolve; a scrub, a pause, a reset or reduced motion cuts straight over. */
+/** Show `frame`. `fade` dissolves from the frame being left; a scrub, a step, a
+ *  pause, a reset or reduced motion cuts straight to the state asked for. */
 function showTerrain(frame, fade, now) {
-  const outgoing = terrain;
-  terrain = terrainOut;
-  terrainOut = outgoing;
-  terrainContext = terrain.getContext("2d");
+  terrainFrom = fade && terrainShown ? terrainShown : null;
   terrainShown = frame;
-  buildTerrain(frame, stirAt(now));
-  terrainSettledAt = fade && terrainOut.width > 0 ? now : 0;
+  terrainSettledAt = terrainFrom ? now : 0;
+  paintTerrain(now);
 }
 
-/** Repaint the plate one frame further round the grain loop. No swap: the sand
- *  stirs many times between timesteps, and swapping would cross-fade the plate
- *  with itself and cancel the dissolve a real harvest is owed. The plate being
- *  LEFT is not restirred — it is on its way out inside 380ms, and repainting a
- *  layer that is fading to nothing costs a second pass to move nothing. */
-function stirTerrain(now) {
-  if (terrainShown) buildTerrain(terrainShown, stirAt(now));
+/** Repaint the plate where it stands. The sand drifts continuously, so this runs
+ *  every tick; it is also what carries a dissolve forward. */
+function paintTerrain(now) {
+  if (!terrainShown) return;
+  const clock = driftAt(now);
+  const dissolved = terrainBlend(now);
+  buildTerrain(terrainShown, terrainFrom, clock, dissolved);
+  terrainPainted = clock;
+  if (dissolved >= 1) {
+    terrainFrom = null;
+    terrainSettledAt = 0;
+  }
 }
 
 /* A SAND CLOUD, not a grid of countable grains.
@@ -1157,17 +1285,28 @@ function stirTerrain(now) {
  * maxSugar+maxSpice tiles say. On the shipped 4/4 board that is 200 against 8,
  * and the saving is what pays for the loop frames below.
  */
-/* 220, from 36, from 26, because the grains got finer and DENSITY IS THE
- * QUANTITY.
+/* 80 — and the mass a unit prints came DOWN this time, on purpose.
  *
- * Coverage goes with the SQUARE of the grade, so every cut to the particle size
- * takes ink off the plate — and the ink is how much sugar is in the cell. 0.075
- * -> 0.064 cost 27% of it and was paid for with 26 -> 36; 0.064 -> 0.026 costs
- * 84%, and (0.064/0.026)^2 x 36 is 220. A unit of sugar therefore prints the
- * same mass it always did, out of six times as many specks, each a sixth of the
- * area. This constant and `particle` in buildGrainSheet are one setting with two
- * halves: move either alone and a unit silently changes what it is worth. */
-const PARTICLES_PER_UNIT = 220;
+ * Every earlier move here (26, then 36, then 220) held total coverage fixed while
+ * the grains got finer, on the principle that coverage is the quantity. At a full
+ * four units that was about three quarters of the cell inked, and three quarters
+ * of a cell inked is not a field of sand — it is a solid: no gaps, no lanes, and
+ * a hard boundary wherever it runs out. Nothing that full can have voids in it,
+ * and the voids are the point.
+ *
+ * So a unit is worth roughly a fifth of the cell now instead of three quarters,
+ * and the four levels are told apart by how CROWDED the sky is rather than by how
+ * close it is to saturated. One unit reads as scattered, four as thick. Same
+ * channel it always was, over a range where the eye can still see plate between
+ * the grains.
+ *
+ * This constant, `particle` and GRAIN_HALO are one setting in three parts: move
+ * any of them alone and a unit silently changes what it is worth. */
+const PARTICLES_PER_UNIT = 80;
+/* How far a grain's glow reaches, as a multiple of its core. Most of a soft
+ * point's radius carries almost no ink, and that long tail is what makes specks
+ * overlap into drifts rather than sit apart like punctuation. */
+const GRAIN_HALO = 3.4;
 /* Eight, not three, because the cloud is now NESTED (see grainCloud).
  *
  * Amount no longer varies the arrangement, so the only thing standing between
@@ -1176,80 +1315,114 @@ const PARTICLES_PER_UNIT = 220;
  * same three tiles. */
 const TILE_VARIANTS = 8;
 
-/* AND THE SAND IS NEVER STILL.
+/* AND THE SAND IS NEVER STILL — CONTINUOUSLY, not in steps.
  *
  * A cloud that never moves is a halftone print OF a cloud. The thing this plate
- * is meant to look like — spice blown across a dune — is defined by the fact
- * that it drifts, and holding it still read as printing rather than as weather.
+ * is meant to look like — spice blown across a dune — is defined by the fact that
+ * it drifts, and holding it still read as printing rather than as weather.
  *
- * So every grain travels a small closed loop around a fixed home. A LOOP, and a
- * home it never leaves, because the picture is a per-cell quantity: a grain that
- * wandered into the next square would be a lie about the data, and a grain whose
- * home moved between timesteps is the flicker grainCloud exists to remove. The
- * loop is contained by INSET rather than by clipping — a grain cut off at the
- * tile edge prints a seam along every cell boundary that pulses once per loop.
+ * The first two attempts both BAKED the motion: a strip of GRAIN_PHASES frames of
+ * the same cloud, the cell showing one column of it, advanced on a clock. Both
+ * failed, in instructive ways.
  *
- * The loop is baked, not computed per frame: a strip holds GRAIN_PHASES frames of
- * the same cloud side by side, so a repaint still costs one blit per resource per
- * cell and the phase only picks a different column of the strip.
+ *   - Cross-fading between two adjacent phases. Two half-alpha copies of a grain
+ *     do not average to one grain, they land at 1-f+f² of one, so every filled
+ *     cell dimmed to three quarters at mid-step and recovered at the boundary.
+ *     The whole plate breathed at the step rate.
+ *   - No alpha, just more phases, so a step moved a grain a third of a pixel.
+ *     Better, and still wrong, because the problem is not the SIZE of the step,
+ *     it is that every cell on the plate takes its step at the same instant. A
+ *     quarter of a million specks changing coverage together, fifteen times a
+ *     second, is a strobe. It reads as twinkle, never as drift.
  *
- * Cross-fading two phases was the first attempt and it is wrong. Two half-alpha
- * copies of a grain do not average to one grain — they land at 1-f+f² of one, so
- * every filled cell dimmed to three quarters at mid-step and recovered at the
- * boundary, and the whole plate breathed at the step rate. There is no alpha here
- * at all now; there are simply enough phases that one step moves a grain about a
- * third of a pixel, which is below what the eye can resolve as a jump. Twenty-four
- * of them costs ~10 MB of sheet and one build per board size.
+ * And a baked loop cannot be slowed, which is the other thing that was asked for:
+ * with a fixed number of frames, a longer period only means holding each frame
+ * longer, so slower and smoother pull against each other. Memory settles it — a
+ * 9-second loop at 60fps is 540 frames of the sheet, which is 150 MB.
  *
- * The phase a cell shows is offset by where that cell stands on the lattice. Two
- * cells holding the same amount already share a cloud whenever they draw the same
- * variant — one chance in eight — and if they also stood at the same phase they
- * would be pixel-identical twins, which is exactly the printed-repeat the variants
- * exist to break. The offset makes that one chance in eight times twenty-four.
+ * So nothing is baked. The tile holds ONE arrangement, and the tile itself is
+ * drawn at a fractional offset that is a continuous function of the clock. Canvas
+ * places a bitmap at sub-pixel coordinates for free — it costs the same as an
+ * integer blit, measured — so the grains move smoothly at any speed, and the
+ * speed is now a number rather than a memory budget.
+ *
+ * A tile is split into GRAIN_LAYERS of them, each drifting on its own path, or
+ * the cell would slide about as one rigid raft. Every grain belongs to one layer
+ * by index, so the layers are interleaved through the cloud rather than stacked,
+ * and the paths are per CELL as well as per layer: cell A's first layer and cell
+ * B's first layer are unrelated, so nothing marches across the plate together.
+ * Three layers, each on a Lissajous of two incommensurable rates, and the pattern
+ * never repeats.
  *
  * NOT scaled by animFactor, unlike every other motion on this stage: this is the
  * wind, not the clock. It keeps its own time while the replay is paused, sped up
  * or held on the end card, and it stops dead for a viewer who asked for reduced
  * motion. */
-const GRAIN_PHASES = 24;
-const GRAIN_PERIOD_MS = 1600;         // one full loop
-const GRAIN_WAVELENGTH = 12;          // cells between ripple crests, on the diagonal
-const GRAIN_RIPPLE = Math.max(1, Math.round(GRAIN_PHASES / GRAIN_WAVELENGTH));
-const grainSheet = { key: "", strips: [[], []], size: 0, bleed: 0, box: 0 };
+const GRAIN_LAYERS = 3;
+/* How many slices a single unit's grains dissolve in. Four, so that a cell losing
+ * one unit still thins in stages rather than fading as a block. */
+const GRAIN_SIPS = 4;
+/* One drift, end to end, in about this many seconds. Slow: a grain crosses a
+ * twentieth of its cell over roughly nine, which is a float, not a stir. */
+const GRAIN_DRIFT_RATE = 0.7;
+const grainSheet = { key: "", solid: [[], []], sips: [[], []], size: 0, bleed: 0, box: 0, float: 0 };
+const grainDrift = { cells: 0, phaseX: null, phaseY: null, rateX: null, rateY: null };
 
 /* `?stir=off` holds the sand still, and it is not a debug flag — it is the only
  * way to see the two motions on this plate APART.
  *
  * There are two of them and they are easy to confuse for each other: the wind,
- * which moves every grain a fraction of a pixel fifteen times a second and never
- * stops, and the harvest, which is the resource actually changing hands. Held on
- * one paused timestep with the stir on, ~47% of the plate's pixels change every
- * 67ms step and 17% of them change by more than a quarter of the plate-to-grain
- * contrast; with it off, none do. So a viewer asked whether the board still
- * flickers cannot answer while both are running, and neither can an audit.
+ * which moves every grain continuously and never stops, and the harvest, which is
+ * the resource actually changing hands. With the wind running, a paused board is
+ * never twice the same picture, so a viewer asked whether the resource still
+ * flickers cannot answer — and neither can an audit.
  *
  * Off, the plate is motionless until a settler eats, which is what the flicker
  * work is for; on, it drifts. Default is on — this switches nothing off for a
  * viewer who does not ask. */
 const stirWanted = new URLSearchParams(location.search).get("stir") !== "off";
 
-/** Which frame of the loop the sand stands at. Its own clock: see above. */
-function stirAt(now) {
+/* The plate is repainted on this beat rather than on every one of the 16ms ticks.
+ *
+ * The drift is slow by design — a grain crosses two pixels in nine seconds — so at
+ * 35 repaints a second it advances about eight thousandths of a pixel between
+ * them. That is three orders of magnitude below anything the eye can resolve as a
+ * step, and it halves what is the most expensive thing on the stage. */
+const GRAIN_TICK_MS = 28;
+
+/** The clock the sand drifts on — real milliseconds on the repaint beat, or a
+ *  hard 0 when the wind is switched off, which is what freezes the plate. */
+function driftAt(now) {
   if (reducedMotion || !stirWanted) return 0;
-  return Math.floor(now / (GRAIN_PERIOD_MS / GRAIN_PHASES));
+  return Math.round(now / GRAIN_TICK_MS) * GRAIN_TICK_MS;
+}
+
+/** The path each (cell, layer) drifts along. Built once per board size: two rates
+ *  that never come back into step, so no layer ever retraces itself, and a phase
+ *  per cell so no two cells drift alike. */
+function buildGrainDrift(cells) {
+  if (grainDrift.cells === cells) return;
+  const slots = cells * GRAIN_LAYERS;
+  grainDrift.cells = cells;
+  grainDrift.phaseX = new Float32Array(slots);
+  grainDrift.phaseY = new Float32Array(slots);
+  grainDrift.rateX = new Float32Array(slots);
+  grainDrift.rateY = new Float32Array(slots);
+  for (let cell = 0; cell < cells; cell += 1) {
+    for (let layer = 0; layer < GRAIN_LAYERS; layer += 1) {
+      const slot = cell * GRAIN_LAYERS + layer;
+      grainDrift.phaseX[slot] = grainOffset(cell, layer, 21) * Math.PI * 2;
+      grainDrift.phaseY[slot] = grainOffset(cell, layer, 22) * Math.PI * 2;
+      grainDrift.rateX[slot] = GRAIN_DRIFT_RATE * (0.62 + grainOffset(cell, layer, 23) * 0.76);
+      grainDrift.rateY[slot] = GRAIN_DRIFT_RATE * (0.62 + grainOffset(cell, layer, 24) * 0.76);
+    }
+  }
 }
 
 /** `value` brought into [0, span) — the cell wraps, so a grain that orbits off
  *  one edge comes back on the other rather than being clipped away. */
 function wrapInto(value, span) {
   return ((value % span) + span) % span;
-}
-
-/** Which frame of the loop the cell at (x, y) shows. Offset along x - y so that
- *  neighbours never stand at the same phase, and two cells that happen to share
- *  an amount AND a variant still cannot print as identical twins. */
-function grainColumn(stir, x, y) {
-  return wrapInto(stir + (x - y) * GRAIN_RIPPLE, GRAIN_PHASES);
 }
 
 /** A deterministic value in [0,1) from three integers. Positions must be stable
@@ -1279,16 +1452,57 @@ function grainOffset(a, b, c) {
  * removes that unit's grains and moves nothing else; regrowing puts them back
  * where they were. Sugar and spice get separate streams, so eating one does not
  * disturb the other. */
+/* Grains CLUMP, and the voids between the clumps are as much of the picture as
+ * the clumps are.
+ *
+ * Scattered evenly — one hash for x, one for y — a cloud has the same density
+ * everywhere, and a field with the same density everywhere has no shape. Past a
+ * few units it stops looking like a field at all and starts looking like a solid
+ * with an edge where it runs out, which is exactly what it looked like.
+ *
+ * So grains come in handfuls. A handful gets an origin and its own reach, and its
+ * grains are placed by SUMMING two offsets rather than taking one, which crowds
+ * them toward the middle and thins them at the rim instead of filling a box
+ * evenly. Handfuls overlap, miss each other, and leave lanes of bare plate
+ * between them — the gaps do the work.
+ *
+ * A handful WRAPS at the cell edge rather than being allowed to sit past it. The
+ * obvious way round — let origins spill a little outside — was tried and printed
+ * a dark rule along every boundary on the board, because a handful can reach
+ * further than the spill allowed it to start, so the edges of the cell were the
+ * one place no handful could be centred and the density fell away there. Wrapping
+ * makes every point in the cell equally likely by construction, which is the only
+ * version of this with no edge case at the edge. Grains still cross the boundary:
+ * a point's glow reaches into the tile's margin and lands over the neighbour, and
+ * the neighbour's does the same back, so the two fields overlap and the boundary
+ * stops existing.
+ *
+ * The handful is keyed by index / GRAIN_PER_CLUMP, so it is a property of the
+ * grain's place in the stream and nothing else. The nesting invariant holds: grain
+ * i is in the same handful at the same spot however much the cell holds. */
+const GRAIN_PER_CLUMP = 7;
 function grainCloud(stream, count) {
   const cloud = [];
   for (let index = 0; index < count; index += 1) {
+    const clump = Math.floor(index / GRAIN_PER_CLUMP);
+    const originX = grainOffset(stream, clump, 30);
+    const originY = grainOffset(stream, clump, 31);
+    const reachX = 0.07 + grainOffset(stream, clump, 32) * 0.20;
+    const reachY = 0.07 + grainOffset(stream, clump, 33) * 0.20;
     cloud.push([
-      grainOffset(stream, index, 0),
-      grainOffset(stream, index, 1),
+      wrapInto(originX + (grainOffset(stream, index, 0) + grainOffset(stream, index, 8) - 1) * reachX, 1),
+      wrapInto(originY + (grainOffset(stream, index, 1) + grainOffset(stream, index, 9) - 1) * reachY, 1),
       // Grains vary in size. A single particle size reads as television static;
       // sand does not have one grade, and the variation is what makes the mass
       // look blown rather than generated.
-      0.65 + grainOffset(stream, index, 2) * 0.95,
+      0.55 + grainOffset(stream, index, 2) * 1.30,
+      /* And in BRIGHTNESS, squared, so most are faint and a few are not.
+       *
+       * A field of equally bright specks is a texture; a field where brightness
+       * runs over a wide range reads as depth, which is the whole difference
+       * between static and a sky. Squaring the hash is what puts most of the
+       * population at the dim end where it belongs. */
+      0.16 + grainOffset(stream, index, 10) ** 2 * 0.84,
     ]);
   }
   return cloud;
@@ -1304,9 +1518,67 @@ function grainCeiling() {
   return [Math.max(0, Math.round(state.maxSugar)), Math.max(0, Math.round(state.maxSpice))];
 }
 
-/** The strip holding `units` of `resource` in a given variant, or undefined. */
-function grainStrip(resource, units, variant) {
-  return grainSheet.strips[resource][(units - 1) * TILE_VARIANTS + variant];
+/** A theme hex as rgba at a given alpha, so the gradients below are derived from
+ *  the palette block rather than restating it. */
+function grainAlpha(hex, alpha) {
+  const value = parseInt(hex.slice(1), 16);
+  return `rgba(${(value >> 16) & 255},${(value >> 8) & 255},${value & 255},${alpha})`;
+}
+
+/* A grain is a SOFT POINT, not a square.
+ *
+ * fillRect gives every speck four hard edges and one flat value, and a plate of
+ * those reads as a printed screen however small they are — at any density above a
+ * scatter it fuses into a solid with a cut edge where it stops. A soft point has
+ * no edge to find: a bright core falling away to nothing, so grains overlap into
+ * drifts rather than tiling into a surface, and the field ends by thinning out
+ * instead of by stopping.
+ *
+ * Baked once per colour and blitted, because a radial gradient per grain across
+ * ~20,000 of them at build time is not affordable and does not need to be — one
+ * sprite scaled and faded is the same picture. */
+function buildGrainSprite(colour) {
+  const size = 64;
+  const sprite = document.createElement("canvas");
+  sprite.width = size;
+  sprite.height = size;
+  const spriteContext = sprite.getContext("2d");
+  const middle = size / 2;
+  const glow = spriteContext.createRadialGradient(middle, middle, 0, middle, middle, middle);
+  // A small solid core, then a long tail. The tail is most of the radius and
+  // almost none of the ink, which is what makes the point read as lit rather than
+  // as drawn.
+  glow.addColorStop(0, grainAlpha(colour, 1));
+  glow.addColorStop(0.18, grainAlpha(colour, 0.82));
+  glow.addColorStop(0.42, grainAlpha(colour, 0.28));
+  glow.addColorStop(0.72, grainAlpha(colour, 0.06));
+  glow.addColorStop(1, grainAlpha(colour, 0));
+  spriteContext.fillStyle = glow;
+  spriteContext.fillRect(0, 0, size, size);
+  return sprite;
+}
+
+/** Which layer and which slice of its unit a grain belongs to. Both fall out of
+ *  its index, so every grain lands in exactly one of each and the layers are
+ *  interleaved THROUGH the cloud rather than stacked in bands of it. */
+function grainLayer(index) {
+  return index % GRAIN_LAYERS;
+}
+function grainSip(index) {
+  return Math.floor(index / GRAIN_LAYERS) % GRAIN_SIPS;
+}
+
+/** The settled tile: everything a cell holding `units` of `resource` shows, in
+ *  one layer. One blit, and it is what the plate is made of almost all the time. */
+function grainSolid(resource, units, variant, layer) {
+  return grainSheet.solid[resource][((units - 1) * TILE_VARIANTS + variant) * GRAIN_LAYERS + layer];
+}
+
+/** One slice of ONE unit — the granularity a harvest dissolves at. Drawn only
+ *  while a cell is changing, which is a fifth of them for a fifth of a dwell. */
+function grainSipTile(resource, unit, sip, variant, layer) {
+  const slice = ((unit - 1) * GRAIN_SIPS + sip) * TILE_VARIANTS + variant;
+  return grainSheet.sips[resource][slice * GRAIN_LAYERS + layer];
 }
 
 function buildGrainSheet(cellPx) {
@@ -1314,7 +1586,8 @@ function buildGrainSheet(cellPx) {
   const key = `${cellPx}:${ceiling[0]}:${ceiling[1]}`;
   if (grainSheet.key === key) return;
   grainSheet.key = key;
-  grainSheet.strips = [[], []];
+  grainSheet.solid = [[], []];
+  grainSheet.sips = [[], []];
   const size = Math.max(2, Math.ceil(cellPx));
   grainSheet.size = size;
   /* SAND, not gravel: 0.026 of a cell, down from 0.075 and then 0.064.
@@ -1330,100 +1603,240 @@ function buildGrainSheet(cellPx) {
    * the count has to pay for the fineness or a unit of sugar quietly becomes a
    * fifth of the ink it was: (0.064/0.026)^2 = 6.1, and 36 x 6.1 is the 220 in
    * PARTICLES_PER_UNIT. Move one of the two and you must move the other. */
-  const particle = Math.max(0.6, size * 0.026);
-  // How far a grain may wander from home. Under half a particle: the mass has to
-  // read as stirred, not as scattered, and its density IS the quantity.
-  const drift = Math.max(0.4, particle * 0.55);
+  const particle = Math.max(0.5, size * 0.021);
+  /* How far a grain travels from home, and it is the DRAWN tile that travels now
+   * rather than anything baked. A twentieth of a cell, so a grain crosses two
+   * pixels of the supersampled plate over the nine seconds of a drift — visible
+   * as movement if you watch one, invisible as a change if you are reading the
+   * board, which is the only setting that satisfies both. */
+  const float = Math.max(0.8, size * 0.05);
   /* The cells BLEED INTO EACH OTHER rather than each holding its own sand.
    *
-   * A grain whose orbit carries it over the edge used to wrap round to the
-   * opposite side of the same cell — the cell as a torus. Density stayed flat
-   * across the boundary, which was the point, but nothing ever CROSSED one, so
-   * every cell was still a closed box and the lattice could be read off the
-   * plate by anyone who looked for it.
+   * A grain that crossed the edge used to wrap round to the opposite side of the
+   * same cell — the cell as a torus. Density stayed flat across the boundary,
+   * which was the point, but nothing ever CROSSED one, so every cell was still a
+   * closed box and the lattice could be read off the plate by anyone who looked.
    *
-   * Now the tile is drawn with a margin and the grain simply carries on into it,
-   * over the neighbour, and the tiles mesh. The cost is the honest one: that
-   * spilled grain belongs to the cell it came FROM, so when a settler eats that
-   * cell the part of the grain lying over the neighbour goes with it. Which is
-   * correct — it was never the neighbour's sand.
+   * Now the tile carries a margin and the grain simply carries on into it, over
+   * the neighbour, and the tiles mesh. The cost is the honest one: that spilled
+   * grain belongs to the cell it came FROM, so when a settler eats that cell the
+   * part lying over the neighbour goes with it. Which is correct — it was never
+   * the neighbour's sand.
    *
-   * The margin is exactly what an orbit plus a grade can reach, so the clip
-   * never cuts a grain and no grain reaches the next phase's column. */
-  const bleed = Math.ceil(drift + particle * 1.6);
+   * The margin covers the reach of a grain's glow; the drift is added at DRAW
+   * time, as a fractional offset on the blit, so it needs no margin of its own. */
+  const bleed = Math.max(2, Math.min(Math.floor(size / 2), Math.round(size * 0.16)));
   const box = size + bleed * 2;
   grainSheet.bleed = bleed;
   grainSheet.box = box;
+  grainSheet.float = float;
+
+  /* NO CELL HAS AN EDGE. Every tile is FEATHERED, and the feathers sum to one.
+   *
+   * With each cell's sand stopping dead at its own boundary, an emptied cell
+   * printed as a hard black square with four straight sides — the sharpest thing
+   * on a plate that is meant to read as weather. Softening it by simply letting
+   * tiles overhang does not work either: where two full cells meet you then have
+   * both fields at full strength and the seam comes back inverted, as a bright
+   * rule instead of a dark one.
+   *
+   * So the field is EXTENDED past the cell — the wrapped cloud repeats into the
+   * margin — and the tile's alpha is a triangular ramp: zero at the outer edge of
+   * the margin, full one margin-width in, flat across the middle. Tiles are laid
+   * one cell apart and overlap by exactly two margins, so on any run of cells the
+   * falling ramp of one lands on the rising ramp of the next and the two sum to
+   * exactly one. Uniform sand stays uniform, with no seam of either sign.
+   *
+   * What it buys is the empty cell: with no neighbour tile to complete the sum,
+   * the surrounding sand simply ramps down into the hole across a sixth of a cell
+   * on every side. The void gets a soft shore instead of four straight sides. */
+  const feather = document.createElement("canvas");
+  feather.width = box;
+  feather.height = box;
+  const featherContext = feather.getContext("2d");
+  const ramp = (context2d, horizontal) => {
+    const shade = horizontal
+      ? context2d.createLinearGradient(0, 0, box, 0)
+      : context2d.createLinearGradient(0, 0, 0, box);
+    shade.addColorStop(0, C.maskOut);
+    shade.addColorStop((bleed * 2) / box, C.maskIn);
+    shade.addColorStop(size / box, C.maskIn);
+    shade.addColorStop(1, C.maskOut);
+    return shade;
+  };
+  featherContext.fillStyle = ramp(featherContext, true);
+  featherContext.fillRect(0, 0, box, box);
+  // Separable: the vertical ramp multiplies the horizontal one, so a corner gets
+  // the product of the two and the partition still sums to one along both axes.
+  featherContext.globalCompositeOperation = "destination-in";
+  featherContext.fillStyle = ramp(featherContext, false);
+  featherContext.fillRect(0, 0, box, box);
+
+  /** One tile: the grains of `cloud` in `layer`, optionally only those in `sip`. */
+  const bake = (sprite, cloud, from, layer, sip) => {
+    const tile = document.createElement("canvas");
+    tile.width = box;
+    tile.height = box;
+    const tileContext = tile.getContext("2d");
+    // The cell's own origin sits one margin in, so what continues past the cell is
+    // drawn into the margin rather than clipped off.
+    tileContext.translate(bleed, bleed);
+    let lit = -1;
+    for (let index = from; index < cloud.length; index += 1) {
+      if (grainLayer(index) !== layer) continue;
+      if (sip >= 0 && grainSip(index) !== sip) continue;
+      const [x, y, scale, glow] = cloud[index];
+      const reach = particle * scale * GRAIN_HALO;
+      if (glow !== lit) {
+        lit = glow;
+        tileContext.globalAlpha = glow;
+      }
+      const atX = x * size;
+      const atY = y * size;
+      // The cloud repeats into the margin, so the field carries on past the cell
+      // instead of stopping at it. Only grains near an edge have a copy to draw.
+      const alsoX = atX < bleed + reach ? atX + size : (atX > size - bleed - reach ? atX - size : null);
+      const alsoY = atY < bleed + reach ? atY + size : (atY > size - bleed - reach ? atY - size : null);
+      const place = (px, py) => tileContext.drawImage(
+        sprite, px - reach / 2, py - reach / 2, reach, reach);
+      place(atX, atY);
+      if (alsoX !== null) place(alsoX, atY);
+      if (alsoY !== null) place(atX, alsoY);
+      if (alsoX !== null && alsoY !== null) place(alsoX, alsoY);
+    }
+    tileContext.setTransform(1, 0, 0, 1, 0, 0);
+    tileContext.globalAlpha = 1;
+    tileContext.globalCompositeOperation = "destination-in";
+    tileContext.drawImage(feather, 0, 0);
+    return tile;
+  };
+
   for (const [resource, colour] of [[0, SUGAR_HEX], [1, SPICE_HEX]]) {
-    for (let units = 1; units <= ceiling[resource]; units += 1) {
-      for (let variant = 0; variant < TILE_VARIANTS; variant += 1) {
-        const strip = document.createElement("canvas");
-        strip.width = box * GRAIN_PHASES;
-        strip.height = box;
-        const stripContext = strip.getContext("2d");
-        stripContext.fillStyle = colour;
-        const stream = grainStream(variant, resource);
-        const cloud = grainCloud(stream, units * PARTICLES_PER_UNIT);
-        /* Every grain floats on a path of ITS OWN — its own start, its own
-         * direction, its own ellipse at its own angle, none of it shared with
-         * the grain beside it.
-         *
-         * The first version tied the starting angle to the grain's x so that
-         * neighbours leaned together, on the theory that a wave passing through
-         * the cell would look more like weather than independent orbits would.
-         * It looks like neither. A cell whose grains all lean the same way is one
-         * rigid thing tilting, and the plate read as several hundred little rafts
-         * ROCKING back and forth in step. Correlation is the bug, not the fix:
-         * with nothing shared, the mass simmers, and the cells mesh into one
-         * field instead of each announcing its own edges.
-         *
-         * Precomputed per grain rather than per (grain, phase) — these are
-         * constants of the path, and recomputing eight hashes inside the phase
-         * loop cost twenty-four times what it needed to. */
-        const paths = cloud.map(([x, y, scale], index) => {
-          const tilt = grainOffset(stream, index, 5) * Math.PI;
-          return {
-            homeX: x * size,
-            homeY: y * size,
-            grade: particle * scale,
-            spin: grainOffset(stream, index, 3) < 0.5 ? 1 : -1,
-            start: grainOffset(stream, index, 4),
-            cosTilt: Math.cos(tilt),
-            sinTilt: Math.sin(tilt),
-            reach: drift * (0.35 + grainOffset(stream, index, 6) * 0.65),
-            // Round orbits all round is as uniform as flat ones all flat. Each
-            // grain gets its own squash, so no two trace the same figure.
-            flat: 0.3 + grainOffset(stream, index, 7) * 0.7,
-          };
-        });
-        for (let phase = 0; phase < GRAIN_PHASES; phase += 1) {
-          stripContext.save();
-          stripContext.beginPath();
-          stripContext.rect(phase * box, 0, box, box);
-          stripContext.clip();
-          // The cell's own origin sits one margin in, so a grain that leaves it
-          // is drawn in the margin rather than wrapped back inside.
-          stripContext.translate(phase * box + bleed, bleed);
-          for (let index = 0; index < paths.length; index += 1) {
-            const path = paths[index];
-            const grade = path.grade;
-            const angle = (path.start + path.spin * phase / GRAIN_PHASES) * Math.PI * 2;
-            const reachX = Math.cos(angle) * path.reach;
-            const reachY = Math.sin(angle) * path.reach * path.flat;
-            stripContext.fillRect(
-              path.homeX + reachX * path.cosTilt - reachY * path.sinTilt,
-              path.homeY + reachX * path.sinTilt + reachY * path.cosTilt,
-              grade, grade);
+    const sprite = buildGrainSprite(colour);
+    const full = ceiling[resource] * PARTICLES_PER_UNIT;
+    for (let variant = 0; variant < TILE_VARIANTS; variant += 1) {
+      const cloud = grainCloud(grainStream(variant, resource), full);
+      for (let units = 1; units <= ceiling[resource]; units += 1) {
+        const held = cloud.slice(0, units * PARTICLES_PER_UNIT);
+        for (let layer = 0; layer < GRAIN_LAYERS; layer += 1) {
+          grainSheet.solid[resource][((units - 1) * TILE_VARIANTS + variant) * GRAIN_LAYERS + layer]
+            = bake(sprite, held, 0, layer, -1);
+          for (let sip = 0; sip < GRAIN_SIPS; sip += 1) {
+            // Only THIS unit's grains: the slice a harvest takes, on its own, so
+            // it can be dissolved without touching the ones underneath it.
+            const slice = ((units - 1) * GRAIN_SIPS + sip) * TILE_VARIANTS + variant;
+            grainSheet.sips[resource][slice * GRAIN_LAYERS + layer]
+              = bake(sprite, held, (units - 1) * PARTICLES_PER_UNIT, layer, sip);
           }
-          stripContext.restore();
         }
-        grainSheet.strips[resource][(units - 1) * TILE_VARIANTS + variant] = strip;
       }
     }
   }
 }
 
-function buildTerrain(frame, stir) {
+/** How many whole units of `resource` a recorded cell holds. */
+function grainUnits(cell, resource, ceiling) {
+  return Math.min(ceiling[resource], Math.max(0, Math.round(cell[resource])));
+}
+
+/* How much of the slice standing at `place` in a queue of `queue` is showing.
+ *
+ * This one expression is the whole difference between a dissolve and a crossfade.
+ * A crossfade puts EVERY element at partial alpha at once — the entire plate at
+ * 50% halfway through. Here the queue is walked: the slices behind the head are
+ * still at 1, the ones in front of it are at 0 and not drawn at all, and only the
+ * slice at the head is anywhere in between. At most one thing on the plate is
+ * ever semi-transparent, so the picture never goes soft. */
+function grainShare(dissolved, queue, place, rising) {
+  const reached = dissolved * queue - place;
+  return Math.max(0, Math.min(1, rising ? reached : 1 - reached));
+}
+
+/* THE HEIGHT UNDER THE SAND.
+ *
+ * Grain density alone cannot carry how much a cell holds, and this was measured
+ * on the real recording rather than argued: sampling the rendered plate cell by
+ * cell against the frame it was drawn from, one unit of sugar to the next moved
+ * the mean luminance by 4 to 9 values — 1.06:1 to 1.13:1, where a non-text
+ * graphic needs 3:1 — while the scatter WITHIN a single level was 7 to 13. The
+ * encoding was quieter than its own noise (gap/sigma 0.32 to 0.92), so a 1-cell
+ * and a 4-cell were not distinguishable and the four massifs printed as an even
+ * speckle. Grains saturate: past the first unit each new one lands on sand that
+ * is already lit, so it buys coverage the eye has mostly been sold already.
+ *
+ * So the sand sits on a WASH that carries the height on its own — one source
+ * pixel per cell, blended off the plate toward each resource's own hue in
+ * proportion to what the cell holds, upscaled with smoothing so the field
+ * interpolates between cell centres instead of terracing into squares. It is
+ * gui.py's two-axis ramp restored as a floor: deterministic, seamless, and free
+ * of the stochastic scatter that was drowning the signal. The sand keeps its
+ * job — texture, and the harvest animation — and stops having to carry depth
+ * by itself.
+ *
+ * Amplitude is set by what else has to survive on the plate. A settler is a
+ * ~115-value seat colour inside a C.ink ring; holding a full cell of both
+ * resources near 75 keeps the bodies clearly the brightest thing on the board
+ * and leaves the ring its job. */
+const WASH_GAIN = 0.16;
+const washPlate = document.createElement("canvas");
+const washContext = washPlate.getContext("2d");
+
+function washRgb(hex) {
+  const value = parseInt(hex.slice(1), 16);
+  return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+}
+
+const WASH_BASE = washRgb(PLATE_HEX);
+const WASH_SUGAR = washRgb(SUGAR_HEX);
+const WASH_SPICE = washRgb(SPICE_HEX);
+
+function paintHeightWash(frame, cell) {
+  const ceiling = grainCeiling();
+  if (ceiling[0] <= 0 && ceiling[1] <= 0) return;
+  if (washPlate.width !== frame.width || washPlate.height !== frame.height) {
+    washPlate.width = frame.width;
+    washPlate.height = frame.height;
+  }
+  const field = washContext.createImageData(frame.width, frame.height);
+  const pixels = field.data;
+  for (let index = 0; index < frame.cells.length; index += 1) {
+    const holds = frame.cells[index];
+    // cellId = x * height + y, and the wash is a row-major bitmap.
+    const x = Math.floor(index / frame.height);
+    const y = index % frame.height;
+    const sugar = ceiling[0] > 0 ? Math.min(1, Math.max(0, holds[0] / ceiling[0])) : 0;
+    const spice = ceiling[1] > 0 ? Math.min(1, Math.max(0, holds[1] / ceiling[1])) : 0;
+    const at = (y * frame.width + x) * 4;
+    for (let channel = 0; channel < 3; channel += 1) {
+      // Each resource pulls the plate toward its own hue independently, so a
+      // cell holding both lands warm and bright and a cell holding one lands on
+      // that one's colour. Additive at THIS amplitude stays on the plate: the
+      // full-both corner measures ~75, well under the seat colours above it.
+      const base = WASH_BASE[channel];
+      pixels[at + channel] = Math.min(255, base
+        + sugar * WASH_GAIN * (WASH_SUGAR[channel] - base)
+        + spice * WASH_GAIN * (WASH_SPICE[channel] - base));
+    }
+    pixels[at + 3] = 255;
+  }
+  washContext.putImageData(field, 0, 0);
+  terrainContext.imageSmoothingEnabled = true;
+  terrainContext.imageSmoothingQuality = "high";
+  // Source pixel centres land on cell centres under a plain scale, so the
+  // bilinear ramp between two cells is centred on the boundary they share.
+  terrainContext.drawImage(washPlate, 0, 0, cell * frame.width, cell * frame.height);
+}
+
+/* Paint the plate: every cell's settled sand at wherever its layers have drifted
+ * to, and, for the cells that just changed hands, the slice going or arriving.
+ *
+ * `dissolved` runs 0 to 1 across one harvest. A departing unit's slices leave in
+ * order, TOP FIRST, because the top of the pile is what a settler takes; an
+ * arriving unit's land in the order they were laid. Only the slice at the head of
+ * the queue is ever part-transparent — the ones behind it are still solid and the
+ * ones ahead are simply not drawn — so at no point is the plate a double exposure
+ * of itself, which is what the crossfade this replaced could never avoid. */
+function buildTerrain(frame, from, clock, dissolved) {
   const size = Math.round(BOARD.w * RENDER_SCALE);
   if (terrain.width !== size) terrain.width = terrain.height = size;
   const cell = size / Math.max(frame.width, frame.height);
@@ -1431,37 +1844,73 @@ function buildTerrain(frame, stir) {
   terrainContext.clearRect(0, 0, terrain.width, terrain.height);
   terrainContext.fillStyle = PLATE_HEX;
   terrainContext.fillRect(0, 0, cell * frame.width, cell * frame.height);
+  paintHeightWash(frame, cell);
 
   buildGrainSheet(cell);
-  terrainStir = stir;
+  buildGrainDrift(frame.cells.length);
   const box = grainSheet.box;
   const bleed = grainSheet.bleed;
+  const float = grainSheet.float;
   const ceiling = grainCeiling();
+  const seconds = clock / 1000;
+  const leaving = from && from.cells.length === frame.cells.length ? from.cells : null;
+  let alpha = 1;
+  terrainContext.globalAlpha = 1;
+
   for (let index = 0; index < frame.cells.length; index += 1) {
-    const [sugar, spice] = frame.cells[index];
-    if (sugar <= 0 && spice <= 0) continue;
+    const holds = frame.cells[index];
+    const held = leaving ? leaving[index] : holds;
+    if (holds[0] <= 0 && holds[1] <= 0 && held[0] <= 0 && held[1] <= 0) continue;
     // cellId = x * height + y (column-major).
     const x = Math.floor(index / frame.height);
     const y = index % frame.height;
     // The variant is chosen per CELL, so the same amount does not print the same
-    // arrangement across a whole massif...
+    // arrangement across a whole massif.
     const variant = Math.floor(grainOffset(index, 7, 11) * TILE_VARIANTS);
-    const column = grainColumn(stir, x, y);
-    const left = Math.round(x * cell);
-    const top = Math.round(y * cell);
-    for (const [resource, amount] of [[0, sugar], [1, spice]]) {
-      const units = Math.min(ceiling[resource], Math.max(0, Math.round(amount)));
-      if (units <= 0) continue;
-      const strip = grainStrip(resource, units, variant);
-      if (!strip) continue;
-      // Drawn one margin up and to the left of the cell it belongs to, so the
-      // sand that overhangs lands on the neighbours. Nothing is erased by the
-      // neighbour's own blit: the margins are transparent, so the two fields
-      // simply overlap and the boundary stops existing.
-      terrainContext.drawImage(strip, column * box, 0, box, box,
-        left - bleed, top - bleed, box, box);
+    // One margin up and to the left of the cell it belongs to, so the sand that
+    // overhangs lands on the neighbours. Nothing is erased by the neighbour's own
+    // blit: the margins are transparent, so the two fields simply overlap and the
+    // boundary stops existing.
+    const left = Math.round(x * cell) - bleed;
+    const top = Math.round(y * cell) - bleed;
+    for (let layer = 0; layer < GRAIN_LAYERS; layer += 1) {
+      const slot = index * GRAIN_LAYERS + layer;
+      // Sub-pixel, and deliberately not rounded: a fractional blit costs the same
+      // as an integer one and is the whole reason this motion is continuous.
+      const dx = left + float * Math.sin(seconds * grainDrift.rateX[slot] + grainDrift.phaseX[slot]);
+      const dy = top + float * Math.sin(seconds * grainDrift.rateY[slot] + grainDrift.phaseY[slot]);
+      for (let resource = 0; resource < 2; resource += 1) {
+        const now = grainUnits(holds, resource, ceiling);
+        const was = grainUnits(held, resource, ceiling);
+        const settled = Math.min(now, was);
+        if (settled > 0) {
+          const tile = grainSolid(resource, settled, variant, layer);
+          if (tile) {
+            if (alpha !== 1) { alpha = 1; terrainContext.globalAlpha = 1; }
+            terrainContext.drawImage(tile, dx, dy, box, box);
+          }
+        }
+        if (now === was) continue;
+        const rising = now > was;
+        const top_ = Math.max(now, was);
+        const queue = (top_ - settled) * GRAIN_SIPS;
+        let place = 0;
+        for (let unit = rising ? settled + 1 : top_; rising ? unit <= top_ : unit > settled;
+          unit += rising ? 1 : -1) {
+          for (let sip = 0; sip < GRAIN_SIPS; sip += 1) {
+            const share = grainShare(dissolved, queue, place, rising);
+            place += 1;
+            if (share <= 0.004) continue;
+            const tile = grainSipTile(resource, unit, sip, variant, layer);
+            if (!tile) continue;
+            if (alpha !== share) { alpha = share; terrainContext.globalAlpha = share; }
+            terrainContext.drawImage(tile, dx, dy, box, box);
+          }
+        }
+      }
     }
   }
+  terrainContext.globalAlpha = 1;
 }
 
 /* THE SURROUND IS THE SAME DESERT.
@@ -1638,15 +2087,9 @@ function drawBoard(frame, previous, t, now) {
   context.fillStyle = C.edge;
   context.fillRect(BOARD.x - 2, BOARD.y - 2, BOARD.w + 4, BOARD.h + 4);
   context.restore();
-  // The plate the settlers are leaving, with the one they have just made
-  // dissolving over it. Both carry the same opaque field colour, so only the
-  // grains that actually changed hands are in motion: the ones a settler ate
-  // drain away and the ones that regrew fill in.
-  const settle = terrainBlend(now);
-  if (settle < 1) context.drawImage(terrainOut, BOARD.x, BOARD.y, BOARD.w, BOARD.h);
-  context.globalAlpha = settle;
+  // One plate. The dissolve happens INSIDE it, on the grains that changed hands,
+  // so there is never a second copy of the board to blend against.
   context.drawImage(terrain, BOARD.x, BOARD.y, BOARD.w, BOARD.h);
-  context.globalAlpha = 1;
 
   // A settler starving leaves an expanding ring where it stood.
   for (let index = motes.length - 1; index >= 0; index -= 1) {
@@ -1829,7 +2272,8 @@ function seatMark(x, y, slot, radius) {
  *  hollow settler was a visible state a viewer could not decode - the legend
  *  for it used to live in the feed's header and vanished at the embed floor. */
 function boardKey(frame) {
-  const y = TOP_INSET + KEY_H - 12;
+  // Sits on the baseline of its own row, immediately above the board.
+  const y = BOARD.y - Math.round(keyH * 0.28);
   let x = BOARD.x + 2;
   let markup = "";
   const size = T(18);
@@ -2060,14 +2504,27 @@ function scorebug(frame) {
       size: T(40), weight: 700, family: F.mono, anchor: "end",
       fill: leader ? C.gold : C.muted,
     });
-    markup += text(
-      margin === 0 ? "level" : margin > 0 ? `+${format(margin)}` : `\u2212${format(-margin)}`,
-      x + chipW - 20, big ? 96 : 84,
-      {
-        size: big ? T(18) : T(20), weight: 700, family: F.mono, anchor: "end",
-        fill: margin > 0 ? C.gold : C.muted,
-      },
-    );
+    /* THE GAP IS ONE FACT, so a two-horse race states it ONCE.
+     *
+     * Every chip used to carry a margin, so a two-population match printed "+236"
+     * on the leader and "\u2212236" on the challenger: the same number, twice, in the
+     * scarcest space on the frame, and the second copy carries nothing the first
+     * did not. It reads as two statistics and is one.
+     *
+     * With three or more it stops being redundant \u2014 each chip's distance to the
+     * leader is a different number \u2014 so they keep it, and the leader keeps its
+     * margin over second place, which is a different quantity again. */
+    const worthSaying = rank === 0 || rows.length > 2;
+    if (worthSaying) {
+      markup += text(
+        margin === 0 ? "level" : margin > 0 ? `+${format(margin)}` : `\u2212${format(-margin)}`,
+        x + chipW - 20, big ? 96 : 84,
+        {
+          size: big ? T(18) : T(20), weight: 700, family: F.mono, anchor: "end",
+          fill: margin > 0 ? C.gold : C.muted,
+        },
+      );
+    }
     x += chipW + gap;
   });
   return markup;
@@ -2082,11 +2539,169 @@ function scorebug(frame) {
  *  race is drawn diverging about zero, which fills the plot from the first
  *  timestep and renders each lead change as a visible crossing. Three or more
  *  populations fall back to absolute lines, where a single gap is meaningless. */
+/** The live figure beside each head dot, in that population's own colour.
+ *
+ *  Two populations dying at the same rate draw two lines on top of each other,
+ *  so the shape alone cannot say which is which or by how much — and the count
+ *  that mattered was the one thing the die-off banner did carry. It travels with
+ *  the head now and changes on every timestep, instead of being shouted once and
+ *  taken away.
+ *
+ *  Set to the RIGHT of the head, into the stretch of axis the episode has not
+ *  reached yet, and flipped to the left of it for the last few timesteps, where
+ *  it would otherwise print past the panel's edge. Two heads at nearly the same
+ *  value would overprint, so they are pushed apart from the top down: the highest
+ *  keeps its place and anything under it steps clear.
+ *
+ *  @param heads {{ slot, y, label }[]} one entry per line, unordered. */
+function headCounts(heads, headX, bounds) {
+  const size = T(18);
+  const step = size * 1.15;
+  /* A sixteen-population match — which the manifest permits — cannot carry
+   * sixteen figures in a strip this short, and a pile-up reads as a fault rather
+   * than as data. The lines and the scorebug still carry it; the labels go.
+   *
+   * The test is whether the pushed-apart stack SPANS the plot: first label at the
+   * top, last at the baseline, one step between each. Measuring the stack's full
+   * height instead cost one head's worth of room and dropped the labels for two
+   * populations at the embed floor, which is the shipped config and the exact
+   * case the figures were added for. */
+  if (heads.length === 0 || (heads.length - 1) * step > bounds.base - bounds.top) return "";
+  const widest = Math.max(...heads.map((head) => advance(head.label, size)));
+  const after = bounds.left + bounds.plotW - headX > widest + G(20);
+  const x = after ? headX + G(11) : headX - G(11);
+  let markup = "";
+  let previous = -Infinity;
+  for (const head of [...heads].sort((first, second) => first.y - second.y)) {
+    // Held inside the plot at both ends. An extinct population sits ON the
+    // baseline, and below that is the shared time axis.
+    const y = Math.min(
+      bounds.base - 2,
+      Math.max(head.y + size * 0.34, bounds.top + size * 0.8, previous + step),
+    );
+    previous = y;
+    markup += text(head.label, x, y, {
+      size, weight: 700, family: F.mono, fill: seatOf(head.slot).text,
+      anchor: after ? "start" : "end", outline: 3,
+    });
+  }
+  return markup;
+}
+
+/** The second plot on the race panel's time axis: how many settlers each
+ *  population still has, timestep by timestep.
+ *
+ *  This is where the die-off went. It used to be a STINGER — a plate dropped over
+ *  the middle of the board for two seconds whenever three settlers went at once,
+ *  which on the shipped config is most timesteps, so the thing a viewer came to
+ *  watch spent the episode behind a banner announcing what the board was already
+ *  showing. A population that is dying is a line that falls: it reads at a
+ *  glance, it keeps its whole history instead of two seconds of it, it says
+ *  WHOSE settlers went, and because it hangs off the same time axis as the lead
+ *  band above it, a collapse and the lead it cost sit on the same vertical. */
+function settlerStrip(frame, plot) {
+  const { left, plotW, scaleX, top, height, visible } = plot;
+  const base = top + height;
+  const axis = {
+    size: T(18), weight: 500, family: F.mono, fill: C.dim, anchor: "end", outline: 2.4,
+  };
+  // The scale is the largest headcount any ONE population has held, not the
+  // starting figure: a variant with reproduction climbs past it, and a spectator
+  // who joined late never saw it (see sawStart).
+  const cap = Math.max(1, ...visible.flatMap((point) => point.population ?? []));
+  const scaleY = (count) => base - (Math.max(0, count) / cap) * height;
+
+  let markup = `<line x1="${left}" y1="${base}" x2="${left + plotW}" y2="${base}" `
+    + `stroke="${C.axis}" stroke-width="1.5"/>`;
+  markup += text(format(cap), left - 10, top + T(18) * 0.7, axis);
+  // ABOVE its baseline, unlike the lead plot's "level". The strip is the bottom
+  // plot on the panel, so below the baseline is the shared time axis — and a "0"
+  // set there printed on top of the "t0" underneath it.
+  //
+  // Dropped at the embed floor, where the compact ramp sets both gutter figures
+  // at 34 units against a 76-unit strip: the pair filled the plot they were
+  // scaling. The floor is a baseline drawn under two lines that only fall, which
+  // is the one end of a headcount axis a viewer can infer.
+  if (!plot.big) markup += text("0", left - 10, base - 3, axis);
+  if (visible.length === 0) return markup;
+
+  const last = visible.at(-1);
+  const headX = scaleX(last.timestep);
+  const heads = [];
+  frame.slots.forEach((_, slot) => {
+    const points = visible
+      .map((point) => `${scaleX(point.timestep).toFixed(1)},`
+        + `${scaleY(point.population?.[slot] ?? 0).toFixed(1)}`)
+      .join(" ");
+    markup += `<polyline points="${points}" fill="none" stroke="${seatOf(slot).color}" `
+      + `stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>`;
+    const count = last.population?.[slot] ?? 0;
+    heads.push({ slot, label: format(count), y: scaleY(count) });
+    // The head is drawn separately so a stream one timestep old is still a mark:
+    // a polyline with a single point draws nothing at all.
+    markup += `<circle cx="${headX.toFixed(1)}" cy="${scaleY(count).toFixed(1)}" `
+      + `r="${G(5)}" fill="${seatOf(slot).color}" stroke="${C.ink}" stroke-width="1.6"/>`;
+  });
+  markup += headCounts(heads, headX, { left, plotW, top, base });
+
+  /* Named inside the plot at its foot, on THE SIDE THE HEADS ARE NOT.
+   *
+   * The label was pinned to the bottom-left, on the reasoning that the lines
+   * enter at the cap on the left and only fall, so the bottom-left is the
+   * corner they leave empty. That holds at the END of an episode. It does not
+   * hold at the start of one: the head sits where the episode has got to, its
+   * figure is printed a few units to the right of it, and while that is still
+   * near the left edge a steep early die-off puts both straight through the
+   * caption. Restoring spice made this the common case rather than the rare
+   * one — two metabolisms burn a settler down faster, so the headcount is
+   * already at the foot of the plot while the head is barely off the axis.
+   *
+   * So the caption takes the far side from the head and swaps once, halfway
+   * across. The heads only ever travel left to right, so whichever half they
+   * are not in is empty for as long as they are not in it. */
+  const captionLeft = headX >= left + plotW * 0.5;
+  markup += text("settlers alive", captionLeft ? left + 12 : left + plotW - 12, base - 10, {
+    size: T(18), weight: 600, fill: C.muted, outline: 3,
+    anchor: captionLeft ? "start" : "end",
+  });
+  return markup;
+}
+
+/** What the panel's two plots share: the strip, and the one time axis both of
+ *  them are drawn against. Called from both the lead-band path and the
+ *  many-populations path, which is why it is not inlined in either. */
+function raceTail(frame, plot) {
+  let markup = settlerStrip(frame, plot);
+  // At the embed floor these land under 7px, so the panel keeps its two plots and
+  // drops the annotations rather than printing a smear.
+  if (plot.big) return markup;
+  const axis = {
+    size: T(18), weight: 500, family: F.mono, fill: C.dim, anchor: "end", outline: 2.4,
+  };
+  markup += text("t0", plot.left, plot.footY, { ...axis, anchor: "start" });
+  markup += text(`t${plot.scheduled}`, plot.left + plot.plotW, plot.footY, axis);
+  return markup;
+}
+
 function raceChart(frame, x, y, width, height) {
   const big = dense();
   const scheduled = state.maxTimestep || 1;
   const top = y + (big ? 62 : 46);
-  const plotH = height - (big ? 84 : 76);
+  /* The panel carries TWO plots against one time axis — the lead above, the
+   * headcount below — so the height it used to give entirely to the lead is now
+   * split three ways. The strip takes 30%: enough for two lines and their scale,
+   * little enough that the lead band is still the thing the panel is about.
+   *
+   * The gap between them holds the lead plot's own axis caption, which used to
+   * sit at the foot of the panel where the strip now is. Dense drops that caption
+   * — its eyebrow already names the unit — and keeps the gap hairline-thin. */
+  const plotArea = height - (big ? 84 : 76);
+  const stripH = Math.round(plotArea * (big ? 0.32 : 0.3));
+  // One caption's worth of clear air at either ramp. At 16 units the compact
+  // ramp's "level" and the strip's own scale figure — 34 units each — printed
+  // into one another across the join.
+  const plotGap = big ? T(18) : T(18) + 12;
+  const plotH = plotArea - stripH - plotGap;
   // The gutter has to hold the axis figure, which is set on the ramp: at 34
   // units "+2,334" is 122 units wide and a 62-unit gutter pushed it clean off
   // the panel's left edge.
@@ -2094,6 +2709,17 @@ function raceChart(frame, x, y, width, height) {
   const plotW = width - left + x - 18;
   const scaleX = (timestep) => left + (timestep / scheduled) * plotW;
   const visible = wealthSeries.filter((point) => point.timestep <= frame.timestep);
+  const plot = {
+    big,
+    left,
+    plotW,
+    scaleX,
+    scheduled,
+    visible,
+    top: top + plotH + plotGap,
+    height: stripH,
+    footY: y + height - 16,
+  };
   const leadCount = events.filter((event) => event.kind === "lead"
     && event.timestep <= frame.timestep).length;
   const axis = {
@@ -2136,25 +2762,48 @@ function raceChart(frame, x, y, width, height) {
           left + 28 + G(6), top + step * 0.62 + slot * step + T(18) * 0.34,
           { size: T(18), weight: 600, fill: seatOf(slot).text, outline: 2.8 });
     });
-    markup += text("total wealth", left + plotW / 2, top + plotH + T(18) + 8,
-      { ...axis, anchor: "middle" });
-    return markup;
+    // The caption hugs the plot's OWN baseline rather than the foot of the panel,
+    // which now belongs to the strip's time axis.
+    if (!big) {
+      markup += text("total wealth", left + plotW, top + plotH + T(18) + 6, axis);
+    }
+    return markup + raceTail(frame, plot);
   }
 
-  /* The size of the lead, always upward, coloured by who holds it.
+  /* A DIVERGING lead: slot 0's above the line, slot 1's below it. Owner call.
    *
-   * This was a signed diverging plot: slot 0 above the midline, slot 1 below.
-   * It was quantitatively correct and it read BACKWARDS - the leader's line
-   * descended, so a viewer applying the near-universal "up is winning" saw the
-   * chart contradict the scoreboard on the one question that matters. Plotting
-   * the ABSOLUTE lead removes the ambiguity: higher is a bigger lead, the colour
-   * says whose, and a lead change is the band touching zero and changing colour. */
+   * This has been both ways. It was diverging, then it was changed to plot the
+   * ABSOLUTE lead always upward, on the reasoning that a viewer applying the
+   * near-universal "up is winning" would see a descending band contradict the
+   * scoreboard. The owner's read is the other one, and it is the stronger one:
+   * with both spells drawn upward, SIDE carries nothing and the whole question
+   * of who is ahead rests on telling two hues apart. Diverging gives it a second,
+   * redundant channel — position — which is exactly what a colour-blind viewer
+   * or a compressed stream has left when hue fails. The old objection is answered
+   * by naming the poles instead of leaving "up" to be inferred: each half of the
+   * plot carries its population's dot and name, so up reads as "A", not as "good".
+   *
+   * The scale is SYMMETRIC, and deliberately, though on the shipped recording it
+   * costs: A peaks at +4,254 and B at only 201, so B's spells are genuinely thin.
+   * That is the episode being lopsided, not the axis lying about it, and the gold
+   * lead-change rules still mark every crossing. Scaling each half to its own
+   * maximum would draw a 201 lead the same height as a 4,254 one.
+   *
+   * The band is STACKED BY RESOURCE: the sugar part of the lead from the midline
+   * out, the spice part on top of it, so the height is still the real lead but a
+   * viewer can see what it is made of. They do not always agree — on 9.5% of the
+   * recording's timesteps one resource favours each population — and when they
+   * disagree the outer band folds back across the line, which is the fact rather
+   * than a fault: ink on a side is that side's advantage, whichever band it is in. */
+  const leadOf = (point, key) => (point[key]?.[0] ?? 0) - (point[key]?.[1] ?? 0);
   const peak = Math.max(
     12,
-    ...visible.map((point) => Math.abs((point.scores[0] ?? 0) - (point.scores[1] ?? 0))),
+    ...visible.map((point) => Math.abs(leadOf(point, "scores"))),
   );
+  const midY = top + plotH / 2;
+  const halfH = plotH / 2;
   const baseY = top + plotH;
-  const scaleY = (lead) => baseY - (Math.abs(lead) / peak) * plotH;
+  const scaleY = (lead) => midY - (lead / peak) * halfH;
 
   for (const event of events) {
     if (event.kind !== "lead" || event.timestep > frame.timestep) continue;
@@ -2163,36 +2812,74 @@ function raceChart(frame, x, y, width, height) {
       + `stroke="${C.gold}" stroke-width="1.2" stroke-dasharray="3 4" opacity=".6"/>`;
   }
 
-  // One filled band per unbroken spell of leadership, so the colour changes
-  // exactly where the lead does.
-  let spell = [];
-  let spellLeader = -1;
-  const flush = () => {
-    if (spell.length === 0 || spellLeader < 0) return;
-    const path = spell.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
-    markup += `<polygon points="${spell[0].x.toFixed(1)},${baseY} ${path} `
-      + `${spell.at(-1).x.toFixed(1)},${baseY}" fill="${seatOf(spellLeader).color}" opacity=".42"/>`;
-    markup += `<polyline points="${path}" fill="none" stroke="${seatOf(spellLeader).color}" `
-      + `stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>`;
-  };
-  for (const point of visible) {
-    const lead = (point.scores[0] ?? 0) - (point.scores[1] ?? 0);
-    const leader = lead === 0 ? spellLeader : (lead > 0 ? 0 : 1);
-    const at = { x: scaleX(point.timestep), y: scaleY(lead) };
-    if (leader !== spellLeader && spell.length > 0) {
-      spell.push({ x: at.x, y: baseY });
-      flush();
-      spell = [{ x: at.x, y: baseY }];
-    }
-    spellLeader = leader;
-    spell.push(at);
-  }
-  flush();
+  /* Clipped at the midline rather than segmented at the crossings. A band that
+   * changes hands between two timesteps crosses the line somewhere BETWEEN two
+   * plotted points; hunting for that intersection by hand is arithmetic the
+   * renderer can hand to the clip, which cuts it exactly and for free. Each band
+   * is drawn twice, once into each half, so a spell that straddles the line comes
+   * out red above and blue below with the seam in the right place. */
+  // Fixed ids: the overlay is one document that is rebuilt whole on every frame,
+  // and it carries exactly one lead plot, so there is nothing for these to collide
+  // with. They must not be generated per frame either — a new id every tick would
+  // leave the browser resolving a fresh clip path 15 times a second.
+  const above = "lead-above";
+  const below = "lead-below";
+  markup += `<defs>`
+    + `<clipPath id="${above}"><rect x="${left}" y="${top}" `
+    + `width="${plotW}" height="${halfH}"/></clipPath>`
+    + `<clipPath id="${below}"><rect x="${left}" y="${midY}" `
+    + `width="${plotW}" height="${halfH}"/></clipPath>`
+    + `</defs>`;
 
-  markup += `<line x1="${left}" y1="${baseY}" x2="${left + plotW}" y2="${baseY}" `
+  const along = (key) => visible
+    .map((point) => `${scaleX(point.timestep).toFixed(1)},${scaleY(
+      leadOf(point, key),
+    ).toFixed(1)}`);
+  const spiceEdge = along("spice");
+  const totalEdge = along("scores");
+  const firstX = scaleX(visible[0].timestep).toFixed(1);
+  const lastX = scaleX(visible.at(-1).timestep).toFixed(1);
+
+  // SPICE from the midline out, then sugar stacked from there to the true lead.
+  // Two opacities of the SAME seat colour: which population is the first read and
+  // must stay in one channel; which resource is the second and rides on density.
+  // The denser tone is the one against the line, so the band always fades outward
+  // — that is a property of the STACK, not of a resource, so the key below reads
+  // its shades off this order rather than asserting one of its own.
+  const band = (points, opacity) => {
+    for (const [clip, slot] of [[above, 0], [below, 1]]) {
+      markup += `<polygon points="${points}" fill="${seatOf(slot).color}" `
+        + `opacity="${opacity}" clip-path="url(#${clip})"/>`;
+    }
+  };
+  band(`${firstX},${midY.toFixed(1)} ${spiceEdge.join(" ")} ${lastX},${midY.toFixed(1)}`, ".46");
+  band(`${spiceEdge.join(" ")} ${[...totalEdge].reverse().join(" ")}`, ".24");
+
+  // The lead itself, over both bands, cut at the line into each side's colour.
+  for (const [clip, slot] of [[above, 0], [below, 1]]) {
+    markup += `<polyline points="${totalEdge.join(" ")}" fill="none" `
+      + `stroke="${seatOf(slot).color}" stroke-width="2.6" stroke-linejoin="round" `
+      + `stroke-linecap="round" clip-path="url(#${clip})"/>`;
+  }
+
+  markup += `<line x1="${left}" y1="${midY}" x2="${left + plotW}" y2="${midY}" `
     + `stroke="${C.axis}" stroke-width="1.5"/>`;
   markup += text(`+${format(peak)}`, left - 10, top + T(18) * 0.7, axis);
-  markup += text("level", left - 10, baseY + T(18) * 0.28, axis);
+  markup += text("level", left - 10, midY + T(18) * 0.28, axis);
+  markup += text(`+${format(peak)}`, left - 10, baseY, axis);
+
+  /* Name the poles, which is what lets "up" mean a population rather than a
+   * verdict. Set hard against the left edge inside each half, where the band
+   * starts from the line and so leaves the corners empty. */
+  frame.slots.slice(0, 2).forEach((slot, index) => {
+    const name = slot?.name ?? `Population ${index + 1}`;
+    const label = big ? name.split(/\s+/).at(-1) : name;
+    const y = index === 0 ? top + T(17) : baseY - T(17) * 0.5;
+    markup += seatMark(left + 12, y - T(17) * 0.32, index, G(4))
+      + text(label, left + 22 + G(4), y, {
+        size: T(17), weight: 600, fill: seatOf(index).text, outline: 2.8, opacity: 0.82,
+      });
+  });
 
   // Who currently holds it, stated in words at the head of the band.
   const last = visible.at(-1);
@@ -2207,35 +2894,84 @@ function raceChart(frame, x, y, width, height) {
     // Shortened at the dense ramp: the full name runs under the band's own peak,
     // and the scorebug two panels up has just said which population it is.
     const holder = frame.slots[leader]?.name ?? `Population ${leader + 1}`;
-    /* Put the label where the band ISN'T.
+    /* Ride the head, rather than sit in the plot's top-left corner.
      *
-     * It was pinned to the plot's top-left, and `peak` is the running maximum,
-     * so whenever the current lead IS the maximum - the normal case for a lead
-     * that grows - the band head reaches exactly `top` and the label sat on its
-     * own fill at 3.32:1, with the head dot landing inside the glyphs. The band
-     * always starts at the baseline on the left, so when the head is close, drop
-     * to the foot of the plot, which is empty by construction.
+     * The corner is where the POLES are named now, and the two labels are the
+     * same words — a fixed "A ahead" printed directly over the permanent "A"
+     * that explains the upper half. Following the head also puts the sentence
+     * where the eye already is, and on a diverging plot the head is the one
+     * point whose side is the answer. It trails the head so it sits over the
+     * stretch of axis the episode has not reached, and flips ahead of it at the
+     * end, the same rule the settler strip's figures follow.
      */
     const caption = leader < 0
       ? "level"
       : `${big ? holder.split(/\s+/).at(-1) : holder} ahead`;
     const size = T(19);
-    const clash = scaleX(last.timestep) < left + 14 + advance(caption, size) + 24
-      && headY < top + size * 1.6;
-    markup += text(caption, left + 14, clash ? baseY - 14 : top + size, {
+    const headX = scaleX(last.timestep);
+    const after = left + plotW - headX > advance(caption, size) + G(18);
+    /* BESIDE the head, and held inside the plot at both ends.
+     *
+     * Offsetting it vertically clear of the band put it OUTSIDE the plot the
+     * moment the current lead was the running peak — the normal case for a lead
+     * that grows, since `peak` is exactly that maximum — and at the embed floor
+     * it printed straight through the panel's own heading: "LEAD, IN SUGAR +
+     * SPICA ahead". Level with the head instead. The band ends AT the head, so
+     * the axis beyond it is empty by construction and there is nothing to dodge;
+     * the clamp then bites only at the two extremes, tucking the line just
+     * inside the edge rather than letting it leave the plot. */
+    const capY = Math.min(
+      baseY - size * 0.25,
+      Math.max(top + size * 0.8, headY + size * 0.34),
+    );
+    markup += text(caption, headX + (after ? G(12) : -G(12)), capY, {
       size, weight: 700, fill: leader < 0 ? C.muted : seatOf(leader).text, outline: 3,
+      anchor: after ? "start" : "end",
     });
   }
 
-  // At the embed floor these land under 7px, so the chart keeps its shape and
-  // its headline count and drops the annotations rather than printing a smear.
+  // The unit, on the lead plot's own baseline. It used to be centred at the foot
+  // of the panel, which is the strip's row now — and down there, under a second
+  // plot in a different unit, it would have labelled the wrong one. Set to the
+  // RIGHT: the band fills from the baseline up, so the row under the baseline is
+  // the one clear lane on the panel, and the left of it already carries "level"
+  // above and the strip's own scale below.
   if (!big) {
-    markup += text("t0", left, y + height - 16, { ...axis, anchor: "start" });
-    markup += text(`t${scheduled}`, left + plotW, y + height - 16, axis);
-    markup += text(`lead, in ${resourceName()}`, left + plotW / 2, y + height - 16,
-      { ...axis, anchor: "middle" });
+    /* The unit, and — when there are two resources — a key for the two shades.
+     *
+     * The band is stacked, so "lead, in sugar + spice" names what the height
+     * measures but not what the seam inside it divides. The swatches carry the
+     * two band opacities in a NEUTRAL ink rather than in a seat colour: the same
+     * pair of densities is used above the line and below it, and keying them in
+     * red would say red-is-sugar to a viewer reading the blue half. Density is
+     * the channel, so the key is drawn in the one thing both halves share. */
+    let keyX = left + plotW;
+    if (state.maxSpice > 0) {
+      const size = T(18);
+      const chipW = G(14);
+      const chipH = G(10);
+      const keyY = baseY + T(18) + 6;
+      // Wider than tall, so each swatch is a sample OF THE BAND rather than a
+      // bullet: the two densities are compared across an area, which is how they
+      // appear on the plot, and a square this small made them near-identical.
+      //
+      // Laid out right to left, so the pair reads "spice sugar" — the order they
+      // are stacked in, from the line outward. The shade travels with the
+      // POSITION in the stack, so if the two are ever swapped again this list is
+      // the one place that has to move with them.
+      for (const [label, opacity] of [["sugar", ".24"], ["spice", ".46"]]) {
+        markup += text(label, keyX, keyY, axis);
+        keyX -= advance(label, size) + G(7);
+        markup += `<rect x="${keyX - chipW}" y="${keyY - chipH * 0.86}" `
+          + `width="${chipW}" height="${chipH}" fill="${C.paper}" opacity="${opacity}"/>`;
+        keyX -= chipW + G(13);
+      }
+      markup += text("lead:", keyX, baseY + T(18) + 6, axis);
+    } else {
+      markup += text(`lead, in ${resourceName()}`, keyX, baseY + T(18) + 6, axis);
+    }
   }
-  return markup;
+  return markup + raceTail(frame, plot);
 }
 
 /** Fold a run of older beats into ONE row that accounts for all of them.
@@ -2397,16 +3133,36 @@ function eventFeed(frame, x, y, width, height) {
         : `${event.count} ${event.cause ?? "lost"}${detail ? ` — ${detail}` : ""}`;
       // The summary row says how many lead changes are inside it, so a viewer
       // can see the panel is accounting for beats it is not naming.
+      const leadSuffix = `${event.leads} lead change${event.leads === 1 ? "" : "s"}`;
       const folded = event.kind === "summary" && event.leads > 0
-        ? `${line}${event.count > 0 ? " · " : ""}`
-          + `${event.leads} lead change${event.leads === 1 ? "" : "s"}`
+        ? `${line}${event.count > 0 ? " · " : ""}${leadSuffix}`
         : line;
+      /* A WIDTH BUDGET, for the same reason the board's key has one.
+       *
+       * This row accumulated its clauses and drew them with no measurement
+       * against the panel it sits in, and the summary is the longest line the
+       * feed ever prints: a count, a cause, a per-population breakdown and a
+       * folded lead-change tally. At the 640 embed floor it ran off the right
+       * edge — "164 starved — 93 B, 71 A · 2 lead c" — losing the very tally
+       * the clause was added to disclose. The row cannot wrap (the feed's
+       * geometry gives every event exactly one row), so it SHEDS: the folded
+       * tally first, then the breakdown, and the count and cause always
+       * survive. What is dropped was already a refinement of what is kept, so
+       * a shorter line is never a different claim. The tally goes first
+       * because it is the one clause that is ALSO printed elsewhere — the race
+       * panel's header carries the same count — while which population is
+       * losing its settlers is said here or nowhere. */
+      const size = T(25);
+      const budget = width - indent - T(28);
+      const candidates = event.count === 0 && event.kind === "summary"
+        ? [leadSuffix]
+        : [folded, line, `${event.count} ${event.cause ?? "lost"}`];
+      const fitted = candidates.find((option) => advance(option, size) <= budget)
+        ?? candidates[candidates.length - 1];
       markup += text(
-        event.count === 0 && event.kind === "summary"
-          ? `${event.leads} lead change${event.leads === 1 ? "" : "s"}`
-          : folded,
+        fitted,
         x + indent, rowY + (big ? 36 : 16),
-        { size: T(25), weight: 500, fill: fresh ? C.paper : C.muted },
+        { size, weight: 500, fill: fresh ? C.paper : C.muted },
       );
     } else {
       markup += `<rect x="${x + indent - barGap}" y="${rowY - 2}" width="${barW}" height="${T(24)}" rx="2" `
@@ -2531,44 +3287,6 @@ function emergence(frame, x, y, width, height) {
     readY += 96;
   }
   return markup;
-}
-
-function stinger() {
-  const event = state.stinger;
-  const width = Math.min(BOARD.w - 24, dense() ? 860 : 720);
-  const x = BOARD.x + (BOARD.w - width) / 2;
-  const y = BOARD.y + BOARD.h * 0.36;
-  // The rule and the border take the CHIP colour; the headline takes the lifted
-  // `text` variant, which is the one measured against the card behind it.
-  const rule = event.kind === "lead" ? seatOf(event.slot).color : C.loss;
-  const ink = event.kind === "lead" ? seatOf(event.slot).text : C.loss;
-  const headline = event.kind === "lead" ? "LEAD CHANGE" : "DIE-OFF";
-  // The cause the ENGINE reported, and the right plural. This said "starved" for
-  // every die-off - which deathCause()'s own docstring calls out as wrong the
-  // moment aging, combat or disease is enabled - and printed "1 settlers".
-  const detail = event.kind === "lead"
-    ? `${event.name} moves ahead by ${format(event.margin)}`
-    : `${event.count} settler${event.count === 1 ? "" : "s"} `
-      + `${event.cause ?? "lost"} this timestep`;
-  // The one element whose whole job is to INTERRUPT, and it was the only draw
-  // function with no density branch: raw 30 and 24 units, which is 10.0 and 8.0
-  // CSS px at the embed floor - the smallest type in the product, on the
-  // callout. It takes the ramp like everything else now, and the plate is sized
-  // from the type rather than pinned at 118 units.
-  const headSize = T(30);
-  const detailSize = T(24);
-  const height = headSize + detailSize + 54;
-  return `<g class="stinger">`
-    + `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="12" fill="${C.stingerBack}" `
-    + `stroke="${rule}" stroke-width="2.5"/>`
-    + `<rect x="${x}" y="${y}" width="7" height="${height}" rx="3.5" fill="${rule}"/>`
-    + text(headline, x + 34, y + headSize + 16, {
-      size: headSize, weight: 700, fill: ink, spacing: 3.2,
-    })
-    + text(detail, x + 34, y + headSize + detailSize + 30, {
-      size: detailSize, weight: 500, fill: C.paper,
-    })
-    + `</g>`;
 }
 
 /** A designed finish that HOLDS on the last frame: the winner, both scores, the
@@ -2711,15 +3429,10 @@ function defs() {
     </linearGradient>
   </defs>
   <style>
-    .stinger { animation: stinger-in .34s cubic-bezier(.2,.9,.3,1.25) both; }
-    @keyframes stinger-in {
-      from { opacity: 0; transform: translateY(16px) scale(.97); }
-      to   { opacity: 1; transform: none; }
-    }
     .endcard { animation: endcard-in .55s ease both; }
     @keyframes endcard-in { from { opacity: 0; } to { opacity: 1; } }
     @media (prefers-reduced-motion: reduce) {
-      .stinger, .endcard { animation: none !important; }
+      .endcard { animation: none !important; }
     }
   </style>`;
 }
@@ -2728,24 +3441,26 @@ function defs() {
  *
  * This is load-bearing, not an optimisation: replacing an element's markup
  * restarts every CSS animation inside it, so rebuilding the whole overlay on
- * each 33 ms tick pinned the end card and the stingers at the first frame of
- * their fade and neither ever became visible. The standings layer changes at
- * timestep boundaries; the beat layer changes only when a beat starts or ends.
- * Keeping them apart lets each animate for its full duration. */
+ * each 33 ms tick pinned the end card at the first frame of its fade and it
+ * never became visible. The standings layer changes at timestep boundaries; the
+ * beat layer changes only at the end of the episode. Keeping them apart lets the
+ * card animate for its full duration.
+ *
+ * The beat layer now holds ONLY the end card — no plate interrupts mid-episode;
+ * see onFrameEntered. It stays its own layer because the split is what makes the
+ * card's fade work at all. */
 hud.innerHTML = `${defs()}<g id="hud-standings"></g><g id="hud-beats"></g>`;
 const standingsLayer = hud.querySelector("#hud-standings");
 const beatsLayer = hud.querySelector("#hud-beats");
 let standingsSignature = "";
 let beatsSignature = "";
 
-function drawBeats(frame, now) {
-  const live = Boolean(state.stinger) && now <= state.stingerUntil;
+function drawBeats(frame) {
   const atEnd = state.finished && currentIndex() >= frames.length - 1;
-  const signature = live ? `stinger:${state.stinger.index}:${state.stinger.kind}` : "";
-  const full = `${signature}|${atEnd}|${currentIndex()}`;
+  const full = `${atEnd}|${currentIndex()}`;
   if (full === beatsSignature) return;
   beatsSignature = full;
-  beatsLayer.innerHTML = (live ? stinger() : "") + (atEnd ? endCard(frame) : "");
+  beatsLayer.innerHTML = atEnd ? endCard(frame) : "";
   // The scrubber was the only lit object outside the end card's scrim, which
   // read as playback continuing under a final result.
   controls.container.classList.toggle("dimmed", atEnd);
@@ -2765,8 +3480,15 @@ function drawHud(frame, index) {
    * its readouts printed on top of each other. Dense still gives its extra
    * height to the two panels a first-time viewer reads — the race and the beats
    * — and turns the readouts sideways into the strip that is left.
+   *
+   * The race panel then took a second plot (the headcount, which used to be a
+   * banner over the board) and 78 units with it. They come from the emergence
+   * panel, whose Lorenz square is sized off its height: sparse still clears the
+   * 235 units its two stacked readouts need. Dense cannot pay — at 194 it is
+   * already exactly its own content — so there the strip is carved out of the
+   * lead plot instead, and the panel keeps its height.
    */
-  const raceH = dense() ? 320 : 280;
+  const raceH = dense() ? 320 : 358;
   const feedH = dense() ? 278 : 250;
   const emergenceH = RAIL.h - raceH - feedH - railGap * 2;
   let markup = raceChart(frame, RAIL.x, RAIL.y, RAIL.w, raceH);
@@ -2961,13 +3683,20 @@ function onFrameEntered(index, now) {
         });
       }
     }
-    // A lead change is the loudest beat in this match; a die-off only earns the
-    // stinger when it is big enough to matter. Queued, not fired: the beat has
-    // to wait for the settlers to arrive, or it announces "Beta moves ahead"
-    // over a scorebug that still crowns Alpha.
-    if (event.kind === "lead" || (event.kind === "death" && event.count >= 3)) {
-      if (!pendingBeat || event.kind === "lead") pendingBeat = event;
-    }
+    /* NOTHING interrupts the board any more.
+     *
+     * A die-off went first: it earned a plate over the middle of the lattice
+     * once three settlers went at once, which on the shipped config is most
+     * timesteps, so the banner was up more often than it was down. The lead
+     * change outlived it and then failed the same test — owner call, on a plate
+     * covering roughly a third of the board.
+     *
+     * Neither reading is lost, because neither plate was ever the only place it
+     * was said. A lead change is a marked step in the lead band, a row in the
+     * feed ("takes the lead"), the running count over the race panel, and a
+     * clause on the end card; a die-off is the settler strip, the death rings
+     * and its own feed row. The plates were the fourth telling, and the only
+     * one that charged the board for it. */
   }
 }
 
@@ -3049,10 +3778,11 @@ function tick() {
     // caught between two timesteps; and the first plate of a stream has nothing
     // to dissolve from.
     showTerrain(terrainFrame, terrainShown !== null && state.playing && !reducedMotion, now);
-  } else if (stirAt(now) !== terrainStir) {
-    // Between timesteps the plate still moves: the sand goes on blowing whether
-    // or not the replay is running.
-    stirTerrain(now);
+  } else if (terrainFrom || driftAt(now) !== terrainPainted) {
+    // Between timesteps the plate still moves — the sand goes on blowing whether
+    // or not the replay is running — and a dissolve in flight still has slices to
+    // let go of. With the wind off, driftAt is a constant and neither fires.
+    paintTerrain(now);
   }
   // Interpolate from the PREVIOUS frame into this one, so the settler arrives
   // exactly as its recorded state lands rather than leaving it early.
@@ -3060,15 +3790,8 @@ function tick() {
   // The HUD reads the same frame the board is showing. Rendering frame N's
   // scores while the settlers were still walking in from N-1 put the clock, the
   // harvested lattice and the scoreboard a full timestep ahead of the bodies.
-  // Release the queued beat only once the board and the standings have caught
-  // up to the frame it describes.
-  if (pendingBeat && settled) {
-    state.stinger = pendingBeat;
-    state.stingerUntil = now + STINGER_MS * animFactor(state.speed);
-    pendingBeat = null;
-  }
   drawHud(terrainFrame, settled ? index : index - 1);
-  drawBeats(frame, now);
+  drawBeats(frame);
   speak(terrainFrame);
 }
 
@@ -3328,6 +4051,9 @@ async function boot() {
     // Storage denied by the embed's sandbox; start from the default.
   }
   setLargeText(remembered);
+  // Before anything draws: BOARD and RAIL are computed, not constant, and the
+  // first frame must not be laid out against zeroes.
+  measureDensity();
   lastTick = performance.now();
   // A timer, not requestAnimationFrame: a backgrounded or headless tab throttles
   // rAF to a few frames a second and starves the interpolation. 16ms rather
