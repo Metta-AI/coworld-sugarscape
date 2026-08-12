@@ -1,38 +1,218 @@
+/* Sugarscape replay viewer — Ink & Print (Softmax house style).
+   Cream paper, warm near-black ink, serif masthead, hairline rules.
+   Typography carries hierarchy; no decorative cards. */
+
 :root {
-  color-scheme: dark;
-  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-  background: #0b0e12;
-  color: #e9edf2;
+  --bg: #fffdf4;
+  --surface: #fffaf0;
+  --surface-alt: #f8f6ef;
+  --fg: #111827;
+  --fg-subtle: #555555;
+  --fg-muted: #999999;
+  --ink-navy: #1a3875;
+  --ink-gold: #d4a853;
+  --ink-terracotta: #b36e4e;
+  --accent: #859ebe;
+  --border: #e4dac8;
+  --border-strong: #d4c9b5;
+  --border-subtle: #f0ebe1;
 }
 
-* { box-sizing: border-box; }
-body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top, #17202b, #0b0e12 55%); }
-header { display: flex; align-items: end; justify-content: space-between; padding: 24px 32px 18px; border-bottom: 1px solid #27303b; }
-h1, h2, p { margin: 0; }
-h1 { font-size: 30px; letter-spacing: -0.04em; }
-h2 { margin-bottom: 18px; font-size: 18px; }
-.eyebrow { color: #f3b84b; font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
-#status, #tick { color: #9aa6b2; font-variant-numeric: tabular-nums; }
-main { display: grid; grid-template-columns: minmax(420px, 1.4fr) minmax(320px, 0.8fr); gap: 24px; padding: 24px 32px 32px; }
-.map-panel, aside { min-width: 0; }
-#map { display: block; width: 100%; max-height: calc(100vh - 180px); background: #11161c; border: 1px solid #29323d; border-radius: 8px; image-rendering: pixelated; }
-.controls { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 12px; margin-top: 12px; }
-button, select { border: 1px solid #394553; border-radius: 5px; background: #19212a; color: inherit; padding: 7px 11px; }
-label { color: #9aa6b2; font-size: 12px; }
-#timeline { width: 100%; accent-color: #f3b84b; }
-.seat-card { margin-bottom: 14px; padding: 14px; background: rgba(20, 27, 35, 0.88); border: 1px solid #29323d; border-radius: 8px; }
-.seat-heading { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
-.seat-name { font-weight: 700; }
-.seat-score { color: #f3b84b; font-size: 20px; font-variant-numeric: tabular-nums; }
-.target-name { color: #9aa6b2; font-size: 11px; }
-.histogram { width: 100%; height: 130px; }
-#error { position: fixed; inset: 20px; padding: 20px; background: #3b1616; border: 1px solid #d65757; border-radius: 8px; }
-body.chrome-off header, body.chrome-off .controls { display: none; }
-body.chrome-off main { padding: 0; grid-template-columns: 2fr 1fr; gap: 8px; }
-body.chrome-off #map { max-height: 100vh; border: 0; border-radius: 0; }
+* { box-sizing: border-box; margin: 0; }
 
-@media (max-width: 820px) {
-  main { grid-template-columns: 1fr; padding: 16px; }
-  header { padding: 18px 16px; }
-  #map { max-height: none; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: "Merriweather Sans", "Segoe UI", sans-serif;
+  font-size: 0.78rem;
+  min-height: 100vh;
+}
+
+header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 24px 12px;
+  border-bottom: 2px solid var(--border-strong);
+}
+
+.eyebrow {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-navy);
+}
+
+h1 {
+  font-family: "Merriweather", Georgia, serif;
+  font-weight: 700;
+  font-size: 1.6rem;
+  line-height: 1.15;
+}
+
+#status {
+  color: var(--fg-subtle);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+main {
+  display: flex;
+  gap: 28px;
+  padding: 20px 24px;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.map-panel { flex: 0 1 auto; min-width: 0; }
+
+#map {
+  width: min(66vh, 100%);
+  max-width: 720px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-alt);
+  display: block;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 12px;
+}
+
+button {
+  font: inherit;
+  font-weight: 600;
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  padding: 4px 14px;
+  cursor: pointer;
+  min-width: 72px;
+}
+button:hover { background: var(--surface-alt); }
+button:active { background: var(--border-subtle); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+input[type="range"] {
+  flex: 1;
+  accent-color: var(--ink-navy);
+  min-width: 0;
+}
+
+#tick {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-subtle);
+  min-width: 8.5em;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.controls label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg-subtle);
+  font-size: 0.68rem;
+}
+
+select {
+  font: inherit;
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 2px 6px;
+}
+select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+aside { flex: 1 1 380px; min-width: 320px; max-width: 460px; }
+
+aside h2 {
+  font-family: "Merriweather", Georgia, serif;
+  font-weight: 700;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ink-navy);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Seat sections separated by hairlines — typography carries the hierarchy. */
+.seat-section { padding: 14px 0 16px; border-bottom: 1px solid var(--border-subtle); }
+.seat-section:last-child { border-bottom: none; }
+
+.seat-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 8px;
+}
+
+.seat-name {
+  font-family: "Merriweather", Georgia, serif;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.seat-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  margin-right: 7px;
+  vertical-align: 1px;
+}
+
+.target-name { color: var(--fg-subtle); font-size: 0.68rem; padding-top: 2px; }
+
+.seat-score {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 1.15rem;
+  font-weight: 600;
+  text-align: right;
+}
+
+.seat-score-label {
+  display: block;
+  font-family: "Merriweather Sans", sans-serif;
+  font-size: 0.58rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--fg-muted);
+}
+
+.histogram, .scoreline { display: block; width: 100%; }
+.pane-caption {
+  color: var(--fg-muted);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 6px 0 2px;
+}
+
+#error {
+  margin: 16px 24px;
+  padding: 10px 14px;
+  border-left: 3px solid var(--ink-terracotta);
+  background: rgba(179, 110, 78, 0.06);
+  color: var(--fg);
+}
+
+.chrome-off header, .chrome-off .controls { display: none; }
+.chrome-off main { padding: 8px; }
+
+@media (max-width: 860px) {
+  main { flex-direction: column; }
+  aside { max-width: none; min-width: 0; }
+  #map { width: 100%; }
 }
