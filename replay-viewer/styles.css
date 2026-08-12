@@ -191,13 +191,16 @@ aside h2 {
   color: var(--fg-muted);
 }
 
-.histogram, .scoreline { display: block; width: 100%; }
-.pane-caption {
-  color: var(--fg-muted);
+.histogram, .scoreline, .popline { display: block; width: 100%; }
+/* Chart labels sit ABOVE their chart, eyebrow-style, with clear separation
+   from the previous chart so they can't read as its caption. */
+.pane-label {
+  color: var(--fg-subtle);
   font-size: 0.6rem;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  padding: 6px 0 2px;
+  padding: 14px 0 4px;
 }
 
 #error {

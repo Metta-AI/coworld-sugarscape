@@ -25,10 +25,17 @@ let frameIndex = 0;
 let playing = true;
 let timer = null;
 let cells = [];
-let agents = new Map();
+let agents = new Map(); // id -> dynamic row [id, x, y, sugar_b, spice_b, tribe, diseases]
+let roster = new Map(); // id -> static row [id, seat, born, sex01, vision, movement, mSugar, mSpice, maxAge]
 let scoreSeries = []; // per seat: [{tick, score}, ...] extracted once at load
 let populationSeries = []; // per seat: [count per frame], reconstructed at load
 let maxWealthSeen = 1; // for stable agent-dot radius scaling across the episode
+
+const seatOf = (agentId) => {
+  const staticRow = roster.get(agentId);
+  return staticRow ? staticRow[1] : 0;
+};
+const wealthOf = (dynamicRow) => (dynamicRow[3] || 0) + (dynamicRow[4] || 0);
 
 const params = new URLSearchParams(location.search);
 if (params.get("chrome") === "off") document.body.classList.add("chrome-off");
@@ -44,7 +51,7 @@ async function inflate(bytes) {
 async function loadBytes(bytes) {
   const raw = await inflate(bytes);
   const documentValue = JSON.parse(new TextDecoder().decode(raw));
-  if (documentValue.format !== "sugarscape.replay.v3" || documentValue.version !== 1) {
+  if (documentValue.format !== "sugarscape.replay.v3" || documentValue.version !== 2) {
     throw new Error("Unsupported Sugarscape replay format.");
   }
   replay = documentValue;
@@ -56,18 +63,18 @@ async function loadBytes(bytes) {
   schedule();
 }
 
-// One pass over all frames at load: score snapshots, per-seat population
-// per tick, and the episode-wide wealth maximum for dot-radius scaling.
+// One pass over all frames at load: the full agent roster (statics arrive
+// once, at header or birth), score snapshots, per-seat population per tick,
+// and the episode-wide wealth maximum for dot-radius scaling.
 function extractSeries() {
   const seatCount = replay.header.targets.length;
   scoreSeries = replay.header.targets.map(() => []);
   populationSeries = replay.header.targets.map(() => []);
   maxWealthSeen = 1;
-  const liveSeat = new Map(
-    replay.header.initial_agents.map((agent) => [agent[0], agent[1]])
-  );
-  for (const agent of replay.header.initial_agents) {
-    maxWealthSeen = Math.max(maxWealthSeen, agent[4]);
+  roster = new Map(replay.header.roster.map((row) => [row[0], row]));
+  const live = new Set(replay.header.initial_agents.map((row) => row[0]));
+  for (const row of replay.header.initial_agents) {
+    maxWealthSeen = Math.max(maxWealthSeen, wealthOf(row));
   }
   replay.frames.forEach((frame) => {
     if (frame.running) {
@@ -75,13 +82,14 @@ function extractSeries() {
         scoreSeries[entry.seat].push({ tick: frame.timestep, score: entry.score });
       }
     }
-    for (const agent of frame.agent_deltas.upsert) {
-      liveSeat.set(agent[0], agent[1]);
-      maxWealthSeen = Math.max(maxWealthSeen, agent[4]);
+    for (const row of frame.agent_deltas.births) roster.set(row[0], row);
+    for (const row of frame.agent_deltas.upsert) {
+      live.add(row[0]);
+      maxWealthSeen = Math.max(maxWealthSeen, wealthOf(row));
     }
-    for (const agentId of frame.agent_deltas.remove) liveSeat.delete(agentId);
+    for (const agentId of frame.agent_deltas.remove) live.delete(agentId);
     const counts = new Array(seatCount).fill(0);
-    for (const seat of liveSeat.values()) counts[seat % seatCount] += 1;
+    for (const agentId of live) counts[seatOf(agentId) % seatCount] += 1;
     counts.forEach((count, seat) => populationSeries[seat].push(count));
   });
 }
@@ -110,6 +118,8 @@ function applyDeltas(frame) {
   }
   for (const agent of frame.agent_deltas.upsert) agents.set(agent[0], agent.slice());
   for (const agentId of frame.agent_deltas.remove) agents.delete(agentId);
+  // Births only add roster statics; the newborn's dynamic row arrives in the
+  // same frame's upsert list (already applied above).
 }
 
 // Print-cartography terrain, two independent channels per cell: sugar is an
@@ -176,11 +186,12 @@ function renderMap(frame) {
   // scale) with a paper outline — the canonical mark, made data-bearing.
   const baseRadius = Math.max(1.5, Math.min(scaleX, scaleY) * 0.22);
   const maxRadius = Math.min(scaleX, scaleY) * 0.46;
-  for (const [, seat, x, y, wealth] of agents.values()) {
-    const radius = baseRadius + (maxRadius - baseRadius) * Math.sqrt((wealth || 0) / maxWealthSeen);
+  for (const row of agents.values()) {
+    const [agentId, x, y] = row;
+    const radius = baseRadius + (maxRadius - baseRadius) * Math.sqrt(wealthOf(row) / maxWealthSeen);
     mapContext.beginPath();
     mapContext.arc((x + 0.5) * scaleX, (y + 0.5) * scaleY, radius, 0, Math.PI * 2);
-    mapContext.fillStyle = seatColors[seat % seatColors.length];
+    mapContext.fillStyle = seatColors[seatOf(agentId) % seatColors.length];
     mapContext.fill();
     mapContext.lineWidth = 1;
     mapContext.strokeStyle = PAPER;
@@ -199,12 +210,12 @@ function buildSeatSections() {
       '<div class="target-name"></div></div>',
       '<div><span class="seat-score">—</span>',
       '<span class="seat-score-label">distribution match</span></div></div>',
+      '<div class="pane-label">Measured (bars) vs target (line)</div>',
       '<canvas class="histogram" width="420" height="120"></canvas>',
-      '<div class="pane-caption">Measured (bars) vs target (line)</div>',
+      '<div class="pane-label">Match score over the episode</div>',
       '<canvas class="scoreline" width="420" height="46"></canvas>',
-      '<div class="pane-caption">Match score over the episode</div>',
+      '<div class="pane-label popline-caption">Living agents</div>',
       '<canvas class="popline" width="420" height="46"></canvas>',
-      '<div class="pane-caption popline-caption">Living agents</div>',
     ].join("");
     section.querySelector(".seat-dot").style.background = seatColors[seat % seatColors.length];
     section.querySelector(".target-name").textContent = `${target.id} · ${target.variable}`;

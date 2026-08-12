@@ -39,9 +39,13 @@ def test_replay_round_trip_and_deltas_reconstruct_final_grid(
 
     reconstructed = [cell[:3] for cell in header["initial_grid"]["cells"]]
     reconstructed_agents = {agent[0]: agent for agent in header["initial_agents"]}
+    reconstructed_roster = {row[0]: row for row in header["roster"]}
     for frame in document["frames"]:
         for index, sugar, spice, pollution in frame["cell_deltas"]:
             reconstructed[index] = [sugar, spice, pollution]
+        for row in frame["agent_deltas"]["births"]:
+            assert row[0] not in reconstructed_roster  # statics arrive exactly once
+            reconstructed_roster[row[0]] = row
         for agent in frame["agent_deltas"]["upsert"]:
             reconstructed_agents[agent[0]] = agent
         for agent_id in frame["agent_deltas"]["remove"]:
@@ -66,14 +70,29 @@ def test_replay_round_trip_and_deltas_reconstruct_final_grid(
     expected_agents = {
         agent.ID: [
             agent.ID,
-            agent.seat,
             agent.cell.x,
             agent.cell.y,
-            quantize_wealth(agent.sugar + agent.spice),
+            quantize_wealth(agent.sugar),
+            quantize_wealth(agent.spice),
+            -1 if agent.tribe is None else agent.tribe,
+            len(agent.diseases),
         ]
         for agent in world.agents
     }
     assert reconstructed_agents == expected_agents
+    # Every living agent has full static traits in the accumulated roster.
+    for agent in world.agents:
+        assert reconstructed_roster[agent.ID] == [
+            agent.ID,
+            agent.seat,
+            agent.born,
+            1 if agent.sex == "male" else 0,
+            agent.vision,
+            agent.movement,
+            agent.sugarMetabolism,
+            agent.spiceMetabolism,
+            agent.maxAge,
+        ]
 
 
 def test_decode_replay_rejects_non_replay_bytes() -> None:
