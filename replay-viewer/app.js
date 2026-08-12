@@ -30,6 +30,11 @@ let roster = new Map(); // id -> static row [id, seat, born, sex01, vision, move
 let scoreSeries = []; // per seat: [{tick, score}, ...] extracted once at load
 let populationSeries = []; // per seat: [count per frame], reconstructed at load
 let maxWealthSeen = 1; // for stable agent-dot radius scaling across the episode
+// Richest cell the LANDSCAPE can hold, not the richest each cell can hold. The
+// terrain ramps are scaled against these so a cell's tint means "how much is
+// here", which is what a mountain is. See renderMap.
+let maxSugarCapacity = 1;
+let maxSpiceCapacity = 1;
 
 const seatOf = (agentId) => {
   const staticRow = roster.get(agentId);
@@ -78,6 +83,12 @@ function extractSeries() {
   scoreSeries = replay.header.targets.map(() => []);
   populationSeries = replay.header.targets.map(() => []);
   maxWealthSeen = 1;
+  maxSugarCapacity = 1;
+  maxSpiceCapacity = 1;
+  for (const cell of replay.header.initial_grid.cells) {
+    maxSugarCapacity = Math.max(maxSugarCapacity, cell[3]);
+    maxSpiceCapacity = Math.max(maxSpiceCapacity, cell[4]);
+  }
   roster = new Map(replay.header.roster.map((row) => [row[0], row]));
   const live = new Set(replay.header.initial_agents.map((row) => row[0]));
   for (const row of replay.header.initial_agents) {
@@ -133,10 +144,48 @@ function applyDeltas(frame) {
 // amber (ink-gold) FILL ramp, spice is a terracotta diagonal HATCH whose
 // weight tracks the spice stock — each amount stays readable on its own, the
 // way a printed map separates tint from line work. Pollution greys the fill.
+//
+// Both ramps are scaled by the GRID-WIDE capacity, never by the cell's own.
+// Dividing a cell's stock by its own maxSugar asks "how full is this cell for
+// itself", and a Sugarscape opens with every cell at capacity — so every cell
+// answered 1.0 and the landscape printed as one flat tint. Measured on a
+// recorded episode at t0: a 1-sugar cell and a 3-sugar cell rendered the
+// IDENTICAL rgb(207,161,94), and adjacent sugar levels sat 1.01-1.03:1 apart
+// against a within-level scatter several times that gap. The four peaks were
+// invisible by construction, because the normalisation divided the mountain
+// out. A mountain is HEIGHT, not fullness.
 const PAPER_RGB = [255, 253, 244];
 const SUGAR_RGB = [212, 168, 83]; // --ink-gold
 const SPICE_HATCH = "#b36e4e"; // --ink-terracotta
 const POLLUTION_RGB = [138, 138, 138];
+
+// A cell holds a whole number of each resource, up to its capacity — four in
+// every shipped config. So each channel has exactly FIVE states, bare plus
+// four, and both ramps are built to fit that rather than to fill a continuum.
+//
+// Both were losing the top of the range, which is where the summits are:
+//   sugar  sqrt(stock/cap) * 0.9  ->  .45 .64 .78 .90, steps of .19 .14 .12,
+//          crowding levels 3 and 4 together exactly at the peaks.
+//   spice  stroke count by thirds ->  1, 2, 3, 3 — four stock levels drawn
+//          with three marks, so a full cell and a three-quarter cell were the
+//          same picture.
+// Both now step EVENLY across the level, so one unit of resource is one
+// constant visual increment anywhere on the scale.
+const SUGAR_TINT_MIN = 0.26; // level 1 must clear paper on its own
+const SUGAR_TINT_MAX = 0.92;
+const SPICE_ALPHA_MIN = 0.5;
+const SPICE_ALPHA_MAX = 0.86;
+
+/** Whole units held, clamped to the landscape's capacity. */
+function levelOf(stock, capacity) {
+  return Math.max(0, Math.min(capacity, Math.round(stock)));
+}
+
+/** Even 0..1 position of level L on a scale of `capacity` steps. */
+function rampAt(level, capacity) {
+  if (capacity <= 1) return 1;
+  return (level - 1) / (capacity - 1);
+}
 
 function mix(base, tint, amount) {
   return [
@@ -156,26 +205,31 @@ function renderMap(frame) {
   cells.forEach((cell, index) => {
     const x = Math.floor(index / height);
     const y = index % height;
-    const sugar = Math.min(1, cell[0] / Math.max(1, cell[3]));
+    const sugar = levelOf(cell[0], maxSugarCapacity);
     const pollution = Math.min(1, cell[2] / 20);
     let rgb = PAPER_RGB;
-    // Resource intensity eases (sqrt) so low stocks still read on paper.
-    if (sugar > 0) rgb = mix(rgb, SUGAR_RGB, Math.sqrt(sugar) * 0.9);
+    if (sugar > 0) {
+      const tint = SUGAR_TINT_MIN
+        + (SUGAR_TINT_MAX - SUGAR_TINT_MIN) * rampAt(sugar, maxSugarCapacity);
+      rgb = mix(rgb, SUGAR_RGB, tint);
+    }
     if (pollution > 0) rgb = mix(rgb, POLLUTION_RGB, pollution * 0.6);
     mapContext.fillStyle = `rgb(${Math.round(rgb[0])},${Math.round(rgb[1])},${Math.round(rgb[2])})`;
     mapContext.fillRect(x * scaleX, y * scaleY, Math.ceil(scaleX), Math.ceil(scaleY));
   });
-  // Pass 2 — spice hatch: 1–3 diagonal strokes per cell by stock level.
+  // Pass 2 — spice hatch: ONE diagonal stroke per unit held, so a cell's spice
+  // can be counted off the map as well as compared. Weight steps with it.
   mapContext.strokeStyle = SPICE_HATCH;
   mapContext.lineWidth = Math.max(1, scaleX * 0.09);
   mapContext.lineCap = "round";
   cells.forEach((cell, index) => {
-    const spice = Math.min(1, cell[1] / Math.max(1, cell[4]));
+    const spice = levelOf(cell[1], maxSpiceCapacity);
     if (spice <= 0) return;
     const x = Math.floor(index / height) * scaleX;
     const y = (index % height) * scaleY;
-    const strokes = spice > 0.66 ? 3 : spice > 0.33 ? 2 : 1;
-    mapContext.globalAlpha = 0.45 + 0.45 * spice;
+    const strokes = spice;
+    mapContext.globalAlpha = SPICE_ALPHA_MIN
+      + (SPICE_ALPHA_MAX - SPICE_ALPHA_MIN) * rampAt(spice, maxSpiceCapacity);
     mapContext.beginPath();
     for (let line = 1; line <= strokes; line += 1) {
       const offset = (line / (strokes + 1)) * (scaleX + scaleY);

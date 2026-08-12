@@ -109,6 +109,7 @@ class ReplayWriter:
         }
         if world.timestep % self.histogram_interval == 0 or world.timestep == world.maxTimestep:
             frame["running"] = self._running_scores()
+            frame["measured"] = self._measured_variables()
         self.frames.append(frame)
         if self.frame_sink is not None:
             self.frame_sink(frame)
@@ -147,6 +148,25 @@ class ReplayWriter:
         ).encode("utf-8")
         compressed = zlib.compress(raw, level=9)
         return ReplayArtifact(compressed, len(raw), len(compressed))
+
+    def _measured_variables(self) -> dict[str, object]:
+        """Every measured variable's current global histogram, not just the targeted one.
+
+        The engine already measures all of them each tick regardless of what the
+        episode is scored on (see RollingMeasurements.record_tick), so recording
+        them costs one histogram build per variable per sample point and lets a
+        viewer re-score an episode against any target in the catalog. Without
+        this a viewer could only ever show the target the episode happened to be
+        assigned, or would have to re-derive measurements itself and risk
+        disagreeing with the engine that produced the score.
+        """
+
+        measured: dict[str, object] = {}
+        for variable in sorted(self.measurements.catalog.bins_by_variable):
+            measured[variable] = self.measurements.histogram(
+                variable, scope="global"
+            ).as_dict()
+        return measured
 
     def _running_scores(self) -> list[dict[str, object]]:
         running: list[dict[str, object]] = []
