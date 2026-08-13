@@ -143,10 +143,18 @@ html, body {
    width below is likewise no longer the hardcoded 798/1920 = 41.6%: the board
    grows as the chrome around it shrinks, so layoutStage publishes its width as
    --board-width and this follows it. */
+/* NO PILL. The transport sits in the empty lane UNDER the lattice.
+ *
+ * It used to be a bordered, blurred capsule floating over the board's bottom
+ * edge — a plate laid across the one surface the broadcast exists to show, to
+ * hold five controls that already read perfectly well on the ground. The lane
+ * below the board was reserved for it all along and was sitting empty, so the
+ * pill was occluding the lattice for no reason at all. Chrome removed; position
+ * published by layoutStage as --transport-top so it tracks the board. */
 .controls {
   position: absolute;
-  left: 1.6%;
-  bottom: 2.3%;
+  left: var(--board-left, 1.6%);
+  top: var(--transport-top, 92%);
   /* Set by layoutStage from the live BOARD.w; the fallback is the old fixed
      798 / 1920 in case the script has not laid out yet. */
   width: var(--board-width, 41.6%);
@@ -155,11 +163,7 @@ html, body {
   display: flex;
   align-items: center;
   gap: clamp(4px, 0.7%, 9px);
-  padding: clamp(4px, 0.55%, 8px) clamp(6px, 0.9%, 12px);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--panel);
-  backdrop-filter: blur(7px);
+  padding: 0 clamp(2px, 0.3%, 5px);
   pointer-events: auto;
 }
 
