@@ -33,6 +33,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from coworld.scoring import Histogram, score_histogram  # noqa: E402
+from coworld.replay import WEALTH_QUANTUM  # noqa: E402
 
 V1_REPLAY_FORMAT = "sugarscape.replay.v1"
 V1_FRAME_FORMAT = "sugarscape.frame.v1"
@@ -138,6 +139,12 @@ def convert(document: dict) -> dict:
             "environmentMaxSugar": max_sugar,
             "environmentMaxSpice": max_spice,
             "startingAgents": starting_agents,
+            # v3 records per-agent wealth in presentation BUCKETS, not raw units
+            # (see quantize_wealth). Say so, loudly, in the frame: a viewer that
+            # treats a 50-unit bucket as a sugar count will decide that every
+            # agent below the first bucket is about to starve, which measured at
+            # 24.2% of agent-frames before this was carried across.
+            "wealthQuantum": WEALTH_QUANTUM,
             "width": width,
             "height": height,
             "cells": [list(cell) for cell in cells],
