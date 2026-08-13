@@ -97,14 +97,25 @@ jitter — curation stays reviewable in the script's diff.
 null-ruleset floor, greedy-welfare baseline, and evolved ceiling per
 scenario.
 
-*Shipping criteria (initial, tuned after the first full table):*
-- ceiling ≥ 0.5 — the target is practically approachable in this world;
-- ceiling − null floor ≥ 0.05 — a skilled ruleset beats doing nothing,
-  i.e. the scenario has a real skill gradient.
+*Shipping criteria (revised 2026-08-13 after the first probe results):*
+- ceiling ≥ 0.5 — the target is practically approachable in this world.
+  This is the only hard gate.
+- ceiling − null floor ≥ 0.05 — originally a second hard gate, now a
+  *classifier*: scenarios at or above it are `skill` scenarios that
+  differentiate the ladder; scenarios below it are `anchor` scenarios.
 
-*Why these two:* the probe's best score is a lower bound on the
-achievable ceiling, so passing proves reachability; it can never
-disprove it. A scenario failing either criterion is retuned or replaced
+*Why the revision:* the first probe table showed the entire
+wealth-skewed family with null floors of 0.96–0.99 — an engine-generated
+target paired with its native regime is nearly self-fulfilling, so no
+ruleset can add much. James's call (2026-08-13): keep these scenarios
+anyway. They prevent regression — a policy that hits them may
+generalize, and a policy that *can't* hit what the null ruleset hits is
+worse than baseline and should be scored accordingly. Anchors compress
+score spread between competent entrants but never invert an ordering.
+
+*Why ceiling still gates:* the probe's best score is a lower bound on
+the achievable ceiling, so passing proves reachability; it can never
+disprove it. A scenario failing the ceiling gate is retuned or replaced
 before deploy — never shipped "because the family passed."
 
 ## The pool: 6 families × 4 variations

@@ -21,6 +21,9 @@ from probe_reachability import GREEDY_RULESET  # noqa: E402
 
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "build" / "probe-pool"
 CEILING_THRESHOLD = 0.5
+# Gradient does not gate shipping: near-zero-gradient scenarios stay in the
+# pool as regression anchors (a policy that misses what the null ruleset hits
+# is worse than baseline). It only classifies anchor vs skill scenarios.
 GRADIENT_THRESHOLD = 0.05
 
 
@@ -91,15 +94,15 @@ def run_probe(
 
 def render_table(results: list[dict[str, object]]) -> str:
     lines = [
-        "| scenario | target | null floor | greedy | ceiling | gradient | result |",
-        "|---|---|---:|---:|---:|---:|---|",
+        "| scenario | target | null floor | greedy | ceiling | gradient | role | result |",
+        "|---|---|---:|---:|---:|---:|---|---|",
     ]
     for result in results:
         lines.append(
             f"| `{result['scenario_id']}` | `{result['target']}` "
             f"| {result['null_floor']:.4f} | {result['greedy_score']:.4f} "
             f"| {result['ceiling']:.4f} | {result['gradient']:+.4f} "
-            f"| {'PASS' if result['passed'] else 'FAIL'} |"
+            f"| {result['role']} | {'PASS' if result['passed'] else 'FAIL'} |"
         )
     return "\n".join(lines)
 
@@ -168,7 +171,8 @@ def main() -> None:
                 "greedy_score": greedy_score(config_paths[scenario_id], seeds),
                 "ceiling": ceiling,
                 "gradient": gradient,
-                "passed": ceiling >= CEILING_THRESHOLD and gradient >= GRADIENT_THRESHOLD,
+                "role": "skill" if gradient >= GRADIENT_THRESHOLD else "anchor",
+                "passed": ceiling >= CEILING_THRESHOLD,
                 "probe_report": probe_report,
             }
             results.append(result)
@@ -179,7 +183,7 @@ def main() -> None:
     combined = {
         "thresholds": {
             "ceiling_minimum": CEILING_THRESHOLD,
-            "gradient_minimum": GRADIENT_THRESHOLD,
+            "skill_role_gradient_minimum": GRADIENT_THRESHOLD,
         },
         "budget": {
             "population": args.population,

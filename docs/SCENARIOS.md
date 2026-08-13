@@ -74,14 +74,23 @@ Each scenario invokes `tools/probe_reachability.py` in its own subprocess and
 keeps that probe's detailed report and best ruleset under
 `build/probe-pool/<scenario-id>/`. The wrapper writes the combined
 `build/probe-pool/report.json` and prints a table containing the null floor,
-greedy baseline, evolved ceiling, and skill gradient.
+greedy baseline, evolved ceiling, skill gradient, and role.
 
-A scenario passes only when both conditions hold:
+A scenario passes when its evolved ceiling is at least `0.50` — the target is
+demonstrably approachable in that world. The evolved score is a lower bound on
+what is achievable, so a pass is trustworthy; a failing scenario must be
+retuned or replaced before rotation, and passing one member never waives
+validation for another member of its family.
 
-- Evolved ceiling is at least `0.50`.
-- Evolved ceiling minus null floor is at least `0.05`.
+The gradient (ceiling minus null floor) classifies rather than gates:
 
-The evolved score is a lower bound on what is achievable. A passing result
-demonstrates reachability and a real skill gradient; a failure is conservative,
-but the scenario must still be retuned or replaced before rotation. Passing one
-member never waives validation for another member of its family.
+- **`skill`** (gradient ≥ `0.05`): a competent ruleset visibly beats doing
+  nothing; these scenarios differentiate the ladder.
+- **`anchor`** (gradient < `0.05`): the null ruleset already matches the
+  target, typically because the world is close to the regime that generated
+  it. Anchors stay in the pool deliberately — they are regression guards. A
+  policy that matches them loses nothing, while a policy that *breaks* them
+  scores worse than the baseline and is punished for it. First observed
+  2026-08-13: the entire wealth-skewed family probed as anchors (null floors
+  0.96–0.99), because an engine-generated target paired with its native
+  regime is nearly self-fulfilling.
