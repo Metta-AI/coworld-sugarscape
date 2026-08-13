@@ -1,0 +1,160 @@
+#!/usr/bin/env python3
+"""Build the single-file Sugarscape broadcast viewer.
+
+The Observatory embeds the replay in a sandboxed iframe behind the Kubernetes
+service proxy, which rewrites the page's base href and cannot reach a CDN. A page
+that pulls any separate sub-resource therefore renders as a black box. So this
+tool folds the stylesheet, the script and the vendored typefaces into one
+self-contained document with every asset as a data URI, and writes it to
+``src/sugarscape/viewer.html`` where ``coworld.nim`` reads it at compile time.
+
+The board itself is drawn, not illustrated: reference/dtl-python/gui.py is the
+oracle for the look, so there is no image pipeline here at all.
+
+    python3 tools/build_viewer.py [--check]
+
+``--check`` rebuilds into memory and fails if the committed output is stale,
+which is what the test suite runs.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import base64
+import re
+import io
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+# v3 keeps src/sugarscape/ as the PINNED DTL vendor, so nothing about this
+# viewer lives there. Sources and assets sit under replay-viewer/, and the
+# build writes the single self-contained document the Observatory serves.
+FONTS = ROOT / "replay-viewer/assets/fonts"
+SOURCE = ROOT / "replay-viewer/src"
+ASSETS = ROOT / "replay-viewer/assets"
+TARGETS = ROOT / "targets"
+OUTPUT = ROOT / "replay-viewer/index.html"
+
+def build_fonts() -> dict[str, str]:
+    fonts = {}
+    for path in sorted(FONTS.glob("*.woff2")):
+        encoded = base64.b64encode(path.read_bytes()).decode()
+        fonts[path.stem.replace("-", "_")] = f"data:font/woff2;base64,{encoded}"
+    if not fonts:
+        raise SystemExit("no vendored fonts; run tools/vendor_fonts.mjs first")
+    return fonts
+
+
+def substitute(template: str, tokens: dict[str, str]) -> str:
+    for key, value in tokens.items():
+        marker = "{{" + key + "}}"
+        if marker not in template:
+            raise SystemExit(f"template has no slot for {marker}")
+        template = template.replace(marker, value)
+    return template
+
+
+# The whole point of inlining is that the served document pulls nothing. A CDN
+# script added to the template would rebuild cleanly and pass a byte-comparison,
+# so the invariant is asserted here rather than only in the Node smoke test.
+EXTERNAL_REFERENCE = re.compile(
+    r"""<(?:script|link|img|iframe|source|object|embed)\b[^>]*?\b(?:src|href)\s*=\s*["'](?!data:|#)"""
+    r"""|url\(\s*["']?(?!data:|#)https?:"""
+    r"""|@import""",
+    re.IGNORECASE,
+)
+
+
+def assert_self_contained(document: str) -> None:
+    """Fail the build if the document would fetch anything at all."""
+    # The rewritten <base href> makes any relative sub-resource resolve under the
+    # proxy prefix, and the sandboxed iframe cannot reach a CDN either way.
+    body = document.replace('<base href="/">', "")
+    offenders = [match.group(0)[:80] for match in EXTERNAL_REFERENCE.finditer(body)]
+    if offenders:
+        raise SystemExit(
+            "viewer would fetch external sub-resources, which black-box the "
+            "hosted embed:\n  " + "\n  ".join(offenders)
+        )
+
+
+def build_sprites() -> dict[str, str]:
+    """The settler atlas, inlined as base64 so the document fetches nothing.
+
+    An indexed palette map rather than a PNG: it decodes synchronously, so the
+    viewer needs no Image or atob and the vm sandbox in tools/test_viewer.mjs
+    keeps working, and tribe colour becomes a palette swap rather than a canvas
+    tint. Produced by hand with tools/export_settler.nim, never in CI — the
+    viewer job has no Nim. Same relationship as the vendored fonts.
+    """
+
+    path = ASSETS / "settler.json"
+    if not path.exists():
+        raise SystemExit(
+            "no exported settler atlas at src/sugarscape/sprites/settler.json; "
+            "run: python3 tools/gen_settler_sprite.py"
+        )
+    packed = json.dumps(json.loads(path.read_text()), separators=(",", ":"))
+    # Pure [A-Za-z0-9+/=], so it sits inside a JS string literal with no escaping
+    # hazard — and `node --check` on the UNSUBSTITUTED source still parses,
+    # because the token lives inside quotes.
+    return {"SETTLERS": base64.b64encode(packed.encode()).decode()}
+
+
+def build_targets() -> dict[str, str]:
+    """The shipped target catalog, inlined so the selector needs no fetch."""
+
+    catalog = sorted(
+        (json.loads(path.read_text()) for path in TARGETS.glob("*.json")),
+        key=lambda target: (target.get("variable", ""), target.get("id", "")),
+    )
+    if not catalog:
+        raise SystemExit("no targets in targets/; the selector would have nothing to offer")
+    # Escaped for a JS string literal, so `node --check` on the unsubstituted
+    # source still parses and no quote can break out of it.
+    packed = json.dumps(catalog, separators=(",", ":"))
+    return {"TARGETS_JSON": packed.replace("\\", "\\\\").replace('"', '\\"')}
+
+
+def build() -> str:
+    fonts = build_fonts()
+    css = substitute((SOURCE / "broadcast.css").read_text(), fonts)
+    # Kept separate from `fonts`: substitute() raises on a token with no slot, so
+    # merging the two would kill the CSS build on {{SETTLERS}}.
+    tokens = build_sprites()
+    tokens.update(build_targets())
+    script = substitute((SOURCE / "broadcast.js").read_text(), tokens)
+    document = substitute(
+        (SOURCE / "broadcast.html").read_text(),
+        {"STYLE": css, "SCRIPT": script},
+    )
+    assert_self_contained(document)
+    return (
+        "<!-- Generated by tools/build_viewer.py from viewer/. Do not edit by hand. -->\n"
+        + document
+    )
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--check", action="store_true", help="fail if the committed output is stale")
+    arguments = parser.parse_args()
+
+    document = build()
+    if arguments.check:
+        current = OUTPUT.read_text() if OUTPUT.exists() else ""
+        if current != document:
+            print(f"{OUTPUT} is stale; run: python3 tools/build_viewer.py", file=sys.stderr)
+            return 1
+        print(f"{OUTPUT} is up to date ({len(document) / 1024:.0f} KB)")
+        return 0
+
+    OUTPUT.write_text(document)
+    print(f"{OUTPUT}  {len(document) / 1024:.0f} KB")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
