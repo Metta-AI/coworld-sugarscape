@@ -1,6 +1,6 @@
 # Solo-ladder scenario pool
 
-**Status:** approved design, implementation pending
+**Status:** implemented (2026-08-13); reachability gate and deploy pending
 **Date:** 2026-08-13
 **Owner:** James Boggs
 
@@ -120,7 +120,7 @@ peak count/coordinates/heights, grid size (40–60), regrow rates,
 |---|---|---|---|
 | Wealth, skewed | `wealth.skewed-gini-0.5` | `agent_replacement.json`: `agentReplacements`, `agentMaxAge` [60,100] | default twin peaks; single mega-peak; four-corner peaks; scarce cap-2 lowland |
 | Wealth, egalitarian | `wealth.egalitarian` | same replacement regime | distinct maps from the skewed four + tighter/wider vision & metabolism ranges |
-| Carrying capacity | `population.carrying-capacity` | `constant_growback.json`: no replacement, finite `agentMaxAge` | regrow rate 1 vs 2; grid 40–60; agents 200–400 |
+| Carrying capacity | `population.carrying-capacity` | regime actually used by `tools/generate_targets.py`: immortal agents (`agentMaxAge` [-1,-1]), no replacement, no reproduction | regrow rate 1 vs 2; grid 40–60; agents 200–400 |
 | Survivorship | `age-at-death.survivorship` | replacement + finite max-age | varied `agentMaxAge` ranges; map scarcity; one seasonal world (`environmentSeasonInterval`) |
 | Price equilibrium | `price.equilibrium` | `trade_basic.json`: spice + trade on, `agentMaxAge` [-1,-1] | metabolism ranges; peak separation (sugar/spice overlap vs opposite corners) |
 | Tribes | `tribe.convergence` ×2, `tribe.diversity` ×2 | `cultural_tagging.json`: tagging on, `environmentMaxTribes` | convergence: mixed start; diversity: quadrant-separated tribes (`environmentTribePerQuadrant`, `environmentStartingQuadrants`) |
@@ -129,6 +129,22 @@ Concrete parameter values are chosen at implementation time inside the
 generator, guided by the anchor example configs, and are then subject to
 the D5 gate — the probe table, not the author's intuition, decides
 whether a parameterization ships.
+
+*Correction (2026-08-13, found during implementation):* the
+carrying-capacity anchor is **not** `constant_growback.json` as first
+written. `tools/generate_targets.py` overrides that example to immortal
+agents when generating `population.carrying-capacity` (finite age with
+no replacement and no reproduction would simply depopulate the world).
+The family's regime is therefore immortal agents, no replacement, no
+reproduction — variation lives entirely in the world parameters. Where a
+target's recorded example config and `generate_targets.py` disagree, the
+generator script is authoritative: it is what actually produced the
+histogram.
+
+Similarly, `probe_pool.py` invokes `probe_reachability.py` as a
+subprocess per scenario rather than importing its internals — reusing
+the probe's CLI contract keeps one copy of the evolutionary loop and
+leaves the probe byte-for-byte unchanged.
 
 **Explicit-pin rule:** every scenario explicitly sets the mechanics its
 target depends on *and* pins hazards it does not want, rather than
@@ -195,9 +211,9 @@ Notes:
 
 ### `tools/probe_pool.py`
 
-- Loops `probe_reachability.py` main over every emitted config
-  (importing its functions rather than shelling out, sharing its
-  ProcessPoolExecutor budget), with per-scenario budget flags
+- Loops `probe_reachability.py` over every emitted config (one
+  subprocess per scenario, keeping the probe byte-for-byte unchanged),
+  with per-scenario budget flags
   (defaults: `--population 24 --generations 12 --seeds 11,42`).
 - Writes `build/probe-pool/report.json` plus a rendered table
   (scenario id, null floor, greedy score, evolved ceiling, gradient,

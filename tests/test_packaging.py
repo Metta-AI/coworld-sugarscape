@@ -44,7 +44,11 @@ def test_manifest_config_and_results_schemas_cover_platform_traps() -> None:
 
 def test_variants_and_certification_are_token_free_and_fixture_lengths_match() -> None:
     manifest = json.loads((ROOT / "coworld_manifest.json").read_text(encoding="utf-8"))
-    assert {variant["id"] for variant in manifest["variants"]} == {"solo-wealth", "duel-4seat"}
+    assert {variant["id"] for variant in manifest["variants"]} == {
+        "solo-wealth",
+        "solo-ladder",
+        "duel-4seat",
+    }
     for variant in manifest["variants"]:
         assert "tokens" not in variant["game_config"]
     certification = manifest["certification"]

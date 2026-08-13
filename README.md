@@ -31,6 +31,11 @@ one target distribution and submits one declarative SugarLang ruleset; the world
 then runs without player I/O and scores how closely the measured outcome matches
 the target.
 
+Ranked solo play uses a deterministic pool of 24 curated scenarios spanning all
+seven targets and six mechanical families, forcing rulesets to adapt to the
+observed world. See [`docs/SCENARIOS.md`](docs/SCENARIOS.md) for the catalog,
+selection rule, regeneration workflow, and per-scenario reachability gate.
+
 Run the offline suite with `.venv/bin/python -m pytest`. For local container
 development, `docker compose up` starts the one-seat config in `config.json` and
 the bundled target-aware baseline. Protocol, language, and target references are
