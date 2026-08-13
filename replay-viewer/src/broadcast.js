@@ -2437,7 +2437,12 @@ function scorebug(frame) {
    *
    * A v1 replay is a race and keeps its scoreboard.
    */
-  if (frame.coworld?.seats?.some((entry) => typeof entry.score === "number")) {
+  // Gated on the world being SCORED, not on a score having arrived. v3 records a
+  // running score only every `replay_histogram_interval` ticks, so for the first
+  // few frames every seat's score is null — and keying off the number brought the
+  // race chip back for exactly those frames, flashing over the tick counter
+  // before vanishing. A world with seats is a scored world from frame zero.
+  if (Array.isArray(frame.coworld?.seats) && frame.coworld.seats.length > 0) {
     return markup;
   }
 
@@ -2511,9 +2516,13 @@ function scorebug(frame) {
      * match score is the same figure the end card settles on, and the actual
      * value of the targeted variable rides underneath it. */
     const seatScore = frame.coworld?.seats?.find((entry) => entry.seat === row.index);
-    const matched = seatScore && typeof seatScore.score === "number";
+    // Present, not necessarily measured yet: the figure must never fall back to
+    // accumulated wealth on a scored world just because the first histogram has
+    // not landed. It shows a dash until there is a real score.
+    const matched = Boolean(seatScore);
     markup += text(
-      matched ? seatScore.score.toFixed(3) : format(row.score),
+      matched ? (typeof seatScore.score === "number" ? seatScore.score.toFixed(3) : "\u2014")
+        : format(row.score),
       x + chipW - 20, big ? 58 : 62,
       {
         size: T(40), weight: 700, family: F.mono, anchor: "end",
@@ -3657,9 +3666,9 @@ function endCard(frame) {
    * The actual value of the targeted variable goes beside it, because the match
    * says how close the SHAPE came and not what the world did. */
   const seatScore = frame.coworld?.seats?.find((entry) => entry.seat === winner.index);
-  const matched = seatScore && typeof seatScore.score === "number";
+  const matched = Boolean(seatScore);
   const actual = matched ? targetActual(frame, seatScore.variable) : null;
-  const verdict = matched
+  const verdict = matched && typeof seatScore.score === "number"
     ? `${winner.name} scores ${seatScore.score.toFixed(3)} against `
       + `${seatScore.targetId ?? "its target"}`
       + `${actual ? ` — ${actual.label} ${actual.value}` : ""}.`
@@ -3769,15 +3778,15 @@ function endCard(frame) {
     // the result.
     const rowMatch = frame.coworld?.seats?.find((entry) => entry.seat === row.index);
     markup += text(
-      rowMatch && typeof rowMatch.score === "number"
-        ? rowMatch.score.toFixed(3)
+      rowMatch
+        ? (typeof rowMatch.score === "number" ? rowMatch.score.toFixed(3) : "\u2014")
         : format(row.score),
       x + cardW - pad - 36, rowY + rowH * 0.66, {
         size: T(34), weight: 700, family: F.mono, fill: leader ? C.gold : C.paper, anchor: "end",
       });
     rowY += rowStep;
   }
-  const scoredCard = frame.coworld?.seats?.some((entry) => typeof entry.score === "number");
+  const scoredCard = Array.isArray(frame.coworld?.seats) && frame.coworld.seats.length > 0;
   markup += text(
     scoredCard
       ? "Score is how closely the measured distribution matches the target — 1.000 is exact."
