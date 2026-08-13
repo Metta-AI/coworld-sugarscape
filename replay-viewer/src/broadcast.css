@@ -1,0 +1,339 @@
+/* Sugarscape broadcast — art direction lock.
+
+   THE BOARD IS A DARK PLATE OF PACKED GRAINS. reference/dtl-python/gui.py is
+   vendored in this repo and remains the oracle for the game's IDENTITY — the
+   shared lattice, its two resources, agents coloured red then blue by decision
+   model — but not for its rendering model, which was a white
+   field of flat interpolated tiles. Two measured reasons it changed, and one
+   asked for:
+
+   1. The tile ramp carried quantity in CHROMA alone. Full sugar against an empty
+      cell measures 1.07:1, so the gradient that is the whole point of the
+      picture had no luminance signal end to end and read flat under any
+      colour-vision deficiency, in greyscale, or on a projector.
+   2. A near-white plate inside a #14100a surround is a glare sandwich: the
+      brightest thing on the broadcast was bare ground.
+
+   So resource is DENSITY: a dense mass of fine particles whose local
+   concentration is the local amount — spice blown across a dune, not counters
+   stacked in a square. The quantity now survives every channel the colour ramp
+   lost it in, and the drifts run across cell boundaries the way real ones would.
+
+   3. The two hues were 4.7:1 apart in LUMINANCE (#F2FA00 at L=0.872 against
+      #9B4722 at L=0.115), so at equal coverage the yellow simply looked like
+      more and the eye read a sugar majority the board did not have. Sugar is a
+      warm white and spice a lit amber now — L=0.800 against L=0.478, close
+      enough that equal masses read as equal masses. Hue says WHICH; density
+      says how much.
+
+   THE BROADCAST AROUND IT is a dark warm surround that seats the plate and never
+   competes with it: ink #2a1f12, paper #f6ead2, sugar-gold accent #e8a838,
+   nothing pure black or pure white. The plate has no luminance edge of its own
+   against that surround, so its boundary is drawn as a lit warm rule rather than
+   left to contrast. Seat colours are lifted from gui.py's palette so one value
+   works both as a settler on the plate and as a chip on the panels. */
+
+@font-face {
+  font-family: "Space Grotesk";
+  font-style: normal;
+  font-weight: 500;
+  font-display: block;
+  src: url({{space_grotesk_500}}) format("woff2");
+}
+@font-face {
+  font-family: "Space Grotesk";
+  font-style: normal;
+  font-weight: 700;
+  font-display: block;
+  src: url({{space_grotesk_700}}) format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: block;
+  src: url({{ibm_plex_mono_500}}) format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 600;
+  font-display: block;
+  src: url({{ibm_plex_mono_600}}) format("woff2");
+}
+
+:root {
+  color-scheme: dark;
+  --ground: #14100a;
+  --ink: #2a1f12;
+  --paper: #f6ead2;
+  --muted: #a8977c;
+  --border: #4a3620;
+  --panel: rgba(20, 15, 8, 0.86);
+  --gold: #e8a838;
+  --gold-wash: rgba(232, 168, 56, 0.16);
+  --track-fill: #e8a838;
+  --track-bed: #4a4034;
+  --display: "Space Grotesk", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--ground);
+  color: var(--paper);
+  font-family: var(--display);
+  overflow: hidden;
+}
+
+/* The embed frame is 16/9 and can be as short as 360px. The stage is letterboxed
+   to exactly 16/9 inside it and everything - board, overlay, controls - lives in
+   that one box, so the short hosted frame can never clip the broadcast off the
+   top or starve the board of height. */
+.frame { position: fixed; inset: 0; display: grid; margin: 0; }
+
+/* Carries the broadcast as text for assistive technology. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+.stage {
+  position: relative;
+  margin: auto;
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  max-width: calc(100vh * 16 / 9);
+  max-height: 100vh;
+}
+
+#board, #hud {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+#hud { pointer-events: none; }
+
+/* Zero-data floating chrome. The container ignores pointer events so clicks fall
+   through to the board; only the real controls take them back.
+
+   The board scales with the frame, but the controls must not: sized purely in
+   viewport units they collapsed to 20x17px at the 640x360 embed, under the
+   24x24 CSS-px minimum target size. Every dimension below is a clamp with an
+   accessible floor, so the chrome stays operable at the smallest embed and
+   grows to comfortable at full size. */
+/* The transport lives in its OWN LANE, reserved in broadcast.js by layoutStage.
+   It used to float over the board: two lattice rows at 1280 and three at 640,
+   where the pixel floors below bite while the board scales down, so the compact
+   variant covered MORE of the primary read surface than the full-size one.
+
+   The lane is measured in CSS PIXELS now rather than being a fixed 9.63% of the
+   stage, because what the pill needs is a physical 34px and nothing else. The
+   width below is likewise no longer the hardcoded 798/1920 = 41.6%: the board
+   grows as the chrome around it shrinks, so layoutStage publishes its width as
+   --board-width and this follows it. */
+.controls {
+  position: absolute;
+  left: 1.6%;
+  bottom: 2.3%;
+  /* Set by layoutStage from the live BOARD.w; the fallback is the old fixed
+     798 / 1920 in case the script has not laid out yet. */
+  width: var(--board-width, 41.6%);
+  min-width: 260px;
+  max-width: calc(100% - 3.2%);
+  display: flex;
+  align-items: center;
+  gap: clamp(4px, 0.7%, 9px);
+  padding: clamp(4px, 0.55%, 8px) clamp(6px, 0.9%, 12px);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+  backdrop-filter: blur(7px);
+  pointer-events: auto;
+}
+
+.controls button {
+  flex: none;
+  min-width: clamp(24px, 2.2vw, 32px);
+  height: clamp(24px, 2.2vw, 32px);
+  padding: 0 clamp(4px, 0.7%, 9px);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--paper);
+  font: 600 clamp(11px, 1vw, 14px)/1 var(--mono);
+  cursor: pointer;
+}
+.controls button:hover { background: var(--gold-wash); }
+/* The larger-text switch is a toggle, so it has to LOOK toggled — aria-pressed
+   alone is invisible to everyone not using assistive technology. */
+.controls button[aria-pressed="true"] {
+  border-color: var(--gold);
+  background: var(--gold-wash);
+  color: var(--gold);
+}
+#text-size b { font-weight: 700; font-size: 1.24em; }
+/* A real outline, not only a box-shadow: forced-colors mode drops shadows, and
+   a focus ring that disappears there is no focus ring. */
+.controls button:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
+  border-color: var(--gold);
+}
+
+#scrub {
+  flex: 1;
+  min-width: 0;
+  height: clamp(24px, 2.2vw, 32px);
+  accent-color: var(--gold);
+  cursor: pointer;
+}
+#scrub:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+/* The pill's buttons were floored at the 24px minimum target; the range THUMB
+   is a separate target and defaulted to 14px. */
+#scrub { -webkit-appearance: none; appearance: none; background: transparent; }
+#scrub::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background:
+    var(--marks, none),
+    linear-gradient(var(--track-fill), var(--track-fill)) left center / var(--played, 0%) 100% no-repeat,
+    var(--track-bed);
+}
+#scrub::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--track-bed);
+}
+#scrub::-moz-range-progress { height: 6px; border-radius: 999px; background: var(--track-fill); }
+#scrub::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  margin-top: -9px;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+  background: var(--gold);
+}
+/* 24, not the 20 this used to carry: SC 2.5.8 measures the TARGET, and Firefox
+   renders this thumb at exactly the size given. WebKit needs the negative
+   margin to centre a thumb taller than its track; Gecko centres it itself. */
+#scrub::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+  background: var(--gold);
+}
+
+@media (forced-colors: active) {
+  .controls { border-color: CanvasText; }
+  .controls button:focus-visible,
+  #scrub:focus-visible { outline-color: Highlight; }
+}
+
+/* Failure has to be visible, never a black box - and it has to look like this
+   product rather than a bare fallback. */
+.notice {
+  position: absolute;
+  inset: auto 12% 34%;
+  margin: 0;
+  padding: 1.4em 1.6em 1.5em;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--gold);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--paper);
+  font: 500 clamp(12px, 1.6vw, 19px)/1.5 var(--display);
+  backdrop-filter: blur(7px);
+}
+.notice::before {
+  content: "SUGARSCAPE";
+  display: block;
+  margin-bottom: 0.5em;
+  color: var(--paper);
+  font: 700 clamp(13px, 1.7vw, 21px)/1 var(--display);
+  letter-spacing: 0.26em;
+}
+.notice .hint {
+  display: block;
+  margin-top: 0.7em;
+  color: var(--muted);
+  font-size: 0.82em;
+}
+.notice code {
+  font-family: var(--mono);
+  color: var(--gold);
+  overflow-wrap: anywhere;
+}
+/* fail() moves the focus here, so the ring has to be real and visible — it is
+   the only thing on screen at that point. */
+.notice:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+}
+.notice:empty { display: none; }
+.controls[hidden] { display: none; }
+/* Under the end card the scrim dims everything else; a full-brightness scrubber
+   there reads as playback continuing under a final result. */
+/* Under the end card the scrim dims everything else; a full-brightness scrubber
+   there reads as playback continuing under a final result. But 0.34 took the
+   glyphs to 2.81:1 and the slider to 2.04:1 — measured, against 4.5:1 and 3:1 —
+   on controls that stay enabled and keyboard-reachable, at the moment the
+   broadcast is most likely to be looked at. 0.72 still steps the pill back
+   behind the result and keeps every control above AA. */
+.controls.dimmed { opacity: 0.72; }
+.controls.dimmed:hover, .controls.dimmed:focus-within { opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .controls, .notice { backdrop-filter: none; }
+}
+
+/* The target picker sits over the histogram panel's heading row. Its box is set
+   in CSS px by placeTargetPicker from the panel's own stage coordinates, so it
+   stays on the panel at any stage size rather than at a guessed percentage. */
+.target-pick {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: auto;
+  font: 600 clamp(9px, 0.62vw, 13px)/1 var(--mono, ui-monospace, monospace);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.target-pick[hidden] { display: none; }
+.target-pick select {
+  font: inherit;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--paper);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  max-width: 60%;
+  cursor: pointer;
+}
+.target-pick select:hover { border-color: var(--gold); }
+.target-pick select:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
