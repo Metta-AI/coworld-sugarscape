@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<!-- The Observatory proxy rewrites this to the proxy base; every URL below is
+     relative or inlined so nothing resolves off the prefix. -->
+<base href="/">
+<title>Sugarscape replay</title>
+<style>{{STYLE}}</style>
+</head>
+<body>
+<main class="frame">
+  <h1 class="sr-only">Sugarscape replay</h1>
+
+  <!-- The canvas and the SVG are one picture, and a picture cannot carry a
+       standing. Both are hidden from assistive technology and the live region
+       below carries the same information as text. -->
+  <div class="stage" id="stage">
+    <canvas id="board" width="2880" height="1620" aria-hidden="true"></canvas>
+    <svg id="hud" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid meet"
+         xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false"></svg>
+
+    <!-- Which target the episode is read against. Real HTML rather than drawn
+         into the SVG, because the HUD's markup is replaced on every timestep and
+         that would close the menu under the pointer. Positioned over the
+         histogram panel by placeTargetPicker, through the SVG's own coordinate
+         transform, so it tracks the panel at any stage size. -->
+    <label class="target-pick" id="target-pick" hidden>
+      <span>read against</span>
+      <select id="target-select" aria-label="Target to score this episode against"></select>
+    </label>
+
+    <div class="controls" id="controls" role="group" aria-label="Playback" hidden>
+      <button id="play" type="button" aria-label="Pause">
+        <span id="play-glyph" aria-hidden="true">&#10074;&#10074;</span>
+      </button>
+      <button id="step-back" type="button" aria-label="Previous timestep">
+        <span aria-hidden="true">&#124;&#9664;</span>
+      </button>
+      <button id="step-forward" type="button" aria-label="Next timestep">
+        <span aria-hidden="true">&#9654;&#124;</span>
+      </button>
+      <!-- The range's units are TIMESTEPS, so min/max/value and the announced
+           valuetext all speak the same number. -->
+      <input id="scrub" type="range" min="0" max="0" value="0" step="1"
+             aria-label="Timestep" aria-valuetext="timestep 0">
+      <button id="speed" type="button" aria-label="Playback speed, 1&times;">1&times;</button>
+      <!-- The broadcast is drawn in SVG user units inside a fixed 16:9 embed, so
+           a larger default font size cannot reach it and there is no reflow to
+           fall back on. This is the in-product mechanism instead. -->
+      <!-- The accessible name leads with the visible "AA" so speech input can
+           reach it, and the pressed state is carried by aria-pressed alone
+           rather than restated in the name. broadcast.js keeps both in sync and
+           disables the control where it cannot help. -->
+      <button id="text-size" type="button" aria-pressed="false" aria-label="AA, larger text">
+        <span aria-hidden="true">A<b>A</b></span>
+      </button>
+    </div>
+
+    <!-- tabindex so a failure can take the focus with it when it takes the
+         transport away; see fail(). -->
+    <p class="notice" id="notice" role="alert" tabindex="-1"></p>
+  </div>
+
+  <!-- The broadcast as text: standings, clock and the latest beat, announced
+       politely as the episode advances. -->
+  <p class="sr-only" id="commentary" aria-live="polite"></p>
+  <p class="sr-only" id="verdict" aria-live="assertive"></p>
+</main>
+<script>
+{{SCRIPT}}
+</script>
+</body>
+</html>
