@@ -304,3 +304,36 @@ html, body {
 @media (prefers-reduced-motion: reduce) {
   .controls, .notice { backdrop-filter: none; }
 }
+
+/* The target picker sits over the histogram panel's heading row. Its box is set
+   in CSS px by placeTargetPicker from the panel's own stage coordinates, so it
+   stays on the panel at any stage size rather than at a guessed percentage. */
+.target-pick {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: auto;
+  font: 600 clamp(9px, 0.62vw, 13px)/1 var(--mono, ui-monospace, monospace);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.target-pick[hidden] { display: none; }
+.target-pick select {
+  font: inherit;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--paper);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  max-width: 60%;
+  cursor: pointer;
+}
+.target-pick select:hover { border-color: var(--gold); }
+.target-pick select:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}

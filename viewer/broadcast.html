@@ -21,6 +21,16 @@
     <svg id="hud" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid meet"
          xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false"></svg>
 
+    <!-- Which target the episode is read against. Real HTML rather than drawn
+         into the SVG, because the HUD's markup is replaced on every timestep and
+         that would close the menu under the pointer. Positioned over the
+         histogram panel by placeTargetPicker, through the SVG's own coordinate
+         transform, so it tracks the panel at any stage size. -->
+    <label class="target-pick" id="target-pick" hidden>
+      <span>read against</span>
+      <select id="target-select" aria-label="Target to score this episode against"></select>
+    </label>
+
     <div class="controls" id="controls" role="group" aria-label="Playback" hidden>
       <button id="play" type="button" aria-label="Pause">
         <span id="play-glyph" aria-hidden="true">&#10074;&#10074;</span>

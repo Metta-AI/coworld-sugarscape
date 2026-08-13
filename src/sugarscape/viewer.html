@@ -314,6 +314,39 @@ html, body {
 @media (prefers-reduced-motion: reduce) {
   .controls, .notice { backdrop-filter: none; }
 }
+
+/* The target picker sits over the histogram panel's heading row. Its box is set
+   in CSS px by placeTargetPicker from the panel's own stage coordinates, so it
+   stays on the panel at any stage size rather than at a guessed percentage. */
+.target-pick {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: auto;
+  font: 600 clamp(9px, 0.62vw, 13px)/1 var(--mono, ui-monospace, monospace);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.target-pick[hidden] { display: none; }
+.target-pick select {
+  font: inherit;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--paper);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  max-width: 60%;
+  cursor: pointer;
+}
+.target-pick select:hover { border-color: var(--gold); }
+.target-pick select:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
 </style>
 </head>
 <body>
@@ -327,6 +360,16 @@ html, body {
     <canvas id="board" width="2880" height="1620" aria-hidden="true"></canvas>
     <svg id="hud" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid meet"
          xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false"></svg>
+
+    <!-- Which target the episode is read against. Real HTML rather than drawn
+         into the SVG, because the HUD's markup is replaced on every timestep and
+         that would close the menu under the pointer. Positioned over the
+         histogram panel by placeTargetPicker, through the SVG's own coordinate
+         transform, so it tracks the panel at any stage size. -->
+    <label class="target-pick" id="target-pick" hidden>
+      <span>read against</span>
+      <select id="target-select" aria-label="Target to score this episode against"></select>
+    </label>
 
     <div class="controls" id="controls" role="group" aria-label="Playback" hidden>
       <button id="play" type="button" aria-label="Pause">
@@ -2083,6 +2126,11 @@ function cellPosition(frame, cell) {
  *  one frame per timestep and agents move several cells at a time, so without
  *  this they teleport. A move longer than half the lattice is a wrap-around and
  *  snaps rather than sliding across the whole board. */
+/** Does this replay record wealth in presentation buckets rather than units? */
+function quantised(frame) {
+  return Number(frame.wealthQuantum || 0) > 1;
+}
+
 function interpolate(previous, frame, t) {
   const before = new Map(previous ? previous.agents.map((agent) => [agent.id, agent]) : []);
   const cell = BOARD.w / frame.width;
@@ -2112,8 +2160,19 @@ function interpolate(previous, frame, t) {
       // (simulation.nim doTimestep), so the test is <=, not <. At < it missed
       // 12 of the 32 deaths in the reference recording while the board's key
       // promised "about to starve"; at < 2x metabolism it over-warned sevenfold.
-      starving: agent.sugar <= agent.sugarMetabolism
-        || (agent.spiceMetabolism > 0 && agent.spice <= agent.spiceMetabolism),
+      /* And only when the replay holds the units to answer it.
+       *
+       * The test needs a raw stock to set against a metabolism. A v3 replay does
+       * not carry one: it records wealth in 50-unit presentation buckets, so
+       * every agent under the first bucket reads as 0 and is then compared
+       * against a metabolism of 1-4. Measured before this guard: 24.2% of all
+       * agent-frames were marked starving and a quarter of the board was faded
+       * for nothing. Quantised data cannot answer the question, so it does not
+       * get to — the marker goes silent rather than wrong, and the key drops its
+       * swatch to match. */
+      starving: !quantised(frame)
+        && (agent.sugar <= agent.sugarMetabolism
+          || (agent.spiceMetabolism > 0 && agent.spice <= agent.spiceMetabolism)),
       tribe: agent.tribe,
       // A settler that changed culture between the frame it came from and this
       // one. The comparison has to be against the SAME agent's previous tag, so
@@ -2121,6 +2180,14 @@ function interpolate(previous, frame, t) {
       // previous tag and so is never a sway.
       swayed: Boolean(source) && source.tribe !== undefined
         && agent.tribe !== undefined && source.tribe !== agent.tribe,
+      // The culture it LEFT. A ring around a settler that has already taken its
+      // new colour says only "something happened here"; the reading a viewer
+      // actually wants is which way it went, and that needs both colours on
+      // screen at once.
+      wasTribe: source ? source.tribe : undefined,
+      // Walking, not floating: the legs only swap for a settler that changed
+      // cell this timestep, and t < 1 means the walk is still in progress.
+      moving: Boolean(source) && source.cell !== agent.cell && t < 1,
     };
   });
 }
@@ -2207,22 +2274,57 @@ function drawBoard(frame, previous, t, now) {
    * costs nothing; a multi-seat world would need the seat back as a second ring.
    */
   const tribal = frame.agents.some((agent) => typeof agent.tribe === "number" && agent.tribe >= 0);
+  const sheet = settlerSheet();
   for (const body of bodies) {
     const seat = seatOf(body.slot);
     const skin = tribal && typeof body.tribe === "number" && body.tribe >= 0
       ? TRIBE_INK[body.tribe % TRIBE_INK.length]
       : seat.color;
     const size = radius * (0.82 + 0.36 * Math.min(1, Math.log10(1 + body.wealth) / 2.4));
-    // SWAYED — this settler took a neighbour's culture on this timestep. Drawn
-    // UNDER the body as a halo so it never hides the colour it just changed to,
-    // which is the whole point of the event.
+    /* SWAYED — a pulse in the culture it is changing TO.
+     *
+     * Three passes, and the difference between them is what the mark is FOR. A
+     * paper halo said only "something happened to this one". Painting it in the
+     * culture the settler LEFT put both colours on screen at once, which was
+     * legible but read backwards: a ring is a thing radiating OUTWARD, and what
+     * spreads through a Sugarscape is the culture doing the converting, not the
+     * one being displaced. So the ring takes the NEW culture and opens — the
+     * settler has just been reached by something spreading, and the pulse is
+     * that arrival.
+     *
+     * Driven by the interpolation fraction, so it opens across the timestep it
+     * belongs to. A cursor at rest holds it part-open rather than letting it
+     * finish and vanish: a paused or scrubbed frame still has to show the event.
+     */
     if (body.swayed) {
+      // The pulse has to CLEAR the figure. A first pass opened from 0.26 to
+      // 0.42 of a cell, which is inside the 0.45 the sprite box occupies, so the
+      // ring drew under the gnome and what showed was a coloured blob rather
+      // than something radiating. It starts outside the silhouette now.
+      const open = (reducedMotion || t >= 1) ? 0.5 : t;
       context.beginPath();
-      context.arc(body.px, body.py, size + ring * 2.6, 0, Math.PI * 2);
-      context.fillStyle = C.paper;
-      context.globalAlpha = 0.5;
-      context.fill();
+      context.arc(body.px, body.py, cell * (0.42 + 0.26 * open), 0, Math.PI * 2);
+      context.lineWidth = Math.max(1.6, cell * 0.11 * (1 - 0.4 * open));
+      context.strokeStyle = skin;
+      context.globalAlpha = 0.95 - 0.45 * open;
+      context.stroke();
       context.globalAlpha = 1;
+    }
+    // A GNOME, when the atlas is present and the cell is big enough to hold one.
+    const tile = sheet && sheet.tileFor(skin, hatRung(body.wealth), walkFrame(body, now));
+    if (tile && cell >= SETTLER_MIN_CELL) {
+      const box = cell * SETTLER_BOX;
+      // STARVING FADES OUT. The hollow outline was a dot idiom: it worked when
+      // the mark was a disc whose fill could be removed. A gnome has no single
+      // fill to hollow, and outlining it just drew a second gnome. A settler with
+      // less than a timestep of food left is going, so it goes translucent —
+      // still placed, still its culture's colour, visibly not long for the world.
+      context.globalAlpha = body.starving ? STARVING_ALPHA : 1;
+      context.imageSmoothingEnabled = false;
+      context.drawImage(tile, body.px - box / 2, body.py - box / 2, box, box);
+      context.imageSmoothingEnabled = true;
+      context.globalAlpha = 1;
+      continue;
     }
     context.beginPath();
     context.arc(body.px, body.py, size, 0, Math.PI * 2);
@@ -2301,6 +2403,142 @@ function targetActual(frame, variable) {
     default:
       return null;
   }
+}
+
+/* THE SETTLER IS A GNOME, AND ITS HAT IS ITS WEALTH.
+ *
+ * The art is heartleaf's (src/sugarscape/art/, ATTRIBUTION.md), exported to a
+ * 16x16 indexed atlas of three hat rungs by tools/export_settler.nim and inlined
+ * here as base64 at build time. Indexed, not a PNG data URI, for three reasons
+ * that all turned out to matter: it decodes SYNCHRONOUSLY so nothing here needs
+ * Image or atob — a top-level use of either takes down every sandboxed block in
+ * tools/test_viewer.mjs; it is ~1.6 KB against ~20 KB; and tribe colour becomes
+ * a PALETTE SWAP rather than a canvas tint, which is the only way the recolour
+ * does not fight the art.
+ *
+ * Three rungs, not more, and the size rides on the BRIM's width rather than the
+ * crown's height. Both facts are measured, through the real 4.5:1 downscale at
+ * the embed floor: brims of 0.42/0.64/0.90 cell render as 6/9/12 columns, while
+ * a five-rung ladder puts two of its steps 1-2 columns apart, which cannot read
+ * on a moving 9px body. A crown at 0.09 cell is 1.24px and half-dissolves.
+ */
+const SETTLER_ATLAS_B64 = "eyJ2IjoyLCJ3IjoxNiwiaCI6MTYsInJ1bmdzIjozLCJmcmFtZXMiOjIsInBhbGV0dGUiOlsiIzAwMDAwMDAwIiwiI2Y4ZDE1MmZmIiwiI2MwOGMyZWZmIiwiI2VmZTFjZmZmIiwiI2U1Y2JiNWZmIiwiIzdmYjNkNWZmIiwiIzNiMmYyMmZmIl0sImhhdCI6WzEsMl0sInR1bmljIjpbNSw1XSwicGl4IjoiQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQkFBQUFBQUFBQUFBQUFBQUFBQUVCQVFJQ0FBQUFBQUFBQUFBQUFBRUJBUUVDQWdJQUFBQUFBQUFBQUFFQkFRRUJBZ0lDQWdBQUFBQUFBQUlCQVFFQkFRSUNBZ0lBQUFBQUFBQUFCQVFFQkFRRUJBUUFBQUFBQUFBQUJBUUVCZ1FFQmdRRUJBQUFBQUFBQUFNREF3TURBd01EQXdNQUFBQUFBQUFBQXdNREF3TURBd01BQUFBQUFBQUFBQUFBQXdNREF3QUFBQUFBQUFBQUFBQUFCUVVGQlFVRkFBQUFBQUFBQUFBQUFBVUZBQUFGQlFBQUFBQUFBQUFBQUFBR0JnQUFCZ1lBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFCQUFBQUFBQUFBQUFBQUFBQUFBRUJBUUlDQUFBQUFBQUFBQUFBQUFFQkFRRUNBZ0lBQUFBQUFBQUFBQUVCQVFFQkFnSUNBZ0FBQUFBQUFBSUJBUUVCQVFJQ0FnSUFBQUFBQUFBQUJBUUVCQVFFQkFRQUFBQUFBQUFBQkFRRUJnUUVCZ1FFQkFBQUFBQUFBQU1EQXdNREF3TURBd01BQUFBQUFBQUFBd01EQXdNREF3TUFBQUFBQUFBQUFBQUFBd01EQXdBQUFBQUFBQUFBQUFBQUJRVUZCUVVGQUFBQUFBQUFBQUFBQUFBRkJRQUFCUVVBQUFBQUFBQUFBQUFBQmdZQUFBWUdBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUJBQUFBQUFBQUFBQUFBQUFBQUFBQkFRSUFBQUFBQUFBQUFBQUFBQUFCQVFFQ0FnQUFBQUFBQUFBQUFBQUFBUUVCQWdJQUFBQUFBQUFBQUFBQUFRRUJBUUlDQWdBQUFBQUFBQUFBQVFFQkFRRUNBZ0lDQUFBQUFBQUFBZ0VCQVFFQkFnSUNBZ0FBQUFBQUFBQUVCQVFFQkFRRUJBQUFBQUFBQUFBRUJBUUdCQVFHQkFRRUFBQUFBQUFBQXdNREF3TURBd01EQXdBQUFBQUFBQUFEQXdNREF3TURBd0FBQUFBQUFBQUFBQUFEQXdNREFBQUFBQUFBQUFBQUFBQUZCUVVGQlFVQUFBQUFBQUFBQUFBQUJRVUFBQVVGQUFBQUFBQUFBQUFBQUFZR0FBQUdCZ0FBQUFBQUFBQUFBQUFBQUFBQkFBQUFBQUFBQUFBQUFBQUFBQUFCQVFJQUFBQUFBQUFBQUFBQUFBQUJBUUVDQWdBQUFBQUFBQUFBQUFBQUFRRUJBZ0lBQUFBQUFBQUFBQUFBQVFFQkFRSUNBZ0FBQUFBQUFBQUFBUUVCQVFFQ0FnSUNBQUFBQUFBQUFnRUJBUUVCQWdJQ0FnQUFBQUFBQUFBRUJBUUVCQVFFQkFBQUFBQUFBQUFFQkFRR0JBUUdCQVFFQUFBQUFBQUFBd01EQXdNREF3TURBd0FBQUFBQUFBQURBd01EQXdNREF3QUFBQUFBQUFBQUFBQURBd01EQUFBQUFBQUFBQUFBQUFBRkJRVUZCUVVBQUFBQUFBQUFBQUFBQUFVRkFBQUZCUUFBQUFBQUFBQUFBQUFHQmdBQUJnWUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUJBUUlBQUFBQUFBQUFBQUFBQUFBQUFRRUNBQUFBQUFBQUFBQUFBQUFBQVFFQkFnSUFBQUFBQUFBQUFBQUFBQUVCQVFJQ0FBQUFBQUFBQUFBQUFBRUJBUUVDQWdJQUFBQUFBQUFBQUFBQkFRRUJBZ0lDQUFBQUFBQUFBQUFCQVFFQkFRSUNBZ0lBQUFBQUFBQUNBUUVCQVFFQ0FnSUNBQUFBQUFBQUFBUUVCQVFFQkFRRUFBQUFBQUFBQUFRRUJBWUVCQVlFQkFRQUFBQUFBQUFEQXdNREF3TURBd01EQUFBQUFBQUFBQU1EQXdNREF3TURBQUFBQUFBQUFBQUFBQU1EQXdNQUFBQUFBQUFBQUFBQUFBVUZCUVVGQlFBQUFBQUFBQUFBQUFBRkJRQUFCUVVBQUFBQUFBQUFBQUFBQmdZQUFRWUdBQUFBQUFBQUFBQUFBQUFBQVFFQ0FBQUFBQUFBQUFBQUFBQUFBUUVCQWdJQUFBQUFBQUFBQUFBQUFBRUJBUUlDQUFBQUFBQUFBQUFBQUFFQkFRRUNBZ0lBQUFBQUFBQUFBQUFCQVFFQkFnSUNBQUFBQUFBQUFBQUJBUUVCQVFJQ0FnSUFBQUFBQUFBQ0FRRUJBUUVDQWdJQ0FBQUFBQUFBQUFRRUJBUUVCQVFFQUFBQUFBQUFBQVFFQkFZRUJBWUVCQVFBQUFBQUFBQURBd01EQXdNREF3TURBQUFBQUFBQUFBTURBd01EQXdNREFBQUFBQUFBQUFBQUFBTURBd01BQUFBQUFBQUFBQUFBQUFVRkJRVUZCUUFBQUFBQUFBQUFBQUFBQlFVQUFBVUZBQUFBQUFBQUFBQUFBQVlHQVFBR0JnQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUEifQ==";
+const SETTLER_BOX = 0.9;        // of a cell; 1.036 is where neighbours fuse
+const SETTLER_MIN_CELL = 14;    // board units; below this the dot reads better
+const STARVING_ALPHA = 0.38;    // a settler about to go, going
+const WALK_MS = 150;            // one step; only ever runs while a settler moves
+// Absolute, not relative to the frame: thresholds computed from the live
+// population would move a settler's hat when OTHER settlers changed.
+const HAT_RUNGS = [80, 220];
+
+function hatRung(wealth) {
+  let rung = 0;
+  for (const edge of HAT_RUNGS) if (wealth >= edge) rung += 1;
+  return rung;
+}
+
+/** Which walk frame a settler is on. A settler that did not move stands still —
+ *  animating a stationary figure is a treadmill, not a walk. */
+function walkFrame(body, now) {
+  if (!body.moving || reducedMotion) return 0;
+  return Math.floor(now / WALK_MS) % 2;
+}
+
+/** base64 -> bytes, by hand. `atob` is a browser global the test sandbox lacks. */
+function unbase64(text) {
+  const set = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  const clean = text.replace(/=+$/, "");
+  const out = new Uint8Array(Math.floor((clean.length * 6) / 8));
+  let bits = 0;
+  let held = 0;
+  let at = 0;
+  for (const character of clean) {
+    const value = set.indexOf(character);
+    if (value < 0) continue;
+    held = (held << 6) | value;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      out[at] = (held >> bits) & 0xff;
+      at += 1;
+    }
+  }
+  return out.subarray(0, at);
+}
+
+function shade(hex, amount) {
+  const value = hex.replace("#", "");
+  const [r, g, b] = [0, 2, 4].map((at) => parseInt(value.slice(at, at + 2), 16));
+  const mix = (channel) => Math.round(channel * amount);
+  return `rgb(${mix(r)},${mix(g)},${mix(b)})`;
+}
+
+let settlerAtlas;
+function settlerSheet() {
+  if (settlerAtlas !== undefined) return settlerAtlas;
+  settlerAtlas = null;
+  // An unsubstituted token means the build step did not run; fall back to dots
+  // rather than throwing, so a hand-edited broadcast.js still renders.
+  if (!SETTLER_ATLAS_B64 || SETTLER_ATLAS_B64.indexOf("{{") === 0) return settlerAtlas;
+  let atlas;
+  try {
+    atlas = JSON.parse(new TextDecoder().decode(unbase64(SETTLER_ATLAS_B64)));
+  } catch (error) {
+    return settlerAtlas;
+  }
+  if (!atlas || !atlas.pix || !atlas.palette) return settlerAtlas;
+  const pixels = unbase64(atlas.pix);
+  if (pixels.length < atlas.w * atlas.h * atlas.rungs * (atlas.frames || 1)) return settlerAtlas;
+  const cache = new Map();
+  const hats = new Set(atlas.hat ?? []);
+  const tunics = new Set(atlas.tunic ?? []);
+
+  settlerAtlas = {
+    atlas,
+    tileFor(ink, rung, frame) {
+      const frames = atlas.frames || 1;
+      const step = Math.min(frames - 1, Math.max(0, frame | 0));
+      const key = `${ink}:${rung}:${step}`;
+      const held = cache.get(key);
+      if (held) return held;
+      const { w, h } = atlas;
+      const tile = document.createElement("canvas");
+      tile.width = w;
+      tile.height = h;
+      const paint = tile.getContext("2d");
+      /* The palette swap, and it is the whole reason this is indexed art.
+       *
+       * The hat takes the tribe at full strength and its shadow stop a little
+       * under, so the crown reads as one lit object rather than a flat wedge;
+       * the tunic sits lower again so hat and body do not merge into a single
+       * coloured mass. Beard, skin and boots are left exactly as authored — they
+       * are what makes it a gnome rather than a coloured pawn, and tinting them
+       * would take the figure with them.
+       *
+       * There is no outline role any more. A keyline around a sixteen-pixel
+       * gnome draws a second gnome; the contrast is carried by the body values,
+       * which clear 7:1 against the plate, and by the beard, which is the
+       * brightest thing on the figure.
+       */
+      const palette = atlas.palette.map((colour, index) => {
+        if (hats.has(index)) return index === atlas.hat[0] ? ink : shade(ink, 0.68);
+        if (tunics.has(index)) return shade(ink, 0.80);
+        return colour;
+      });
+      const base = (rung * frames + step) * w * h;
+      for (let y = 0; y < h; y += 1) {
+        for (let x = 0; x < w; x += 1) {
+          const index = pixels[base + y * w + x];
+          if (index === 0) continue;
+          paint.fillStyle = palette[index] ?? "#000";
+          paint.fillRect(x, y, 1, 1);
+        }
+      }
+      cache.set(key, tile);
+      return tile;
+    },
+  };
+  return settlerAtlas;
 }
 
 function wealthTotal(frame) {
@@ -2411,97 +2649,102 @@ function seatMark(x, y, slot, radius) {
  *  hollow settler was a visible state a viewer could not decode - the legend
  *  for it used to live in the feed's header and vanished at the embed floor. */
 function boardKey(frame) {
-  // Sits on the baseline of its own row, immediately above the board.
+  /* The key teaches what the board DRAWS, and it has been wrong every time the
+   * board changed underneath it — a colour ramp after the plate became grain
+   * density, grain density after the grains became countable dots, and coloured
+   * discs after the settlers became gnomes. Each swatch below is now made the
+   * same way its subject is: the resource marks are the same dots at the same
+   * radius, and the culture swatches are the real sprite, tinted the real way.
+   */
   const y = BOARD.y - Math.round(keyH * 0.28);
   let x = BOARD.x + 2;
   let markup = "";
   const size = T(18);
-  const dot = G(6);
   const gap = G(20);
-  const swatchW = G(13);
   const style = { size, weight: 600, fill: C.muted, outline: 2.6 };
-  // One ramp per resource the world actually carries. The shipped config seeds
-  // BOTH sugar and spice peaks, so most of the plate is the rust of spice while
-  // the key taught only the yellow of sugar — the dominant colour on the board
-  // was the one thing the legend did not explain.
-  // The key has to teach what the board actually encodes, and it has been wrong
-  // twice by lagging it: a colour ramp after the board became grain density, and
-  // grain density after the board became countable dots. The swatches now draw
-  // the SAME dots at the same sizes — none, one, two, three, four.
+  const spot = Math.max(1, G(3.2));
+  const pitch = spot * 3.4;
+
+  // One dot per unit, four of them, because four is the cap a tile can hold.
+  // The old five-box 0..4 ramp printed boxes 13 units wide with sub-pixel specks
+  // inside and read as punctuation.
   const ramps = [["sugar", SUGAR_HEX, state.maxSugar]];
   if (state.maxSpice > 0) ramps.push(["spice", SPICE_HEX, state.maxSpice]);
-  for (const [label, grainColour, peak] of ramps) {
-    const steps = Math.max(1, Math.min(4, Math.round(peak)));
-    for (let step = 0; step <= steps; step += 1) {
-      const cellX = x + step * (swatchW + 2);
-      markup += `<rect x="${cellX}" y="${y - swatchW + 2}" `
-        + `width="${swatchW}" height="${swatchW}" fill="${PLATE_HEX}" `
-        + `stroke="${GRID_HEX}" stroke-width="0.8"/>`;
-      // One dot per unit, laid out by the board's own sampler so the key is the
-      // same picture a cell holding that much would print.
-      const spot = Math.max(0.8, swatchW * DOT_RADIUS * 2.2);
-      const layout = cellDotLayout(step + 900, 4, 4);
-      for (let unit = 0; unit < step; unit += 1) {
-        const point = layout[unit];
-        if (!point) continue;
-        markup += `<circle cx="${(cellX + point[0] * swatchW).toFixed(1)}" `
-          + `cy="${(y - swatchW + 2 + point[1] * swatchW).toFixed(1)}" `
-          + `r="${spot.toFixed(2)}" fill="${grainColour}"/>`;
-      }
+  for (const [label, ink, peak] of ramps) {
+    const most = Math.max(1, Math.min(4, Math.round(peak)));
+    for (let unit = 0; unit < most; unit += 1) {
+      markup += `<circle cx="${(x + unit * pitch).toFixed(1)}" cy="${y - size * 0.32}" `
+        + `r="${spot.toFixed(2)}" fill="${ink}"/>`;
     }
-    x += (steps + 1) * (swatchW + 2) + 8;
-    markup += text(label, x, y, style);
-    // Advance by the REAL type size. A fixed per-character step was tuned
-    // against one ramp and overlapped every label the moment the other was in
-    // force. The trailing gap is proportional too, or the key reads as one run
-    // of words the moment the ramp grows.
-    x += advance(label, size) + gap;
+    x += (most - 1) * pitch + spot + G(8);
+    markup += text(`${label} 1\u2013${most}`, x, y, style);
+    x += advance(`${label} 1\u2013${most}`, size) + gap;
   }
-  // A WIDTH BUDGET. This accumulated x with no measurement against the plate, so
-  // it terminated 16 units inside the board's right edge with the shipped names
-  // and ran clean off it with anything longer — and the names come from the
-  // manifest, not from here. Shorten until the run fits.
-  const rightEdge = BOARD.x + BOARD.w;
-  const tailWidth = dot + G(7) + advance("about to starve", size) + gap;
-  // When the world has cultures the settlers are coloured by TRIBE, so the key
-  // has to teach tribes — a seat swatch here would name a colour the board never
-  // draws. One swatch per surviving tribe, in the board's own inks.
+
+  // The settlers themselves, drawn from the atlas so the key cannot drift from
+  // the board again. Falls back to a disc when the sprite is not in play.
   const tribes = [...new Set(frame.agents
     .map((agent) => agent.tribe)
     .filter((tribe) => typeof tribe === "number" && tribe >= 0))].sort((a, b) => a - b);
+  const mark = G(15);
   if (tribes.length > 0) {
     markup += text("cultures", x, y, style);
     x += advance("cultures", size) + G(8);
     for (const tribe of tribes) {
-      markup += `<circle cx="${x}" cy="${y - dot}" r="${dot}" `
-        + `fill="${TRIBE_INK[tribe % TRIBE_INK.length]}"/>`;
-      x += dot * 2 + G(5);
+      const ink = TRIBE_INK[tribe % TRIBE_INK.length];
+      markup += settlerSwatch(ink, x, y - mark + G(3), mark, 1);
+      x += mark + G(2);
     }
-    x += gap - G(5);
-    markup += `<circle cx="${x}" cy="${y - dot}" r="${dot}" fill="none" `
-      + `stroke="${C.paper}" stroke-width="${G(2.4)}" opacity="0.6"/>`;
-    markup += text("just swayed", x + dot + G(7), y, style);
-    x += dot + G(7) + advance("just swayed", size) + gap;
+    x += gap - G(2);
+    // Swayed is the culture it LEFT, so the swatch has to be a ring, not a dot.
+    markup += `<circle cx="${x + mark / 2}" cy="${y - mark / 2 + G(2)}" r="${mark / 2}" `
+      + `fill="none" stroke="${TRIBE_INK[0]}" stroke-width="${G(2.4)}"/>`;
+    markup += text("just swayed", x + mark + G(7), y, style);
+    x += mark + G(7) + advance("just swayed", size) + gap;
+    // Starving fades rather than hollows, so the swatch fades too — and it is
+    // only offered when the replay can actually answer the question.
+    if (!quantised(frame)) {
+      markup += settlerSwatch(TRIBE_INK[1 % TRIBE_INK.length], x, y - mark + G(3), mark, STARVING_ALPHA);
+      markup += text("about to starve", x + mark + G(7), y, style);
+    }
+    return markup;
   }
+
+  const rightEdge = BOARD.x + BOARD.w;
+  const tailWidth = mark + G(7) + advance("about to starve", size) + gap;
   const budget = (rightEdge - x - tailWidth) / Math.max(1, frame.slots.length);
   frame.slots.forEach((slot, index) => {
-    if (tribes.length > 0) return; // the seat is not what the body colour says
-    markup += `<circle cx="${x}" cy="${y - dot}" r="${dot}" fill="${seatOf(index).color}"/>`;
+    markup += `<circle cx="${x}" cy="${y - G(6)}" r="${G(6)}" fill="${seatOf(index).color}"/>`;
     const full = slot.name || `Population ${index + 1}`;
     let label = dense() ? full.split(/\s+/).at(-1) : full;
-    if (advance(label, size) + dot + G(7) + gap > budget) {
-      label = full.split(/\s+/).at(-1);
+    while (label.length > 1 && advance(label, size) + G(13) + gap > budget) {
+      label = `${label.slice(0, -2)}\u2026`;
     }
-    while (label.length > 1 && advance(label, size) + dot + G(7) + gap > budget) {
-      label = `${label.slice(0, -2)}…`;
-    }
-    markup += text(label, x + dot + G(7), y, style);
-    x += dot + G(7) + advance(label, size) + gap;
+    markup += text(label, x + G(13), y, style);
+    x += G(13) + advance(label, size) + gap;
   });
-  markup += `<circle cx="${x}" cy="${y - dot}" r="${dot}" fill="none" `
+  markup += `<circle cx="${x}" cy="${y - G(6)}" r="${G(6)}" fill="none" `
     + `stroke="${C.muted}" stroke-width="${G(2.2)}"/>`;
-  markup += text("about to starve", x + dot + G(7), y, style);
+  markup += text("about to starve", x + G(13), y, style);
   return markup;
+}
+
+/** One settler, at key size, as an inline image so the legend is literally the
+ *  same art the board blits. Cached: toDataURL is far too slow for a redraw. */
+const swatchCache = new Map();
+function settlerSwatch(ink, x, y, box, alpha) {
+  const sheet = settlerSheet();
+  if (!sheet) {
+    return `<circle cx="${x + box / 2}" cy="${y + box / 2}" r="${box / 2}" `
+      + `fill="${ink}" opacity="${alpha}"/>`;
+  }
+  let url = swatchCache.get(ink);
+  if (!url) {
+    url = sheet.tileFor(ink, 1, 0).toDataURL();
+    swatchCache.set(ink, url);
+  }
+  return `<image href="${url}" x="${x}" y="${y}" width="${box}" height="${box}" `
+    + `opacity="${alpha}" style="image-rendering:pixelated"/>`;
 }
 
 function scorebug(frame) {
@@ -2548,41 +2791,31 @@ function scorebug(frame) {
   // leaves no room to stack an eyebrow above it or run a progress bar beside it.
   // So dense states the fraction on one line and lets the transport's own played
   // track carry the bar — it already did, at both densities.
-  const clockX = big ? MARGIN + 400 : MARGIN + 476;
-  const clockW = big ? 490 : 320;
-  markup += panel(clockX, 14, clockW, BUG_H);
-  if (big) {
-    markup += text(`${frame.timestep} / ${scheduled}`, clockX + 20, 72, {
-      size: T(40), weight: 600, family: F.mono, fill: C.paper,
+  /* THE CLOCK SITS IN THE TOP-RIGHT CORNER, ON NOTHING.
+   *
+   * It used to be a bordered card parked mid-band beside the masthead, which is
+   * the treatment a panel earns by holding a navigable unit — a clock is one
+   * number. The plate under it is already the darkest thing on the stage, so the
+   * figure needs no card to sit on; the border was decoration and it competed
+   * with the rail's panels, which are real. Right-aligned to the stage margin,
+   * which is the same axis the rail's right edge uses.
+   */
+  const clockRight = W - MARGIN - 2;
+  markup += text(`${frame.timestep} / ${scheduled}`, clockRight, big ? 62 : 66, {
+    size: T(40), weight: 600, family: F.mono, fill: C.paper, anchor: "end",
+  });
+  if (stateLabel) {
+    markup += text(stateLabel, clockRight, big ? 86 : 92, {
+      size: T(18), weight: 700, family: F.mono, anchor: "end",
+      fill: stateFill, spacing: 1.4,
     });
-    if (stateLabel) {
-      markup += text(stateLabel, clockX + clockW - 20, 72, {
-        size: T(18), weight: 700, family: F.mono, anchor: "end",
-        fill: stateFill, spacing: 1.4,
-      });
-    }
-  } else {
-    markup += eyebrow("Timestep", clockX + 18, 46);
-    markup += text(`${frame.timestep}`, clockX + 18, 84, {
-      size: 40, weight: 600, family: F.mono, fill: C.paper,
-    });
-    // Mono advances at ~0.6em, so the fraction's offset is read off the size
-    // rather than off a constant tuned for one of them.
-    markup += text(` / ${scheduled}`,
-      clockX + 18 + String(frame.timestep).length * 40 * 0.6, 84, {
-        size: T(24), weight: 500, family: F.mono, fill: C.muted,
-      });
-    const barX = clockX + 178;
-    const barW = clockW - 196;
-    markup += `<rect x="${barX}" y="60" width="${barW}" height="9" rx="4.5" fill="${C.trackBed}"/>`;
-    markup += `<rect x="${barX}" y="60" width="${Math.max(3, barW * progress)}" `
-      + `height="9" rx="4.5" fill="${C.gold}"/>`;
-    if (stateLabel) {
-      markup += text(stateLabel, barX + barW, 46, {
-        size: T(18), weight: 700, family: F.mono, anchor: "end",
-        fill: stateFill, spacing: 1.4,
-      });
-    }
+  } else if (!big) {
+    // The played track already carries progress at the transport, so the bar
+    // here is only worth its room when nothing else is using the second line.
+    const barW = 240;
+    markup += `<rect x="${clockRight - barW}" y="80" width="${barW}" height="7" rx="3.5" fill="${C.trackBed}"/>`;
+    markup += `<rect x="${clockRight - barW}" y="80" width="${Math.max(3, barW * progress)}" `
+      + `height="7" rx="3.5" fill="${C.gold}"/>`;
   }
   // Dense has no room for the second line, and CUT SHORT already stands in the
   // clock; the spoken broadcast carries the full sentence at both densities.
@@ -2602,6 +2835,21 @@ function scorebug(frame) {
         size: T(18), weight: 600, fill: state.truncated ? C.loss : C.muted,
       });
     }
+  }
+
+  /* NO CHIP STRIP ON A SCORED WORLD.
+   *
+   * The chip is a scoreboard: rank, name, score, margin over the field. That is
+   * the right furniture for a race between populations and the wrong furniture
+   * for a world where one seat is graded against a target — there is no rank to
+   * hold, no field to lead, and the score it would print is already the headline
+   * of the panel DIRECTLY BELOW it. Restating it in the corner was the whole
+   * defect; changing which number it restated did not fix it.
+   *
+   * A v1 replay is a race and keeps its scoreboard.
+   */
+  if (frame.coworld?.seats?.some((entry) => typeof entry.score === "number")) {
+    return markup;
   }
 
   // Standing — the score axis is total living wealth; population rides along as
@@ -3383,6 +3631,37 @@ function eventFeed(frame, x, y, width, height) {
  * whole claim is "these two shapes are/aren't the same" and two scales would let
  * a mismatch print as a match.
  */
+/* Which target the histogram is read against.
+ *
+ * An episode is ASSIGNED one target, but the engine measures every variable in
+ * the catalog each tick regardless, so any target can be asked of any run. That
+ * is a genuinely different question from the one the episode was scored on —
+ * "how close did this ruleset come to a target it was never given?" — so the
+ * assigned one stays marked and stays the default. */
+let targetChoice = null;
+
+/** The chosen target as a seat-shaped record, or the assigned seat unchanged. */
+function readingFor(frame) {
+  const seat = frame.coworld?.seats?.[0];
+  const choices = frame.coworld?.choices ?? [];
+  if (!targetChoice) return seat;
+  const pick = choices.find((choice) => choice.id === targetChoice);
+  if (!pick) return seat;
+  return {
+    seat: seat?.seat ?? 0,
+    name: seat?.name,
+    targetId: pick.id,
+    variable: pick.variable,
+    bins: pick.bins,
+    targetProbs: pick.targetProbs,
+    measuredProbs: pick.measuredProbs,
+    sampleCount: pick.sampleCount,
+    measured: Boolean(pick.measuredProbs?.length),
+    score: pick.score,
+    assigned: pick.assigned,
+  };
+}
+
 function targetHistogram(frame, x, y, width, height) {
   const big = dense();
   const seats = frame.coworld?.seats ?? [];
@@ -3390,7 +3669,8 @@ function targetHistogram(frame, x, y, width, height) {
   markup += eyebrow("Did the rules grow the target?", x + 18, y + (big ? 46 : 26));
   if (seats.length === 0) return markup;
 
-  const seat = seats[0];
+  const seat = readingFor(frame);
+  if (!seat) return markup;
   const headY = y + (big ? 46 : 26) + 34;
   const score = typeof seat.score === "number" ? seat.score : null;
   // The score is the headline, so it takes the figure treatment; the target it
@@ -3401,8 +3681,13 @@ function targetHistogram(frame, x, y, width, height) {
   markup += text("distribution match", x + 18, headY + T(40) + 22, {
     size: T(18), weight: 600, fill: C.muted, spacing: 1.4,
   });
-  markup += text(`${seat.variable ?? "wealth"} · ${seat.targetId ?? "target"}`,
-    x + 18, headY + T(40) + 44, { size: T(17), weight: 500, family: F.mono, fill: C.dim });
+  // Say plainly when the reading is NOT the one the episode was played for, so a
+  // browsed score is never mistaken for the result.
+  const offTarget = seat.assigned === false;
+  markup += text(
+    `${seat.variable ?? "wealth"} · ${seat.targetId ?? "target"}${offTarget ? " · not this episode's target" : ""}`,
+    x + 18, headY + T(40) + 44,
+    { size: T(17), weight: 500, family: F.mono, fill: offTarget ? C.gold : C.dim });
 
   const plotTop = headY + T(40) + 60;
   const plotH = Math.max(30, y + height - plotTop - 30);
@@ -3507,25 +3792,37 @@ function inequalityOverTime(frame, x, y, width, height) {
   }
   // Never a bare number: the value, which way it has moved since the start, and
   // what that means in words.
+  /* ONE ROW, TWO READINGS, AND A MEASURED BUDGET BETWEEN THEM.
+   *
+   * The Gini figure sits left and the trade line right, on the same baseline, and
+   * the first draft let both run at full length: "up 0.123 from 0.000" collided
+   * with "30 trades this tick" and printed "from 0.0(30)trades". So the trade
+   * line is measured first, because it is the shorter and more perishable fact,
+   * and the drift clause is only drawn in the room that is actually left. */
   const drift = now - opened;
-  const way = Math.abs(drift) < 0.005 ? "level with the start"
-    : `${drift > 0 ? "up" : "down"} ${Math.abs(drift).toFixed(3)} from ${opened.toFixed(3)}`;
-  markup += text(now.toFixed(3), plotX, plotTop + plotH + 22,
+  const figure = now.toFixed(3);
+  const figureEnd = plotX + advance(figure, T(22)) + 10;
+  markup += text(figure, plotX, plotTop + plotH + 22,
     { size: T(22), weight: 600, family: F.mono, fill: C.paper });
-  markup += text(way, plotX + advance(now.toFixed(3), T(22)) + 10, plotTop + plotH + 22,
-    { size: T(17), weight: 500, family: F.mono, fill: C.dim });
 
-  // Trade, as a footer — see the note above on what the replay does and does not
-  // record. Zero is a real reading here, not a missing one.
   const stats = frame.stats ?? {};
+  let tradeStart = plotX + plotW;
   if (stats.tradeVolume !== undefined) {
     const volume = Number(stats.tradeVolume) || 0;
     const price = Number(stats.meanTradePrice) || 0;
+    // Zero is a real reading here, not a missing one.
     const line = volume === 0
       ? "no trades this tick"
-      : `${volume} trade${volume === 1 ? "" : "s"} this tick · mean price ${price.toFixed(2)}`;
+      : `${volume} trade${volume === 1 ? "" : "s"} · mean price ${price.toFixed(2)}`;
+    tradeStart = plotX + plotW - advance(line, T(17));
     markup += text(line, plotX + plotW, plotTop + plotH + 22,
       { size: T(17), weight: 500, family: F.mono, fill: C.muted, anchor: "end" });
+  }
+  const way = Math.abs(drift) < 0.005 ? "level with the start"
+    : `${drift > 0 ? "up" : "down"} ${Math.abs(drift).toFixed(3)} from ${opened.toFixed(3)}`;
+  if (figureEnd + advance(way, T(17)) + 12 < tradeStart) {
+    markup += text(way, figureEnd, plotTop + plotH + 22,
+      { size: T(17), weight: 500, family: F.mono, fill: C.dim });
   }
   return markup;
 }
@@ -3543,7 +3840,21 @@ function inequalityOverTime(frame, x, y, width, height) {
  * the others fall away, independently of whether the population is growing or
  * dying. Drawn from the frames, so it works on any replay carrying tribes.
  */
-const TRIBE_INK = ["#f0a63c", "#7fb3d5", "#c9d17a", "#d98cae", "#8fd1c0", "#e8c07d"];
+/* Tribe inks, MEASURED against the two things they have to survive.
+ *
+ * Each clears 7:1 against PLATE_HEX, because that is the ground a settler
+ * actually stands on: 99.2% of agent-frames sit on a cell the settler has
+ * already stripped, so the body value carries the mark and the ink ring cannot
+ * help there (ink is 1.09:1 against the plate).
+ *
+ * Two were wrong, and both were mine. #f0a63c was BYTE-IDENTICAL to SPICE_HEX,
+ * so the first tribe's settlers were exactly the colour of the spice dots they
+ * stand among — a 1.00:1 collision, worse than the 1.07:1 that put the ink ring
+ * there in the first place. #d98cae measured 6.98:1 against the plate, under the
+ * bar it was picked to clear. Now #ef8f7c (7.46:1 plate, 1.15:1 spice) and
+ * #dd9ab8 (7.88:1 plate). Anything added here gets measured, not eyeballed.
+ */
+const TRIBE_INK = ["#ef8f7c", "#7fb3d5", "#c9d17a", "#dd9ab8", "#8fd1c0", "#e8c07d"];
 
 function tribeShares(frame, x, y, width, height) {
   const big = dense();
@@ -3992,6 +4303,7 @@ function drawHud(frame, index) {
   markup += scorebug(frame);
   markup += boardKey(frame);
   standingsLayer.innerHTML = markup;
+  if (fillTargetPicker(frame)) placeTargetPicker();
 }
 
 // ---------------------------------------------------------------------------
@@ -3999,6 +4311,73 @@ function drawHud(frame, index) {
 // ---------------------------------------------------------------------------
 
 let lastTick = 0;
+
+/* THE TARGET PICKER.
+ *
+ * Populated once per replay from the catalog the converter embedded, and placed
+ * over the histogram panel by transforming the panel's own stage coordinates
+ * through the SVG's screen matrix. Percentages would drift the moment the stage
+ * stopped being exactly 16:9; the matrix is what the SVG is actually using.
+ */
+const targetPick = document.getElementById("target-pick");
+const targetSelect = document.getElementById("target-select");
+const stageEl = document.getElementById("stage");
+let targetOptionsKey = "";
+
+function fillTargetPicker(frame) {
+  const choices = frame.coworld?.choices ?? [];
+  if (choices.length === 0) {
+    targetPick.hidden = true;
+    return false;
+  }
+  const key = choices.map((choice) => choice.id).join("|");
+  if (key !== targetOptionsKey) {
+    targetOptionsKey = key;
+    targetSelect.innerHTML = choices.map((choice) => {
+      const label = choice.assigned ? `${choice.id} (assigned)` : choice.id;
+      // A target measured on a variable this episode never sampled cannot be
+      // scored, and is offered disabled rather than silently absent.
+      const dead = choice.score === null || choice.score === undefined;
+      return `<option value="${choice.id}"${choice.assigned ? " selected" : ""}`
+        + `${dead ? " disabled" : ""}>${label}${dead ? " — not measured" : ""}</option>`;
+    }).join("");
+    if (!targetChoice) {
+      const assigned = choices.find((choice) => choice.assigned);
+      targetChoice = assigned ? assigned.id : choices[0].id;
+    }
+    targetSelect.value = targetChoice;
+  }
+  targetPick.hidden = false;
+  return true;
+}
+
+function placeTargetPicker() {
+  if (targetPick.hidden) return;
+  const matrix = hud.getScreenCTM();
+  const stageBox = stageEl.getBoundingClientRect();
+  if (!matrix) return;
+  const at = (x, y) => ({
+    left: matrix.a * x + matrix.c * y + matrix.e - stageBox.left,
+    top: matrix.b * x + matrix.d * y + matrix.f - stageBox.top,
+  });
+  // BELOW the heading, not on it. The panel's title is a long left-aligned
+  // question and the picker is right-aligned, so sharing that row printed the
+  // menu straight through "DID THE RULES GROW THE TARGET?". The row under it is
+  // clear on the right — the score and its labels are all left-aligned.
+  const corner = at(RAIL.x + RAIL.w - 18, RAIL.y + (dense() ? 58 : 40));
+  targetPick.style.right = `${Math.round(stageBox.width - corner.left)}px`;
+  targetPick.style.top = `${Math.round(corner.top)}px`;
+  targetPick.style.left = "auto";
+}
+
+targetSelect.addEventListener("change", () => {
+  targetChoice = targetSelect.value;
+  // The rail is signature-cached, so force the redraw rather than waiting for a
+  // timestep boundary that may never come while paused.
+  standingsSignature = "";
+  const frame = frames[currentIndex()];
+  if (frame) drawHud(frame, currentIndex());
+});
 
 const commentary = document.getElementById("commentary");
 const verdictLine = document.getElementById("verdict");

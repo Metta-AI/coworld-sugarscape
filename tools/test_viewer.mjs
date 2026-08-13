@@ -931,6 +931,43 @@ assert.match(strapline.onePopulation, /^1 population,/, "one population, not '1 
 assert.match(strapline.v3, /^1 seat ·/, "one seat, not '1 seats'");
 assert.match(strapline.twoSeats, /^2 seats ·/, "and two seats takes the plural");
 
+/* A SETTLER MUST NOT BE THE COLOUR OF THE GROUND IT STANDS ON.
+ *
+ * TRIBE_INK[0] shipped byte-identical to SPICE_HEX — settlers of the first tribe
+ * were exactly the colour of the spice dots around them, a 1.00:1 collision, and
+ * nothing in this file noticed. TRIBE_INK[3] measured 6.98:1 against the plate,
+ * under the bar it was chosen to clear. Both are measured here now, because a
+ * settler standing on stripped ground has only its body value to carry it: the
+ * ink ring is 1.09:1 against the plate and cannot do the work. */
+const inks = JSON.parse(vm.runInContext(`
+  const lin = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+  const lum = (hex) => {
+    const h = hex.replace("#", "");
+    const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
+    return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  };
+  const ratio = (a, b) => {
+    const [x, y] = [lum(a), lum(b)];
+    return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+  };
+  JSON.stringify(TRIBE_INK.map((ink) => ({
+    ink,
+    plate: ratio(ink, PLATE_HEX),
+    spice: ratio(ink, SPICE_HEX),
+    sugar: ratio(ink, SUGAR_HEX),
+  })));
+`, viewerContext));
+for (const row of inks) {
+  assert.ok(row.plate >= 7,
+    `tribe ink ${row.ink} must clear 7:1 on the plate it stands on, got ${row.plate.toFixed(2)}`);
+  assert.ok(row.spice > 1.05,
+    `tribe ink ${row.ink} must not be the colour of a spice dot, got ${row.spice.toFixed(2)}`);
+  assert.ok(row.sugar > 1.05,
+    `nor of a sugar dot, got ${row.sugar.toFixed(2)} for ${row.ink}`);
+}
+assert.equal(new Set(inks.map((row) => row.ink)).size, inks.length,
+  "and no two tribes may share an ink");
+
 assert.equal(dots.perCell, 8, "four sugar plus four spice positions per cell");
 assert.equal(dots.missing, 0, "every position must be placed");
 assert.equal(dots.outside, 0, "and every dot stays wholly inside its own cell");

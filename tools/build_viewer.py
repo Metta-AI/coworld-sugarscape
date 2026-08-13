@@ -20,6 +20,7 @@ which is what the test suite runs.
 from __future__ import annotations
 
 import argparse
+import json
 import base64
 import re
 import io
@@ -74,10 +75,35 @@ def assert_self_contained(document: str) -> None:
         )
 
 
+def build_sprites() -> dict[str, str]:
+    """The settler atlas, inlined as base64 so the document fetches nothing.
+
+    An indexed palette map rather than a PNG: it decodes synchronously, so the
+    viewer needs no Image or atob and the vm sandbox in tools/test_viewer.mjs
+    keeps working, and tribe colour becomes a palette swap rather than a canvas
+    tint. Produced by hand with tools/export_settler.nim, never in CI — the
+    viewer job has no Nim. Same relationship as the vendored fonts.
+    """
+
+    path = ROOT / "src/sugarscape/sprites/settler.json"
+    if not path.exists():
+        raise SystemExit(
+            "no exported settler atlas at src/sugarscape/sprites/settler.json; "
+            "run: nim c -r -d:release tools/export_settler.nim"
+        )
+    packed = json.dumps(json.loads(path.read_text()), separators=(",", ":"))
+    # Pure [A-Za-z0-9+/=], so it sits inside a JS string literal with no escaping
+    # hazard — and `node --check` on the UNSUBSTITUTED source still parses,
+    # because the token lives inside quotes.
+    return {"SETTLERS": base64.b64encode(packed.encode()).decode()}
+
+
 def build() -> str:
     fonts = build_fonts()
     css = substitute((SOURCE / "broadcast.css").read_text(), fonts)
-    script = (SOURCE / "broadcast.js").read_text()
+    # Kept separate from `fonts`: substitute() raises on a token with no slot, so
+    # merging the two would kill the CSS build on {{SETTLERS}}.
+    script = substitute((SOURCE / "broadcast.js").read_text(), build_sprites())
     document = substitute(
         (SOURCE / "broadcast.html").read_text(),
         {"STYLE": css, "SCRIPT": script},

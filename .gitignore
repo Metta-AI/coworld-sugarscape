@@ -92,3 +92,6 @@ tests/nim/test_*
 
 # ux.replay build outputs
 .build/
+
+# Built by hand from src/sugarscape/art/, never in CI. See tools/export_settler.nim.
+tools/export_settler
