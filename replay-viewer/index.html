@@ -693,7 +693,7 @@ const frames = [];
 const frameIndexByTimestep = new Map();
 const events = [];               // derived beats, in frame order
 const wealthSeries = [];         // [{ timestep, scores: number[], population: number[] }]
-const motes = [];                // transient death effects
+const motes = [];                // transient death effects, in CELL coordinates
 
 const state = {
   streamId: null,
@@ -1193,6 +1193,10 @@ function resetStream() {
   events.length = 0;
   wealthSeries.length = 0;
   motes.length = 0;
+  // A crossfade is remembered by AGENT ID, and a new stream starts its ids over
+  // from zero: without this, the first settlers of the next episode inherit the
+  // last one's half-finished sways and open a pulse nothing on the board caused.
+  swayLog.clear();
   state.cursor = 0;
   state.maxWealth = 1;
   state.maxSugar = 1;
@@ -2309,7 +2313,7 @@ function drawBoard(frame, previous, t, now) {
   // initEnvironment takes independent width and height, and gui.py computes its
   // site height and width separately, so a 64x32 world filled the top half of
   // the plate and a 32x64 one ran off the bottom.
-  let cell = Math.min(BOARD.w / frame.width, BOARD.h / frame.height);
+  const base = Math.min(BOARD.w / frame.width, BOARD.h / frame.height);
 
   context.setTransform(RENDER_SCALE, 0, 0, RENDER_SCALE, 0, 0);
   context.clearRect(0, 0, W, H);
@@ -2328,7 +2332,12 @@ function drawBoard(frame, previous, t, now) {
   // One plate. The dissolve happens INSIDE it, on the grains that changed hands,
   // so there is never a second copy of the board to blend against.
   easeView(frame, now);
-  const lens = viewTransform(frame, cell);
+  const lens = viewTransform(frame, base);
+  // ONE cell size for the whole pass, and it is the LENS's. Holding the base
+  // size in the same name and swapping it partway down was how the death rings
+  // came to be drawn unzoomed: everything below this line is on the magnified
+  // lattice, so nothing below this line may use the unmagnified cell.
+  const cell = lens.cell;
   // Everything on the lattice is drawn under the lens and clipped to the plate.
   context.save();
   context.beginPath();
@@ -2352,7 +2361,13 @@ function drawBoard(frame, previous, t, now) {
     context.strokeStyle = C.loss;
     context.lineWidth = Math.max(1.4, cell * 0.22 * (1 - age));
     context.beginPath();
-    context.arc(mote.px, mote.py, cell * (0.32 + age * 1.05), 0, Math.PI * 2);
+    context.arc(
+      lens.ox + mote.cx * cell,
+      lens.oy + mote.cy * cell,
+      cell * (0.32 + age * 1.05),
+      0,
+      Math.PI * 2,
+    );
     context.stroke();
   }
   context.globalAlpha = 1;
@@ -2379,7 +2394,6 @@ function drawBoard(frame, previous, t, now) {
   // embed floor is the constraint on going further: at 640 a cell is 8 CSS px,
   // so this is a 4px dot, and the ring below is what keeps it a body.
   // Sizes follow the lens: a magnified lattice needs magnified settlers on it.
-  cell = lens.cell;
   const radius = cell * 0.26;
   // A settler is red or blue and so is the ground it stands on - sugar ramps to
   // yellow, spice to rust - so a bare dot separated by HUE ALONE, which is the
@@ -2488,13 +2502,22 @@ function drawBoard(frame, previous, t, now) {
     // off one edge and arriving at the other, which is what a torus IS.
     const spots = [[body.px, body.py]];
     if (body.wrapped) {
-      const dx = body.px < BOARD.x ? spanX : (body.px > BOARD.x + spanX ? -spanX : 0);
-      const dy = body.py < BOARD.y ? spanY : (body.py > BOARD.y + spanY ? -spanY : 0);
+      // Against the LATTICE's edges, not the plate's. Under the lens the two are
+      // not the same rectangle — magnify and the lattice runs well outside the
+      // plate — so testing against the plate put the second copy of a wrapping
+      // settler a whole board away from where it belonged.
+      const dx = body.px < lens.ox ? spanX : (body.px > lens.ox + spanX ? -spanX : 0);
+      const dy = body.py < lens.oy ? spanY : (body.py > lens.oy + spanY ? -spanY : 0);
       if (dx || dy) spots.push([body.px + dx, body.py + dy]);
       else {
         // Still inside the lattice, but about to leave it: draw the arrival
-        // ahead of time on whichever axis the walk is crossing.
-        spots.push([body.px - spanX, body.py], [body.px + spanX, body.py]);
+        // ahead of time on whichever axis the walk is crossing. Both axes — a
+        // settler leaving by the top wraps exactly as one leaving by the side,
+        // and only the horizontal copies were ever drawn.
+        spots.push(
+          [body.px - spanX, body.py], [body.px + spanX, body.py],
+          [body.px, body.py - spanY], [body.px, body.py + spanY],
+        );
       }
     }
 
@@ -2985,6 +3008,21 @@ function boardKey(frame) {
       + `fill="none" stroke="${TRIBE_INK[0]}" stroke-width="${G(2.4)}"/>`;
     markup += text("just swayed", x + mark + G(7), y, style);
     x += mark + G(7) + advance("just swayed", size) + gap;
+    /* THE BOARD'S OTHER RING.
+     *
+     * A settler that starves leaves an expanding ring where it stood, and the
+     * key's only ring said "just swayed" — so a die-off read as a mass
+     * conversion, which is how this mark got reported as a swaying bug. Two
+     * rings on the plate, two rings in the key, told apart by the ink they are
+     * actually drawn in. Silent under reduced motion, which suppresses the mark
+     * itself rather than merely slowing it.
+     */
+    if (!reducedMotion) {
+      markup += `<circle cx="${x + mark / 2}" cy="${y - mark / 2 + G(2)}" r="${mark / 2}" `
+        + `fill="none" stroke="${C.loss}" stroke-width="${G(2.4)}"/>`;
+      markup += text("just starved", x + mark + G(7), y, style);
+      x += mark + G(7) + advance("just starved", size) + gap;
+    }
     // Starving fades rather than hollows, so the swatch fades too — and it is
     // only offered when the replay can actually answer the question.
     if (!quantised(frame)) {
@@ -5019,17 +5057,18 @@ function onFrameEntered(index, now) {
   const frame = frames[index];
   if (!frame) return;
 
-  const cell = BOARD.w / frame.width;
   for (const event of events) {
     if (event.index !== index) continue;
     if (event.kind === "death" && !reducedMotion) {
       for (const agent of event.agents) {
         const position = cellPosition(frame, agent.cell);
-        motes.push({
-          px: BOARD.x + (position.x + 0.5) * cell,
-          py: BOARD.y + (position.y + 0.5) * cell,
-          born: now,
-        });
+        // A ring is remembered by the CELL it happened in, not by where that
+        // cell was on screen when it happened. Stage units baked in the lens of
+        // one instant: a ring outlives its frame, so panning or zooming during
+        // the 1.5s it is up left it stranded at a stale position and a stale
+        // size, and a zoomed-in board showed the whole map's deaths as small
+        // circles scattered over the magnified one. drawBoard projects them.
+        motes.push({ cx: position.x + 0.5, cy: position.y + 0.5, born: now });
       }
     }
     /* NOTHING interrupts the board any more.
