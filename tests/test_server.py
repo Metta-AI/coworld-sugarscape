@@ -77,6 +77,12 @@ def test_server_end_to_end_contract(tmp_path: Path) -> None:
             "tokens": ["token-zero", "token-one"],
             "players": [{"name": "Zero"}, {"name": "One"}],
             "player_connect_timeout_seconds": 5,
+            # These tests drive the episode to completion and then wait for the
+            # process to EXIT, so they opt out of the post-episode grace that
+            # keeps /global reachable for the hosted certifier's probe.
+            # test_global_answers_a_ping_after_the_episode_has_finished is the
+            # one that needs it, and sets its own.
+            "spectator_grace_seconds": 0,
         }
     )
     config_path = tmp_path / "config.json"
@@ -215,6 +221,12 @@ def test_certification_fixture_completes_with_bundled_baseline_players(tmp_path:
             "tokens": ["baseline-zero", "baseline-one"],
             "players": [{"name": "Baseline 0"}, {"name": "Baseline 1"}],
             "player_connect_timeout_seconds": 5,
+            # These tests drive the episode to completion and then wait for the
+            # process to EXIT, so they opt out of the post-episode grace that
+            # keeps /global reachable for the hosted certifier's probe.
+            # test_global_answers_a_ping_after_the_episode_has_finished is the
+            # one that needs it, and sets its own.
+            "spectator_grace_seconds": 0,
         }
     )
     config_path = tmp_path / "config.json"
@@ -306,3 +318,86 @@ def _retry_connect(url: str):
             if error.response.status_code != 409 or time.monotonic() >= deadline:
                 raise
             time.sleep(0.02)
+
+
+def test_global_answers_a_ping_after_the_episode_has_finished(
+    tmp_path: Path,
+    tiny_episode_config: dict[str, object],
+) -> None:
+    """The hosted certifier connects to /global AFTER the run and pings it.
+
+    This is the failure that kept every published version uncertified — the
+    reported reason being "Game websocket did not answer a WebSocket Ping with
+    Pong: ws://127.0.0.1:8080/global". Two causes, both fixed:
+
+    1. The server closed as soon as its already-connected readers drained, which
+       on a small config is ~2 s after start. The probe arrived at nothing.
+    2. Once it outlived the episode, a finished spectator was sent the result and
+       immediately disconnected from THIS side, so the ping met a closed socket.
+
+    So this test does exactly what the certifier does, in that order: let the
+    episode finish, connect fresh, and ping.
+    """
+
+    config = {
+        **tiny_episode_config,
+        "seed": 7,
+        "seats": 1,
+        "players": [{"name": "solo"}],
+        "tokens": ["token-zero"],
+        "targets": ["wealth.skewed-gini-0.5"],
+        # Long enough to connect inside, short enough to keep the suite quick.
+        "spectator_grace_seconds": 12,
+    }
+    config_path = tmp_path / "config.json"
+    results_path = tmp_path / "results.json"
+    replay_path = tmp_path / "replay.bin"
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+    port = _unused_port()
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "PYTHONHASHSEED": "0",
+            "PYTHONPATH": str(ROOT / "src"),
+            "COGAME_HOST": "127.0.0.1",
+            "COGAME_PORT": str(port),
+            "COGAME_CONFIG_URI": config_path.as_uri(),
+            "COGAME_RESULTS_URI": results_path.as_uri(),
+            "COGAME_SAVE_REPLAY_URI": replay_path.as_uri(),
+        }
+    )
+    process = subprocess.Popen(
+        [str(ROOT / ".venv" / "bin" / "python"), "-m", "coworld.server"],
+        cwd=ROOT,
+        env=environment,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    try:
+        _wait_for_health(f"http://127.0.0.1:{port}", process)
+        # Play the episode out so the server reaches its post-episode state.
+        player = _retry_connect(f"ws://127.0.0.1:{port}/player?slot=0&token=token-zero")
+        json.loads(player.recv(timeout=15))  # observation
+        # `type: action` with a null ruleset is the documented "no ruleset"
+        # submission the other tests use; it closes the window and runs the world.
+        player.send(json.dumps({"type": "action", "ruleset": None}))
+        deadline = time.time() + 60
+        while time.time() < deadline and not results_path.exists():
+            time.sleep(0.2)
+        player.close()
+        assert results_path.exists(), "the episode never wrote its results"
+
+        # NOW behave like the certifier: a fresh connection, then a ping.
+        spectator = connect(f"ws://127.0.0.1:{port}/global", proxy=None)
+        try:
+            assert json.loads(spectator.recv(timeout=10))["type"] in {"status", "result"}
+            # ping() returns once the peer's Pong comes back; a closed or
+            # unresponsive socket raises instead.
+            spectator.ping().wait(timeout=10)
+            spectator.ping().wait(timeout=10)
+        finally:
+            spectator.close()
+    finally:
+        process.terminate()
+        process.wait(timeout=30)

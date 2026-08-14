@@ -42,6 +42,12 @@ from .targets import load_target_catalog, resolve_seat_targets
 PROTOCOL = "sugarscape-v3/1"
 MAX_PLAYER_MESSAGE_BYTES = 64 * 1024
 SPECTATOR_QUEUE_SIZE = 64
+# How long the server keeps listening after the episode's artifacts are written.
+# The hosted certifier's viewer probe connects to /global and pings it, and on a
+# small config the episode is over in ~2s — so a server that closed as soon as
+# its already-connected readers drained was simply not there when the probe
+# arrived. Bounded: a game container that never exits is a hung job.
+SPECTATOR_GRACE_SECONDS = 30.0
 _LOGGER = logging.getLogger("coworld.server")
 _PRIVATE_CONFIG_KEYS = {
     "agentLogfile",
@@ -277,10 +283,20 @@ class SugarscapeServer:
                     }
                 )
             )
+            # Arrived after the episode finished: hand over the result rather
+            # than holding a connection open on a world that is already decided.
+            # Truthiness, NOT `is not None`: the field defaults to "" rather than
+            # None, so an identity check fires during the submission window and
+            # hands every spectator an empty message before the world has run.
+            if self._result_message:
+                await connection.send(self._result_message)
+                await self._linger(connection)
+                return
             while True:
                 message = await queue.get()
                 await connection.send(message)
                 if json.loads(message).get("type") == "result":
+                    await self._linger(connection)
                     return
         except ConnectionClosed:
             return
@@ -350,10 +366,63 @@ class SugarscapeServer:
         self._fan_out(self._result_message)
         self._result_ready.set()
 
+    async def _linger(self, connection: ServerConnection) -> None:
+        """Hold a finished spectator connection open until the PEER hangs up.
+
+        Sending the result and returning closes the socket from this side, and a
+        reader that wanted to ping it then gets `no close frame received or
+        sent`. That is the second half of the certification failure: even once
+        the server outlived the episode, the probe's connection was torn down
+        before its ping could be answered. Waiting on the peer keeps the
+        connection alive, and the websockets library answers Pings from its own
+        reader task while we sit here.
+        """
+
+        # BOUNDED by the same grace knob, for two reasons. Leaving the socket
+        # open indefinitely blocks shutdown — exiting the `serve()` context
+        # waits on live handler tasks, so an un-timed wait here turns a finished
+        # episode into a hung container. And a deployment that sets the grace to
+        # zero is saying "do not hold anything open", which has to include this.
+        grace = float(self.config.get("spectator_grace_seconds", SPECTATOR_GRACE_SECONDS))
+        if grace <= 0:
+            return
+        try:
+            await asyncio.wait_for(connection.wait_closed(), timeout=grace)
+        except (ConnectionClosed, TimeoutError):
+            return
+
     async def _wait_for_terminal_delivery(self) -> None:
-        deadline = asyncio.get_running_loop().time() + 2.0
-        while (self._active_players or self._spectators) and asyncio.get_running_loop().time() < deadline:
+        """Stay reachable after the episode, for readers that have not arrived yet.
+
+        This used to wait up to two seconds and ONLY while someone was already
+        connected, then return — closing the websocket server. Anything that
+        connected after that found nothing listening, which is why hosted
+        certification failed every version with "Game websocket did not answer a
+        WebSocket Ping with Pong: ws://127.0.0.1:8080/global": the viewer probe
+        was arriving at a socket that had already shut down. On the shipped
+        20x20 config the whole episode is over in about two seconds, so the
+        window it had to hit was essentially zero.
+
+        So the server now holds open for a bounded grace whether or not anyone is
+        connected, and a spectator arriving inside that window is handed the
+        finished result immediately (see _spectator_handler). Bounded, because a
+        game container that never exits is a hung job: the grace is the ceiling,
+        and connected readers still shorten it by draining.
+        """
+
+        loop = asyncio.get_running_loop()
+        grace = float(self.config.get("spectator_grace_seconds", SPECTATOR_GRACE_SECONDS))
+        deadline = loop.time() + max(0.0, grace)
+        _log("terminal_grace_open", seconds=grace)
+        # Drain anyone already attached first; they are why the episode ran.
+        drain = loop.time() + 2.0
+        while (self._active_players or self._spectators) and loop.time() < drain:
             await asyncio.sleep(0.01)
+        # Then simply remain listening. A reader that connects here gets the
+        # result on arrival, so the wait is not a silent one.
+        while loop.time() < deadline:
+            await asyncio.sleep(0.05)
+        _log("terminal_grace_closed")
 
     def _fan_out(self, message: str) -> None:
         for queue in tuple(self._spectators):
