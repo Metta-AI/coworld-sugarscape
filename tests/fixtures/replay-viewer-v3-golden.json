@@ -1,0 +1,112 @@
+{
+  "document": {
+    "format": "sugarscape.replay.v3",
+    "version": 2,
+    "header": {
+      "config": {
+        "timesteps": 3,
+        "players": [
+          {"name": "Alpha"},
+          {"name": "Beta"}
+        ]
+      },
+      "scores": [0.5, 0.75],
+      "targets": [
+        {"id": "fixture.alpha", "variable": "wealth", "bins": [0, 1], "probs": [1]},
+        {"id": "fixture.beta", "variable": "wealth", "bins": [0, 1], "probs": [1]}
+      ],
+      "rulesets": [],
+      "seat_details": [],
+      "initial_grid": {
+        "width": 2,
+        "height": 2,
+        "cells": [
+          [1.5, 0, 0.25, 4, 0],
+          [2, 0, 0, 4, 0],
+          [3, 0, 0, 4, 0],
+          [4, 0, 0, 4, 0]
+        ]
+      },
+      "roster": [
+        [1, 0, 0, 1, 2, 1, 1, 0, 80],
+        [2, 1, 0, 0, 3, 2, 2, 0, 90]
+      ],
+      "initial_agents": [
+        [1, 0, 0, 100, 0, 0, 0],
+        [2, 1, 0, 50, 0, 1, 0]
+      ]
+    },
+    "frames": [
+      {
+        "type": "frame",
+        "timestep": 1,
+        "cell_deltas": [[0, 2.5, 0, 0.5]],
+        "agent_deltas": {
+          "births": [],
+          "upsert": [[2, 1, 0, 150, 0, 1, 1]],
+          "remove": []
+        },
+        "runtimeStats": {
+          "giniCoefficient": 0.25,
+          "agentStarvationDeaths": 0
+        }
+      },
+      {
+        "type": "frame",
+        "timestep": 2,
+        "cell_deltas": [[3, 3.75, 0, 0.125]],
+        "agent_deltas": {
+          "births": [],
+          "upsert": [[1, 0, 1, 150, 0, 0, 0]],
+          "remove": [2]
+        },
+        "runtimeStats": {
+          "giniCoefficient": 0.4,
+          "agentStarvationDeaths": 1
+        },
+        "running": [
+          {"seat": 0, "score": 0.5, "histogram": {"bins": [0, 1], "probs": [1], "sample_count": 2}},
+          {"seat": 1, "score": 0.25, "histogram": {"bins": [0, 1], "probs": [1], "sample_count": 1}}
+        ],
+        "measured": {
+          "wealth": {"bins": [0, 1], "probs": [1], "sample_count": 3}
+        }
+      },
+      {
+        "type": "frame",
+        "timestep": 3,
+        "cell_deltas": [],
+        "agent_deltas": {
+          "births": [[3, 1, 3, 1, 1, 1, 1, 0, 70]],
+          "upsert": [[3, 1, 1, 200, 0, 2, 0]],
+          "remove": []
+        },
+        "runtimeStats": {
+          "giniCoefficient": 0.15,
+          "agentStarvationDeaths": 0
+        }
+      }
+    ]
+  },
+  "expected": {
+    "frame_sha256": [
+      "b1cd963dcb5ac8cef4b22dd0ddff7203608e1fed06923937eca5093854ec4abe",
+      "bde190d2c69f2d6bc4ef041c3043585324b26bff21bb73df767b0ecc5766426d",
+      "291ce349dcee62c60683641505a6bcc08c0679d96bfb4d46405bf46eb0307a8e",
+      "ed5ecbd98db23c4491e08928148fd9838747e149eed310a7647900d2f256c4fb"
+    ],
+    "wealth_series": [
+      {"timestep": 0, "scores": [100, 50], "sugar": [100, 50], "spice": [0, 0], "population": [1, 1]},
+      {"timestep": 1, "scores": [100, 150], "sugar": [100, 150], "spice": [0, 0], "population": [1, 1]},
+      {"timestep": 2, "scores": [150, 0], "sugar": [150, 0], "spice": [0, 0], "population": [1, 0]},
+      {"timestep": 3, "scores": [150, 200], "sugar": [150, 200], "spice": [0, 0], "population": [1, 1]}
+    ],
+    "events": [
+      {"index": 1, "timestep": 1, "kind": "lead", "slot": 1, "name": "Beta", "margin": 50},
+      {"index": 2, "timestep": 2, "kind": "death", "count": 1, "cause": "starved", "bySlot": [[1, 1]], "lost": [[2, 2, 1]]},
+      {"index": 2, "timestep": 2, "kind": "lead", "slot": 0, "name": "Alpha", "margin": 150},
+      {"index": 3, "timestep": 3, "kind": "lead", "slot": 1, "name": "Beta", "margin": 50}
+    ],
+    "seek_order": [3, 0, 2, 1, 3]
+  }
+}

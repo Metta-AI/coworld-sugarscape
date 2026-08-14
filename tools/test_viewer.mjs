@@ -15,12 +15,16 @@
  */
 
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import vm from "node:vm";
 
 const root = resolve(import.meta.dirname, "..");
 const viewerHtml = await readFile(join(root, "replay-viewer/index.html"), "utf8");
+const goldenFixture = JSON.parse(await readFile(
+  join(root, "tests/fixtures/replay-viewer-v3-golden.json"), "utf8",
+));
 
 // The hosted embed is a sandboxed iframe behind a proxy that cannot reach a CDN,
 // and any separate sub-resource 404s under the rewritten base href.
@@ -240,6 +244,52 @@ const settler = (id, slot, cell, sugar) => ({
   sugarMetabolism: 1, spiceMetabolism: 0, movement: 1, vision: 1,
   depressed: false, sick: false, race: -1, sex: "male", tribe: -1,
 });
+
+// Freeze the eager v3 materializer as an independent oracle before FrameStore
+// replaces it. Hashing canonical JSON covers every nested cell, agent, statistic,
+// and coworld field without committing four repetitive full snapshots.
+const goldenReplay = JSON.parse(vm.runInContext(
+  `JSON.stringify(v3ToReplay(${JSON.stringify(goldenFixture.document)}))`, viewerContext,
+));
+const frameHash = (frame) => createHash("sha256").update(JSON.stringify(frame)).digest("hex");
+const goldenHashes = goldenReplay.frames.map(frameHash);
+if (goldenFixture.expected.frame_sha256.length === 0) {
+  console.log(`GOLDEN_FRAME_HASHES=${JSON.stringify(goldenHashes)}`);
+}
+assert.deepEqual(goldenHashes, goldenFixture.expected.frame_sha256,
+  "every materialized v3 frame must remain byte-canonically equivalent to the golden oracle");
+
+const goldenModel = JSON.parse(vm.runInContext(`
+  resetStream();
+  for (const frame of ${JSON.stringify(goldenReplay.frames)}) recordFrame(frame);
+  const compactEvent = (event) => {
+    const out = {
+      index: event.index, timestep: event.timestep, kind: event.kind,
+    };
+    if (event.kind === "lead") {
+      Object.assign(out, { slot: event.slot, name: event.name, margin: event.margin });
+    } else {
+      Object.assign(out, {
+        count: event.count, cause: event.cause, bySlot: event.bySlot,
+        lost: event.agents.map((agent) => [agent.id, agent.cell, agent.slot]),
+      });
+    }
+    return out;
+  };
+  const sought = ${JSON.stringify(goldenFixture.expected.seek_order)}.map((index) => {
+    seek(index);
+    return frames[currentIndex()];
+  });
+  JSON.stringify({ wealthSeries, events: events.map(compactEvent), sought });
+`, viewerContext));
+assert.deepEqual(goldenModel.wealthSeries, goldenFixture.expected.wealth_series,
+  "historical summary series must match the brute-force golden values");
+assert.deepEqual(goldenModel.events, goldenFixture.expected.events,
+  "semantic event history must match the brute-force golden values");
+assert.deepEqual(goldenModel.sought.map(frameHash),
+  goldenFixture.expected.seek_order.map((index) => goldenHashes[index]),
+  "random seeking must return the exact indexed materialized frame");
+vm.runInContext("resetStream()", viewerContext);
 
 const model = JSON.parse(vm.runInContext(`
   recordFrame(${sandboxFrame(0, [settler(1, 0, 0, 10), settler(2, 1, 1, 4)])});

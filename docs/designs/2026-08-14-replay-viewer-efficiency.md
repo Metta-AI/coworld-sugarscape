@@ -312,7 +312,7 @@ James ratified option 1 on 2026-08-14:
 The order is dependency-driven. In particular, high-speed frame skipping may
 not ship before semantic events are independent of displayed frames.
 
-### Phase 0: Lock behavior and measurement
+### Phase 0: Lock behavior and measurement (implemented 2026-08-14)
 
 - Add `FrameStore`-independent golden fixtures for full materialized frames,
   summaries, events, seeking, and same-timestep replacement.
@@ -321,6 +321,16 @@ not ship before semantic events are independent of displayed frames.
   ready time, per-advance time, and paused paint count.
 - Keep thresholds generous enough for CI host variance but strict enough to
   catch a return to eager snapshots or permanent painting.
+
+Run the reproducible browser harness with:
+
+```text
+.venv/bin/python tools/benchmark_replay_viewer.py
+```
+
+Phase 0 records the eager-viewer baseline with `budgets_enforced: false`;
+Phase 2 enables the retained-memory assertions after `FrameStore` replaces the
+eager snapshots.
 
 ### Phase 1: Remove unnecessary pixels and paints
 
