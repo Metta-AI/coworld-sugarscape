@@ -133,7 +133,7 @@ peak count/coordinates/heights, grid size (40–60), regrow rates,
 | Wealth, egalitarian | `wealth.egalitarian` | same replacement regime | distinct maps from the skewed four + tighter/wider vision & metabolism ranges |
 | Carrying capacity | `population.carrying-capacity` | regime actually used by `tools/generate_targets.py`: immortal agents (`agentMaxAge` [-1,-1]), no replacement, no reproduction | regrow rate 1 vs 2; grid 40–60; agents 200–400 |
 | Survivorship | `age-at-death.survivorship` | replacement + finite max-age | varied `agentMaxAge` ranges; map scarcity; one seasonal world (`environmentSeasonInterval`) |
-| Price equilibrium | `price.equilibrium` | `trade_basic.json`: spice + trade on, `agentMaxAge` [-1,-1] | metabolism ranges; peak separation (sugar/spice overlap vs opposite corners) |
+| Price equilibrium | `price.equilibrium` | `trade_basic.json`: spice + trade on, `agentMaxAge` [-1,-1] | metabolism ranges; peak separation and scarcity (full spatial separation probed unreachable — the target needs co-located or moderately separated markets; see probe history) |
 | Tribes | `tribe.convergence` ×2, `tribe.diversity` ×2 | `cultural_tagging.json`: tagging on, `environmentMaxTribes` | convergence: mixed start; diversity: quadrant-separated tribes (`environmentTribePerQuadrant`, `environmentStartingQuadrants`) |
 
 Concrete parameter values are chosen at implementation time inside the

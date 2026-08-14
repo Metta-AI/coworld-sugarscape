@@ -29,7 +29,7 @@ Every family contains four distinct worlds. Grid dimensions stay between 40 and
 | Wealth, egalitarian | `offset-twins`, `central-plateau`, `four-basins`, `scarce-income` | `wealth.egalitarian` | Short finite lives, replacement, narrow endowments, and universal income |
 | Carrying capacity | `compact-regrow-1`, `wide-regrow-1`, `dense-regrow-2`, `sparse-regrow-2` | `population.carrying-capacity` | Immortal agents, no replacement, and no reproduction |
 | Survivorship | `young-frontier`, `long-lived`, `scarce`, `seasonal-migration` | `age-at-death.survivorship` | Finite varied lifespans and replacement; one seasonal world |
-| Price equilibrium | `overlapping-peaks`, `opposite-corners`, `four-markets`, `split-centers` | `price.equilibrium` | Immortal agents with sugar, spice, and bilateral trade |
+| Price equilibrium | `overlapping-peaks`, `scarce-markets`, `four-markets`, `split-centers` | `price.equilibrium` | Immortal agents with sugar, spice, and bilateral trade |
 | Tribes | `three-way-mixed`, `two-way-mixed`, `opposite-quadrants`, `three-quadrants` | `tribe.convergence` twice and `tribe.diversity` twice | Cultural tagging; mixed starts for convergence and quadrant-separated starts for diversity |
 
 Scenarios explicitly pin the mechanics their targets require and disable
@@ -94,3 +94,7 @@ The gradient (ceiling minus null floor) classifies rather than gates:
   2026-08-13: the entire wealth-skewed family probed as anchors (null floors
   0.96–0.99), because an engine-generated target paired with its native
   regime is nearly self-fulfilling.
+
+The shipped pool's full probe table lives in
+[`docs/probe-reports/2026-08-14-solo-ladder-pool.md`](probe-reports/2026-08-14-solo-ladder-pool.md):
+18 anchors, 6 skill scenarios, all 24 passing the ceiling gate.
