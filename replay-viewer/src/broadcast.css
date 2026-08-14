@@ -180,6 +180,13 @@ html, body {
   cursor: pointer;
 }
 .controls button:hover { background: var(--gold-wash); }
+/* A control at its limit has to LOOK spent. text-size has been able to disable
+   itself since syncLargeText landed and had no style to show for it, so a
+   pressable-looking button sat there doing nothing; the lens hits its stops at
+   1x and 8x every session. Dimmed rather than removed — where the lens runs out
+   is part of what it tells you. */
+.controls button:disabled { opacity: 0.38; cursor: default; }
+.controls button:disabled:hover { background: transparent; }
 /* The larger-text switch is a toggle, so it has to LOOK toggled — aria-pressed
    alone is invisible to everyone not using assistive technology. */
 .controls button[aria-pressed="true"] {

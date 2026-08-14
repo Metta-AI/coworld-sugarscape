@@ -271,6 +271,8 @@ const controls = {
   forward: document.getElementById("step-forward"),
   scrub: document.getElementById("scrub"),
   speed: document.getElementById("speed"),
+  zoomOut: document.getElementById("zoom-out"),
+  zoomIn: document.getElementById("zoom-in"),
   text: document.getElementById("text-size"),
 };
 
@@ -4477,6 +4479,53 @@ if (typeof window !== "undefined") {
   });
 }
 
+/* THE LENS, WORKED FROM A BUTTON.
+ *
+ * One step is coarser than a wheel notch on purpose: a button is for getting
+ * somewhere, and the wheel is still there for the fine adjustment. Four presses
+ * cross the whole 1x-8x range.
+ */
+const ZOOM_STEP = 1.5;
+
+/** The wheel zooms about the POINTER; a button has no pointer to zoom about, so
+ *  it steps about the centre of what is already shown — the one point the viewer
+ *  is certainly looking at. Same clamp and the same follow-break as the wheel,
+ *  because a lens that jumps back to a settler you stopped following is not the
+ *  lens you just asked for. */
+function zoomBy(factor) {
+  const before = view.scale;
+  view.scale = Math.min(VIEW_MAX, Math.max(VIEW_MIN, view.scale * factor));
+  if (view.scale === before) return;
+  if (view.follow !== null) { clearFollow(); standingsSignature = ""; }
+  // All the way out IS the fit, so it recentres rather than leaving the lattice
+  // parked wherever the last drag left it. This is what Escape does too.
+  const frame = frames[currentIndex()];
+  if (frame && view.scale <= VIEW_MIN + 0.001) {
+    view.cx = frame.width / 2;
+    view.cy = frame.height / 2;
+  }
+  syncZoom();
+}
+
+/** A control that cannot act has to SAY so — the same rule syncLargeText follows.
+ *  At 1x there is nothing to zoom out of and at VIEW_MAX nothing further in.
+ *
+ *  Guarded by the shown value because tick() calls this every frame and the
+ *  follow-ease moves view.scale continuously: rewriting an aria-label sixty times
+ *  a second is a screen reader talking over itself. */
+let zoomShown = -1;
+function syncZoom() {
+  const at = Math.round(view.scale * 10) / 10;
+  if (at === zoomShown) return;
+  zoomShown = at;
+  controls.zoomOut.disabled = view.scale <= VIEW_MIN + 0.001;
+  controls.zoomIn.disabled = view.scale >= VIEW_MAX - 0.001;
+  // The label carries the VALUE: an aria-label overrides the visible glyph, so a
+  // static one would leave the current magnification unannounced (see speed).
+  controls.zoomOut.setAttribute("aria-label", `Zoom out, now ${at}×`);
+  controls.zoomIn.setAttribute("aria-label", `Zoom in, now ${at}×`);
+}
+
 const commentary = document.getElementById("commentary");
 const verdictLine = document.getElementById("verdict");
 let spokenKey = "";
@@ -4766,6 +4815,10 @@ function tick() {
   drawHud(terrainFrame, settled ? index : index - 1);
   drawBeats(frame);
   speak(terrainFrame);
+  // The wheel, a drag and the follow-ease all move the lens without going
+  // through the buttons, so the buttons are reconciled here rather than only in
+  // their own handlers.
+  syncZoom();
 }
 
 // ---------------------------------------------------------------------------
@@ -4794,6 +4847,8 @@ controls.back.addEventListener("click", () => seek(Math.floor(state.cursor) - 1)
 controls.forward.addEventListener("click", () => seek(Math.floor(state.cursor) + 1));
 controls.scrub.addEventListener("input", () => seek(indexOfTimestep(Number(controls.scrub.value))));
 controls.text.addEventListener("click", () => setLargeText(!state.largeText));
+controls.zoomIn.addEventListener("click", () => zoomBy(ZOOM_STEP));
+controls.zoomOut.addEventListener("click", () => zoomBy(1 / ZOOM_STEP));
 controls.speed.addEventListener("click", () => {
   state.speed = SPEEDS[(SPEEDS.indexOf(state.speed) + 1) % SPEEDS.length];
   controls.speed.innerHTML = `${state.speed}&times;`;
