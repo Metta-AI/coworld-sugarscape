@@ -99,6 +99,7 @@ def main() -> int:
                 "chrome": str(chrome),
                 "seed": SEED,
                 "budgets_enforced": False,
+                "paint_budgets_enforced": True,
                 "replays": [replay],
             }
             manifest_path = directory / f"manifest-{index}.json"
@@ -117,6 +118,7 @@ def main() -> int:
         report = {
             "browser": str(chrome),
             "budgets_enforced": False,
+            "paint_budgets_enforced": True,
             "results": browser_results,
         }
 

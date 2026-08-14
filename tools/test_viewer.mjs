@@ -33,13 +33,13 @@ assert.doesNotMatch(viewerHtml, /https?:\/\/(fonts|cdn|unpkg|jsdelivr)/);
 assert.doesNotMatch(viewerHtml, /<(script|link)[^>]+\b(src|href)="(?!data:)/);
 // Drive the real viewer script in a sandbox with a DOM stub, so the derived
 // broadcast model is covered without a browser.
-const viewerTimers = { interval: null, pending: [] };
+const viewerTimers = { interval: null, intervalStarts: 0, pending: [] };
+const documentListeners = new Map();
+const windowListeners = new Map();
 const gradient = { addColorStop() {} };
 const pattern = { setTransform() {} };
 const canvasContext = new Proxy({
   createRadialGradient: () => gradient,
-  // The grain tiles are feathered with a pair of linear ramps at build time, so
-  // this one is reached by buildGrainSheet rather than only by a draw call.
   createLinearGradient: () => gradient,
   createPattern: () => pattern,
   createImageData: (width, height) => ({ data: new Uint8ClampedArray(width * height * 4) }),
@@ -114,6 +114,7 @@ const sessionStorageStub = {
 // A media query the suite can flip, so the reduced-motion LISTENER is covered
 // rather than only the value it happened to have at load.
 const motion = { matches: false, listeners: [] };
+let nowValue = 0;
 const viewerContext = vm.createContext({
   console,
   // The loader decodes replay BYTES, so the sandbox needs the text codecs. It is
@@ -123,6 +124,7 @@ const viewerContext = vm.createContext({
   TextDecoder,
   TextEncoder,
   document: {
+    hidden: false,
     createElement: () => fakeElement(),
     getElementById: (id) => elementFor(id),
     querySelector: (selector) => elementFor(selector.replace(/^#/, "")),
@@ -131,6 +133,7 @@ const viewerContext = vm.createContext({
     // layoutStage publishes the live board width to the stylesheet through a
     // custom property, so the transport lane can follow a board that moves.
     documentElement: fakeElement("documentElement"),
+    addEventListener: (name, fn) => documentListeners.set(name, fn),
   },
   // The sandbox exercises the pure model; setInterval is stubbed out below so
   // playback never starts.
@@ -154,7 +157,7 @@ const viewerContext = vm.createContext({
   },
   DOMMatrix: class { translate() { return this; } scale() { return this; } },
   location: { host: "localhost", protocol: "http:", pathname: "/client/global", search: "" },
-  performance: { now: () => 0 },
+  performance: { now: () => nowValue },
   URLSearchParams,
   sessionStorage: sessionStorageStub,
   matchMedia: (query) => ({
@@ -178,10 +181,19 @@ const viewerContext = vm.createContext({
   // Real timers, driven by hand below. Stubbing these to no-ops made every
   // timer-based path - the silence timeout, the idle settle, the end-card hold -
   // structurally invisible to this suite.
-  setInterval: (fn) => { viewerTimers.interval = fn; return 1; },
+  setInterval: (fn) => {
+    viewerTimers.interval = fn;
+    viewerTimers.intervalStarts += 1;
+    return viewerTimers.intervalStarts;
+  },
+  clearInterval: () => { viewerTimers.interval = null; },
   setTimeout: (fn, delay) => { viewerTimers.pending.push({ fn, delay }); return viewerTimers.pending.length; },
   clearTimeout: (id) => { if (id) viewerTimers.pending[id - 1] = null; },
 });
+viewerContext.window = viewerContext;
+viewerContext.addEventListener = (name, fn) => windowListeners.set(name, fn);
+viewerContext.devicePixelRatio = 1;
+viewerContext.ResizeObserver = class { observe() {} };
 const lastSocketRef = { socket: null };
 viewerContext.payloadForTest = null;
 Object.defineProperty(viewerContext, "lastSocket", { get: () => lastSocketRef.socket });
@@ -194,6 +206,15 @@ viewerContext.runPendingTimers = () => {
   for (const entry of queued) if (entry) entry.fn();
 };
 viewerContext.viewerTimersReset = () => { viewerTimers.pending.length = 0; };
+viewerContext.paintLoopState = () => ({
+  active: viewerTimers.interval !== null,
+  starts: viewerTimers.intervalStarts,
+});
+viewerContext.fireVisibility = (hidden) => {
+  viewerContext.document.hidden = hidden;
+  documentListeners.get("visibilitychange")?.();
+};
+viewerContext.setNow = (value) => { nowValue = value; };
 viewerContext.fireMotionChange = (matches) => {
   motion.matches = matches;
   for (const listener of motion.listeners) listener({ matches });
@@ -538,14 +559,34 @@ assert.equal(truncated.scheduled, 40);
 assert.ok(truncated.last < truncated.scheduled,
   "a stream stopping at t10 of 40 is incomplete and must never read FINAL");
 
-// Speed must collapse dead time between timesteps, never the walk itself.
+// Speed is an honest multiplier over the whole recorded beat.
 const tempo = JSON.parse(vm.runInContext(`
-  JSON.stringify({
-    animAtOne: animFactor(1),
-    animAtFour: animFactor(4),
-    dwellAtOne: frameDwellMs(1),
-    dwellAtFour: frameDwellMs(4),
-  });
+  (() => {
+    resetStream();
+    state.playing = false;
+    recordFrame(${sandboxFrame(0, [])});
+    recordFrame(${sandboxFrame(1, [])});
+    state.finished = true;
+    state.cursor = frames.length - 1;
+    state.speed = 4;
+    state.holdUntil = 0;
+    state.playing = true;
+    lastTick = 0;
+    setNow(100);
+    tick();
+    state.playing = false;
+    const result = {
+      animAtOne: animFactor(1),
+      animAtFour: animFactor(4),
+      dwellAtOne: frameDwellMs(1),
+      dwellAtFour: frameDwellMs(4),
+      endHoldAtFour: state.holdUntil - 100,
+    };
+    state.speed = 1;
+    setNow(0);
+    lastTick = 0;
+    return JSON.stringify(result);
+  })()
 `, viewerContext));
 assert.equal(tempo.animAtOne, 1);
 // Every speed step has to actually do something. With the animation cap at 2x
@@ -556,11 +597,9 @@ assert.equal(new Set(dwells).size, dwells.length, `speed steps must differ: ${dw
 assert.ok(dwells.every((value, index) => index === 0 || value < dwells[index - 1]),
   `each speed step must shorten the dwell: ${dwells}`);
 assert.equal(tempo.animAtFour, 1 / 3, "motion is capped at 3x real time");
-assert.ok(tempo.dwellAtFour < tempo.dwellAtOne, "speed shortens the dwell");
-assert.ok(
-  tempo.dwellAtFour >= tempo.animAtFour * 620,
-  "the dwell is floored to the length of the walk it has to show",
-);
+assert.equal(tempo.dwellAtOne, 770, "1x preserves the existing complete beat");
+assert.equal(tempo.dwellAtFour, 192.5, "4x is four times the 1x wall-clock rate");
+assert.equal(tempo.endHoldAtFour, 1300, "the end hold scales by the selected speed too");
 
 /* The transport announces TIMESTEPS, and its own min/max/value are timesteps.
  *
@@ -661,270 +700,96 @@ for (const [index, rows] of ledger.rows.entries()) {
     "and the panel must be full whenever there is more than one beat to show");
 }
 
-/* A cell that loses a unit must LOSE THAT UNIT'S GRAINS, not re-scatter its
- * whole cloud.
- *
- * The grain positions used to be seeded from the cell's contents, so 4 -> 3
- * sugar threw away every grain in the cell and drew a different cloud - and
- * re-threw the spice with it, off the same running seed. Regrow rate 1 against
- * a max of 4 changes a quarter of the board every timestep, so a quarter of the
- * plate re-scattered every beat and the resource read as flicker. */
-const grains = JSON.parse(vm.runInContext(`
-  const four = grainCloud(grainStream(3, 0), 4 * PARTICLES_PER_UNIT);
-  JSON.stringify({
-    nested: JSON.stringify(grainCloud(grainStream(3, 0), 3 * PARTICLES_PER_UNIT))
-      === JSON.stringify(four.slice(0, 3 * PARTICLES_PER_UNIT)),
-    sugarVsSpice: JSON.stringify(grainCloud(grainStream(3, 1), 4 * PARTICLES_PER_UNIT))
-      === JSON.stringify(four),
-    variants: TILE_VARIANTS,
-    distinct: new Set(Array.from({ length: TILE_VARIANTS }, (_, variant) =>
-      JSON.stringify(grainCloud(grainStream(variant, 0), PARTICLES_PER_UNIT)))).size,
-    spread: four.every(([x, y]) => x >= 0 && x < 1 && y >= 0 && y < 1),
-  });
-`, viewerContext));
-assert.ok(grains.nested,
-  "the cloud for N units must be the cloud for N-1 plus one more handful");
-assert.ok(!grains.sugarVsSpice, "sugar and spice must draw from separate streams");
-assert.ok(grains.variants >= 8,
-  `a nested cloud has no amount to vary the arrangement, so it needs variants: ${grains.variants}`);
-assert.equal(grains.distinct, grains.variants, "and every variant must actually differ");
-assert.ok(grains.spread, "grains lie inside the cell they belong to");
+/* Terrain and board painting are invalidated by data and geometry, not clocks.
+ * A paused/hidden viewer owns no interval; explicit interaction paints once. */
+const invalidation = JSON.parse(vm.runInContext(`
+  (() => {
+    resetStream();
+    state.playing = false;
+    setStageWidth(640);
+    measureDensity();
+    const original = ${sandboxFrame(0, [])};
+    const same = ${sandboxFrame(1, [])};
+    const changed = ${sandboxFrame(2, [])};
+    changed.cells[0] = [2, 0, 0];
+    const firstPaint = showTerrain(original);
+    const unchangedPaint = showTerrain(same);
+    const changedPaint = showTerrain(changed);
+    const small = [board.width, board.height, terrain.width, terrain.height];
+    devicePixelRatio = 2;
+    measureDensity();
+    const densityPaint = showTerrain(changed);
+    const retina = [board.width, board.height];
+    devicePixelRatio = 1;
+    setStageWidth(1600);
+    measureDensity();
+    const geometryPaint = showTerrain(changed);
+    const large = [board.width, board.height, terrain.width, terrain.height];
 
-/* The plate DISSOLVES between timesteps while the replay runs, and CUTS
- * whenever the viewer asked for a particular state - a scrub, a step, a pause,
- * reduced motion, or the first frame of a stream, which has nothing to dissolve
- * from. */
-const settle = JSON.parse(vm.runInContext(`
-  const frameA = ${sandboxFrame(0, [])};
-  const frameB = ${sandboxFrame(1, [])};
-  resetStream(); recordFrame(frameA); recordFrame(frameB);
-  state.speed = 1;
-  showTerrain(frameA, false, 1000);
-  const first = terrainBlend(1000);
-  showTerrain(frameB, true, 1000);
-  const opening = terrainBlend(1000);
-  const middle = terrainBlend(1000 + SETTLE_MS / 2);
-  const done = terrainBlend(1000 + SETTLE_MS);
-  const later = terrainBlend(1000 + SETTLE_MS * 4);
-  showTerrain(frameA, false, 2000);
-  JSON.stringify({ first, opening, middle, done, later, cut: terrainBlend(2000),
-    withinDwell: SETTLE_MS < frameDwellMs(1) });
+    recordFrame(original);
+    const paused = paintLoopState();
+    setPlaying(true);
+    const playing = paintLoopState();
+    fireVisibility(true);
+    const hidden = paintLoopState();
+    fireVisibility(false);
+    const visible = paintLoopState();
+    setPlaying(false);
+    return JSON.stringify({
+      firstPaint, unchangedPaint, changedPaint, densityPaint, geometryPaint,
+      small, retina, large, paused, playing, hidden, visible,
+    });
+  })()
 `, viewerContext));
-assert.equal(settle.first, 1, "the first plate of a stream is shown whole");
-assert.equal(settle.opening, 0, "a dissolve starts on the plate being left");
-assert.ok(settle.middle > 0 && settle.middle < 1, `and eases across it: ${settle.middle}`);
-assert.equal(settle.done, 1, "and lands exactly on the new plate");
-assert.equal(settle.later, 1, "and stays there");
-assert.equal(settle.cut, 1, "a scrub, a step or a pause cuts straight to the state asked for");
-assert.ok(settle.withinDwell,
-  "a dissolve must finish inside one dwell, or the next harvest cuts it off");
+assert.deepEqual(
+  [invalidation.firstPaint, invalidation.unchangedPaint,
+    invalidation.changedPaint, invalidation.densityPaint, invalidation.geometryPaint],
+  [true, false, true, true, true],
+  "terrain paints only for changed resources or changed geometry",
+);
+assert.deepEqual(invalidation.small.slice(0, 2), [640, 360],
+  "a 640px stage needs only a 640x360 DPR1 board backing store");
+assert.deepEqual(invalidation.retina, [1280, 720],
+  "a DPR change resizes the backing store even when CSS geometry is stable");
+assert.deepEqual(invalidation.large.slice(0, 2), [1600, 900],
+  "backing resolution follows visible stage density up to the cap");
+assert.equal(invalidation.paused.active, false, "paused playback owns no paint interval");
+assert.equal(invalidation.playing.active, true, "playing playback owns one paint interval");
+assert.equal(invalidation.hidden.active, false, "a hidden page owns no paint interval");
+assert.equal(invalidation.visible.active, true, "visibility return restarts active playback");
 
-/* THE SAND KEEPS ITS OWN CLOCK, AND IT RUNS CONTINUOUSLY.
- *
- * The drift is the wind, not the replay. It goes on blowing while the transport
- * is paused, it does NOT speed up when playback does — every other motion on this
- * stage is scaled by animFactor and this one must not be, or the world would look
- * windier at 4x — and it stops dead for a viewer who asked for reduced motion,
- * which also stops the plate being repainted at all.
- *
- * And it is a CLOCK, not a frame counter. Two earlier versions baked the motion
- * into a strip of phases and stepped through it, which is why this reads the way
- * it does now: a baked loop cannot be slowed without holding each frame longer,
- * so slower and smoother fought each other, and every cell took its step on the
- * same instant, which is a strobe rather than a drift. */
-const drift = JSON.parse(vm.runInContext(`
-  fireMotionChange(false);
-  state.speed = 1;
-  const beat = driftAt(GRAIN_TICK_MS * 4) - driftAt(0);
-  const within = driftAt(GRAIN_TICK_MS * 0.3) - driftAt(0);
-  state.speed = 4;
-  const fast = driftAt(GRAIN_TICK_MS * 4) - driftAt(0);
-  state.speed = 1;
-  fireMotionChange(true);
-  const reduced = [driftAt(0), driftAt(GRAIN_TICK_MS * 7), driftAt(90000)];
-  fireMotionChange(false);
-  JSON.stringify({ beat, within, fast, reduced, tick: GRAIN_TICK_MS, rate: GRAIN_DRIFT_RATE });
+// A delayed callback can cross two boundaries at honest 4x. Every crossed
+// index must still enter, or death rings and other boundary work disappear.
+const crossed = JSON.parse(vm.runInContext(`
+  (() => {
+    resetStream();
+    state.playing = false;
+    for (let step = 0; step <= 2; step += 1) {
+      recordFrame(Object.assign(${sandboxFrame(0, [])}, { timestep: step }));
+    }
+    events.length = 0;
+    events.push(
+      { index: 1, timestep: 1, kind: "death", agents: [{ id: 1, cell: 0, slot: 0 }] },
+      { index: 2, timestep: 2, kind: "death", agents: [{ id: 2, cell: 1, slot: 0 }] },
+    );
+    motes.length = 0;
+    state.lastDrawnIndex = 0;
+    state.cursor = 0.99;
+    state.speed = 4;
+    state.playing = true;
+    lastTick = 0;
+    setNow(200);
+    tick();
+    state.playing = false;
+    const result = { index: currentIndex(), motes: motes.map((mote) => [mote.cx, mote.cy]) };
+    state.speed = 1;
+    setNow(0);
+    lastTick = 0;
+    return JSON.stringify(result);
+  })()
 `, viewerContext));
-assert.equal(drift.beat, drift.tick * 4, "the clock is real time, not a frame index");
-assert.equal(drift.within, 0, "quantised to the repaint beat, so a tick is not wasted");
-assert.equal(drift.fast, drift.tick * 4, "the wind does not blow harder at 4x; it is not the clock");
-assert.deepEqual(drift.reduced, [0, 0, 0],
-  "reduced motion freezes the sand, which also stops the plate being repainted");
-// The point of the whole rewrite: one repaint must move a grain far less than a
-// pixel, or it is a step and not a drift. Peak speed of a sine of amplitude A and
-// rate w is A*w, and the tile drifts by at most `float` = 0.05 of a cell.
-const perBeat = 0.05 * 38 * (drift.rate * 1.38) * (drift.tick / 1000);
-assert.ok(perBeat < 0.1,
-  `a repaint must move a grain a small fraction of a pixel, got ${perBeat.toFixed(4)}`);
-
-/* `?stir=off` holds the sand still so the two motions on this plate can be told
- * apart — the wind, which never stops, and the harvest, which is the resource
- * changing hands. Nobody can answer "does the board still flicker?" while both
- * are running. Default is ON: a viewer who does not ask gets the sand blowing. */
-const switched = JSON.parse(vm.runInContext(`
-  JSON.stringify({ onByDefault: driftAt(GRAIN_TICK_MS * 5) !== driftAt(0), wanted: stirWanted });
-`, viewerContext));
-assert.ok(switched.onByDefault, "with no query the sand blows");
-assert.ok(switched.wanted, "and the switch reads as on");
-// The sandbox's location carries no query, so the off path is checked on the
-// predicate the flag is built from rather than by reloading the document.
-assert.equal(new URLSearchParams("?stir=off").get("stir") !== "off", false,
-  "?stir=off is what holds the sand still");
-
-/* EVERY (CELL, LAYER) DRIFTS ON ITS OWN PATH.
- *
- * A tile moved as one rigid thing is a raft, and a plate of rafts rocking is what
- * the first attempt at this looked like. So the cloud is cut into GRAIN_LAYERS
- * interleaved by grain index, each drifting separately — and the paths are per
- * CELL as well as per layer, or every layer would march across the board in step.
- * The two rates of a path are never equal, so x and y never come back into phase
- * and the path never closes. */
-const paths = JSON.parse(vm.runInContext(`
-  buildGrainDrift(64);
-  const slots = 64 * GRAIN_LAYERS;
-  const keys = new Set();
-  let closed = 0;
-  for (let slot = 0; slot < slots; slot += 1) {
-    keys.add(grainDrift.phaseX[slot] + ":" + grainDrift.phaseY[slot]
-      + ":" + grainDrift.rateX[slot] + ":" + grainDrift.rateY[slot]);
-    if (grainDrift.rateX[slot] === grainDrift.rateY[slot]) closed += 1;
-  }
-  JSON.stringify({
-    layers: GRAIN_LAYERS,
-    slots,
-    distinct: keys.size,
-    closed,
-    interleaved: [0, 1, 2, 3, 4, 5].map((index) => grainLayer(index)),
-    sipsSpread: [0, 1, 2, 3].map((sip) =>
-      Array.from({ length: 64 }, (unused, index) => index)
-        .filter((index) => grainSip(index) === sip).length),
-  });
-`, viewerContext));
-assert.ok(paths.layers >= 3, `a cell needs several independent drifts, got ${paths.layers}`);
-assert.equal(paths.distinct, paths.slots, "no two (cell, layer) pairs drift alike");
-assert.equal(paths.closed, 0, "and no path closes on itself: the two rates always differ");
-assert.deepEqual(paths.interleaved, [0, 1, 2, 0, 1, 2],
-  "layers are interleaved THROUGH the cloud, not stacked in bands of it");
-assert.ok(paths.sipsSpread.every((count) => count > 0),
-  "and every slice of a unit gets grains");
-
-/* A HARVEST DISSOLVES ONE SLICE AT A TIME. This is the whole difference between
- * what is drawn now and the crossfade it replaced.
- *
- * A crossfade is a property of the whole image: halfway through, all 1,024 cells
- * are at 50% — including the 800 that did not change — so the plate goes soft
- * everywhere to animate a fifth of it. Walking a queue instead, at most ONE slice
- * is part-transparent at any moment; the ones behind it are solid and the ones in
- * front are not drawn at all. */
-const dissolve = JSON.parse(vm.runInContext(`
-  const queue = 3 * GRAIN_SIPS;
-  const walk = (dissolved, rising) => Array.from({ length: queue },
-    (unused, place) => grainShare(dissolved, queue, place, rising));
-  const partial = (row) => row.filter((share) => share > 0.001 && share < 0.999).length;
-  const steps = [0, 0.17, 0.33, 0.5, 0.66, 0.84, 1];
-  JSON.stringify({
-    sips: GRAIN_SIPS,
-    fallingStart: walk(0, false),
-    fallingEnd: walk(1, false),
-    risingStart: walk(0, true),
-    risingEnd: walk(1, true),
-    mostPartial: Math.max(...steps.map((at) => Math.max(partial(walk(at, false)), partial(walk(at, true))))),
-    monotonic: steps.slice(1).every((at, index) =>
-      walk(at, false).reduce((sum, share) => sum + share, 0)
-      <= walk(steps[index], false).reduce((sum, share) => sum + share, 0) + 1e-9),
-  });
-`, viewerContext));
-assert.ok(dissolve.fallingStart.every((share) => share === 1),
-  "a cell that has just lost sand still shows all of it");
-assert.ok(dissolve.fallingEnd.every((share) => share === 0), "and by the end, none of it");
-assert.ok(dissolve.risingStart.every((share) => share === 0),
-  "a cell that has just gained sand shows none of it yet");
-assert.ok(dissolve.risingEnd.every((share) => share === 1), "and by the end, all of it");
-assert.equal(dissolve.mostPartial, 1,
-  "at most ONE slice is ever part-transparent — that is what a crossfade cannot do");
-assert.ok(dissolve.monotonic, "and sand only ever leaves; a dissolve does not flicker back");
-
-/* NO CELL HAS AN EDGE: the tiles are feathered and the feathers SUM TO ONE.
- *
- * Three attempts are on the record. Insetting the grains so none could reach an
- * edge printed a dark gutter around all 1,024 cells. Wrapping the cell as a torus
- * fixed the gutter but left every cell a closed box, so an emptied one printed as
- * a hard black square. Letting tiles simply overhang brings the seam back with the
- * opposite sign — two full cells overlapping is a BRIGHT rule.
- *
- * So the cloud repeats into the margin and the tile's alpha is a triangular ramp.
- * Tiles sit one cell apart and overlap by exactly two margins, so the falling ramp
- * of one lands on the rising ramp of the next and they sum to one: uniform sand
- * stays uniform. Next to an emptied cell there is no neighbour to complete the
- * sum, so the sand ramps down into the hole and the void gets a soft shore. */
-const bleeding = JSON.parse(vm.runInContext(`
-  state.maxSugar = 4; state.maxSpice = 4;
-  grainSheet.key = "";
-  buildGrainSheet(38);
-  JSON.stringify({
-    bleed: grainSheet.bleed,
-    box: grainSheet.box,
-    size: grainSheet.size,
-    float: grainSheet.float,
-    reach: Math.max(0.5, 38 * 0.021) * GRAIN_HALO,
-  });
-`, viewerContext));
-assert.ok(bleeding.bleed >= 1, `the tile must carry a margin, got ${bleeding.bleed}`);
-assert.equal(bleeding.box, bleeding.size + bleeding.bleed * 2, "one margin on every side");
-assert.ok(bleeding.bleed >= bleeding.reach,
-  `the margin must cover a grain's glow (${bleeding.reach}), got ${bleeding.bleed}`);
-// The partition of unity needs a flat middle to ramp between: the two ramps are
-// each two margins wide, so they cannot be allowed to meet.
-assert.ok(bleeding.bleed * 2 <= bleeding.size,
-  "the ramps must not overlap each other, or the sum stops being one");
-assert.ok(bleeding.float > 0 && bleeding.float < bleeding.size * 0.12,
-  "and the drift is a nudge, not a relocation: a grain never leaves its neighbourhood");
-
-/* The sheet is keyed by RESOURCE and AMOUNT, and carries ONE arrangement.
- *
- * Keyed by the (sugar, spice) PAIR it stored every combination of two clouds that
- * never interact. Keyed by phase as well, it stored a whole baked loop per tile —
- * which is what had to go for the motion to be continuous. What is left is a tile
- * per (resource, amount, variant, layer) for the settled sand, and one per slice
- * on top of that, drawn only while a cell is actually changing. */
-const sheet = JSON.parse(vm.runInContext(`
-  const heldSugar = state.maxSugar;
-  const heldSpice = state.maxSpice;
-  state.maxSugar = 4;
-  state.maxSpice = 3;
-  grainSheet.key = "";
-  buildGrainSheet(38);
-  const tile = grainSolid(0, 4, 0, 0);
-  const out = JSON.stringify({
-    size: grainSheet.size,
-    box: grainSheet.box,
-    sugar: grainSheet.solid[0].filter(Boolean).length,
-    spice: grainSheet.solid[1].filter(Boolean).length,
-    sugarSips: grainSheet.sips[0].filter(Boolean).length,
-    width: tile.width,
-    height: tile.height,
-    nothingForNothing: grainSolid(0, 0, 0, 0) === undefined,
-    variants: TILE_VARIANTS,
-    layers: GRAIN_LAYERS,
-    sips: GRAIN_SIPS,
-  });
-  state.maxSugar = heldSugar;
-  state.maxSpice = heldSpice;
-  grainSheet.key = "";
-  out;
-`, viewerContext));
-assert.equal(sheet.sugar, 4 * sheet.variants * sheet.layers,
-  "one settled tile per sugar amount, per variant, per layer");
-assert.equal(sheet.spice, 3 * sheet.variants * sheet.layers,
-  "and per spice amount, which need not match it");
-assert.equal(sheet.sugarSips, 4 * sheet.sips * sheet.variants * sheet.layers,
-  "and one per slice of each unit, for the dissolve");
-assert.equal(sheet.size, 38, "the tile is built for the cell size it was asked for");
-// A cell plus its two margins — the field carries on past the cell, so the tile is
-// bigger than the cell it belongs to (see NO CELL HAS AN EDGE).
-assert.equal(sheet.width, sheet.box, "and it is ONE arrangement wide: no baked loop");
-assert.equal(sheet.height, sheet.box, "one bled cell tall");
-assert.ok(sheet.nothingForNothing, "an empty cell has no tile; it is left as bare plate");
+assert.equal(crossed.index, 2, "the fixture must cross two frame boundaries");
+assert.equal(crossed.motes.length, 2, "every crossed frame must run boundary handling");
 
 /* A TILE HOLDS UP TO FOUR OF EACH, AND THEY ARE COUNTABLE.
  *

@@ -205,6 +205,13 @@ try {
         }, 250);
       }, 50));
     })()`);
+    if (manifest.paint_budgets_enforced
+        && (runtime.paused_paints_250ms.board !== 0
+          || runtime.paused_paints_250ms.terrain !== 0)) {
+      throw new Error(
+        `${replay.scenario} painted while paused: ${JSON.stringify(runtime.paused_paints_250ms)}`,
+      );
+    }
 
     results.push({
       scenario: replay.scenario,
@@ -222,6 +229,7 @@ try {
   process.stdout.write(`${JSON.stringify({
     browser: manifest.chrome,
     budgets_enforced: manifest.budgets_enforced,
+    paint_budgets_enforced: manifest.paint_budgets_enforced,
     results,
   })}\n`);
 } catch (error) {

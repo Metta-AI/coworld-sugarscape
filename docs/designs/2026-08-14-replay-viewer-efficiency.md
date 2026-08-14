@@ -332,7 +332,7 @@ Phase 0 records the eager-viewer baseline with `budgets_enforced: false`;
 Phase 2 enables the retained-memory assertions after `FrameStore` replaces the
 eager snapshots.
 
-### Phase 1: Remove unnecessary pixels and paints
+### Phase 1: Remove unnecessary pixels and paints (implemented 2026-08-14)
 
 - Make 0.5x through 4x honest by using `770 / speed` total dwell and scaling the
   end hold. Iterate every frame index crossed by a timer callback so a jank
@@ -347,6 +347,11 @@ eager snapshots.
 This phase is independently valuable and low risk. It does not change replay
 navigation semantics, and it cuts the current maximum 1,000-tick duration from
 about 5m57s to about 3m13s before the deeper storage and clock work lands.
+
+The Phase 1 Chrome harness records zero paused board/terrain paints, a 321,300
+pixel main backing store at its headless viewport (down from 4,665,600), and a
+303 KB bundle (down from 334 KB). Retained replay heap is intentionally unchanged
+until Phase 2.
 
 ### Phase 2: Introduce packed `FrameStore`
 

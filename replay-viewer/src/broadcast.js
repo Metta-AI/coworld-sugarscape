@@ -105,7 +105,8 @@ const F = { display: "Space Grotesk", mono: "IBM Plex Mono" };
 
 const W = 1920;
 const H = 1080;
-const RENDER_SCALE = 1.5;          // canvas supersampling; see setTransform below
+const MAX_RENDER_SCALE = 1.5;
+let renderScale = MAX_RENDER_SCALE;
 const MARGIN = 30;
 const BUG_H = 92;
 // The clear space under the scorebug band. 22 was generous for a band whose type
@@ -198,10 +199,9 @@ function layoutStage() {
 }
 
 // ---------------------------------------------------------------------------
-// Tempo — two independent levers (the Agricogla model).
-//   animFactor  caps motion so it never plays faster than ANIM_MAX x real time.
-//   frameDwellMs floors the auto-advance so speed collapses DEAD TIME between
-//   timesteps, never the walk itself.
+// Tempo. A speed label is an honest wall-clock multiplier over the complete
+// 770ms beat. Motion itself remains capped at 3x; at 4x the shorter dwell simply
+// reaches the settled frame sooner.
 // ---------------------------------------------------------------------------
 
 // The board's motion IS the product, so reduced motion does not disable it -
@@ -223,7 +223,10 @@ if (motionQuery) {
     // which is the whole point. Turning it off used to force-START playback -
     // over an explicit pause, for anyone whose OS flips the setting on a
     // schedule. Resuming is the viewer's decision, not the media query's.
-    if (reducedMotion && frames.length > 0) setPlaying(false);
+    if (reducedMotion && frames.length > 0) {
+      setPlaying(false);
+      renderOnce();
+    }
   };
   // Safari before 14 has no addEventListener on a MediaQueryList.
   if (typeof motionQuery.addEventListener === "function") {
@@ -246,13 +249,9 @@ function animFactor(speed) {
   return Math.max(1 / Math.max(speed, 0.05), 1 / ANIM_MAX);
 }
 
-/** How long to hold each timestep. The walk between two timesteps is the beat
- *  and must always play in full, so the dwell is the capped walk plus a pause
- *  to read it. Because animation is capped at ANIM_MAX, raising the speed past
- *  that point shortens the walk no further and only the pause remains constant
- *  - which is what stops a fast replay from becoming unreadable. */
+/** How long to hold each timestep, including its reading beat. */
 function frameDwellMs(speed) {
-  return BASE_FRAME_MS * animFactor(speed) + READ_PAUSE;
+  return (BASE_FRAME_MS + READ_PAUSE) / Math.max(speed, 0.05);
 }
 
 // ---------------------------------------------------------------------------
@@ -275,6 +274,21 @@ const controls = {
   zoomIn: document.getElementById("zoom-in"),
   text: document.getElementById("text-size"),
 };
+
+/** Match backing pixels to what the embed can display, capped at the existing
+ *  supersampling level. A 640px-wide stage no longer carries a 2880px bitmap. */
+function syncBackingStores(stageWidth) {
+  const density = typeof devicePixelRatio === "number" ? devicePixelRatio : 1;
+  const nextScale = Math.min(MAX_RENDER_SCALE, stageWidth * density / W);
+  if (!(nextScale > 0)) return;
+  const width = Math.max(1, Math.round(W * nextScale));
+  const height = Math.max(1, Math.round(H * nextScale));
+  if (board.width === width && board.height === height && renderScale === nextScale) return;
+  renderScale = nextScale;
+  board.width = width;
+  board.height = height;
+  terrainShown = null;
+}
 
 const frames = [];
 const frameIndexByTimestep = new Map();
@@ -425,6 +439,7 @@ function measureDensity() {
   const moved = width > 0 && width !== state.stageWidth;
   if (width > 0) state.stageWidth = width;
   if (moved) layoutStage();
+  if (width > 0) syncBackingStores(width);
   if (compact === state.compact) {
     if (moved) {
       standingsSignature = "";
@@ -491,6 +506,7 @@ function setLargeText(on) {
   }
   standingsSignature = "";
   beatsSignature = "";
+  renderOnce();
 }
 
 
@@ -713,6 +729,8 @@ function recordFrame(frame) {
     state.maxWealth = Math.max(1, ...wealthSeries.flatMap((point) => point.scores));
     standingsSignature = "";
     terrainShown = null;
+    if (state.live && state.playing) startPaintLoop();
+    else if (state.live) renderOnce();
     return;
   }
 
@@ -772,9 +790,12 @@ function recordFrame(frame) {
   deriveEvents(index);
   syncScrub();
   if (state.live && state.playing) state.cursor = frames.length - 1;
+  if (state.live && state.playing) startPaintLoop();
+  else if (state.live) renderOnce();
 }
 
 function resetStream() {
+  stopPaintLoop();
   frames.length = 0;
   frameIndexByTimestep.clear();
   events.length = 0;
@@ -842,245 +863,30 @@ const PLATE_HEX = "#1d1811";          // the field the grains lie on; NEVER pure
 const GRID_HEX = "#332a1e";           // one step up from the plate
 
 let terrainShown = null;
-/* ONE plate, and only the sand that CHANGED HANDS dissolves on it.
- *
- * A harvest is instantaneous in the model and used to be instantaneous on the
- * board — four units of sugar were simply gone on the tick a settler landed, and
- * one unit came back, whole, on each of the four ticks after it. Across the ~222
- * cells that change every timestep on the shipped 32x32 board that reads as a
- * flicker rather than as eating.
- *
- * The first fix for that was a CROSSFADE: keep the outgoing plate and dissolve
- * the incoming one over it. It does not work, and why is worth keeping. A
- * crossfade is a property of the whole image, so for as long as it ran, all 1,024
- * cells were drawn twice at partial alpha — including the 800 that had not
- * changed at all. Most of every dwell the entire plate was a half-transparent
- * double exposure of itself: contrast spent everywhere to animate a fifth of the
- * board. It reads as the picture going soft, not as sand moving.
- *
- * What actually happened is far more specific, and that is what is drawn now. A
- * cell going 4 -> 3 keeps three units of grains EXACTLY where they were, at full
- * strength, and loses the fourth unit's. Only those animate; every other grain on
- * the plate is untouched and solid. And they do not fade as a block — a unit is
- * baked as GRAIN_SIPS separate slices which go one after another, so the sand
- * thins in waves and the last of it lingers. That is a dissolve. The other thing
- * was a video transition. */
 const terrain = document.createElement("canvas");
 const terrainContext = terrain.getContext("2d");
-let terrainFrom = null;               // the frame being dissolved FROM; null when settled
-let terrainSettledAt = 0;             // when the dissolve began; 0 = nothing in flight
-let terrainPainted = -1;              // the drift clock the plate currently stands at
 
-/* How long the sand takes to settle after a timestep lands.
- *
- * Scaled by animFactor with everything else, and shorter than the gap between two
- * harvests (a dwell, 770ms at 1x) so a dissolve always finishes before the next
- * one starts. Longer than the 380ms the crossfade used, because this one costs
- * the picture nothing while it runs — the only grains in motion are the ones that
- * genuinely changed hands, so there is no reason to hurry it. */
-const SETTLE_MS = 620;
-
-/** How far through the dissolve the plate stands, 0 to 1. */
-function terrainBlend(now) {
-  if (!terrainSettledAt) return 1;
-  const age = (now - terrainSettledAt) / (SETTLE_MS * animFactor(state.speed));
-  if (age >= 1) return 1;
-  return age * age * (3 - 2 * age);   // smoothstep; a linear dissolve pops at both ends
+function sameTerrain(first, second) {
+  if (!first || !second || first.width !== second.width || first.height !== second.height
+      || first.environmentMaxSugar !== second.environmentMaxSugar
+      || first.environmentMaxSpice !== second.environmentMaxSpice
+      || first.cells.length !== second.cells.length) return false;
+  for (let index = 0; index < first.cells.length; index += 1) {
+    if (first.cells[index][0] !== second.cells[index][0]
+        || first.cells[index][1] !== second.cells[index][1]) return false;
+  }
+  return true;
 }
 
-/** Show `frame`. `fade` dissolves from the frame being left; a scrub, a step, a
- *  pause, a reset or reduced motion cuts straight to the state asked for. */
-function showTerrain(frame, fade, now) {
-  terrainFrom = fade && terrainShown ? terrainShown : null;
+/** Cache the countable resource layer until its data or geometry changes. */
+function showTerrain(frame) {
+  if (sameTerrain(frame, terrainShown)) {
+    terrainShown = frame;
+    return false;
+  }
   terrainShown = frame;
-  terrainSettledAt = terrainFrom ? now : 0;
-  paintTerrain(now);
-}
-
-/** Repaint the plate where it stands. The sand drifts continuously, so this runs
- *  every tick; it is also what carries a dissolve forward. */
-function paintTerrain(now) {
-  if (!terrainShown) return;
-  const clock = driftAt(now);
-  const dissolved = terrainBlend(now);
-  buildTerrain(terrainShown, terrainFrom, clock, dissolved);
-  terrainPainted = clock;
-  if (dissolved >= 1) {
-    terrainFrom = null;
-    terrainSettledAt = 0;
-  }
-}
-
-/* A SAND CLOUD, not a grid of countable grains.
- *
- * Resource is drawn as a dense mass of fine particles whose local density is the
- * local amount — the way spice looks blown across a dune rather than the way
- * counters look stacked in a square. Two earlier attempts are worth recording
- * because neither is obviously wrong until you look at it:
- *
- *   - One grain per unit, scattered anywhere in the cell, small enough not to
- *     collide. At that size the eye cannot integrate density from isolated dots,
- *     so the two sugar massifs and the two spice massifs dissolved into an even
- *     speckle. The picture lost its terrain entirely.
- *   - One grain per unit, PACKED on a per-cell sub-grid. Legible, and countable,
- *     but it read as a halftone screen: a regular pitch inside a regular pitch,
- *     which is a printing artefact rather than a landscape. Filling that
- *     sub-grid in raster order also struck continuous horizontal bands across
- *     the whole plate, because neighbouring cells hold similar amounts and so
- *     laid their first grains along the same row together.
- *
- * So: many particles per unit, scattered across the WHOLE cell with no inset, so
- * neighbouring cells merge into one continuous field and the drifts run across
- * cell boundaries the way real ones would. Local density carries the quantity,
- * which is a channel that survives greyscale, colour-vision deficiency, a
- * projector and a phone in sunlight — none of which the original's chroma ramp
- * did.
- *
- * Drawn once into a small sheet of TILES rather than particle-by-particle every
- * timestep: a full board is 1,024 cells holding up to eight units each, and at
- * the density that reads as a cloud that is a quarter of a million fills per
- * timestep. One tile per (resource, amount), several variants of each so the
- * repeat is not visible, built once per board size and then blitted — two blits
- * per cell, one for each resource standing in it.
- *
- * Per RESOURCE, not per (sugar, spice) PAIR. The two clouds are independent
- * streams (see grainCloud), so a pair sheet was storing every combination of two
- * things that never interact: (maxSugar+1)(maxSpice+1) tiles to say what
- * maxSugar+maxSpice tiles say. On the shipped 4/4 board that is 200 against 8,
- * and the saving is what pays for the loop frames below.
- */
-/* 80 — and the mass a unit prints came DOWN this time, on purpose.
- *
- * Every earlier move here (26, then 36, then 220) held total coverage fixed while
- * the grains got finer, on the principle that coverage is the quantity. At a full
- * four units that was about three quarters of the cell inked, and three quarters
- * of a cell inked is not a field of sand — it is a solid: no gaps, no lanes, and
- * a hard boundary wherever it runs out. Nothing that full can have voids in it,
- * and the voids are the point.
- *
- * So a unit is worth roughly a fifth of the cell now instead of three quarters,
- * and the four levels are told apart by how CROWDED the sky is rather than by how
- * close it is to saturated. One unit reads as scattered, four as thick. Same
- * channel it always was, over a range where the eye can still see plate between
- * the grains.
- *
- * This constant, `particle` and GRAIN_HALO are one setting in three parts: move
- * any of them alone and a unit silently changes what it is worth. */
-const PARTICLES_PER_UNIT = 80;
-/* How far a grain's glow reaches, as a multiple of its core. Most of a soft
- * point's radius carries almost no ink, and that long tail is what makes specks
- * overlap into drifts rather than sit apart like punctuation. */
-const GRAIN_HALO = 3.4;
-/* Eight, not three, because the cloud is now NESTED (see grainCloud).
- *
- * Amount no longer varies the arrangement, so the only thing standing between
- * the eye and a visible repeat is the variant count. Three was already thin
- * inside a massif, where every cell holds the same amount and so drew from the
- * same three tiles. */
-const TILE_VARIANTS = 8;
-
-/* AND THE SAND IS NEVER STILL — CONTINUOUSLY, not in steps.
- *
- * A cloud that never moves is a halftone print OF a cloud. The thing this plate
- * is meant to look like — spice blown across a dune — is defined by the fact that
- * it drifts, and holding it still read as printing rather than as weather.
- *
- * The first two attempts both BAKED the motion: a strip of GRAIN_PHASES frames of
- * the same cloud, the cell showing one column of it, advanced on a clock. Both
- * failed, in instructive ways.
- *
- *   - Cross-fading between two adjacent phases. Two half-alpha copies of a grain
- *     do not average to one grain, they land at 1-f+f² of one, so every filled
- *     cell dimmed to three quarters at mid-step and recovered at the boundary.
- *     The whole plate breathed at the step rate.
- *   - No alpha, just more phases, so a step moved a grain a third of a pixel.
- *     Better, and still wrong, because the problem is not the SIZE of the step,
- *     it is that every cell on the plate takes its step at the same instant. A
- *     quarter of a million specks changing coverage together, fifteen times a
- *     second, is a strobe. It reads as twinkle, never as drift.
- *
- * And a baked loop cannot be slowed, which is the other thing that was asked for:
- * with a fixed number of frames, a longer period only means holding each frame
- * longer, so slower and smoother pull against each other. Memory settles it — a
- * 9-second loop at 60fps is 540 frames of the sheet, which is 150 MB.
- *
- * So nothing is baked. The tile holds ONE arrangement, and the tile itself is
- * drawn at a fractional offset that is a continuous function of the clock. Canvas
- * places a bitmap at sub-pixel coordinates for free — it costs the same as an
- * integer blit, measured — so the grains move smoothly at any speed, and the
- * speed is now a number rather than a memory budget.
- *
- * A tile is split into GRAIN_LAYERS of them, each drifting on its own path, or
- * the cell would slide about as one rigid raft. Every grain belongs to one layer
- * by index, so the layers are interleaved through the cloud rather than stacked,
- * and the paths are per CELL as well as per layer: cell A's first layer and cell
- * B's first layer are unrelated, so nothing marches across the plate together.
- * Three layers, each on a Lissajous of two incommensurable rates, and the pattern
- * never repeats.
- *
- * NOT scaled by animFactor, unlike every other motion on this stage: this is the
- * wind, not the clock. It keeps its own time while the replay is paused, sped up
- * or held on the end card, and it stops dead for a viewer who asked for reduced
- * motion. */
-const GRAIN_LAYERS = 3;
-/* How many slices a single unit's grains dissolve in. Four, so that a cell losing
- * one unit still thins in stages rather than fading as a block. */
-const GRAIN_SIPS = 4;
-/* One drift, end to end, in about this many seconds. Slow: a grain crosses a
- * twentieth of its cell over roughly nine, which is a float, not a stir. */
-const GRAIN_DRIFT_RATE = 0.7;
-const grainSheet = { key: "", solid: [[], []], sips: [[], []], size: 0, bleed: 0, box: 0, float: 0 };
-const grainDrift = { cells: 0, phaseX: null, phaseY: null, rateX: null, rateY: null };
-
-/* `?stir=off` holds the sand still, and it is not a debug flag — it is the only
- * way to see the two motions on this plate APART.
- *
- * There are two of them and they are easy to confuse for each other: the wind,
- * which moves every grain continuously and never stops, and the harvest, which is
- * the resource actually changing hands. With the wind running, a paused board is
- * never twice the same picture, so a viewer asked whether the resource still
- * flickers cannot answer — and neither can an audit.
- *
- * Off, the plate is motionless until a settler eats, which is what the flicker
- * work is for; on, it drifts. Default is on — this switches nothing off for a
- * viewer who does not ask. */
-const stirWanted = new URLSearchParams(location.search).get("stir") !== "off";
-
-/* The plate is repainted on this beat rather than on every one of the 16ms ticks.
- *
- * The drift is slow by design — a grain crosses two pixels in nine seconds — so at
- * 35 repaints a second it advances about eight thousandths of a pixel between
- * them. That is three orders of magnitude below anything the eye can resolve as a
- * step, and it halves what is the most expensive thing on the stage. */
-const GRAIN_TICK_MS = 28;
-
-/** The clock the sand drifts on — real milliseconds on the repaint beat, or a
- *  hard 0 when the wind is switched off, which is what freezes the plate. */
-function driftAt(now) {
-  if (reducedMotion || !stirWanted) return 0;
-  return Math.round(now / GRAIN_TICK_MS) * GRAIN_TICK_MS;
-}
-
-/** The path each (cell, layer) drifts along. Built once per board size: two rates
- *  that never come back into step, so no layer ever retraces itself, and a phase
- *  per cell so no two cells drift alike. */
-function buildGrainDrift(cells) {
-  if (grainDrift.cells === cells) return;
-  const slots = cells * GRAIN_LAYERS;
-  grainDrift.cells = cells;
-  grainDrift.phaseX = new Float32Array(slots);
-  grainDrift.phaseY = new Float32Array(slots);
-  grainDrift.rateX = new Float32Array(slots);
-  grainDrift.rateY = new Float32Array(slots);
-  for (let cell = 0; cell < cells; cell += 1) {
-    for (let layer = 0; layer < GRAIN_LAYERS; layer += 1) {
-      const slot = cell * GRAIN_LAYERS + layer;
-      grainDrift.phaseX[slot] = grainOffset(cell, layer, 21) * Math.PI * 2;
-      grainDrift.phaseY[slot] = grainOffset(cell, layer, 22) * Math.PI * 2;
-      grainDrift.rateX[slot] = GRAIN_DRIFT_RATE * (0.62 + grainOffset(cell, layer, 23) * 0.76);
-      grainDrift.rateY[slot] = GRAIN_DRIFT_RATE * (0.62 + grainOffset(cell, layer, 24) * 0.76);
-    }
-  }
+  buildTerrain(frame);
+  return true;
 }
 
 /** `value` brought into [0, span) — the cell wraps, so a grain that orbits off
@@ -1091,415 +897,13 @@ function wrapInto(value, span) {
 
 /** A deterministic value in [0,1) from three integers. Positions must be stable
  *  across timesteps or the whole plate boils when one settler eats one unit. */
-function grainOffset(a, b, c) {
+function stableOffset(a, b, c) {
   let hash = (a * 73856093) ^ (b * 19349663) ^ (c * 83492791);
   hash = Math.imul(hash ^ (hash >>> 15), 2246822507);
   hash = Math.imul(hash ^ (hash >>> 13), 3266489909);
   return ((hash ^ (hash >>> 16)) >>> 0) / 4294967296;
 }
 
-/* The cloud for N units is the cloud for N-1 with one more handful ON TOP.
- *
- * This is the whole fix for the flicker the board used to have. The grain
- * positions used to be seeded from the cell's CONTENTS — `(sugar * 31 + spice)`
- * — so a cell going 4 -> 3 sugar did not lose a quarter of its grains, it threw
- * all of them away and scattered a completely different cloud, and it re-threw
- * its spice at the same time because the two shared one running seed. With
- * regrow rate 1 against a max of 4, a quarter of the board changes amount on
- * every timestep, so a quarter of the plate re-scattered every beat. Stable
- * positions per cell were not enough: the positions have to be stable per
- * AMOUNT too.
- *
- * So a cloud is keyed by its stream — the variant, and which of the two
- * resources — and never by how much is in the cell, and the tile for N units
- * draws the first N x PARTICLES_PER_UNIT grains of it. Losing a unit now
- * removes that unit's grains and moves nothing else; regrowing puts them back
- * where they were. Sugar and spice get separate streams, so eating one does not
- * disturb the other. */
-/* Grains CLUMP, and the voids between the clumps are as much of the picture as
- * the clumps are.
- *
- * Scattered evenly — one hash for x, one for y — a cloud has the same density
- * everywhere, and a field with the same density everywhere has no shape. Past a
- * few units it stops looking like a field at all and starts looking like a solid
- * with an edge where it runs out, which is exactly what it looked like.
- *
- * So grains come in handfuls. A handful gets an origin and its own reach, and its
- * grains are placed by SUMMING two offsets rather than taking one, which crowds
- * them toward the middle and thins them at the rim instead of filling a box
- * evenly. Handfuls overlap, miss each other, and leave lanes of bare plate
- * between them — the gaps do the work.
- *
- * A handful WRAPS at the cell edge rather than being allowed to sit past it. The
- * obvious way round — let origins spill a little outside — was tried and printed
- * a dark rule along every boundary on the board, because a handful can reach
- * further than the spill allowed it to start, so the edges of the cell were the
- * one place no handful could be centred and the density fell away there. Wrapping
- * makes every point in the cell equally likely by construction, which is the only
- * version of this with no edge case at the edge. Grains still cross the boundary:
- * a point's glow reaches into the tile's margin and lands over the neighbour, and
- * the neighbour's does the same back, so the two fields overlap and the boundary
- * stops existing.
- *
- * The handful is keyed by index / GRAIN_PER_CLUMP, so it is a property of the
- * grain's place in the stream and nothing else. The nesting invariant holds: grain
- * i is in the same handful at the same spot however much the cell holds. */
-const GRAIN_PER_CLUMP = 7;
-function grainCloud(stream, count) {
-  const cloud = [];
-  for (let index = 0; index < count; index += 1) {
-    const clump = Math.floor(index / GRAIN_PER_CLUMP);
-    const originX = grainOffset(stream, clump, 30);
-    const originY = grainOffset(stream, clump, 31);
-    const reachX = 0.07 + grainOffset(stream, clump, 32) * 0.20;
-    const reachY = 0.07 + grainOffset(stream, clump, 33) * 0.20;
-    cloud.push([
-      wrapInto(originX + (grainOffset(stream, index, 0) + grainOffset(stream, index, 8) - 1) * reachX, 1),
-      wrapInto(originY + (grainOffset(stream, index, 1) + grainOffset(stream, index, 9) - 1) * reachY, 1),
-      // Grains vary in size. A single particle size reads as television static;
-      // sand does not have one grade, and the variation is what makes the mass
-      // look blown rather than generated.
-      0.55 + grainOffset(stream, index, 2) * 1.30,
-      /* And in BRIGHTNESS, squared, so most are faint and a few are not.
-       *
-       * A field of equally bright specks is a texture; a field where brightness
-       * runs over a wide range reads as depth, which is the whole difference
-       * between static and a sky. Squaring the hash is what puts most of the
-       * population at the dim end where it belongs. */
-      0.16 + grainOffset(stream, index, 10) ** 2 * 0.84,
-    ]);
-  }
-  return cloud;
-}
-
-/** The stream a resource's cloud is drawn from in a given variant. */
-function grainStream(variant, resource) {
-  return variant * 2 + resource;
-}
-
-/** How much of each resource a cell can hold, as [sugar, spice]. */
-function grainCeiling() {
-  return [Math.max(0, Math.round(state.maxSugar)), Math.max(0, Math.round(state.maxSpice))];
-}
-
-/** A theme hex as rgba at a given alpha, so the gradients below are derived from
- *  the palette block rather than restating it. */
-function grainAlpha(hex, alpha) {
-  const value = parseInt(hex.slice(1), 16);
-  return `rgba(${(value >> 16) & 255},${(value >> 8) & 255},${value & 255},${alpha})`;
-}
-
-/* A grain is a SOFT POINT, not a square.
- *
- * fillRect gives every speck four hard edges and one flat value, and a plate of
- * those reads as a printed screen however small they are — at any density above a
- * scatter it fuses into a solid with a cut edge where it stops. A soft point has
- * no edge to find: a bright core falling away to nothing, so grains overlap into
- * drifts rather than tiling into a surface, and the field ends by thinning out
- * instead of by stopping.
- *
- * Baked once per colour and blitted, because a radial gradient per grain across
- * ~20,000 of them at build time is not affordable and does not need to be — one
- * sprite scaled and faded is the same picture. */
-function buildGrainSprite(colour) {
-  const size = 64;
-  const sprite = document.createElement("canvas");
-  sprite.width = size;
-  sprite.height = size;
-  const spriteContext = sprite.getContext("2d");
-  const middle = size / 2;
-  const glow = spriteContext.createRadialGradient(middle, middle, 0, middle, middle, middle);
-  // A small solid core, then a long tail. The tail is most of the radius and
-  // almost none of the ink, which is what makes the point read as lit rather than
-  // as drawn.
-  glow.addColorStop(0, grainAlpha(colour, 1));
-  glow.addColorStop(0.18, grainAlpha(colour, 0.82));
-  glow.addColorStop(0.42, grainAlpha(colour, 0.28));
-  glow.addColorStop(0.72, grainAlpha(colour, 0.06));
-  glow.addColorStop(1, grainAlpha(colour, 0));
-  spriteContext.fillStyle = glow;
-  spriteContext.fillRect(0, 0, size, size);
-  return sprite;
-}
-
-/** Which layer and which slice of its unit a grain belongs to. Both fall out of
- *  its index, so every grain lands in exactly one of each and the layers are
- *  interleaved THROUGH the cloud rather than stacked in bands of it. */
-function grainLayer(index) {
-  return index % GRAIN_LAYERS;
-}
-function grainSip(index) {
-  return Math.floor(index / GRAIN_LAYERS) % GRAIN_SIPS;
-}
-
-/** The settled tile: everything a cell holding `units` of `resource` shows, in
- *  one layer. One blit, and it is what the plate is made of almost all the time. */
-function grainSolid(resource, units, variant, layer) {
-  return grainSheet.solid[resource][((units - 1) * TILE_VARIANTS + variant) * GRAIN_LAYERS + layer];
-}
-
-/** One slice of ONE unit — the granularity a harvest dissolves at. Drawn only
- *  while a cell is changing, which is a fifth of them for a fifth of a dwell. */
-function grainSipTile(resource, unit, sip, variant, layer) {
-  const slice = ((unit - 1) * GRAIN_SIPS + sip) * TILE_VARIANTS + variant;
-  return grainSheet.sips[resource][slice * GRAIN_LAYERS + layer];
-}
-
-function buildGrainSheet(cellPx) {
-  const ceiling = grainCeiling();
-  const key = `${cellPx}:${ceiling[0]}:${ceiling[1]}`;
-  if (grainSheet.key === key) return;
-  grainSheet.key = key;
-  grainSheet.solid = [[], []];
-  grainSheet.sips = [[], []];
-  const size = Math.max(2, Math.ceil(cellPx));
-  grainSheet.size = size;
-  /* SAND, not gravel: 0.026 of a cell, down from 0.075 and then 0.064.
-   *
-   * At a fortieth of the cell a grain lands under one device pixel once the
-   * supersampled plate is scaled down, so it prints as a partial-coverage speck
-   * rather than as a countable block with edges of its own. That is the whole
-   * difference between a field of sand and a field of dots, and it is also what
-   * stops the stir reading as static: a grain that is a fraction of a pixel
-   * changes a fraction of a pixel's worth of ink when it moves.
-   *
-   * COVERAGE IS THE QUANTITY, and coverage goes with the SQUARE of the grade, so
-   * the count has to pay for the fineness or a unit of sugar quietly becomes a
-   * fifth of the ink it was: (0.064/0.026)^2 = 6.1, and 36 x 6.1 is the 220 in
-   * PARTICLES_PER_UNIT. Move one of the two and you must move the other. */
-  const particle = Math.max(0.5, size * 0.021);
-  /* How far a grain travels from home, and it is the DRAWN tile that travels now
-   * rather than anything baked. A twentieth of a cell, so a grain crosses two
-   * pixels of the supersampled plate over the nine seconds of a drift — visible
-   * as movement if you watch one, invisible as a change if you are reading the
-   * board, which is the only setting that satisfies both. */
-  const float = Math.max(0.8, size * 0.05);
-  /* The cells BLEED INTO EACH OTHER rather than each holding its own sand.
-   *
-   * A grain that crossed the edge used to wrap round to the opposite side of the
-   * same cell — the cell as a torus. Density stayed flat across the boundary,
-   * which was the point, but nothing ever CROSSED one, so every cell was still a
-   * closed box and the lattice could be read off the plate by anyone who looked.
-   *
-   * Now the tile carries a margin and the grain simply carries on into it, over
-   * the neighbour, and the tiles mesh. The cost is the honest one: that spilled
-   * grain belongs to the cell it came FROM, so when a settler eats that cell the
-   * part lying over the neighbour goes with it. Which is correct — it was never
-   * the neighbour's sand.
-   *
-   * The margin covers the reach of a grain's glow; the drift is added at DRAW
-   * time, as a fractional offset on the blit, so it needs no margin of its own. */
-  const bleed = Math.max(2, Math.min(Math.floor(size / 2), Math.round(size * 0.16)));
-  const box = size + bleed * 2;
-  grainSheet.bleed = bleed;
-  grainSheet.box = box;
-  grainSheet.float = float;
-
-  /* NO CELL HAS AN EDGE. Every tile is FEATHERED, and the feathers sum to one.
-   *
-   * With each cell's sand stopping dead at its own boundary, an emptied cell
-   * printed as a hard black square with four straight sides — the sharpest thing
-   * on a plate that is meant to read as weather. Softening it by simply letting
-   * tiles overhang does not work either: where two full cells meet you then have
-   * both fields at full strength and the seam comes back inverted, as a bright
-   * rule instead of a dark one.
-   *
-   * So the field is EXTENDED past the cell — the wrapped cloud repeats into the
-   * margin — and the tile's alpha is a triangular ramp: zero at the outer edge of
-   * the margin, full one margin-width in, flat across the middle. Tiles are laid
-   * one cell apart and overlap by exactly two margins, so on any run of cells the
-   * falling ramp of one lands on the rising ramp of the next and the two sum to
-   * exactly one. Uniform sand stays uniform, with no seam of either sign.
-   *
-   * What it buys is the empty cell: with no neighbour tile to complete the sum,
-   * the surrounding sand simply ramps down into the hole across a sixth of a cell
-   * on every side. The void gets a soft shore instead of four straight sides. */
-  const feather = document.createElement("canvas");
-  feather.width = box;
-  feather.height = box;
-  const featherContext = feather.getContext("2d");
-  const ramp = (context2d, horizontal) => {
-    const shade = horizontal
-      ? context2d.createLinearGradient(0, 0, box, 0)
-      : context2d.createLinearGradient(0, 0, 0, box);
-    shade.addColorStop(0, C.maskOut);
-    shade.addColorStop((bleed * 2) / box, C.maskIn);
-    shade.addColorStop(size / box, C.maskIn);
-    shade.addColorStop(1, C.maskOut);
-    return shade;
-  };
-  featherContext.fillStyle = ramp(featherContext, true);
-  featherContext.fillRect(0, 0, box, box);
-  // Separable: the vertical ramp multiplies the horizontal one, so a corner gets
-  // the product of the two and the partition still sums to one along both axes.
-  featherContext.globalCompositeOperation = "destination-in";
-  featherContext.fillStyle = ramp(featherContext, false);
-  featherContext.fillRect(0, 0, box, box);
-
-  /** One tile: the grains of `cloud` in `layer`, optionally only those in `sip`. */
-  const bake = (sprite, cloud, from, layer, sip) => {
-    const tile = document.createElement("canvas");
-    tile.width = box;
-    tile.height = box;
-    const tileContext = tile.getContext("2d");
-    // The cell's own origin sits one margin in, so what continues past the cell is
-    // drawn into the margin rather than clipped off.
-    tileContext.translate(bleed, bleed);
-    let lit = -1;
-    for (let index = from; index < cloud.length; index += 1) {
-      if (grainLayer(index) !== layer) continue;
-      if (sip >= 0 && grainSip(index) !== sip) continue;
-      const [x, y, scale, glow] = cloud[index];
-      const reach = particle * scale * GRAIN_HALO;
-      if (glow !== lit) {
-        lit = glow;
-        tileContext.globalAlpha = glow;
-      }
-      const atX = x * size;
-      const atY = y * size;
-      // The cloud repeats into the margin, so the field carries on past the cell
-      // instead of stopping at it. Only grains near an edge have a copy to draw.
-      const alsoX = atX < bleed + reach ? atX + size : (atX > size - bleed - reach ? atX - size : null);
-      const alsoY = atY < bleed + reach ? atY + size : (atY > size - bleed - reach ? atY - size : null);
-      const place = (px, py) => tileContext.drawImage(
-        sprite, px - reach / 2, py - reach / 2, reach, reach);
-      place(atX, atY);
-      if (alsoX !== null) place(alsoX, atY);
-      if (alsoY !== null) place(atX, alsoY);
-      if (alsoX !== null && alsoY !== null) place(alsoX, alsoY);
-    }
-    tileContext.setTransform(1, 0, 0, 1, 0, 0);
-    tileContext.globalAlpha = 1;
-    tileContext.globalCompositeOperation = "destination-in";
-    tileContext.drawImage(feather, 0, 0);
-    return tile;
-  };
-
-  for (const [resource, colour] of [[0, SUGAR_HEX], [1, SPICE_HEX]]) {
-    const sprite = buildGrainSprite(colour);
-    const full = ceiling[resource] * PARTICLES_PER_UNIT;
-    for (let variant = 0; variant < TILE_VARIANTS; variant += 1) {
-      const cloud = grainCloud(grainStream(variant, resource), full);
-      for (let units = 1; units <= ceiling[resource]; units += 1) {
-        const held = cloud.slice(0, units * PARTICLES_PER_UNIT);
-        for (let layer = 0; layer < GRAIN_LAYERS; layer += 1) {
-          grainSheet.solid[resource][((units - 1) * TILE_VARIANTS + variant) * GRAIN_LAYERS + layer]
-            = bake(sprite, held, 0, layer, -1);
-          for (let sip = 0; sip < GRAIN_SIPS; sip += 1) {
-            // Only THIS unit's grains: the slice a harvest takes, on its own, so
-            // it can be dissolved without touching the ones underneath it.
-            const slice = ((units - 1) * GRAIN_SIPS + sip) * TILE_VARIANTS + variant;
-            grainSheet.sips[resource][slice * GRAIN_LAYERS + layer]
-              = bake(sprite, held, (units - 1) * PARTICLES_PER_UNIT, layer, sip);
-          }
-        }
-      }
-    }
-  }
-}
-
-/** How many whole units of `resource` a recorded cell holds. */
-function grainUnits(cell, resource, ceiling) {
-  return Math.min(ceiling[resource], Math.max(0, Math.round(cell[resource])));
-}
-
-/* How much of the slice standing at `place` in a queue of `queue` is showing.
- *
- * This one expression is the whole difference between a dissolve and a crossfade.
- * A crossfade puts EVERY element at partial alpha at once — the entire plate at
- * 50% halfway through. Here the queue is walked: the slices behind the head are
- * still at 1, the ones in front of it are at 0 and not drawn at all, and only the
- * slice at the head is anywhere in between. At most one thing on the plate is
- * ever semi-transparent, so the picture never goes soft. */
-function grainShare(dissolved, queue, place, rising) {
-  const reached = dissolved * queue - place;
-  return Math.max(0, Math.min(1, rising ? reached : 1 - reached));
-}
-
-/* THE HEIGHT UNDER THE SAND.
- *
- * Grain density alone cannot carry how much a cell holds, and this was measured
- * on the real recording rather than argued: sampling the rendered plate cell by
- * cell against the frame it was drawn from, one unit of sugar to the next moved
- * the mean luminance by 4 to 9 values — 1.06:1 to 1.13:1, where a non-text
- * graphic needs 3:1 — while the scatter WITHIN a single level was 7 to 13. The
- * encoding was quieter than its own noise (gap/sigma 0.32 to 0.92), so a 1-cell
- * and a 4-cell were not distinguishable and the four massifs printed as an even
- * speckle. Grains saturate: past the first unit each new one lands on sand that
- * is already lit, so it buys coverage the eye has mostly been sold already.
- *
- * So the sand sits on a WASH that carries the height on its own — one source
- * pixel per cell, blended off the plate toward each resource's own hue in
- * proportion to what the cell holds, upscaled with smoothing so the field
- * interpolates between cell centres instead of terracing into squares. It is
- * gui.py's two-axis ramp restored as a floor: deterministic, seamless, and free
- * of the stochastic scatter that was drowning the signal. The sand keeps its
- * job — texture, and the harvest animation — and stops having to carry depth
- * by itself.
- *
- * Amplitude is set by what else has to survive on the plate. A settler is a
- * ~115-value seat colour inside a C.ink ring; holding a full cell of both
- * resources near 75 keeps the bodies clearly the brightest thing on the board
- * and leaves the ring its job. */
-const WASH_GAIN = 0.16;
-const washPlate = document.createElement("canvas");
-const washContext = washPlate.getContext("2d");
-
-function washRgb(hex) {
-  const value = parseInt(hex.slice(1), 16);
-  return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
-}
-
-const WASH_BASE = washRgb(PLATE_HEX);
-const WASH_SUGAR = washRgb(SUGAR_HEX);
-const WASH_SPICE = washRgb(SPICE_HEX);
-
-function paintHeightWash(frame, cell) {
-  const ceiling = grainCeiling();
-  if (ceiling[0] <= 0 && ceiling[1] <= 0) return;
-  if (washPlate.width !== frame.width || washPlate.height !== frame.height) {
-    washPlate.width = frame.width;
-    washPlate.height = frame.height;
-  }
-  const field = washContext.createImageData(frame.width, frame.height);
-  const pixels = field.data;
-  for (let index = 0; index < frame.cells.length; index += 1) {
-    const holds = frame.cells[index];
-    // cellId = x * height + y, and the wash is a row-major bitmap.
-    const x = Math.floor(index / frame.height);
-    const y = index % frame.height;
-    const sugar = ceiling[0] > 0 ? Math.min(1, Math.max(0, holds[0] / ceiling[0])) : 0;
-    const spice = ceiling[1] > 0 ? Math.min(1, Math.max(0, holds[1] / ceiling[1])) : 0;
-    const at = (y * frame.width + x) * 4;
-    for (let channel = 0; channel < 3; channel += 1) {
-      // Each resource pulls the plate toward its own hue independently, so a
-      // cell holding both lands warm and bright and a cell holding one lands on
-      // that one's colour. Additive at THIS amplitude stays on the plate: the
-      // full-both corner measures ~75, well under the seat colours above it.
-      const base = WASH_BASE[channel];
-      pixels[at + channel] = Math.min(255, base
-        + sugar * WASH_GAIN * (WASH_SUGAR[channel] - base)
-        + spice * WASH_GAIN * (WASH_SPICE[channel] - base));
-    }
-    pixels[at + 3] = 255;
-  }
-  washContext.putImageData(field, 0, 0);
-  terrainContext.imageSmoothingEnabled = true;
-  terrainContext.imageSmoothingQuality = "high";
-  // Source pixel centres land on cell centres under a plain scale, so the
-  // bilinear ramp between two cells is centred on the boundary they share.
-  terrainContext.drawImage(washPlate, 0, 0, cell * frame.width, cell * frame.height);
-}
-
-/* Paint the plate: every cell's settled sand at wherever its layers have drifted
- * to, and, for the cells that just changed hands, the slice going or arriving.
- *
- * `dissolved` runs 0 to 1 across one harvest. A departing unit's slices leave in
- * order, TOP FIRST, because the top of the pile is what a settler takes; an
- * arriving unit's land in the order they were laid. Only the slice at the head of
- * the queue is ever part-transparent — the ones behind it are still solid and the
- * ones ahead are simply not drawn — so at no point is the plate a double exposure
- * of itself, which is what the crossfade this replaced could never avoid. */
 /* COUNTABLE DOTS, one per unit held. A tile carries up to four of each.
  *
  * This replaces the sand cloud, and the reason the cloud existed no longer
@@ -1557,8 +961,8 @@ function cellDotLayout(index, sugarCap, spiceCap) {
     let bestGap = -1;
     for (let attempt = 0; attempt < DOT_TRIES; attempt += 1) {
       salt += 1;
-      const x = DOT_MARGIN + grainOffset(index, salt, 61) * span;
-      const y = DOT_MARGIN + grainOffset(index, salt, 67) * span;
+      const x = DOT_MARGIN + stableOffset(index, salt, 61) * span;
+      const y = DOT_MARGIN + stableOffset(index, salt, 67) * span;
       let gap = Infinity;
       for (const point of points) {
         gap = Math.min(gap, Math.hypot(point[0] - x, point[1] - y));
@@ -1617,8 +1021,8 @@ function paintResourceDots(frame, cell) {
   }
 }
 
-function buildTerrain(frame, from, clock, dissolved) {
-  const size = Math.round(BOARD.w * RENDER_SCALE);
+function buildTerrain(frame) {
+  const size = Math.round(BOARD.w * renderScale);
   if (terrain.width !== size) terrain.width = terrain.height = size;
   const cell = size / Math.max(frame.width, frame.height);
   terrainContext.setTransform(1, 0, 0, 1, 0, 0);
@@ -1680,19 +1084,19 @@ function buildGround() {
   dustTile.height = DUST_TILE;
   const dustContext = dustTile.getContext("2d");
   for (let drift = 0; drift < DUST_DRIFTS; drift += 1) {
-    const originX = grainOffset(drift, 5, 0) * DUST_TILE;
-    const originY = grainOffset(drift, 5, 1) * DUST_TILE;
+    const originX = stableOffset(drift, 5, 0) * DUST_TILE;
+    const originY = stableOffset(drift, 5, 1) * DUST_TILE;
     // Long and low, like everything the wind makes.
-    const reachX = 16 + grainOffset(drift, 5, 2) * 48;
-    const reachY = 3 + grainOffset(drift, 5, 3) * 9;
+    const reachX = 16 + stableOffset(drift, 5, 2) * 48;
+    const reachY = 3 + stableOffset(drift, 5, 3) * 9;
     // Roughly a third spice to two thirds sugar, which is about what the lattice
     // carries; the surround is downwind of the board, not a different world.
-    dustContext.fillStyle = grainOffset(drift, 5, 4) < 0.34 ? C.dustWarm : C.dust;
+    dustContext.fillStyle = stableOffset(drift, 5, 4) < 0.34 ? C.dustWarm : C.dust;
     for (let index = 0; index < DUST_PER_DRIFT; index += 1) {
-      const spanX = (grainOffset(drift, index, 6) + grainOffset(drift, index, 7) - 1) * reachX;
-      const spanY = (grainOffset(drift, index, 8) + grainOffset(drift, index, 9) - 1) * reachY;
-      const length = 1 + grainOffset(drift, index, 10) * 5;
-      const height = 1 + grainOffset(drift, index, 11);
+      const spanX = (stableOffset(drift, index, 6) + stableOffset(drift, index, 7) - 1) * reachX;
+      const spanY = (stableOffset(drift, index, 8) + stableOffset(drift, index, 9) - 1) * reachY;
+      const length = 1 + stableOffset(drift, index, 10) * 5;
+      const height = 1 + stableOffset(drift, index, 11);
       // Wrapped for the same reason the cell grains are: the tile repeats, and a
       // drift cut off at its edge would print a hard vertical seam every 360.
       const x = wrapInto(originX + spanX, DUST_TILE);
@@ -1884,6 +1288,12 @@ function easeView(frame, now) {
   const agent = frame.agents.find((each) => each.id === view.follow);
   if (!agent) { clearFollow(); return; }
   const at = cellPosition(frame, agent.cell);
+  if (!state.playing) {
+    view.cx = at.x + 0.5;
+    view.cy = at.y + 0.5;
+    view.scale = FOLLOW_SCALE;
+    return;
+  }
   // Ease toward the settler rather than pinning to it: a hard bind makes the
   // whole world jitter by a cell every tick while the settler walks.
   view.cx += (at.x + 0.5 - view.cx) * 0.18;
@@ -1902,7 +1312,7 @@ function drawBoard(frame, previous, t, now) {
   // the plate and a 32x64 one ran off the bottom.
   const base = Math.min(BOARD.w / frame.width, BOARD.h / frame.height);
 
-  context.setTransform(RENDER_SCALE, 0, 0, RENDER_SCALE, 0, 0);
+  context.setTransform(renderScale, 0, 0, renderScale, 0, 0);
   context.clearRect(0, 0, W, H);
   drawGround(now);
 
@@ -1916,8 +1326,7 @@ function drawBoard(frame, previous, t, now) {
   context.fillStyle = C.edge;
   context.fillRect(BOARD.x - 2, BOARD.y - 2, BOARD.w + 4, BOARD.h + 4);
   context.restore();
-  // One plate. The dissolve happens INSIDE it, on the grains that changed hands,
-  // so there is never a second copy of the board to blend against.
+  // One cached resource plate; settlers and effects move over it independently.
   easeView(frame, now);
   const lens = viewTransform(frame, base);
   // ONE cell size for the whole pass, and it is the LENS's. Holding the base
@@ -2059,7 +1468,7 @@ function drawBoard(frame, previous, t, now) {
       // Driven by the sway's AGE and staggered by a hash of the settler's id, so
       // a hundred conversions on one tick arrive as a scatter of ripples instead
       // of one shutter closing across the whole board.
-      const offset = grainOffset(body.agent.id, 3, 97) * 0.35;
+      const offset = stableOffset(body.agent.id, 3, 97) * 0.35;
       const open = reducedMotion
         ? 0.5
         : Math.max(0, Math.min(1, (arrived - offset) / (1 - offset)));
@@ -4421,6 +3830,7 @@ board.addEventListener("wheel", (event) => {
       view.cx = at.frame.width / 2;
       view.cy = at.frame.height / 2;
     }
+    renderOnce();
   }
 }, { passive: false });
 
@@ -4445,6 +3855,7 @@ board.addEventListener("pointermove", (event) => {
   view.follow = null;
   view.cx = dragging.cx - dx / (base * view.scale);
   view.cy = dragging.cy - dy / (base * view.scale);
+  renderOnce();
 });
 
 board.addEventListener("pointerup", (event) => {
@@ -4467,6 +3878,7 @@ board.addEventListener("pointerup", (event) => {
     clearFollow();
     standingsSignature = "";
   }
+  renderOnce();
 });
 
 // Guarded: the headless test sandbox has a document stub but no window, and the
@@ -4476,6 +3888,7 @@ if (typeof window !== "undefined") {
     if (event.key !== "Escape") return;
     if (view.follow !== null) { clearFollow(); standingsSignature = ""; }
     view.scale = VIEW_MIN;
+    renderOnce();
   });
 }
 
@@ -4505,6 +3918,7 @@ function zoomBy(factor) {
     view.cy = frame.height / 2;
   }
   syncZoom();
+  renderOnce();
 }
 
 /** A control that cannot act has to SAY so — the same rule syncLargeText follows.
@@ -4737,7 +4151,7 @@ function tick() {
         state.cursor = frames.length - 1;
         if (state.finished) {
           // Hold the end card, then loop — the replay contract expects looping.
-          if (!state.holdUntil) state.holdUntil = now + 5200;
+          if (!state.holdUntil) state.holdUntil = now + 5200 / state.speed;
           else if (now > state.holdUntil) { state.holdUntil = 0; state.cursor = 0; }
         }
       }
@@ -4748,8 +4162,15 @@ function tick() {
 
   const index = currentIndex();
   if (index !== state.lastDrawnIndex) {
+    const previousDrawn = state.lastDrawnIndex;
     state.lastDrawnIndex = index;
-    onFrameEntered(index, now);
+    if (previousDrawn >= 0 && index > previousDrawn) {
+      for (let entered = previousDrawn + 1; entered <= index; entered += 1) {
+        onFrameEntered(entered, now);
+      }
+    } else {
+      onFrameEntered(index, now);
+    }
     controls.scrub.value = String(frames[index].timestep);
     controls.scrub.style.setProperty("--played", `${played(index) * 100}%`);
     // Mark the lead changes on the timeline itself, so the shape of the match is
@@ -4795,16 +4216,7 @@ function tick() {
     || fraction >= 0.88 || index >= frames.length - 1;
   const terrainFrame = settled ? frame : previous;
   if (terrainFrame !== terrainShown) {
-    // Dissolve only while the replay is running. A scrub, a step, a pause or a
-    // reduced-motion viewer wants the state it asked for, at once, not a plate
-    // caught between two timesteps; and the first plate of a stream has nothing
-    // to dissolve from.
-    showTerrain(terrainFrame, terrainShown !== null && state.playing && !reducedMotion, now);
-  } else if (terrainFrom || driftAt(now) !== terrainPainted) {
-    // Between timesteps the plate still moves — the sand goes on blowing whether
-    // or not the replay is running — and a dissolve in flight still has slices to
-    // let go of. With the wind off, driftAt is a constant and neither fires.
-    paintTerrain(now);
+    showTerrain(terrainFrame);
   }
   // Interpolate from the PREVIOUS frame into this one, so the settler arrives
   // exactly as its recorded state lands rather than leaving it early.
@@ -4821,6 +4233,31 @@ function tick() {
   syncZoom();
 }
 
+let paintTimer = null;
+
+function pageHidden() {
+  return typeof document.hidden === "boolean" && document.hidden;
+}
+
+function stopPaintLoop() {
+  if (paintTimer === null) return;
+  clearInterval(paintTimer);
+  paintTimer = null;
+}
+
+function startPaintLoop() {
+  if (paintTimer !== null || !state.playing || frames.length === 0 || pageHidden()) return;
+  lastTick = performance.now();
+  tick();
+  paintTimer = setInterval(tick, 16);
+}
+
+/** Paint an explicit state change once; paused and hidden views have no loop. */
+function renderOnce() {
+  if (frames.length === 0 || pageHidden()) return;
+  tick();
+}
+
 // ---------------------------------------------------------------------------
 // Controls
 // ---------------------------------------------------------------------------
@@ -4829,6 +4266,8 @@ function setPlaying(playing) {
   state.playing = playing;
   controls.glyph.textContent = playing ? "❚❚" : "▶";
   controls.play.setAttribute("aria-label", playing ? "Pause" : "Play");
+  if (playing) startPaintLoop();
+  else stopPaintLoop();
 }
 
 function seek(index) {
@@ -4836,12 +4275,14 @@ function seek(index) {
   state.live = false;
   state.holdUntil = 0;
   state.cursor = Math.max(0, Math.min(frames.length - 1, index));
+  renderOnce();
 }
 
 controls.play.addEventListener("click", () => {
   if (!state.playing && state.cursor >= frames.length - 1 && state.finished) state.cursor = 0;
   state.holdUntil = 0;
   setPlaying(!state.playing);
+  if (!state.playing) renderOnce();
 });
 controls.back.addEventListener("click", () => seek(Math.floor(state.cursor) - 1));
 controls.forward.addEventListener("click", () => seek(Math.floor(state.cursor) + 1));
@@ -4892,6 +4333,8 @@ function fail(message, detail = "") {
 function ready() {
   notice.textContent = "";
   controls.container.hidden = false;
+  if (state.playing) startPaintLoop();
+  else renderOnce();
 }
 
 /** Derive the spectator socket from the page's OWN path. The Observatory serves
@@ -5331,12 +4774,24 @@ async function boot() {
   // first frame must not be laid out against zeroes.
   measureDensity();
   lastTick = performance.now();
-  // A timer, not requestAnimationFrame: a backgrounded or headless tab throttles
-  // rAF to a few frames a second and starves the interpolation. 16ms rather
-  // than 33 because settlers jump several cells per timestep, and at 30fps that
-  // motion reads as stepping rather than moving; the terrain is cached now, so
-  // the extra draws are cheap.
-  setInterval(tick, 16);
+
+  const geometryChanged = () => {
+    measureDensity();
+    renderOnce();
+  };
+  if (typeof ResizeObserver === "function") {
+    const observer = new ResizeObserver(geometryChanged);
+    observer.observe(document.getElementById("stage"));
+  } else {
+    window.addEventListener("resize", geometryChanged);
+  }
+  if (typeof document.addEventListener === "function") {
+    document.addEventListener("visibilitychange", () => {
+      if (pageHidden()) stopPaintLoop();
+      else if (state.playing) startPaintLoop();
+      else renderOnce();
+    });
+  }
 
   const params = new URLSearchParams(location.search);
   // The Observatory embeds this behind a proxy and strips its own chrome.
