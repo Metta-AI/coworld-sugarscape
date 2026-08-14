@@ -46,6 +46,18 @@
       <input id="scrub" type="range" min="0" max="0" value="0" step="1"
              aria-label="Timestep" aria-valuetext="timestep 0">
       <button id="speed" type="button" aria-label="Playback speed, 1&times;">1&times;</button>
+      <!-- The lens, with a HANDLE on it.
+           Wheel-and-drag was the only way in, and a gesture with no affordance is
+           a feature nobody finds — least of all inside the Observatory's iframe,
+           where a wheel over the page is a scroll before it is a zoom. Two
+           buttons say the lens exists; the wheel still does the fine work.
+           Zooming out to 1x IS the fit, so there is no third "reset" button. -->
+      <button id="zoom-out" type="button" aria-label="Zoom out">
+        <span aria-hidden="true">&minus;</span>
+      </button>
+      <button id="zoom-in" type="button" aria-label="Zoom in">
+        <span aria-hidden="true">&plus;</span>
+      </button>
       <!-- The broadcast is drawn in SVG user units inside a fixed 16:9 embed, so
            a larger default font size cannot reach it and there is no reflow to
            fall back on. This is the in-product mechanism instead. -->

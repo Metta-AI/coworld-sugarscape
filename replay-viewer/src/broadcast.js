@@ -150,25 +150,51 @@ const RAIL = { x: 0, y: 0, w: 0, h: 0 };
 let transportH = 104;
 let keyH = KEY_H;
 
+/* TWO COLUMNS: everything that READS on the left, the world itself on the right.
+ *
+ * The board used to sit left under a full-width scorebug band, with the panels
+ * in a rail beside it. That band cost the board 124 units of height it did not
+ * need — the masthead and the clock are text, and text belongs in the column of
+ * text. Moving them into the left column lets the board start a key-row below
+ * the top margin instead of below a whole band, and a board sized off the height
+ * gets all of that back: 875 units to 949, which is 18% more area under the
+ * lattice. On a 50x50 league board that is the difference between a gnome you
+ * can read and a speck.
+ *
+ * The board is still SQUARE and still sized from the height, because the lattice
+ * is square and the stage is wider than it is tall. The left column takes what
+ * is left, which is ample for three panels of short text.
+ */
 function layoutStage() {
   const perPixel = unitsPerPixel();
   transportH = Math.max(44, Math.round(TRANSPORT_PX * perPixel));
   // The key is ONE LINE of legend and had a fixed 34-unit row for it, which is
   // the caption step plus 16 units of nothing at any width above the floor.
   keyH = Math.max(20, Math.round(T(18) * 1.12));
-  const top = BUG_H + BAND_GAP + keyH;
-  BOARD.y = top;
-  BOARD.w = H - top - MARGIN - transportH;
+  BOARD.y = MARGIN + keyH;
+  BOARD.w = H - BOARD.y - MARGIN - transportH;
   BOARD.h = BOARD.w;
-  RAIL.x = BOARD.x + BOARD.w + RAIL_GUTTER;
+  // Right column, flush to the stage margin.
+  BOARD.x = W - MARGIN - BOARD.w;
+  // Left column: masthead and clock at its top, panels filling the rest. It
+  // keeps its full height because the transport belongs to the board only.
+  RAIL.x = MARGIN;
   RAIL.y = BUG_H + BAND_GAP;
-  RAIL.w = W - RAIL.x - MARGIN;
-  RAIL.h = H - RAIL.y - MARGIN - transportH;
-  // The transport is laid out in CSS and must span the board it belongs to. That
-  // was a hardcoded 41.6% (798/1920); the board moves now, so the width goes over
-  // as a custom property rather than being restated in the stylesheet.
+  RAIL.w = BOARD.x - RAIL_GUTTER - MARGIN;
+  RAIL.h = H - RAIL.y - MARGIN;
+  // The transport is laid out in CSS and must sit under the board it belongs to.
+  // Both edges go over as custom properties; a hardcoded left was fine only while
+  // the board was the left-hand column.
   document.documentElement.style.setProperty(
     "--board-width", `${(BOARD.w / W * 100).toFixed(2)}%`);
+  document.documentElement.style.setProperty(
+    "--board-left", `${(BOARD.x / W * 100).toFixed(2)}%`);
+  // The transport's own lane, which sits UNDER the lattice rather than over it.
+  // Centred in the reserved band so it is neither against the board nor the
+  // stage edge.
+  const laneTop = BOARD.y + BOARD.h + (transportH - TRANSPORT_PX * unitsPerPixel()) / 2;
+  document.documentElement.style.setProperty(
+    "--transport-top", `${(laneTop / H * 100).toFixed(2)}%`);
 }
 
 // ---------------------------------------------------------------------------
@@ -245,6 +271,8 @@ const controls = {
   forward: document.getElementById("step-forward"),
   scrub: document.getElementById("scrub"),
   speed: document.getElementById("speed"),
+  zoomOut: document.getElementById("zoom-out"),
+  zoomIn: document.getElementById("zoom-in"),
   text: document.getElementById("text-size"),
 };
 
@@ -252,7 +280,7 @@ const frames = [];
 const frameIndexByTimestep = new Map();
 const events = [];               // derived beats, in frame order
 const wealthSeries = [];         // [{ timestep, scores: number[], population: number[] }]
-const motes = [];                // transient death effects
+const motes = [];                // transient death effects, in CELL coordinates
 
 const state = {
   streamId: null,
@@ -752,6 +780,10 @@ function resetStream() {
   events.length = 0;
   wealthSeries.length = 0;
   motes.length = 0;
+  // A crossfade is remembered by AGENT ID, and a new stream starts its ids over
+  // from zero: without this, the first settlers of the next episode inherit the
+  // last one's half-finished sways and open a pulse nothing on the board caused.
+  swayLog.clear();
   state.cursor = 0;
   state.maxWealth = 1;
   state.maxSugar = 1;
@@ -1722,28 +1754,53 @@ function quantised(frame) {
 
 function interpolate(previous, frame, t) {
   const before = new Map(previous ? previous.agents.map((agent) => [agent.id, agent]) : []);
-  const cell = BOARD.w / frame.width;
+  // Bodies are placed in STAGE units, so they have to go through the same lens
+  // the lattice does or the swarm would slide off its own ground when zoomed.
+  const base = Math.min(BOARD.w / frame.width, BOARD.h / frame.height);
+  const lens = viewTransform(frame, base);
+  const cell = lens.cell;
   return frame.agents.map((agent) => {
     const target = cellPosition(frame, agent.cell);
     const source = before.get(agent.id);
     let x = target.x;
     let y = target.y;
     let wealth = agent.sugar + agent.spice;
+    let wrapped = false;
+    let fromX = target.x;
+    let fromY = target.y;
     if (source) {
+      /* THE LATTICE IS A TORUS, so a settler leaving one edge arrives at the
+       * other — and that used to be the one move it could not show.
+       *
+       * Interpolating straight from old cell to new would drag it backwards
+       * across the entire board, which is why the wrap was skipped and the
+       * settler simply appeared somewhere else. Skipping is not neutral: on a
+       * 50x50 board a wrap is a common move, so a share of the swarm teleported
+       * every tick and the eye read the whole field as unstable.
+       *
+       * So the SHORT way round is taken instead. The delta is folded into
+       * [-half, +half], which lets the settler walk off the edge it actually
+       * left by — its position simply runs outside the lattice, and drawBoard
+       * paints the second copy arriving on the far side.
+       */
       const from = cellPosition(frame, source.cell);
-      const wrapped = Math.abs(from.x - target.x) > frame.width / 2
-        || Math.abs(from.y - target.y) > frame.height / 2;
-      if (!wrapped) {
-        x = from.x + (target.x - from.x) * t;
-        y = from.y + (target.y - from.y) * t;
-      }
+      fromX = from.x;
+      fromY = from.y;
+      let dx = target.x - from.x;
+      let dy = target.y - from.y;
+      if (dx > frame.width / 2) { dx -= frame.width; wrapped = true; }
+      else if (dx < -frame.width / 2) { dx += frame.width; wrapped = true; }
+      if (dy > frame.height / 2) { dy -= frame.height; wrapped = true; }
+      else if (dy < -frame.height / 2) { dy += frame.height; wrapped = true; }
+      x = from.x + dx * t;
+      y = from.y + dy * t;
       wealth = (source.sugar + source.spice) + (wealth - (source.sugar + source.spice)) * t;
     }
     return {
       agent,
       slot: slotOf(agent),
-      px: BOARD.x + (x + 0.5) * cell,
-      py: BOARD.y + (y + 0.5) * cell,
+      px: lens.ox + (x + 0.5) * cell,
+      py: lens.oy + (y + 0.5) * cell,
       wealth,
       // The engine kills when metabolism takes a settler to or below zero
       // (simulation.nim doTimestep), so the test is <=, not <. At < it missed
@@ -1777,8 +1834,65 @@ function interpolate(previous, frame, t) {
       // Walking, not floating: the legs only swap for a settler that changed
       // cell this timestep, and t < 1 means the walk is still in progress.
       moving: Boolean(source) && source.cell !== agent.cell && t < 1,
+      // Where the walk STARTED, in stage units, so the move itself can be drawn.
+      fromPx: source ? lens.ox + (fromX + 0.5) * cell : null,
+      fromPy: source ? lens.oy + (fromY + 0.5) * cell : null,
+      // Mid-wrap: this settler is straddling an edge and must be drawn twice.
+      wrapped: wrapped && t < 1,
     };
   });
+}
+
+/* A LENS OVER THE LATTICE.
+ *
+ * A league board is 50x50 with a thousand settlers on it, and at one cell to
+ * nineteen pixels a single gnome is a detail you can see but not read. So the
+ * board carries a view: a scale and a centre, both in CELL coordinates so they
+ * survive a resize, and everything drawn on the lattice — terrain, trails,
+ * settlers, rings — goes through the same transform.
+ *
+ * Following a settler is the same lens with its centre bound to a body. It eases
+ * rather than snapping, because a hard cut to a moving target is how you lose
+ * track of which one you picked.
+ */
+const view = { scale: 1, cx: 0, cy: 0, follow: null, eased: 1 };
+const VIEW_MIN = 1;
+const VIEW_MAX = 8;
+const FOLLOW_SCALE = 3.2;
+
+/** Cell coordinates -> stage units, under the current lens. */
+function viewTransform(frame, cell) {
+  const span = Math.max(frame.width, frame.height);
+  if (!view.cx && !view.cy) { view.cx = frame.width / 2; view.cy = frame.height / 2; }
+  const scale = view.scale;
+  // The lens cannot show ground that does not exist: clamp the centre so the
+  // lattice always fills the frame rather than floating in it.
+  const halfW = frame.width / (2 * scale);
+  const halfH = frame.height / (2 * scale);
+  const cx = Math.min(Math.max(view.cx, halfW), frame.width - halfW);
+  const cy = Math.min(Math.max(view.cy, halfH), frame.height - halfH);
+  return {
+    cell: cell * scale,
+    ox: BOARD.x + BOARD.w / 2 - cx * cell * scale,
+    oy: BOARD.y + BOARD.h / 2 - cy * cell * scale,
+    span,
+  };
+}
+
+function easeView(frame, now) {
+  if (view.follow === null) return;
+  const agent = frame.agents.find((each) => each.id === view.follow);
+  if (!agent) { clearFollow(); return; }
+  const at = cellPosition(frame, agent.cell);
+  // Ease toward the settler rather than pinning to it: a hard bind makes the
+  // whole world jitter by a cell every tick while the settler walks.
+  view.cx += (at.x + 0.5 - view.cx) * 0.18;
+  view.cy += (at.y + 0.5 - view.cy) * 0.18;
+  view.scale += (FOLLOW_SCALE - view.scale) * 0.12;
+}
+
+function clearFollow() {
+  view.follow = null;
 }
 
 function drawBoard(frame, previous, t, now) {
@@ -1786,7 +1900,7 @@ function drawBoard(frame, previous, t, now) {
   // initEnvironment takes independent width and height, and gui.py computes its
   // site height and width separately, so a 64x32 world filled the top half of
   // the plate and a 32x64 one ran off the bottom.
-  const cell = Math.min(BOARD.w / frame.width, BOARD.h / frame.height);
+  const base = Math.min(BOARD.w / frame.width, BOARD.h / frame.height);
 
   context.setTransform(RENDER_SCALE, 0, 0, RENDER_SCALE, 0, 0);
   context.clearRect(0, 0, W, H);
@@ -1804,7 +1918,26 @@ function drawBoard(frame, previous, t, now) {
   context.restore();
   // One plate. The dissolve happens INSIDE it, on the grains that changed hands,
   // so there is never a second copy of the board to blend against.
-  context.drawImage(terrain, BOARD.x, BOARD.y, BOARD.w, BOARD.h);
+  easeView(frame, now);
+  const lens = viewTransform(frame, base);
+  // ONE cell size for the whole pass, and it is the LENS's. Holding the base
+  // size in the same name and swapping it partway down was how the death rings
+  // came to be drawn unzoomed: everything below this line is on the magnified
+  // lattice, so nothing below this line may use the unmagnified cell.
+  const cell = lens.cell;
+  // Everything on the lattice is drawn under the lens and clipped to the plate.
+  context.save();
+  context.beginPath();
+  context.rect(BOARD.x, BOARD.y, BOARD.w, BOARD.h);
+  context.clip();
+  context.imageSmoothingEnabled = view.scale < 1.5;
+  context.drawImage(
+    terrain,
+    lens.ox, lens.oy,
+    lens.cell * Math.max(frame.width, frame.height),
+    lens.cell * Math.max(frame.width, frame.height),
+  );
+  context.imageSmoothingEnabled = true;
 
   // A settler starving leaves an expanding ring where it stood.
   for (let index = motes.length - 1; index >= 0; index -= 1) {
@@ -1815,7 +1948,13 @@ function drawBoard(frame, previous, t, now) {
     context.strokeStyle = C.loss;
     context.lineWidth = Math.max(1.4, cell * 0.22 * (1 - age));
     context.beginPath();
-    context.arc(mote.px, mote.py, cell * (0.32 + age * 1.05), 0, Math.PI * 2);
+    context.arc(
+      lens.ox + mote.cx * cell,
+      lens.oy + mote.cy * cell,
+      cell * (0.32 + age * 1.05),
+      0,
+      Math.PI * 2,
+    );
     context.stroke();
   }
   context.globalAlpha = 1;
@@ -1832,12 +1971,16 @@ function drawBoard(frame, previous, t, now) {
    * Sized by wealth; hollow when a settler has less than one timestep of food
    * left, so the die-off is visible just before it happens. */
   const bodies = interpolate(previous, frame, t);
+  // Kept for hit-testing: a click must select the gnome that was DRAWN, not the
+  // one the model says is at that cell — mid-walk they are different places.
+  lastBodies = bodies;
   // 0.31 of a cell put a dot two thirds the width of the square it stood in, and
   // with 64 of them the swarm was reading as the subject and the lattice as its
   // backdrop. It is the other way round: the sand is the picture. Smaller, and
   // the settlers become what they are — bodies moving over a landscape. The
   // embed floor is the constraint on going further: at 640 a cell is 8 CSS px,
   // so this is a 4px dot, and the ring below is what keeps it a body.
+  // Sizes follow the lens: a magnified lattice needs magnified settlers on it.
   const radius = cell * 0.26;
   // A settler is red or blue and so is the ground it stands on - sugar ramps to
   // yellow, spice to rust - so a bare dot separated by HUE ALONE, which is the
@@ -1864,11 +2007,34 @@ function drawBoard(frame, previous, t, now) {
    */
   const tribal = frame.agents.some((agent) => typeof agent.tribe === "number" && agent.tribe >= 0);
   const sheet = settlerSheet();
+  pruneSwayLog(frame);
+  // The lattice clip opened with the terrain is still in force, which is what
+  // keeps a settler walking off an edge — or magnified past one — from painting
+  // over the panels beside the board.
+  const spanX = lens.cell * frame.width;
+  const spanY = lens.cell * frame.height;
   for (const body of bodies) {
     const seat = seatOf(body.slot);
-    const skin = tribal && typeof body.tribe === "number" && body.tribe >= 0
+    // Remember a change on the frame it is first seen, so both the colour and the
+    // ring can be read off how OLD it is rather than off this single frame.
+    if (body.swayed && !swayLog.has(body.agent.id)) {
+      swayLog.set(body.agent.id, { from: body.wasTribe, born: now });
+    }
+    const arrived = swayAge(body, now);
+    let skin = tribal && typeof body.tribe === "number" && body.tribe >= 0
       ? TRIBE_INK[body.tribe % TRIBE_INK.length]
       : seat.color;
+    // THE COLOUR CROSSES OVER; it does not snap. A settler that was green on one
+    // frame and blue on the next made a mass conversion read as a mass repaint —
+    // the whole field blinking rather than a culture spreading through it.
+    if (arrived < 1) {
+      const held = swayLog.get(body.agent.id);
+      const from = typeof held?.from === "number" && held.from >= 0
+        ? TRIBE_INK[held.from % TRIBE_INK.length]
+        : skin;
+      // Quantised, or the per-colour tile cache mints a new sprite every frame.
+      skin = blendHex(from, skin, Math.round(arrived * SWAY_STEPS) / SWAY_STEPS);
+    }
     const size = radius * (0.82 + 0.36 * Math.min(1, Math.log10(1 + body.wealth) / 2.4));
     /* SWAYED — a pulse in the culture it is changing TO.
      *
@@ -1885,20 +2051,92 @@ function drawBoard(frame, previous, t, now) {
      * belongs to. A cursor at rest holds it part-open rather than letting it
      * finish and vanish: a paused or scrubbed frame still has to show the event.
      */
-    if (body.swayed) {
-      // The pulse has to CLEAR the figure. A first pass opened from 0.26 to
-      // 0.42 of a cell, which is inside the 0.45 the sprite box occupies, so the
-      // ring drew under the gnome and what showed was a coloured blob rather
-      // than something radiating. It starts outside the silhouette now.
-      const open = (reducedMotion || t >= 1) ? 0.5 : t;
-      context.beginPath();
-      context.arc(body.px, body.py, cell * (0.42 + 0.26 * open), 0, Math.PI * 2);
-      context.lineWidth = Math.max(1.6, cell * 0.11 * (1 - 0.4 * open));
+    if (arrived < 1) {
+      // The pulse CLEARS the figure — a first pass opened from 0.26 to 0.42 of a
+      // cell, inside the 0.45 the sprite box occupies, so the ring drew under the
+      // gnome and showed as a coloured blob rather than something radiating.
+      //
+      // Driven by the sway's AGE and staggered by a hash of the settler's id, so
+      // a hundred conversions on one tick arrive as a scatter of ripples instead
+      // of one shutter closing across the whole board.
+      const offset = grainOffset(body.agent.id, 3, 97) * 0.35;
+      const open = reducedMotion
+        ? 0.5
+        : Math.max(0, Math.min(1, (arrived - offset) / (1 - offset)));
+      if (open > 0) {
+        /* THE RING IS THE DESTINATION CULTURE, AT FULL STRENGTH.
+         *
+         * It was drawn in `skin`, which is the colour mid-CROSSFADE — and the
+         * ring is brightest at open≈0, exactly when that blend is still mostly
+         * the tribe being LEFT. Two symptoms, one cause: the rings stopped
+         * looking like the culture arriving, and a ring wearing one colour
+         * around a gnome wearing another reads as a ring with no gnome in it.
+         * The body may cross over gradually; the mark announcing where it is
+         * going may not. */
+        const joining = typeof body.tribe === "number" && body.tribe >= 0
+          ? TRIBE_INK[body.tribe % TRIBE_INK.length]
+          : skin;
+        context.beginPath();
+        context.arc(body.px, body.py, cell * (0.42 + 0.30 * open), 0, Math.PI * 2);
+        context.lineWidth = Math.max(1.6, cell * 0.11 * (1 - 0.4 * open));
+        context.strokeStyle = joining;
+        context.globalAlpha = 0.9 * (1 - open);
+        context.stroke();
+        context.globalAlpha = 1;
+      }
+    }
+    // Where this settler is drawn. Mid-wrap it is in two places at once: walking
+    // off one edge and arriving at the other, which is what a torus IS.
+    const spots = [[body.px, body.py]];
+    if (body.wrapped) {
+      // Against the LATTICE's edges, not the plate's. Under the lens the two are
+      // not the same rectangle — magnify and the lattice runs well outside the
+      // plate — so testing against the plate put the second copy of a wrapping
+      // settler a whole board away from where it belonged.
+      const dx = body.px < lens.ox ? spanX : (body.px > lens.ox + spanX ? -spanX : 0);
+      const dy = body.py < lens.oy ? spanY : (body.py > lens.oy + spanY ? -spanY : 0);
+      if (dx || dy) spots.push([body.px + dx, body.py + dy]);
+      else {
+        // Still inside the lattice, but about to leave it: draw the arrival
+        // ahead of time on whichever axis the walk is crossing. Both axes — a
+        // settler leaving by the top wraps exactly as one leaving by the side,
+        // and only the horizontal copies were ever drawn.
+        spots.push(
+          [body.px - spanX, body.py], [body.px + spanX, body.py],
+          [body.px, body.py - spanY], [body.px, body.py + spanY],
+        );
+      }
+    }
+
+    /* THE MOVE ITSELF, not just its result.
+     *
+     * A Sugarscape settler jumps to the best cell in vision, so on a league
+     * board most of the swarm relocates every tick — 942 of 1,130 on a measured
+     * frame — several cells at a time, inside one 620 ms step. The positions
+     * were already interpolated, so nothing was actually snapping; but a
+     * thousand figures all sliding at once with no trace of where they came from
+     * reads as the whole field reshuffling rather than as a thousand settlers
+     * each going somewhere.
+     *
+     * So each walk leaves a short trail from the cell it left, fading as the
+     * settler arrives. It costs one line per moving settler and turns "everyone
+     * is somewhere else" into "everyone went that way".
+     */
+    if (body.moving && body.fromPx !== null && cell >= SETTLER_MIN_CELL && !reducedMotion) {
+      const fade = 1 - t;
       context.strokeStyle = skin;
-      context.globalAlpha = 0.95 - 0.45 * open;
-      context.stroke();
+      context.globalAlpha = 0.38 * fade;
+      context.lineWidth = Math.max(1, cell * 0.16 * fade);
+      context.lineCap = "round";
+      for (const [sx, sy] of spots) {
+        context.beginPath();
+        context.moveTo(body.fromPx + (sx - body.px), body.fromPy + (sy - body.py));
+        context.lineTo(sx, sy);
+        context.stroke();
+      }
       context.globalAlpha = 1;
     }
+
     // A GNOME, when the atlas is present and the cell is big enough to hold one.
     const tile = sheet && sheet.tileFor(skin, hatRung(body.wealth), walkFrame(body, now));
     if (tile && cell >= SETTLER_MIN_CELL) {
@@ -1910,7 +2148,9 @@ function drawBoard(frame, previous, t, now) {
       // still placed, still its culture's colour, visibly not long for the world.
       context.globalAlpha = body.starving ? STARVING_ALPHA : 1;
       context.imageSmoothingEnabled = false;
-      context.drawImage(tile, body.px - box / 2, body.py - box / 2, box, box);
+      for (const [sx, sy] of spots) {
+        context.drawImage(tile, sx - box / 2, sy - box / 2, box, box);
+      }
       context.imageSmoothingEnabled = true;
       context.globalAlpha = 1;
       continue;
@@ -1936,7 +2176,7 @@ function drawBoard(frame, previous, t, now) {
       context.stroke();
     }
   }
-
+  context.restore();
 }
 
 // ---------------------------------------------------------------------------
@@ -2012,13 +2252,26 @@ function targetActual(frame, variable) {
  * on a moving 9px body. A crown at 0.09 cell is 1.24px and half-dissolves.
  */
 const SETTLER_ATLAS_B64 = "{{SETTLERS}}";
-const SETTLER_BOX = 0.9;        // of a cell; 1.036 is where neighbours fuse
+// Of a cell. 1.036 is where neighbouring settlers measurably fuse into one blob,
+// so this is as large as the figure goes while staying countable.
+const SETTLER_BOX = 0.98;
 const SETTLER_MIN_CELL = 14;    // board units; below this the dot reads better
 const STARVING_ALPHA = 0.38;    // a settler about to go, going
 const WALK_MS = 150;            // one step; only ever runs while a settler moves
-// Absolute, not relative to the frame: thresholds computed from the live
-// population would move a settler's hat when OTHER settlers changed.
-const HAT_RUNGS = [80, 220];
+/* Absolute, not relative to the frame: thresholds computed from the live
+ * population would move a settler's hat when OTHER settlers changed.
+ *
+ * MEASURED against a real league episode rather than guessed, because the first
+ * pair were guessed and the top hat effectively never appeared: across 1,010,159
+ * agent-frames, 80/220 put 71.5% on the smallest hat, 28.0% on the middle and
+ * 0.52% on the largest. A tier that occurs in one frame in two hundred is not a
+ * tier, which is exactly why the biggest hat could not be found on screen.
+ *
+ * 50/100 splits the same population 37% / 34% / 29%. Both land on the 50-unit
+ * bucket boundaries the recording actually quantises wealth to, so no settler
+ * sits astride a threshold.
+ */
+const HAT_RUNGS = [50, 100];
 
 function hatRung(wealth) {
   let rung = 0;
@@ -2053,6 +2306,58 @@ function unbase64(text) {
     }
   }
   return out.subarray(0, at);
+}
+
+/* CULTURE CHANGES EASE; THEY DO NOT FLASH.
+ *
+ * On a league board hundreds of settlers change tribe on the same tick. Two
+ * things made that read as the whole field strobing rather than as culture
+ * spreading:
+ *
+ *   1. The BODY COLOUR snapped. A settler was green on one frame and blue on the
+ *      next, with nothing in between, so a mass conversion was a mass repaint.
+ *   2. Every pulse opened and closed in lockstep, because they were all driven
+ *      by the same interpolation fraction.
+ *
+ * So a sway is remembered for SWAY_MS and both the colour and the ring are read
+ * off its AGE. The colour crosses from the old culture to the new over that
+ * window, and each settler's ring is offset by a hash of its id, so a hundred
+ * conversions arrive as a scatter of ripples instead of one shutter.
+ *
+ * The blend is quantised to SWAY_STEPS, because the tinted sprite is cached per
+ * colour and a continuous blend would mint a new tile every frame.
+ */
+const SWAY_MS = 1500;
+const SWAY_STEPS = 5;
+const swayLog = new Map();   // agent id -> { from, born }
+
+function blendHex(from, to, amount) {
+  const read = (hex) => {
+    const value = hex.replace("#", "");
+    return [0, 2, 4].map((at) => parseInt(value.slice(at, at + 2), 16));
+  };
+  const [ar, ag, ab] = read(from);
+  const [br, bg, bb] = read(to);
+  const at = (a, b) => Math.round(a + (b - a) * amount);
+  return `rgb(${at(ar, br)},${at(ag, bg)},${at(ab, bb)})`;
+}
+
+/** How far through its change a settler is: 0 just converted, 1 fully arrived. */
+/** Drop entries for settlers that are gone. swayAge only expires an entry when
+ *  it is ASKED about, and a settler that dies mid-change is never asked again —
+ *  measured at 1,409 orphaned entries against 205 live ones on a league board. */
+function pruneSwayLog(frame) {
+  if (swayLog.size < 256) return;
+  const live = new Set(frame.agents.map((agent) => agent.id));
+  for (const id of swayLog.keys()) if (!live.has(id)) swayLog.delete(id);
+}
+
+function swayAge(body, now) {
+  const held = swayLog.get(body.agent.id);
+  if (!held) return 1;
+  const age = (now - held.born) / (SWAY_MS * animFactor(state.speed));
+  if (age >= 1) { swayLog.delete(body.agent.id); return 1; }
+  return Math.max(0, age);
 }
 
 function shade(hex, amount) {
@@ -2290,6 +2595,21 @@ function boardKey(frame) {
       + `fill="none" stroke="${TRIBE_INK[0]}" stroke-width="${G(2.4)}"/>`;
     markup += text("just swayed", x + mark + G(7), y, style);
     x += mark + G(7) + advance("just swayed", size) + gap;
+    /* THE BOARD'S OTHER RING.
+     *
+     * A settler that starves leaves an expanding ring where it stood, and the
+     * key's only ring said "just swayed" — so a die-off read as a mass
+     * conversion, which is how this mark got reported as a swaying bug. Two
+     * rings on the plate, two rings in the key, told apart by the ink they are
+     * actually drawn in. Silent under reduced motion, which suppresses the mark
+     * itself rather than merely slowing it.
+     */
+    if (!reducedMotion) {
+      markup += `<circle cx="${x + mark / 2}" cy="${y - mark / 2 + G(2)}" r="${mark / 2}" `
+        + `fill="none" stroke="${C.loss}" stroke-width="${G(2.4)}"/>`;
+      markup += text("just starved", x + mark + G(7), y, style);
+      x += mark + G(7) + advance("just starved", size) + gap;
+    }
     // Starving fades rather than hollows, so the swatch fades too — and it is
     // only offered when the replay can actually answer the question.
     if (!quantised(frame)) {
@@ -2389,7 +2709,9 @@ function scorebug(frame) {
    * with the rail's panels, which are real. Right-aligned to the stage margin,
    * which is the same axis the rail's right edge uses.
    */
-  const clockRight = W - MARGIN - 2;
+  // Top-right of the LEFT column, not of the stage: the clock belongs to the
+  // column of readings, and against the stage edge it sat over the board.
+  const clockRight = RAIL.x + RAIL.w;
   markup += text(`${frame.timestep} / ${scheduled}`, clockRight, big ? 62 : 66, {
     size: T(40), weight: 600, family: F.mono, fill: C.paper, anchor: "end",
   });
@@ -2437,7 +2759,12 @@ function scorebug(frame) {
    *
    * A v1 replay is a race and keeps its scoreboard.
    */
-  if (frame.coworld?.seats?.some((entry) => typeof entry.score === "number")) {
+  // Gated on the world being SCORED, not on a score having arrived. v3 records a
+  // running score only every `replay_histogram_interval` ticks, so for the first
+  // few frames every seat's score is null — and keying off the number brought the
+  // race chip back for exactly those frames, flashing over the tick counter
+  // before vanishing. A world with seats is a scored world from frame zero.
+  if (Array.isArray(frame.coworld?.seats) && frame.coworld.seats.length > 0) {
     return markup;
   }
 
@@ -2511,9 +2838,13 @@ function scorebug(frame) {
      * match score is the same figure the end card settles on, and the actual
      * value of the targeted variable rides underneath it. */
     const seatScore = frame.coworld?.seats?.find((entry) => entry.seat === row.index);
-    const matched = seatScore && typeof seatScore.score === "number";
+    // Present, not necessarily measured yet: the figure must never fall back to
+    // accumulated wealth on a scored world just because the first histogram has
+    // not landed. It shows a dash until there is a real score.
+    const matched = Boolean(seatScore);
     markup += text(
-      matched ? seatScore.score.toFixed(3) : format(row.score),
+      matched ? (typeof seatScore.score === "number" ? seatScore.score.toFixed(3) : "\u2014")
+        : format(row.score),
       x + chipW - 20, big ? 58 : 62,
       {
         size: T(40), weight: 700, family: F.mono, anchor: "end",
@@ -3416,6 +3747,79 @@ function inequalityOverTime(frame, x, y, width, height) {
   return markup;
 }
 
+/* ONE SETTLER, AND WHAT IT ACTUALLY DID.
+ *
+ * Everything here is READ or DERIVED from the recording; none of it is a guess
+ * at intent. A v3 replay stores each settler's traits once and its position and
+ * wealth per tick, so "moved four cells and gained 50" is a fact, while "went
+ * looking for sugar" would be a story. The panel says the facts and names the
+ * one thing it cannot say.
+ *
+ * Wealth is in the recording's 50-unit presentation buckets (see quantised), so
+ * it is reported as a bucket rather than implying a precision it does not have.
+ */
+function settlerPanel(frame, x, y, width, height) {
+  const big = dense();
+  let markup = panel(x, y, width, height);
+  const agent = frame.agents.find((each) => each.id === view.follow);
+  markup += eyebrow(agent ? `Settler ${agent.id}` : "Settler", x + 18, y + (big ? 46 : 26));
+  if (!agent) {
+    markup += text("this settler is gone", x + 18, y + (big ? 82 : 62),
+      { size: T(18), weight: 500, family: F.mono, fill: C.dim });
+    return markup;
+  }
+
+  const ink = typeof agent.tribe === "number" && agent.tribe >= 0
+    ? TRIBE_INK[agent.tribe % TRIBE_INK.length] : C.paper;
+  const index = currentIndex();
+  const was = index > 0 ? frames[index - 1].agents.find((each) => each.id === agent.id) : null;
+  const wealth = agent.sugar + agent.spice;
+  const moved = was && was.cell !== agent.cell;
+  let stepped = 0;
+  if (moved) {
+    const from = cellPosition(frame, was.cell);
+    const to = cellPosition(frame, agent.cell);
+    const dx = Math.min(Math.abs(from.x - to.x), frame.width - Math.abs(from.x - to.x));
+    const dy = Math.min(Math.abs(from.y - to.y), frame.height - Math.abs(from.y - to.y));
+    stepped = Math.max(dx, dy);
+  }
+  const gained = was ? wealth - (was.sugar + was.spice) : 0;
+  const swayedTo = was && was.tribe !== agent.tribe;
+
+  let cursor = y + (big ? 46 : 26) + 30;
+  const line = (label, value, tint) => {
+    markup += text(label, x + 18, cursor, { size: T(17), weight: 500, family: F.mono, fill: C.dim });
+    markup += text(value, x + width - 18, cursor,
+      { size: T(18), weight: 600, family: F.mono, fill: tint || C.paper, anchor: "end" });
+    cursor += 26;
+  };
+
+  line("culture", `tribe ${agent.tribe}`, ink);
+  line("wealth", `${format(wealth)}${quantised(frame) ? " ±25" : ""}`);
+  line("age", `${agent.age} of ${agent.maxAge && agent.maxAge > 0 ? agent.maxAge : "\u221e"}`);
+  line("vision · movement", `${agent.vision} · ${agent.movement}`);
+  line("metabolism", `${agent.sugarMetabolism} sugar · ${agent.spiceMetabolism} spice`);
+
+  cursor += 6;
+  markup += eyebrow("This tick", x + 18, cursor);
+  cursor += 26;
+  const did = [];
+  if (moved) did.push([`walked ${stepped} cell${stepped === 1 ? "" : "s"}`, C.paper]);
+  if (gained > 0) did.push([`harvested +${format(gained)}`, C.gold]);
+  if (gained < 0) did.push([`spent ${format(-gained)}`, C.muted]);
+  if (swayedTo) did.push([`took tribe ${agent.tribe}'s culture`, ink]);
+  if (agent.sick) did.push(["carrying disease", C.loss]);
+  if (did.length === 0) did.push(["stayed put", C.dim]);
+  for (const [what, tint] of did.slice(0, 4)) {
+    markup += text(what, x + 18, cursor, { size: T(18), weight: 500, family: F.mono, fill: tint });
+    cursor += 24;
+  }
+  // The honest limit of the recording, stated rather than papered over.
+  markup += text("the ruleset behind this is not recorded", x + 18, y + height - 16,
+    { size: T(15), weight: 500, family: F.mono, fill: C.dim });
+  return markup;
+}
+
 /* CULTURE — each tribe's share of the living population, over time.
  *
  * The other readout worth showing in any episode. Epstein and Axtell's cultural
@@ -3657,9 +4061,9 @@ function endCard(frame) {
    * The actual value of the targeted variable goes beside it, because the match
    * says how close the SHAPE came and not what the world did. */
   const seatScore = frame.coworld?.seats?.find((entry) => entry.seat === winner.index);
-  const matched = seatScore && typeof seatScore.score === "number";
+  const matched = Boolean(seatScore);
   const actual = matched ? targetActual(frame, seatScore.variable) : null;
-  const verdict = matched
+  const verdict = matched && typeof seatScore.score === "number"
     ? `${winner.name} scores ${seatScore.score.toFixed(3)} against `
       + `${seatScore.targetId ?? "its target"}`
       + `${actual ? ` — ${actual.label} ${actual.value}` : ""}.`
@@ -3769,15 +4173,15 @@ function endCard(frame) {
     // the result.
     const rowMatch = frame.coworld?.seats?.find((entry) => entry.seat === row.index);
     markup += text(
-      rowMatch && typeof rowMatch.score === "number"
-        ? rowMatch.score.toFixed(3)
+      rowMatch
+        ? (typeof rowMatch.score === "number" ? rowMatch.score.toFixed(3) : "\u2014")
         : format(row.score),
       x + cardW - pad - 36, rowY + rowH * 0.66, {
         size: T(34), weight: 700, family: F.mono, fill: leader ? C.gold : C.paper, anchor: "end",
       });
     rowY += rowStep;
   }
-  const scoredCard = frame.coworld?.seats?.some((entry) => typeof entry.score === "number");
+  const scoredCard = Array.isArray(frame.coworld?.seats) && frame.coworld.seats.length > 0;
   markup += text(
     scoredCard
       ? "Score is how closely the measured distribution matches the target — 1.000 is exact."
@@ -3836,7 +4240,7 @@ function drawBeats(frame) {
 
 function drawHud(frame, index) {
   const atEnd = state.finished && currentIndex() >= frames.length - 1;
-  const signature = `${index}|${atEnd}`;
+  const signature = `${index}|${atEnd}|${view.follow}`;
   if (signature === standingsSignature) return;
   standingsSignature = signature;
 
@@ -3888,7 +4292,12 @@ function drawHud(frame, index) {
     ? targetHistogram(frame, RAIL.x, RAIL.y, RAIL.w, raceH)
     : raceChart(frame, RAIL.x, RAIL.y, RAIL.w, raceH);
   markup += inequalityOverTime(frame, RAIL.x, RAIL.y + raceH + railGap, RAIL.w, feedH);
-  markup += tribeShares(frame, RAIL.x, RAIL.y + raceH + feedH + railGap * 2, RAIL.w, emergenceH);
+  // Following a settler swaps the bottom panel for that settler. The two upper
+  // panels are the episode's own reading and stay put; this is the one slot
+  // whose subject can change without losing the thread.
+  markup += view.follow !== null
+    ? settlerPanel(frame, RAIL.x, RAIL.y + raceH + feedH + railGap * 2, RAIL.w, emergenceH)
+    : tribeShares(frame, RAIL.x, RAIL.y + raceH + feedH + railGap * 2, RAIL.w, emergenceH);
   markup += scorebug(frame);
   markup += boardKey(frame);
   standingsLayer.innerHTML = markup;
@@ -3967,6 +4376,155 @@ targetSelect.addEventListener("change", () => {
   const frame = frames[currentIndex()];
   if (frame) drawHud(frame, currentIndex());
 });
+
+/* POINTING AT THE LATTICE.
+ *
+ * Wheel zooms about the cursor, so the cell under the pointer stays under it —
+ * zooming about the centre makes you chase what you were looking at. Dragging
+ * pans. Clicking a settler follows it; clicking bare ground lets go.
+ *
+ * Hit-testing is done against the SAME interpolated bodies the frame drew, not
+ * against the model's cell positions, because a settler mid-walk is not where
+ * its cell says it is and clicking the gnome you can see must select the gnome
+ * you can see.
+ */
+let lastBodies = [];
+let dragging = null;
+
+function cellUnderPointer(event) {
+  const frame = frames[currentIndex()];
+  if (!frame) return null;
+  const rect = board.getBoundingClientRect();
+  const scale = rect.width / W;
+  const x = (event.clientX - rect.left) / scale;
+  const y = (event.clientY - rect.top) / scale;
+  if (x < BOARD.x || x > BOARD.x + BOARD.w || y < BOARD.y || y > BOARD.y + BOARD.h) return null;
+  const base = Math.min(BOARD.w / frame.width, BOARD.h / frame.height);
+  const lens = viewTransform(frame, base);
+  return { x, y, frame, lens, cx: (x - lens.ox) / lens.cell, cy: (y - lens.oy) / lens.cell };
+}
+
+board.addEventListener("wheel", (event) => {
+  const at = cellUnderPointer(event);
+  if (!at) return;
+  event.preventDefault();
+  const before = view.scale;
+  const step = Math.exp(-event.deltaY * 0.0015);
+  view.scale = Math.min(VIEW_MAX, Math.max(VIEW_MIN, view.scale * step));
+  if (view.scale !== before) {
+    // Keep the pointed-at cell under the pointer.
+    view.follow = null;
+    const ratio = 1 - before / view.scale;
+    view.cx += (at.cx - view.cx) * ratio;
+    view.cy += (at.cy - view.cy) * ratio;
+    if (view.scale <= VIEW_MIN + 0.001) {
+      view.cx = at.frame.width / 2;
+      view.cy = at.frame.height / 2;
+    }
+  }
+}, { passive: false });
+
+board.addEventListener("pointerdown", (event) => {
+  const at = cellUnderPointer(event);
+  if (!at) return;
+  dragging = { x: event.clientX, y: event.clientY, moved: false, cx: view.cx, cy: view.cy };
+  board.setPointerCapture(event.pointerId);
+});
+
+board.addEventListener("pointermove", (event) => {
+  if (!dragging) return;
+  const rect = board.getBoundingClientRect();
+  const scale = rect.width / W;
+  const frame = frames[currentIndex()];
+  if (!frame) return;
+  const base = Math.min(BOARD.w / frame.width, BOARD.h / frame.height);
+  const dx = (event.clientX - dragging.x) / scale;
+  const dy = (event.clientY - dragging.y) / scale;
+  if (Math.abs(dx) > 3 || Math.abs(dy) > 3) dragging.moved = true;
+  if (!dragging.moved) return;
+  view.follow = null;
+  view.cx = dragging.cx - dx / (base * view.scale);
+  view.cy = dragging.cy - dy / (base * view.scale);
+});
+
+board.addEventListener("pointerup", (event) => {
+  const held = dragging;
+  dragging = null;
+  if (!held || held.moved) return;
+  const at = cellUnderPointer(event);
+  if (!at) return;
+  // Nearest drawn body within half a cell of the click.
+  let best = null;
+  let bestGap = at.lens.cell * 0.7;
+  for (const body of lastBodies) {
+    const gap = Math.hypot(body.px - at.x, body.py - at.y);
+    if (gap < bestGap) { bestGap = gap; best = body; }
+  }
+  if (best) {
+    view.follow = best.agent.id;
+    standingsSignature = "";
+  } else if (view.follow !== null) {
+    clearFollow();
+    standingsSignature = "";
+  }
+});
+
+// Guarded: the headless test sandbox has a document stub but no window, and the
+// rest of the file keeps its window listeners inside boot() for the same reason.
+if (typeof window !== "undefined") {
+  window.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    if (view.follow !== null) { clearFollow(); standingsSignature = ""; }
+    view.scale = VIEW_MIN;
+  });
+}
+
+/* THE LENS, WORKED FROM A BUTTON.
+ *
+ * One step is coarser than a wheel notch on purpose: a button is for getting
+ * somewhere, and the wheel is still there for the fine adjustment. Four presses
+ * cross the whole 1x-8x range.
+ */
+const ZOOM_STEP = 1.5;
+
+/** The wheel zooms about the POINTER; a button has no pointer to zoom about, so
+ *  it steps about the centre of what is already shown — the one point the viewer
+ *  is certainly looking at. Same clamp and the same follow-break as the wheel,
+ *  because a lens that jumps back to a settler you stopped following is not the
+ *  lens you just asked for. */
+function zoomBy(factor) {
+  const before = view.scale;
+  view.scale = Math.min(VIEW_MAX, Math.max(VIEW_MIN, view.scale * factor));
+  if (view.scale === before) return;
+  if (view.follow !== null) { clearFollow(); standingsSignature = ""; }
+  // All the way out IS the fit, so it recentres rather than leaving the lattice
+  // parked wherever the last drag left it. This is what Escape does too.
+  const frame = frames[currentIndex()];
+  if (frame && view.scale <= VIEW_MIN + 0.001) {
+    view.cx = frame.width / 2;
+    view.cy = frame.height / 2;
+  }
+  syncZoom();
+}
+
+/** A control that cannot act has to SAY so — the same rule syncLargeText follows.
+ *  At 1x there is nothing to zoom out of and at VIEW_MAX nothing further in.
+ *
+ *  Guarded by the shown value because tick() calls this every frame and the
+ *  follow-ease moves view.scale continuously: rewriting an aria-label sixty times
+ *  a second is a screen reader talking over itself. */
+let zoomShown = -1;
+function syncZoom() {
+  const at = Math.round(view.scale * 10) / 10;
+  if (at === zoomShown) return;
+  zoomShown = at;
+  controls.zoomOut.disabled = view.scale <= VIEW_MIN + 0.001;
+  controls.zoomIn.disabled = view.scale >= VIEW_MAX - 0.001;
+  // The label carries the VALUE: an aria-label overrides the visible glyph, so a
+  // static one would leave the current magnification unannounced (see speed).
+  controls.zoomOut.setAttribute("aria-label", `Zoom out, now ${at}×`);
+  controls.zoomIn.setAttribute("aria-label", `Zoom in, now ${at}×`);
+}
 
 const commentary = document.getElementById("commentary");
 const verdictLine = document.getElementById("verdict");
@@ -4133,17 +4691,18 @@ function onFrameEntered(index, now) {
   const frame = frames[index];
   if (!frame) return;
 
-  const cell = BOARD.w / frame.width;
   for (const event of events) {
     if (event.index !== index) continue;
     if (event.kind === "death" && !reducedMotion) {
       for (const agent of event.agents) {
         const position = cellPosition(frame, agent.cell);
-        motes.push({
-          px: BOARD.x + (position.x + 0.5) * cell,
-          py: BOARD.y + (position.y + 0.5) * cell,
-          born: now,
-        });
+        // A ring is remembered by the CELL it happened in, not by where that
+        // cell was on screen when it happened. Stage units baked in the lens of
+        // one instant: a ring outlives its frame, so panning or zooming during
+        // the 1.5s it is up left it stranded at a stale position and a stale
+        // size, and a zoomed-in board showed the whole map's deaths as small
+        // circles scattered over the magnified one. drawBoard projects them.
+        motes.push({ cx: position.x + 0.5, cy: position.y + 0.5, born: now });
       }
     }
     /* NOTHING interrupts the board any more.
@@ -4256,6 +4815,10 @@ function tick() {
   drawHud(terrainFrame, settled ? index : index - 1);
   drawBeats(frame);
   speak(terrainFrame);
+  // The wheel, a drag and the follow-ease all move the lens without going
+  // through the buttons, so the buttons are reconciled here rather than only in
+  // their own handlers.
+  syncZoom();
 }
 
 // ---------------------------------------------------------------------------
@@ -4284,6 +4847,8 @@ controls.back.addEventListener("click", () => seek(Math.floor(state.cursor) - 1)
 controls.forward.addEventListener("click", () => seek(Math.floor(state.cursor) + 1));
 controls.scrub.addEventListener("input", () => seek(indexOfTimestep(Number(controls.scrub.value))));
 controls.text.addEventListener("click", () => setLargeText(!state.largeText));
+controls.zoomIn.addEventListener("click", () => zoomBy(ZOOM_STEP));
+controls.zoomOut.addEventListener("click", () => zoomBy(1 / ZOOM_STEP));
 controls.speed.addEventListener("click", () => {
   state.speed = SPEEDS[(SPEEDS.indexOf(state.speed) + 1) % SPEEDS.length];
   controls.speed.innerHTML = `${state.speed}&times;`;
