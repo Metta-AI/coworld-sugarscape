@@ -381,13 +381,23 @@ the engine's stricter histogram object and can disagree on intermediate
 histograms, while those values are derived from the retained measurements and
 are not replay storage state.
 
-### Phase 3: Make the clock honest
+### Phase 3: Make the clock honest (implemented 2026-08-14)
 
 - Introduce the epoch cursor and visible-only animation scheduling.
 - Add 8x and 16x and skip to the latest due frame when necessary, extending the
   honest dwell and scaled-hold grammar introduced in Phase 1.
 - Rebase correctly on speed change, seek, pause/resume, and visibility return.
 - Verify no semantic event is lost when display frames are skipped.
+
+The implemented clock stores replay-cycle phase against a monotonic epoch, so
+speed changes, pause/resume, seeks, end holds, and visibility changes rebase
+without drift or jumps. Hidden time advances the timeline without scheduling a
+paint; visibility return computes the due cursor and paints exactly once before
+requesting the next visible animation frame. At 16x, 1,000 recorded beats plus
+the scaled final hold take about 48.5 seconds. Controlled tests also verify that
+8x/16x suppress skipped transient effects while retaining all precomputed
+semantic events, throttle `aria-live` updates to one per second, and always
+announce the final verdict.
 
 ### Phase 4: Optimize only measured residuals
 

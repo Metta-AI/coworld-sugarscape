@@ -33,7 +33,7 @@ assert.doesNotMatch(viewerHtml, /https?:\/\/(fonts|cdn|unpkg|jsdelivr)/);
 assert.doesNotMatch(viewerHtml, /<(script|link)[^>]+\b(src|href)="(?!data:)/);
 // Drive the real viewer script in a sandbox with a DOM stub, so the derived
 // broadcast model is covered without a browser.
-const viewerTimers = { interval: null, intervalStarts: 0, pending: [] };
+const viewerTimers = { animation: null, animationStarts: 0, pending: [] };
 const documentListeners = new Map();
 const windowListeners = new Map();
 const gradient = { addColorStop() {} };
@@ -135,8 +135,8 @@ const viewerContext = vm.createContext({
     documentElement: fakeElement("documentElement"),
     addEventListener: (name, fn) => documentListeners.set(name, fn),
   },
-  // The sandbox exercises the pure model; setInterval is stubbed out below so
-  // playback never starts.
+  // The sandbox exercises the pure model; animation frames are driven by hand
+  // below so playback never races the assertions.
   // A socket the suite can speak THROUGH, so the message handler, the silence
   // timer and the idle settle can be exercised together rather than one at a
   // time. Driving isRenderableFrame directly is why the two-of-them-together
@@ -181,12 +181,12 @@ const viewerContext = vm.createContext({
   // Real timers, driven by hand below. Stubbing these to no-ops made every
   // timer-based path - the silence timeout, the idle settle, the end-card hold -
   // structurally invisible to this suite.
-  setInterval: (fn) => {
-    viewerTimers.interval = fn;
-    viewerTimers.intervalStarts += 1;
-    return viewerTimers.intervalStarts;
+  requestAnimationFrame: (fn) => {
+    viewerTimers.animation = fn;
+    viewerTimers.animationStarts += 1;
+    return viewerTimers.animationStarts;
   },
-  clearInterval: () => { viewerTimers.interval = null; },
+  cancelAnimationFrame: () => { viewerTimers.animation = null; },
   setTimeout: (fn, delay) => { viewerTimers.pending.push({ fn, delay }); return viewerTimers.pending.length; },
   clearTimeout: (id) => { if (id) viewerTimers.pending[id - 1] = null; },
 });
@@ -207,9 +207,15 @@ viewerContext.runPendingTimers = () => {
 };
 viewerContext.viewerTimersReset = () => { viewerTimers.pending.length = 0; };
 viewerContext.paintLoopState = () => ({
-  active: viewerTimers.interval !== null,
-  starts: viewerTimers.intervalStarts,
+  active: viewerTimers.animation !== null,
+  starts: viewerTimers.animationStarts,
+  pendingTimers: viewerTimers.pending.filter(Boolean).length,
 });
+viewerContext.runAnimationFrame = (now) => {
+  const callback = viewerTimers.animation;
+  viewerTimers.animation = null;
+  if (callback) callback(now);
+};
 viewerContext.fireVisibility = (hidden) => {
   viewerContext.document.hidden = hidden;
   documentListeners.get("visibilitychange")?.();
@@ -625,14 +631,12 @@ const tempo = JSON.parse(vm.runInContext(`
     recordFrame(${sandboxFrame(0, [])});
     recordFrame(${sandboxFrame(1, [])});
     state.finished = true;
-    state.cursor = frameCount() - 1;
     state.speed = 4;
-    state.holdUntil = 0;
-    state.playing = true;
-    lastTick = 0;
     setNow(100);
-    tick();
-    state.playing = false;
+    setPlaybackCursor(frameCount() - 1, 100);
+    setPlaying(true);
+    tick(100);
+    setPlaying(false);
     const result = {
       animAtOne: animFactor(1),
       animAtFour: animFactor(4),
@@ -642,7 +646,7 @@ const tempo = JSON.parse(vm.runInContext(`
     };
     state.speed = 1;
     setNow(0);
-    lastTick = 0;
+    setPlaybackCursor(0, 0);
     return JSON.stringify(result);
   })()
 `, viewerContext));
@@ -759,7 +763,7 @@ for (const [index, rows] of ledger.rows.entries()) {
 }
 
 /* Terrain and board painting are invalidated by data and geometry, not clocks.
- * A paused/hidden viewer owns no interval; explicit interaction paints once. */
+ * A paused/hidden viewer owns no animation frame; explicit interaction paints once. */
 const invalidation = JSON.parse(vm.runInContext(`
   (() => {
     resetStream();
@@ -785,6 +789,7 @@ const invalidation = JSON.parse(vm.runInContext(`
     const large = [board.width, board.height, terrain.width, terrain.height];
 
     recordFrame(original);
+    recordFrame(same);
     const paused = paintLoopState();
     setPlaying(true);
     const playing = paintLoopState();
@@ -811,9 +816,9 @@ assert.deepEqual(invalidation.retina, [1280, 720],
   "a DPR change resizes the backing store even when CSS geometry is stable");
 assert.deepEqual(invalidation.large.slice(0, 2), [1600, 900],
   "backing resolution follows visible stage density up to the cap");
-assert.equal(invalidation.paused.active, false, "paused playback owns no paint interval");
-assert.equal(invalidation.playing.active, true, "playing playback owns one paint interval");
-assert.equal(invalidation.hidden.active, false, "a hidden page owns no paint interval");
+assert.equal(invalidation.paused.active, false, "paused playback owns no animation frame");
+assert.equal(invalidation.playing.active, true, "playing playback owns one animation frame");
+assert.equal(invalidation.hidden.active, false, "a hidden page owns no animation frame");
 assert.equal(invalidation.visible.active, true, "visibility return restarts active playback");
 
 // A delayed callback can cross two boundaries at honest 4x. Every crossed
@@ -832,22 +837,154 @@ const crossed = JSON.parse(vm.runInContext(`
     );
     motes.length = 0;
     state.lastDrawnIndex = 0;
-    state.cursor = 0.99;
     state.speed = 4;
-    state.playing = true;
-    lastTick = 0;
+    setNow(0);
+    setPlaybackCursor(0.99, 0);
+    setPlaying(true);
     setNow(200);
-    tick();
-    state.playing = false;
+    tick(200);
+    setPlaying(false);
     const result = { index: currentIndex(), motes: motes.map((mote) => [mote.cx, mote.cy]) };
     state.speed = 1;
     setNow(0);
-    lastTick = 0;
+    setPlaybackCursor(0, 0);
     return JSON.stringify(result);
   })()
 `, viewerContext));
 assert.equal(crossed.index, 2, "the fixture must cross two frame boundaries");
 assert.equal(crossed.motes.length, 2, "every crossed frame must run boundary handling");
+
+// The epoch clock rebases without jumping, ignores hidden paint throttling, and
+// snaps at 8x/16x while semantic history remains complete.
+const epochClock = JSON.parse(vm.runInContext(`(() => {
+  resetStream();
+  state.playing = false;
+  for (let step = 0; step <= 20; step += 1) {
+    recordFrame(Object.assign(${sandboxFrame(0, [])}, { timestep: step, maxTimestep: 20 }));
+  }
+  state.finished = true;
+  viewerTimersReset();
+  setNow(0);
+  setPlaybackSpeed(1, 0);
+  setPlaybackCursor(0, 0);
+  setPlaying(true);
+  setNow(770);
+  tick(770);
+  const atOne = state.cursor;
+  setPlaybackSpeed(4, 770);
+  const afterSpeedChange = state.cursor;
+  setNow(962.5);
+  tick(962.5);
+  const atTwo = state.cursor;
+  setPlaying(false);
+  setNow(1962.5);
+  tick(1962.5);
+  const whilePaused = state.cursor;
+  setPlaying(true);
+  setNow(2155);
+  tick(2155);
+  const afterResume = state.cursor;
+  setPlaying(false);
+
+  setNow(0);
+  setPlaybackSpeed(4, 0);
+  setPlaybackCursor(0, 0);
+  let paints = 0;
+  const originalDrawBoard = drawBoard;
+  drawBoard = (...args) => { paints += 1; return originalDrawBoard(...args); };
+  setPlaying(true);
+  paints = 0;
+  fireVisibility(true);
+  setNow(1000);
+  const hidden = { cursor: state.cursor, paints, loop: paintLoopState() };
+  fireVisibility(false);
+  const visible = { cursor: state.cursor, paints, loop: paintLoopState() };
+  drawBoard = originalDrawBoard;
+  setPlaying(false);
+
+  events.length = 0;
+  events.push(
+    { index: 1, timestep: 1, kind: "death", agents: [{ id: 1, cell: 0, slot: 0 }] },
+    { index: 2, timestep: 2, kind: "lead", slot: 1, name: "Beta", margin: 2 },
+    { index: 3, timestep: 3, kind: "death", agents: [{ id: 2, cell: 1, slot: 0 }] },
+  );
+  motes.length = 0;
+  state.lastDrawnIndex = 0;
+  setNow(0);
+  setPlaybackSpeed(16, 0);
+  setPlaybackCursor(0, 0);
+  setPlaying(true);
+  tick(200);
+  const skipped = {
+    index: currentIndex(), semanticEvents: events.length, transientMotes: motes.length,
+  };
+  setPlaying(false);
+
+  viewerTimersReset();
+  setNow(0);
+  setPlaybackCursor(frameCount() - 1, 0);
+  setPlaying(true);
+  const held = paintLoopState();
+  setPlaying(false);
+  setPlaybackSpeed(1, 0);
+  return JSON.stringify({
+    atOne, afterSpeedChange, atTwo, whilePaused, afterResume,
+    hidden, visible, skipped, held,
+    interpolation: SPEEDS.map((speed) => interpolatesAt(speed)),
+  });
+})()`, viewerContext));
+assert.equal(epochClock.atOne, 1, "770ms at 1x advances exactly one frame");
+assert.equal(epochClock.afterSpeedChange, 1, "changing speed rebases without jumping");
+assert.equal(epochClock.atTwo, 2, "the rebased 4x epoch advances from the same cursor");
+assert.equal(epochClock.whilePaused, 2, "paused wall time does not advance the epoch");
+assert.equal(epochClock.afterResume, 3, "resume rebases from the paused cursor");
+assert.equal(epochClock.hidden.cursor, 0, "hidden wall time does not mutate the last painted cursor");
+assert.equal(epochClock.hidden.paints, 0, "a hidden page paints nothing");
+assert.equal(epochClock.hidden.loop.active, false, "a hidden page schedules no animation frame");
+assert.equal(epochClock.hidden.loop.pendingTimers, 0, "a hidden page schedules no timer either");
+assert.ok(Math.abs(epochClock.visible.cursor - (1000 / 192.5)) < 1e-9,
+  "visibility return computes the wall-clock cursor before painting");
+assert.equal(epochClock.visible.paints, 1, "visibility return issues exactly one catch-up paint");
+assert.equal(epochClock.visible.loop.active, true, "then schedules the next visible animation frame");
+assert.deepEqual(epochClock.skipped, { index: 4, semanticEvents: 3, transientMotes: 0 },
+  "16x selects the latest due frame without replaying skipped transient effects");
+assert.equal(epochClock.held.active, false, "the final hold owns no animation loop");
+assert.ok(epochClock.held.pendingTimers > 0, "the final hold schedules one intentional wake-up");
+assert.deepEqual(epochClock.interpolation, [true, true, true, true, false, false],
+  "only dwells of at least 150ms interpolate");
+
+const speechThrottle = JSON.parse(vm.runInContext(`(() => {
+  resetStream();
+  state.playing = false;
+  for (let step = 0; step <= 40; step += 1) {
+    recordFrame(Object.assign(${sandboxFrame(0, [settler(1, 0, 0, 10)])}, {
+      timestep: step, maxTimestep: 40,
+    }));
+  }
+  state.finished = true;
+  state.speed = 16;
+  spokenKey = "";
+  lastSpokenAt = -Infinity;
+  state.cursor = 1;
+  speak(frameAt(1), 0);
+  const first = commentary.textContent;
+  state.cursor = 11;
+  speak(frameAt(11), 100);
+  const throttled = commentary.textContent;
+  speak(frameAt(11), 1100);
+  const later = commentary.textContent;
+  state.cursor = frameCount() - 1;
+  speak(lastFrame(), 1101);
+  const final = verdictLine.textContent;
+  state.speed = 1;
+  return JSON.stringify({ first, throttled, later, final });
+})()`, viewerContext));
+assert.equal(speechThrottle.throttled, speechThrottle.first,
+  "16x must not enqueue a new aria-live utterance every skipped beat");
+assert.notEqual(speechThrottle.later, speechThrottle.first,
+  "high-speed commentary may update at a human-readable cadence");
+assert.match(speechThrottle.final, /^Final\./,
+  "the final verdict bypasses high-speed announcement throttling");
 
 /* A TILE HOLDS UP TO FOUR OF EACH, AND THEY ARE COUNTABLE.
  *

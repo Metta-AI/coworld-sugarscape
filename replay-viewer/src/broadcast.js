@@ -200,8 +200,8 @@ function layoutStage() {
 
 // ---------------------------------------------------------------------------
 // Tempo. A speed label is an honest wall-clock multiplier over the complete
-// 770ms beat. Motion itself remains capped at 3x; at 4x the shorter dwell simply
-// reaches the settled frame sooner.
+// 770ms beat. Motion itself remains capped at 3x through 4x; 8x and 16x snap to
+// the latest due frame because their complete dwell is shorter than 150ms.
 // ---------------------------------------------------------------------------
 
 // The board's motion IS the product, so reduced motion does not disable it -
@@ -239,8 +239,10 @@ if (motionQuery) {
 const ANIM_MAX = 3;
 const BASE_FRAME_MS = 620;
 const READ_PAUSE = 150;
+const NOMINAL_FRAME_MS = BASE_FRAME_MS + READ_PAUSE;
+const END_HOLD_MS = 5200;
 const MOTE_MS = 1500;
-const SPEEDS = [0.5, 1, 2, 4];
+const SPEEDS = [0.5, 1, 2, 4, 8, 16];
 
 // With ANIM_MAX at 2 both levers saturated there, so pressing 4x changed the
 // label and nothing else. At 3 the dwell floor keeps shortening past 2x while
@@ -251,7 +253,11 @@ function animFactor(speed) {
 
 /** How long to hold each timestep, including its reading beat. */
 function frameDwellMs(speed) {
-  return (BASE_FRAME_MS + READ_PAUSE) / Math.max(speed, 0.05);
+  return NOMINAL_FRAME_MS / Math.max(speed, 0.05);
+}
+
+function interpolatesAt(speed) {
+  return frameDwellMs(speed) >= READ_PAUSE;
 }
 
 // ---------------------------------------------------------------------------
@@ -1326,6 +1332,7 @@ function resetStream() {
   // last one's half-finished sways and open a pulse nothing on the board caused.
   swayLog.clear();
   state.cursor = 0;
+  setPlaybackPhase(0);
   state.maxWealth = 1;
   state.maxSugar = 1;
   state.maxSpice = 0;
@@ -1342,6 +1349,7 @@ function resetStream() {
   state.lastDrawnIndex = -1;
   spokenKey = "";
   spokenVerdict = false;
+  lastSpokenAt = -Infinity;
   markedLeads = -1;
   standingsSignature = "";
   beatsSignature = "";
@@ -4242,7 +4250,63 @@ function drawHud(frame, index) {
 // Playback
 // ---------------------------------------------------------------------------
 
-let lastTick = 0;
+const playbackClock = {
+  epochTime: 0,
+  epochPhase: 0,
+  speed: 1,
+};
+
+function playbackCycleUnits() {
+  return Math.max(0, frameCount() - 1) * NOMINAL_FRAME_MS + END_HOLD_MS;
+}
+
+function playbackPhaseAt(now) {
+  const cycle = playbackCycleUnits();
+  if (!(cycle > 0)) return 0;
+  const elapsed = state.playing ? Math.max(0, now - playbackClock.epochTime) : 0;
+  const phase = playbackClock.epochPhase + elapsed * playbackClock.speed;
+  if (!state.finished && !state.live) {
+    return Math.min(phase, Math.max(0, frameCount() - 1) * NOMINAL_FRAME_MS);
+  }
+  return phase % cycle;
+}
+
+function setPlaybackPhase(phase, now = performance.now()) {
+  const cycle = playbackCycleUnits();
+  playbackClock.epochPhase = cycle > 0 ? ((phase % cycle) + cycle) % cycle : 0;
+  playbackClock.epochTime = now;
+  playbackClock.speed = state.speed;
+}
+
+function setPlaybackCursor(cursor, now = performance.now()) {
+  state.cursor = Math.max(0, Math.min(frameCount() - 1, cursor));
+  setPlaybackPhase(state.cursor * NOMINAL_FRAME_MS, now);
+  state.holdUntil = 0;
+}
+
+/** Project wall-clock time onto the replay timeline without serial catch-up. */
+function syncPlaybackCursor(now) {
+  if (!state.playing || frameCount() === 0) return false;
+  if (state.live) {
+    state.cursor = frameCount() - 1;
+    state.holdUntil = 0;
+    return false;
+  }
+  const phase = playbackPhaseAt(now);
+  const movementEnd = Math.max(0, frameCount() - 1) * NOMINAL_FRAME_MS;
+  if (phase < movementEnd) {
+    state.cursor = phase / NOMINAL_FRAME_MS;
+    state.holdUntil = 0;
+    return false;
+  }
+  state.cursor = frameCount() - 1;
+  if (!state.finished) {
+    state.holdUntil = 0;
+    return true;
+  }
+  state.holdUntil = now + (playbackCycleUnits() - phase) / Math.max(state.speed, 0.05);
+  return true;
+}
 
 /* THE TARGET PICKER.
  *
@@ -4471,6 +4535,8 @@ let spokenKey = "";
 let spokenVerdict = false;
 let spokenLegend = false;
 let markedLeads = -1;
+let lastSpokenAt = -Infinity;
+const SPOKEN_CADENCE_MS = 1000;
 
 /** Say what the picture shows, at a pace a screen reader can actually consume.
  *
@@ -4480,7 +4546,7 @@ let markedLeads = -1;
  *  changes, at the quarter marks, and at the finish. The picture is hidden from
  *  assistive technology, so this text is the whole broadcast and it has to carry
  *  everything the panels do, not a subset of it. */
-function speak(frame) {
+function speak(frame, now = performance.now()) {
   const atEnd = state.finished && currentIndex() >= frameCount() - 1;
   /* A stream that stopped short is the loudest thing on the picture and used to
    * be SILENT here. The scorebug prints CUT SHORT in the loss colour and a
@@ -4528,12 +4594,15 @@ function speak(frame) {
   spokenVerdict = false;
   verdictLine.textContent = "";
 
+  if (!interpolatesAt(state.speed) && now - lastSpokenAt < SPOKEN_CADENCE_MS) return;
+
   const beat = [...events].reverse().find((event) => event.timestep <= frame.timestep);
   const beatKey = beat ? `${beat.index}:${beat.kind}` : "none";
   const quarter = Math.floor((frame.timestep / Math.max(1, state.maxTimestep)) * 4);
   const key = `${beatKey}|${quarter}`;
   if (key === spokenKey) return;
   spokenKey = key;
+  lastSpokenAt = now;
 
   const stats = frame.stats ?? {};
   const gini = Number(stats.giniCoefficient ?? 0);
@@ -4661,27 +4730,9 @@ function onFrameEntered(index, now) {
   }
 }
 
-function tick() {
-  const now = performance.now();
-  const elapsed = Math.min(200, now - lastTick);
-  lastTick = now;
+function tick(now = performance.now()) {
   if (frameCount() === 0) return;
-
-  if (state.playing) {
-    if (state.live) {
-      state.cursor = frameCount() - 1;
-    } else {
-      state.cursor += elapsed / frameDwellMs(state.speed);
-      if (state.cursor >= frameCount() - 1) {
-        state.cursor = frameCount() - 1;
-        if (state.finished) {
-          // Hold the end card, then loop — the replay contract expects looping.
-          if (!state.holdUntil) state.holdUntil = now + 5200 / state.speed;
-          else if (now > state.holdUntil) { state.holdUntil = 0; state.cursor = 0; }
-        }
-      }
-    }
-  }
+  const holding = syncPlaybackCursor(now);
 
   measureDensity();
 
@@ -4689,7 +4740,7 @@ function tick() {
   if (index !== state.lastDrawnIndex) {
     const previousDrawn = state.lastDrawnIndex;
     state.lastDrawnIndex = index;
-    if (previousDrawn >= 0 && index > previousDrawn) {
+    if (interpolatesAt(state.speed) && previousDrawn >= 0 && index > previousDrawn) {
       for (let entered = previousDrawn + 1; entered <= index; entered += 1) {
         onFrameEntered(entered, now);
       }
@@ -4726,8 +4777,9 @@ function tick() {
   }
 
   const frame = frameAt(index);
-  const previous = index > 0 ? frameAt(index - 1) : null;
-  const fraction = Math.max(0, Math.min(1, state.cursor - index));
+  const interpolate = interpolatesAt(state.speed);
+  const previous = interpolate && index > 0 ? frameAt(index - 1) : null;
+  const fraction = interpolate ? Math.max(0, Math.min(1, state.cursor - index)) : 1;
 
   // The engine moves an agent and THEN lets it collect, so the cell it emptied
   // must not empty until it arrives. Painting frame N's terrain while the
@@ -4751,30 +4803,51 @@ function tick() {
   // harvested lattice and the scoreboard a full timestep ahead of the bodies.
   drawHud(terrainFrame, settled ? index : index - 1);
   drawBeats(frame);
-  speak(terrainFrame);
+  speak(terrainFrame, now);
   // The wheel, a drag and the follow-ease all move the lens without going
   // through the buttons, so the buttons are reconciled here rather than only in
   // their own handlers.
   syncZoom();
+  return holding;
 }
 
-let paintTimer = null;
+let paintRequest = null;
+let holdTimer = null;
 
 function pageHidden() {
   return typeof document.hidden === "boolean" && document.hidden;
 }
 
 function stopPaintLoop() {
-  if (paintTimer === null) return;
-  clearInterval(paintTimer);
-  paintTimer = null;
+  if (paintRequest !== null) cancelAnimationFrame(paintRequest);
+  if (holdTimer !== null) clearTimeout(holdTimer);
+  paintRequest = null;
+  holdTimer = null;
+}
+
+function scheduleNextPaint(holding, now) {
+  if (!state.playing || pageHidden()) return;
+  if (holding) {
+    if (state.holdUntil > now) {
+      holdTimer = setTimeout(() => {
+        holdTimer = null;
+        startPaintLoop();
+      }, state.holdUntil - now);
+    }
+    return;
+  }
+  paintRequest = requestAnimationFrame((timestamp) => {
+    paintRequest = null;
+    const nextHolding = tick(timestamp);
+    scheduleNextPaint(nextHolding, timestamp);
+  });
 }
 
 function startPaintLoop() {
-  if (paintTimer !== null || !state.playing || frameCount() === 0 || pageHidden()) return;
-  lastTick = performance.now();
-  tick();
-  paintTimer = setInterval(tick, 16);
+  if (paintRequest !== null || holdTimer !== null || !state.playing
+      || frameCount() === 0 || pageHidden()) return;
+  const now = performance.now();
+  scheduleNextPaint(tick(now), now);
 }
 
 /** Paint an explicit state change once; paused and hidden views have no loop. */
@@ -4788,7 +4861,11 @@ function renderOnce() {
 // ---------------------------------------------------------------------------
 
 function setPlaying(playing) {
+  const now = performance.now();
+  if (state.playing && frameCount() > 0) syncPlaybackCursor(now);
+  const phase = state.playing ? playbackPhaseAt(now) : state.cursor * NOMINAL_FRAME_MS;
   state.playing = playing;
+  setPlaybackPhase(phase, now);
   controls.glyph.textContent = playing ? "❚❚" : "▶";
   controls.play.setAttribute("aria-label", playing ? "Pause" : "Play");
   if (playing) startPaintLoop();
@@ -4798,13 +4875,12 @@ function setPlaying(playing) {
 function seek(index) {
   setPlaying(false);
   state.live = false;
-  state.holdUntil = 0;
-  state.cursor = Math.max(0, Math.min(frameCount() - 1, index));
+  setPlaybackCursor(index);
   renderOnce();
 }
 
 controls.play.addEventListener("click", () => {
-  if (!state.playing && state.cursor >= frameCount() - 1 && state.finished) state.cursor = 0;
+  if (!state.playing && state.cursor >= frameCount() - 1 && state.finished) setPlaybackCursor(0);
   state.holdUntil = 0;
   setPlaying(!state.playing);
   if (!state.playing) renderOnce();
@@ -4815,12 +4891,24 @@ controls.scrub.addEventListener("input", () => seek(indexOfTimestep(Number(contr
 controls.text.addEventListener("click", () => setLargeText(!state.largeText));
 controls.zoomIn.addEventListener("click", () => zoomBy(ZOOM_STEP));
 controls.zoomOut.addEventListener("click", () => zoomBy(1 / ZOOM_STEP));
-controls.speed.addEventListener("click", () => {
-  state.speed = SPEEDS[(SPEEDS.indexOf(state.speed) + 1) % SPEEDS.length];
+function setPlaybackSpeed(speed, now = performance.now()) {
+  const playing = state.playing;
+  if (state.playing) syncPlaybackCursor(now);
+  const phase = state.playing ? playbackPhaseAt(now) : state.cursor * NOMINAL_FRAME_MS;
+  state.speed = speed;
+  setPlaybackPhase(phase, now);
   controls.speed.innerHTML = `${state.speed}&times;`;
   // The label has to carry the VALUE: an aria-label overrides the visible "2x",
   // so a static one would leave the current speed unannounced.
   controls.speed.setAttribute("aria-label", `Playback speed, ${state.speed}×`);
+  if (playing) {
+    stopPaintLoop();
+    startPaintLoop();
+  } else renderOnce();
+}
+
+controls.speed.addEventListener("click", () => {
+  setPlaybackSpeed(SPEEDS[(SPEEDS.indexOf(state.speed) + 1) % SPEEDS.length]);
 });
 
 // ---------------------------------------------------------------------------
@@ -4916,6 +5004,7 @@ function connect() {
   const markFinished = () => {
     if (frameCount() === 0) return;
     state.live = false;
+    setPlaybackCursor(state.cursor);
     if (complete()) {
       state.finished = true;
       state.truncated = false;
@@ -4954,7 +5043,7 @@ function connect() {
     idleTimer = setTimeout(() => {
       if (!complete()) return;
       markFinished();
-      state.cursor = 0;
+      setPlaybackCursor(0);
       setPlaying(!reducedMotion);
     }, 1200);
   });
@@ -5130,7 +5219,7 @@ async function adoptReplay(payload, url) {
     state.maxWealth = Math.max(1, ...wealthSeries.flatMap((point) => point.scores));
     state.finished = true;
     state.live = false;
-    state.cursor = 0;
+    setPlaybackCursor(0);
     syncScrub();
     ready();
     setPlaying(!reducedMotion);
@@ -5184,7 +5273,7 @@ async function adoptReplay(payload, url) {
     state.finished = true;
   }
   state.live = false;
-  state.cursor = 0;
+  setPlaybackCursor(0);
   setPlaying(!reducedMotion);
 }
 
@@ -5200,7 +5289,7 @@ async function boot() {
   // Before anything draws: BOARD and RAIL are computed, not constant, and the
   // first frame must not be laid out against zeroes.
   measureDensity();
-  lastTick = performance.now();
+  setPlaybackPhase(state.cursor * NOMINAL_FRAME_MS);
 
   const geometryChanged = () => {
     measureDensity();
