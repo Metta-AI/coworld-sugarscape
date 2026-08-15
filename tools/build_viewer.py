@@ -5,11 +5,12 @@ The Observatory embeds the replay in a sandboxed iframe behind the Kubernetes
 service proxy, which rewrites the page's base href and cannot reach a CDN. A page
 that pulls any separate sub-resource therefore renders as a black box. So this
 tool folds the stylesheet, the script and the vendored typefaces into one
-self-contained document with every asset as a data URI, and writes it to
-``src/sugarscape/viewer.html`` where ``coworld.nim`` reads it at compile time.
+self-contained document with every asset as a data URI, and writes the
+committed ``replay-viewer/index.html``.
 
-The board itself is drawn, not illustrated: reference/dtl-python/gui.py is the
-oracle for the look, so there is no image pipeline here at all.
+The board itself is drawn, not illustrated: the archived
+``archived/v1/reference/dtl-python/gui.py`` is the oracle for the look, so
+there is no image pipeline here at all.
 
     python3 tools/build_viewer.py [--check]
 
