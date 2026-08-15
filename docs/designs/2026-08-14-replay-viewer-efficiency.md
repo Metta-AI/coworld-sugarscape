@@ -1,6 +1,6 @@
 # Replay viewer efficiency
 
-**Status:** approved 2026-08-14; implementation in progress
+**Status:** implemented 2026-08-14
 **Date:** 2026-08-14
 **Owners:** James Boggs; design drafted collaboratively by Codex and Claude Code
 
@@ -399,7 +399,7 @@ the scaled final hold take about 48.5 seconds. Controlled tests also verify that
 semantic events, throttle `aria-live` updates to one per second, and always
 announce the final verdict.
 
-### Phase 4: Optimize only measured residuals
+### Phase 4: Optimize only measured residuals (implemented 2026-08-14)
 
 - Downsample long HUD chart paths to visible pixels.
 - Replace whole-standings-SVG `innerHTML` updates with incremental DOM updates
@@ -408,6 +408,36 @@ announce the final verdict.
   still shows a meaningful cost.
 - Re-profile before considering Worker/`OffscreenCanvas`; adopt either only
   with measured evidence and a clear ownership/transfer design.
+
+The late-replay profile measured the final 100 advances, where the charts have
+their longest histories. Before Phase 4, the dense scenario averaged 13.52 ms
+per advance: 7.88 ms in board paint, 1.67 ms in terrain presentation, and 2.48
+ms across the HUD and history charts. The compact scenario averaged 5.21 ms.
+
+Phase 4 applies Largest-Triangle-Three-Buckets (LTTB) to each long history and
+caps its SVG points at the rendered plot width. This follows established
+[Chart.js decimation guidance](https://www.chartjs.org/docs/latest/configuration/decimation.html),
+which recommends LTTB when the data has substantially more samples than the
+canvas has horizontal pixels, and its broader
+[performance guidance](https://www.chartjs.org/docs/latest/general/performance.html)
+to decimate before rendering. The viewer keeps its small local implementation
+because it is a dependency-free static bundle and needs only returned indices,
+including a shared index set for aligned lead bands.
+
+After decimation, the same dense sample averages about 12.4 ms per advance:
+7.54 ms in board paint, 1.55 ms in terrain, and 1.45 ms across the HUD and
+history charts. The compact sample averages about 4.4 ms. The remaining whole
+HUD update is too small to justify incremental DOM ownership, and board paint
+is still the dominant cost, so Phase 4 does not introduce a Worker or
+`OffscreenCanvas`.
+
+A sparse terrain-patching prototype was rejected by the byte-for-byte browser
+oracle. At the current small-cell scale, a countable resource dot's minimum
+pixel radius and halo cross cell boundaries, so repainting one changed cell is
+not equivalent to rebuilding the layer. The final 100 advances also change
+17.5% of dense cells and 23.1% of compact cells on average; expanding each patch
+to every affected neighbor would add complexity without a convincing measured
+gain. The exact full terrain rebuild remains.
 
 Each phase should be separately reviewable. Phase 2 may be split mechanically
 into store introduction, caller migration, and eager-path removal, but the
@@ -449,6 +479,8 @@ full snapshot array.
   or terrain paint.
 - Assert unchanged terrain produces zero rebuilds and geometry change produces
   exactly one.
+- Assert chart decimation retains endpoints and an isolated peak while never
+  exceeding the rendered-pixel point budget.
 - Measure local ready time and per-sequential-advance latency as trend metrics;
   gate only after repeat runs establish non-flaky thresholds.
 - Record browser version, viewport, scenario, and GPU mode alongside results.

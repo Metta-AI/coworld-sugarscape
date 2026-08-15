@@ -3325,6 +3325,50 @@ function headCounts(heads, headX, bounds) {
  *  glance, it keeps its whole history instead of two seconds of it, it says
  *  WHOSE settlers went, and because it hangs off the same time axis as the lead
  *  band above it, a collapse and the lead it cost sit on the same vertical. */
+function lttbIndices(length, threshold, xAt, yAt) {
+  if (threshold >= length || threshold <= 0) return Array.from({ length }, (_, index) => index);
+  if (threshold < 3) return [0, length - 1].slice(0, threshold);
+  const sampled = [0];
+  const bucket = (length - 2) / (threshold - 2);
+  let anchor = 0;
+  for (let output = 0; output < threshold - 2; output += 1) {
+    const averageStart = Math.floor((output + 1) * bucket) + 1;
+    const averageEnd = Math.min(length, Math.floor((output + 2) * bucket) + 1);
+    let averageX = 0;
+    let averageY = 0;
+    const averageCount = Math.max(1, averageEnd - averageStart);
+    for (let index = averageStart; index < averageEnd; index += 1) {
+      averageX += xAt(index);
+      averageY += yAt(index);
+    }
+    averageX /= averageCount;
+    averageY /= averageCount;
+
+    const rangeStart = Math.floor(output * bucket) + 1;
+    const rangeEnd = Math.min(length - 1, Math.floor((output + 1) * bucket) + 1);
+    let selected = rangeStart;
+    let largestArea = -1;
+    for (let index = rangeStart; index < rangeEnd; index += 1) {
+      const area = Math.abs(
+        (xAt(anchor) - averageX) * (yAt(index) - yAt(anchor))
+        - (xAt(anchor) - xAt(index)) * (averageY - yAt(anchor)),
+      );
+      if (area > largestArea) {
+        largestArea = area;
+        selected = index;
+      }
+    }
+    sampled.push(selected);
+    anchor = selected;
+  }
+  sampled.push(length - 1);
+  return sampled;
+}
+
+function chartPointBudget(plotWidth) {
+  return Math.max(2, Math.floor(plotWidth / unitsPerPixel()));
+}
+
 function settlerStrip(frame, plot) {
   const { left, plotW, scaleX, top, height, visible } = plot;
   const base = top + height;
@@ -3355,9 +3399,12 @@ function settlerStrip(frame, plot) {
   const headX = scaleX(last.timestep);
   const heads = [];
   frame.slots.forEach((_, slot) => {
-    const points = visible
-      .map((point) => `${scaleX(point.timestep).toFixed(1)},`
-        + `${scaleY(point.population?.[slot] ?? 0).toFixed(1)}`)
+    const indices = lttbIndices(visible.length, chartPointBudget(plotW),
+      (index) => visible[index].timestep,
+      (index) => visible[index].population?.[slot] ?? 0);
+    const points = indices
+      .map((index) => `${scaleX(visible[index].timestep).toFixed(1)},`
+        + `${scaleY(visible[index].population?.[slot] ?? 0).toFixed(1)}`)
       .join(" ");
     markup += `<polyline points="${points}" fill="none" stroke="${seatOf(slot).color}" `
       + `stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>`;
@@ -3473,8 +3520,12 @@ function raceChart(frame, x, y, width, height) {
       + `stroke="${C.hairlineSoft}" stroke-width="1"/>`;
     markup += text(format(state.maxWealth), left - 10, top + 6, axis);
     frame.slots.forEach((_, slot) => {
-      const points = visible
-        .map((point) => `${scaleX(point.timestep).toFixed(1)},${scaleY(point.scores[slot] ?? 0).toFixed(1)}`)
+      const indices = lttbIndices(visible.length, chartPointBudget(plotW),
+        (index) => visible[index].timestep,
+        (index) => visible[index].scores[slot] ?? 0);
+      const points = indices
+        .map((index) => `${scaleX(visible[index].timestep).toFixed(1)},`
+          + `${scaleY(visible[index].scores[slot] ?? 0).toFixed(1)}`)
         .join(" ");
       if (!points) return;
       const step = T(18) * 1.5;
@@ -3557,9 +3608,19 @@ function raceChart(frame, x, y, width, height) {
     + `width="${plotW}" height="${halfH}"/></clipPath>`
     + `</defs>`;
 
-  const along = (key) => visible
-    .map((point) => `${scaleX(point.timestep).toFixed(1)},${scaleY(
-      leadOf(point, key),
+  const leadBudget = chartPointBudget(plotW);
+  const perBandBudget = Math.max(2, Math.floor((leadBudget + 2) / 2));
+  const leadIndices = [...new Set([
+    ...lttbIndices(visible.length, perBandBudget,
+      (index) => visible[index].timestep,
+      (index) => leadOf(visible[index], "scores")),
+    ...lttbIndices(visible.length, perBandBudget,
+      (index) => visible[index].timestep,
+      (index) => leadOf(visible[index], "spice")),
+  ])].sort((a, b) => a - b);
+  const along = (key) => leadIndices
+    .map((index) => `${scaleX(visible[index].timestep).toFixed(1)},${scaleY(
+      leadOf(visible[index], key),
     ).toFixed(1)}`);
   const spiceEdge = along("spice");
   const totalEdge = along("scores");
@@ -4070,7 +4131,10 @@ function inequalityOverTime(frame, x, y, width, height) {
     { size: T(16), weight: 500, family: F.mono, fill: C.dim, anchor: "end" });
 
   const points = [];
-  for (let index = 0; index <= upto && index < frameCount(); index += 1) {
+  const visibleCount = Math.min(frameCount(), upto + 1);
+  const indices = lttbIndices(visibleCount, chartPointBudget(plotW),
+    (index) => index, giniSummaryAt);
+  for (const index of indices) {
     points.push(`${xFor(index).toFixed(1)},${yFor(giniSummaryAt(index)).toFixed(1)}`);
   }
   if (points.length > 1) {
@@ -4267,15 +4331,23 @@ function tribeShares(frame, x, y, width, height) {
   const upto = currentIndex();
   let leader = null;
   let leaderShare = 0;
+  const visibleCount = Math.min(frameCount(), upto + 1);
   order.forEach((tribe, position) => {
-    const points = [];
-    for (let index = 0; index <= upto && index < frameCount(); index += 1) {
-      const counts = new Map(frameStore.summaryAt(index).tribes);
+    const history = [];
+    for (let index = 0; index < visibleCount; index += 1) {
+      const entries = frameStore.summaryAt(index).tribes;
+      let count = 0;
       let total = 0;
-      for (const value of counts.values()) total += value;
-      if (total <= 0) continue;
-      points.push(`${xFor(index).toFixed(1)},${yFor((counts.get(tribe) ?? 0) / total).toFixed(1)}`);
+      for (const [candidate, value] of entries) {
+        total += value;
+        if (candidate === tribe) count = value;
+      }
+      if (total > 0) history.push({ index, share: count / total });
     }
+    const indices = lttbIndices(history.length, chartPointBudget(plotW),
+      (index) => history[index].index, (index) => history[index].share);
+    const points = indices.map((index) => `${xFor(history[index].index).toFixed(1)},`
+      + `${yFor(history[index].share).toFixed(1)}`);
     if (points.length > 1) {
       markup += `<polyline points="${points.join(" ")}" fill="none" `
         + `stroke="${TRIBE_INK[position % TRIBE_INK.length]}" stroke-width="2.5" `

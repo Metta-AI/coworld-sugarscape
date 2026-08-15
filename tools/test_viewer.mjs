@@ -586,6 +586,22 @@ assert.ok(dieOff.headsFlipped,
 assert.ok(!dieOff.crowded,
   "sixteen figures may not pile up in a strip that cannot separate them");
 
+const decimation = JSON.parse(vm.runInContext(`(() => {
+  const values = Array(1000).fill(0);
+  values[517] = 100;
+  const indices = lttbIndices(values.length, 100, (index) => index, (index) => values[index]);
+  return JSON.stringify({
+    count: indices.length,
+    first: indices[0],
+    last: indices.at(-1),
+    spike: indices.includes(517),
+    passthrough: lttbIndices(4, 10, (index) => index, (index) => index),
+  });
+})()`, viewerContext));
+assert.deepEqual(decimation, {
+  count: 100, first: 0, last: 999, spike: true, passthrough: [0, 1, 2, 3],
+}, "chart decimation stays within the pixel budget while retaining endpoints and peaks");
+
 // The playback engine itself: nothing used to drive tick(), which is where the
 // end-card off-by-one lived.
 const playback = JSON.parse(vm.runInContext(`

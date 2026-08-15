@@ -223,10 +223,33 @@ try {
     const runtime = await evaluate(cdp, `(() => {
       setPlaying(false);
       const counts = { board: 0, terrain: 0 };
+      const timings = { board: 0, terrain: 0, hud: 0, race: 0, inequality: 0, tribe: 0 };
       const originalBoard = drawBoard;
       const originalTerrain = buildTerrain;
-      drawBoard = (...args) => { counts.board += 1; return originalBoard(...args); };
-      buildTerrain = (...args) => { counts.terrain += 1; return originalTerrain(...args); };
+      const originalShowTerrain = showTerrain;
+      const originalHud = drawHud;
+      const originalRace = raceChart;
+      const originalInequality = inequalityOverTime;
+      const originalTribe = tribeShares;
+      const timed = (name, operation) => (...args) => {
+        const started = performance.now();
+        const result = operation(...args);
+        timings[name] += performance.now() - started;
+        return result;
+      };
+      drawBoard = timed("board", (...args) => {
+        counts.board += 1;
+        return originalBoard(...args);
+      });
+      buildTerrain = (...args) => {
+        counts.terrain += 1;
+        return originalTerrain(...args);
+      };
+      showTerrain = timed("terrain", originalShowTerrain);
+      drawHud = timed("hud", originalHud);
+      raceChart = timed("race", originalRace);
+      inequalityOverTime = timed("inequality", originalInequality);
+      tribeShares = timed("tribe", originalTribe);
       return new Promise((resolve) => setTimeout(() => {
         counts.board = 0;
         counts.terrain = 0;
@@ -234,16 +257,31 @@ try {
           const paused = { ...counts };
           counts.board = 0;
           counts.terrain = 0;
+          for (const name of Object.keys(timings)) timings[name] = 0;
           const samples = Math.min(100, frameCount() - 1);
+          const firstSample = frameCount() - samples;
           const started = performance.now();
-          for (let index = 1; index <= samples; index += 1) {
+          for (let index = firstSample; index < frameCount(); index += 1) {
             state.cursor = index;
             tick(performance.now());
           }
           const advanceMs = (performance.now() - started) / samples;
+          const componentMs = Object.fromEntries(Object.entries(timings)
+            .map(([name, total]) => [name, total / samples]));
+          let changedCells = 0;
+          if (frameStore.mode === "v3") {
+            for (let index = firstSample; index < frameCount(); index += 1) {
+              const delta = index - 1;
+              changedCells += frameStore.cellOffsets[delta + 1] - frameStore.cellOffsets[delta];
+            }
+          }
           resolve({
             paused_paints_250ms: paused,
             sequential_advance_ms: advanceMs,
+            component_ms_per_advance: componentMs,
+            changed_cells_per_advance: changedCells / samples,
+            changed_cell_fraction: changedCells
+              / (samples * frameAt(firstSample).cells.length),
             board_pixels: board.width * board.height,
             terrain_pixels: terrain.width * terrain.height,
             frames: frameCount(),
