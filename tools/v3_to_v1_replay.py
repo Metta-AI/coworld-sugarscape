@@ -187,7 +187,7 @@ def convert(document: dict) -> dict:
         for seat, target in enumerate(targets):
             reading = latest.get(seat) or {}
             histogram = reading.get("histogram") or {}
-            seats.append({
+            seat_row = {
                 "seat": seat,
                 "name": slots[seat % len(slots)]["name"],
                 "targetId": target.get("id"),
@@ -197,8 +197,11 @@ def convert(document: dict) -> dict:
                 "measuredProbs": histogram.get("probs") or [],
                 "sampleCount": histogram.get("sample_count", 0),
                 "measured": bool(histogram.get("probs")),
-                "score": reading.get("score"),
-            })
+                "assigned": True,
+            }
+            if reading.get("score") is not None:
+                seat_row["score"] = reading["score"]
+            seats.append(seat_row)
         # The whole catalog, each scored against what this episode actually grew.
         # `assigned` marks the one the episode was really played for, so the view
         # can say so rather than presenting seven equal-looking verdicts.

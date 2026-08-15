@@ -16,7 +16,10 @@ const manifestPath = process.argv[2];
 if (!manifestPath) throw new Error("usage: benchmark_replay_viewer.mjs MANIFEST.json");
 const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
 const viewer = await readFile(manifest.viewer);
-const replayByName = new Map(manifest.replays.map((entry) => [basename(entry.path), entry.path]));
+const artifactByName = new Map(manifest.replays.flatMap((entry) => [
+  [basename(entry.path), entry.path],
+  [basename(entry.oracle_path), entry.oracle_path],
+]));
 
 function listen(server) {
   return new Promise((resolvePromise, reject) => {
@@ -40,7 +43,7 @@ const web = http.createServer(async (request, response) => {
     return;
   }
   if (url.pathname.startsWith("/replays/")) {
-    const path = replayByName.get(basename(url.pathname));
+    const path = artifactByName.get(basename(url.pathname));
     if (path) {
       response.writeHead(200, { "content-type": "application/octet-stream" });
       response.end(await readFile(path));
@@ -167,10 +170,53 @@ try {
       `${base}/index.html?chrome=off&replay=${encodeURIComponent(`${base}/replays/${basename(replay.path)}`)}`);
     await retry(
       () => evaluate(cdp,
-        `typeof frames !== "undefined" && frames.length === ${replay.expected_frames} && state.finished`),
+        `frameStore instanceof FrameStore && frameCount() === ${replay.expected_frames} && state.finished`),
       `${replay.scenario} adoption`, 30000,
     );
     const readyMs = performance.now() - started;
+    const equivalent = await evaluate(cdp, `(async () => {
+      const oracle = await (await fetch(
+        ${JSON.stringify(`${base}/replays/`)} + ${JSON.stringify(basename(replay.oracle_path))}
+      )).json();
+      const difference = (left, right, path = "frame") => {
+        if (Object.is(left, right)) return null;
+        // The standalone Python converter delegates catalog scoring to the
+        // engine while the viewer preserves its historical JS port. Dedicated
+        // scorer tests pin that port; this oracle is for stored replay state.
+        if (/\\.coworld\\.choices\\.\\d+\\.score$/.test(path)) return null;
+        if (typeof left === "number" && typeof right === "number"
+            && Math.abs(left - right) <= 1e-12) return null;
+        if (typeof left !== "object" || left === null
+            || typeof right !== "object" || right === null) {
+          return path + ": " + JSON.stringify(left) + " != " + JSON.stringify(right);
+        }
+        const leftKeys = Object.keys(left);
+        const rightKeys = Object.keys(right);
+        if (leftKeys.length !== rightKeys.length) {
+          return path + ": keys " + JSON.stringify(leftKeys) + " != " + JSON.stringify(rightKeys);
+        }
+        for (const key of leftKeys) {
+          if (!Object.prototype.hasOwnProperty.call(right, key)) return path + "." + key + ": missing";
+          const found = difference(left[key], right[key], path + "." + key);
+          if (found) return found;
+        }
+        return null;
+      };
+      for (let index = 0; index < oracle.frames.length; index += 1) {
+        const found = difference(frameStore.frameAt(index), oracle.frames[index]);
+        if (found) return index + ": " + found;
+      }
+      const probes = [0, 31, 32, 33, 511, 999, 1000, 64, 1]
+        .filter((index) => index < oracle.frames.length);
+      for (const index of probes) {
+        const found = difference(frameStore.frameAt(index), oracle.frames[index]);
+        if (found) return index + ": " + found;
+      }
+      return true;
+    })()`);
+    if (equivalent !== true) {
+      throw new Error(`${replay.scenario} FrameStore diverged from eager oracle at frame ${equivalent}`);
+    }
     await cdp.send("HeapProfiler.collectGarbage");
     const usedHeap = (await cdp.send("Runtime.getHeapUsage")).usedSize;
 
@@ -188,7 +234,7 @@ try {
           const paused = { ...counts };
           counts.board = 0;
           counts.terrain = 0;
-          const samples = Math.min(100, frames.length - 1);
+          const samples = Math.min(100, frameCount() - 1);
           const started = performance.now();
           for (let index = 1; index <= samples; index += 1) {
             state.cursor = index;
@@ -200,7 +246,7 @@ try {
             sequential_advance_ms: advanceMs,
             board_pixels: board.width * board.height,
             terrain_pixels: terrain.width * terrain.height,
-            frames: frames.length,
+            frames: frameCount(),
           });
         }, 250);
       }, 50));
@@ -210,6 +256,12 @@ try {
           || runtime.paused_paints_250ms.terrain !== 0)) {
       throw new Error(
         `${replay.scenario} painted while paused: ${JSON.stringify(runtime.paused_paints_250ms)}`,
+      );
+    }
+    if (manifest.budgets_enforced
+        && Math.max(0, usedHeap - emptyHeap) >= replay.retained_budget_bytes) {
+      throw new Error(
+        `${replay.scenario} retained ${usedHeap - emptyHeap} bytes, budget ${replay.retained_budget_bytes}`,
       );
     }
 
@@ -223,6 +275,7 @@ try {
       empty_viewer_heap_bytes: emptyHeap,
       retained_heap_bytes: Math.max(0, usedHeap - emptyHeap),
       retained_budget_bytes: replay.retained_budget_bytes,
+      every_frame_storage_oracle_equal: true,
       ...runtime,
     });
   }

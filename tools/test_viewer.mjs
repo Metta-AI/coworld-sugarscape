@@ -266,12 +266,21 @@ const settler = (id, slot, cell, sugar) => ({
   depressed: false, sick: false, race: -1, sex: "male", tribe: -1,
 });
 
-// Freeze the eager v3 materializer as an independent oracle before FrameStore
-// replaces it. Hashing canonical JSON covers every nested cell, agent, statistic,
-// and coworld field without committing four repetitive full snapshots.
-const goldenReplay = JSON.parse(vm.runInContext(
-  `JSON.stringify(v3ToReplay(${JSON.stringify(goldenFixture.document)}))`, viewerContext,
-));
+// Hashing canonical JSON covers every nested cell, agent, statistic, and coworld
+// field. The fixture was captured from the removed eager materializer, so this
+// remains an independent oracle after production became delta-native.
+const goldenReplay = JSON.parse(vm.runInContext(`(() => {
+  const store = FrameStore.fromV3(${JSON.stringify(goldenFixture.document)});
+  const sought = ${JSON.stringify(goldenFixture.expected.seek_order)}
+    .map((index) => store.frameAt(index).timestep);
+  if (store.cache.size > 3) throw new Error("FrameStore materialization cache exceeded three frames");
+  return JSON.stringify({
+    format: "sugarscape.replay.v1",
+    config: store.config,
+    frames: Array.from({ length: store.count }, (_, index) => store.frameAt(index)),
+    sought,
+  });
+})()`, viewerContext));
 const frameHash = (frame) => createHash("sha256").update(JSON.stringify(frame)).digest("hex");
 const goldenHashes = goldenReplay.frames.map(frameHash);
 if (goldenFixture.expected.frame_sha256.length === 0) {
@@ -279,6 +288,16 @@ if (goldenFixture.expected.frame_sha256.length === 0) {
 }
 assert.deepEqual(goldenHashes, goldenFixture.expected.frame_sha256,
   "every materialized v3 frame must remain byte-canonically equivalent to the golden oracle");
+const numericPacking = JSON.parse(vm.runInContext(`JSON.stringify([
+  losslessNumericArray([-32768, 32767]).constructor.name,
+  losslessNumericArray([32768]).constructor.name,
+  losslessNumericArray([1.5]).constructor.name,
+  losslessNumericArray([0.1]).constructor.name,
+  losslessNumericArray([Number.MAX_SAFE_INTEGER]).constructor.name,
+])`, viewerContext));
+assert.deepEqual(numericPacking,
+  ["Int16Array", "Int32Array", "Float32Array", "Float64Array", "Float64Array"],
+  "numeric planes must use the narrowest representation that is exactly lossless");
 
 const goldenModel = JSON.parse(vm.runInContext(`
   resetStream();
@@ -299,7 +318,7 @@ const goldenModel = JSON.parse(vm.runInContext(`
   };
   const sought = ${JSON.stringify(goldenFixture.expected.seek_order)}.map((index) => {
     seek(index);
-    return frames[currentIndex()];
+    return frameAt(currentIndex());
   });
   JSON.stringify({ wealthSeries, events: events.map(compactEvent), sought });
 `, viewerContext));
@@ -320,10 +339,10 @@ const model = JSON.parse(vm.runInContext(`
   // A repeat of a timestep already seen must update in place, not append.
   recordFrame(${sandboxFrame(2, [settler(2, 1, 1, 31)])});
   JSON.stringify({
-    frames: frames.length,
-    timesteps: frames.map((frame) => frame.timestep),
+    frames: frameCount(),
+    timesteps: Array.from({ length: frameCount() }, (_, index) => frameAt(index).timestep),
     scheduledEnd: state.maxTimestep,
-    standing: ranked(frames.at(-1)).map((row) => [row.name, row.score]),
+    standing: ranked(lastFrame()).map((row) => [row.name, row.score]),
     events: events.map((event) => [event.timestep, event.kind, event.count ?? event.name]),
   });
 `, viewerContext));
@@ -340,14 +359,53 @@ assert.deepEqual(model.events, [[2, "death", 1], [2, "lead", "Beta"]]);
 const afterReplace = JSON.parse(vm.runInContext(`
   recordFrame(${sandboxFrame(2, [settler(2, 1, 1, 900)])});
   JSON.stringify({
-    frames: frames.length,
+    frames: frameCount(),
     series: wealthSeries.at(-1).scores,
-    standing: ranked(frames.at(-1)).map((row) => row.score),
+    standing: ranked(lastFrame()).map((row) => row.score),
   });
 `, viewerContext));
 assert.equal(afterReplace.frames, 3, "a repeated timestep replaces, never appends");
 assert.deepEqual(afterReplace.series, [0, 900], "the chart follows the replacement");
 assert.deepEqual(afterReplace.standing, [900, 0], "and so does the standing");
+
+// Only the newest 64 v1 inputs remain as full frames. Replacing an older frame
+// exercises the packed slow path and must rebuild summaries and lead events all
+// the way through the suffix.
+const oldReplacement = JSON.parse(vm.runInContext(`(() => {
+  resetStream();
+  const base = ${sandboxFrame(
+    0, [settler(1, 0, 0, 10), settler(2, 1, 1, 5)],
+  )};
+  const at = (step, beta) => ({
+    ...base,
+    timestep: step,
+    agents: base.agents.map((agent) => ({ ...agent, sugar: agent.slot === 1 ? beta : 10 })),
+  });
+  for (let step = 0; step < 70; step += 1) recordFrame(at(step, step === 69 ? 20 : 5));
+  const before = JSON.stringify(frameAt(1));
+  recordFrame(at(1, 30));
+  return JSON.stringify({
+    count: frameCount(),
+    tail: frameStore.legacyTail.size,
+    oldChanged: JSON.stringify(frameAt(1)) !== before,
+    leaders: events.filter((event) => event.kind === "lead")
+      .map((event) => [event.timestep, event.slot]),
+  });
+})()`, viewerContext));
+assert.deepEqual(oldReplacement, {
+  count: 70,
+  tail: 64,
+  oldChanged: true,
+  leaders: [[1, 1], [2, 0], [69, 1]],
+});
+
+const midJoin = JSON.parse(vm.runInContext(`(() => {
+  resetStream();
+  recordFrame(${sandboxFrame(40, [settler(1, 0, 0, 10)])});
+  return JSON.stringify({ timestep: firstFrame().timestep, joinedLate: joinedLate() });
+})()`, viewerContext));
+assert.deepEqual(midJoin, { timestep: 40, joinedLate: true });
+vm.runInContext("resetStream()", viewerContext);
 
 // A frame the viewer cannot render must be REJECTED, not half-drawn behind a
 // confident HUD. Wrong format, no slots, and a malformed lattice all count.
@@ -382,7 +440,7 @@ assert.equal(manySeats.scored, 16, "no population may be silently scored zero");
 // A stream from a new server run resets rather than interleaving.
 const afterRestart = JSON.parse(vm.runInContext(`
   recordFrame(${sandboxFrame(0, [settler(9, 0, 0, 1)], { streamId: "second" })});
-  JSON.stringify({ frames: frames.length, events: events.length });
+  JSON.stringify({ frames: frameCount(), events: events.length });
 `, viewerContext));
 assert.deepEqual(afterRestart, { frames: 1, events: 0 });
 // A restart must not inherit the previous episode's schedule, or the clock
@@ -454,7 +512,7 @@ const dieOff = JSON.parse(vm.runInContext(`
     // beatsSignature short-circuits a repaint that would not change anything, so
     // clear it or the second read below returns the first read's markup.
     beatsSignature = "";
-    drawBeats(frames[1]);
+    drawBeats(frameAt(1));
     const afterDeaths = beatsLayer.innerHTML;
     // And now Beta overtakes, which used to earn the surviving plate.
     const overtake = ${sandboxFrame(2, [])};
@@ -462,21 +520,21 @@ const dieOff = JSON.parse(vm.runInContext(`
     recordFrame(overtake);
     onFrameEntered(2, 0);
     beatsSignature = "";
-    drawBeats(frames[2]);
+    drawBeats(frameAt(2));
     const afterLead = beatsLayer.innerHTML;
     // The overtake must still be RECORDED even though it no longer interrupts -
     // this is what the lead band, the feed row and the end card's clause read.
     const leadsRecorded = events.filter((event) => event.kind === "lead").length;
     const deathsRecorded = events.filter((event) => event.kind === "death").length;
     // The strip itself, at two timesteps, against a scale of its own.
-    const strip = (until, at = (t) => t) => settlerStrip(frames[until], {
+    const strip = (until, at = (t) => t) => settlerStrip(frameAt(until), {
       big: false, left: 0, plotW: 100, scaleX: at, scheduled: 40, footY: 60,
       top: 0, height: 50,
       visible: wealthSeries.filter((point) => point.timestep <= until),
     });
     const pointsIn = (markup) => (markup.match(/points="[^"]*"/g) || [])
       .map((run) => run.split(" ").length);
-    drawHud(frames[1], 1);
+    drawHud(frameAt(1), 1);
     return JSON.stringify({
       afterDeaths, afterLead, leadsRecorded, deathsRecorded,
       railNamesTheStrip: /settlers alive/.test(standingsLayer.innerHTML),
@@ -531,7 +589,7 @@ const playback = JSON.parse(vm.runInContext(`
   }
   state.finished = true;
   state.playing = false;
-  state.cursor = frames.length - 1;
+  state.cursor = frameCount() - 1;
   tick();
   const atEndText = beatsLayer.innerHTML;
   state.cursor = 0;
@@ -553,7 +611,7 @@ const truncated = JSON.parse(vm.runInContext(`
   for (let step = 0; step <= 10; step += 1) {
     recordFrame(Object.assign(${sandboxFrame(0, [])}, { timestep: step, maxTimestep: 40 }));
   }
-  JSON.stringify({ scheduled: state.maxTimestep, last: frames.at(-1).timestep });
+  JSON.stringify({ scheduled: state.maxTimestep, last: lastFrame().timestep });
 `, viewerContext));
 assert.equal(truncated.scheduled, 40);
 assert.ok(truncated.last < truncated.scheduled,
@@ -567,7 +625,7 @@ const tempo = JSON.parse(vm.runInContext(`
     recordFrame(${sandboxFrame(0, [])});
     recordFrame(${sandboxFrame(1, [])});
     state.finished = true;
-    state.cursor = frames.length - 1;
+    state.cursor = frameCount() - 1;
     state.speed = 4;
     state.holdUntil = 0;
     state.playing = true;
@@ -625,8 +683,8 @@ const transport = JSON.parse(vm.runInContext(`
     max: scrub.max,
     value: scrub.value,
     valuetext: scrub.getAttribute("aria-valuetext"),
-    seekMid: (() => { seek(indexOfTimestep(27)); return frames[currentIndex()].timestep; })(),
-    seekMissing: (() => { seek(indexOfTimestep(99)); return frames[currentIndex()].timestep; })(),
+    seekMid: (() => { seek(indexOfTimestep(27)); return frameAt(currentIndex()).timestep; })(),
+    seekMissing: (() => { seek(indexOfTimestep(99)); return frameAt(currentIndex()).timestep; })(),
     joinedLate: joinedLate(),
   });
 `, viewerContext));
@@ -642,12 +700,12 @@ assert.equal(transport.seekMissing, 30, "and an unrecorded one snaps to the near
 // and every "of 64 survived" total silently became a window.
 assert.ok(transport.joinedLate, "a stream that does not start at t0 must be flagged");
 const lateNotice = vm.runInContext(`
-  drawHud(frames.at(-1), frames.length - 1); standingsLayer.innerHTML;
+  drawHud(lastFrame(), frameCount() - 1); standingsLayer.innerHTML;
 `, viewerContext);
 assert.match(lateNotice, /joined at t20/,
   "and the overlay must say the earlier timesteps were never delivered");
 assert.match(
-  vm.runInContext("speak(frames.at(-1)); document.getElementById('commentary').textContent",
+  vm.runInContext("speak(lastFrame()); document.getElementById('commentary').textContent",
     viewerContext),
   /joined at timestep 20/,
   "the spoken broadcast must carry it too",
@@ -676,7 +734,7 @@ const ledger = JSON.parse(vm.runInContext(`
     }));
   }
   const total = events.reduce((sum, e) => sum + (e.kind === "death" ? e.count : 0), 0);
-  drawHud(frames.at(-1), frames.length - 1);
+  drawHud(lastFrame(), frameCount() - 1);
   JSON.stringify({
     total,
     deaths: events.filter((e) => e.kind === "death").length,
@@ -1009,7 +1067,7 @@ const midStreamFailure = JSON.parse(vm.runInContext(`
   fail("This episode is sending frames this viewer cannot read.");
   JSON.stringify({
     hidden: document.getElementById("controls").hidden === true,
-    frames: frames.length,
+    frames: frameCount(),
     text: document.getElementById("notice").innerHTML,
   });
 `, viewerContext));
@@ -1043,7 +1101,7 @@ const artifact = vm.runInContext(`
     let threw = null;
     try { tick(); tick(); } catch (error) { threw = String(error); }
     return JSON.stringify({
-      frames: frames.length,
+      frames: frameCount(),
       notice: document.getElementById("notice").innerHTML,
       truncated: state.truncated,
       finished: state.finished,
@@ -1176,7 +1234,7 @@ const diverging = JSON.parse(vm.runInContext(`
     // The chart ALONE, not the whole hud: the scorebug names both populations
     // too, so asserting the poles are named against the full overlay would pass
     // whether or not the plot carries a single label of its own.
-    const markup = raceChart(frames[2], 0, 0, 600, 300);
+    const markup = raceChart(frameAt(2), 0, 0, 600, 300);
     const polys = [...markup.matchAll(/<polygon[^>]*>/g)].map((m) => m[0]);
     const clipped = (clip, opacity) => polys.filter((p) =>
       p.includes(clip) && p.includes('opacity="' + opacity + '"'));
@@ -1250,7 +1308,7 @@ const caption = JSON.parse(vm.runInContext(`
     const open = ${sandboxFrame(0, [])};
     open.agents = [at(1, 0, 0, 10), at(2, 1, 1, 10)];
     recordFrame(open);
-    const strip = (scaleX) => settlerStrip(frames[0], {
+    const strip = (scaleX) => settlerStrip(firstFrame(), {
       big: false, left: 0, plotW: 100, scaleX, scheduled: 40, footY: 60,
       top: 0, height: 50, visible: wealthSeries,
     });
@@ -1287,7 +1345,7 @@ const budgeted = JSON.parse(vm.runInContext(`
       bySlot: [[0, 71], [1, 93]], agents: [],
     });
     const line = (width) => {
-      const found = eventFeed(frames[0], 0, 0, width, 300)
+      const found = eventFeed(firstFrame(), 0, 0, width, 300)
         .match(/>([^<]*starved[^<]*)</);
       return found ? found[1] : null;
     };

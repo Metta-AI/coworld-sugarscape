@@ -8,9 +8,9 @@ garbage collection through Chrome DevTools Protocol, and prints JSON metrics.
     .venv/bin/python tools/benchmark_replay_viewer.py
     .venv/bin/python tools/benchmark_replay_viewer.py --output build/viewer-perf.json
 
-Phase 0 records a baseline without enforcing the approved post-FrameStore heap
-budgets. Phase 2 turns those budgets into assertions after the compact store is
-available.
+The Phase 0 commit recorded a baseline without enforcing the approved
+post-FrameStore heap budgets. The current harness enforces them and also checks
+every materialized frame against the independent eager Python converter.
 """
 
 from __future__ import annotations
@@ -32,6 +32,7 @@ sys.path.insert(0, str(TOOLS))
 
 from coworld.episode import run_episode  # noqa: E402
 from generate_scenario_pool import emit_configs  # noqa: E402
+from v3_to_v1_replay import convert, load_v3  # noqa: E402
 
 SCENARIOS = (
     ("capacity.compact-regrow-1", 6 * 1024 * 1024),
@@ -66,10 +67,16 @@ def generate_replays(directory: Path) -> list[dict[str, object]]:
         generation_ms = (perf_counter() - started) * 1000
         replay_path = directory / f"{scenario}.replay"
         replay_path.write_bytes(replay)
+        oracle_path = directory / f"{scenario}.v1.json"
+        oracle_path.write_text(
+            json.dumps(convert(load_v3(replay_path)), separators=(",", ":")),
+            encoding="utf-8",
+        )
         replays.append(
             {
                 "scenario": scenario,
                 "path": str(replay_path),
+                "oracle_path": str(oracle_path),
                 "compressed_bytes": len(replay),
                 "raw_bytes": int(results["result.replay_raw_bytes"]),
                 "expected_frames": int(config["timesteps"]) + 1,
@@ -98,7 +105,7 @@ def main() -> int:
                 "viewer": str(ROOT / "replay-viewer" / "index.html"),
                 "chrome": str(chrome),
                 "seed": SEED,
-                "budgets_enforced": False,
+                "budgets_enforced": True,
                 "paint_budgets_enforced": True,
                 "replays": [replay],
             }
@@ -117,7 +124,7 @@ def main() -> int:
             browser_results.extend(json.loads(completed.stdout)["results"])
         report = {
             "browser": str(chrome),
-            "budgets_enforced": False,
+            "budgets_enforced": True,
             "paint_budgets_enforced": True,
             "results": browser_results,
         }

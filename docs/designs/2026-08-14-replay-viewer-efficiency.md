@@ -353,7 +353,7 @@ pixel main backing store at its headless viewport (down from 4,665,600), and a
 303 KB bundle (down from 334 KB). Retained replay heap is intentionally unchanged
 until Phase 2.
 
-### Phase 2: Introduce packed `FrameStore`
+### Phase 2: Introduce packed `FrameStore` (implemented 2026-08-14)
 
 - Pack v3 arrays during load and drop the parsed document.
 - Add checkpoints, the sequential decoder, three-frame materialization LRU,
@@ -366,6 +366,20 @@ until Phase 2.
 
 This is the main memory win and the architectural prerequisite for reliable
 high-speed playback.
+
+The Phase 2 Chrome harness exhaustively compares the stored fields of all 1,001
+materialized frames in both shipped scenarios with the independent eager Python
+converter, then forces garbage collection before enforcing the retained-store
+budgets. The
+compact scenario retains 4.4 MB (budget: less than 6 MB) and the dense scenario
+retains 5.9 MB (budget: less than 10 MB), down from about 75 MB and 169 MB.
+Sequential rendered advance measures 3.2 ms and 10.0 ms respectively; load-to-
+ready measures 168 ms and 327 ms on the recorded local Chrome run. Catalog
+choice scores are covered by the dedicated engine-score fixture rather than the
+exhaustive converter comparison: the standalone Python converter delegates to
+the engine's stricter histogram object and can disagree on intermediate
+histograms, while those values are derived from the retained measurements and
+are not replay storage state.
 
 ### Phase 3: Make the clock honest
 

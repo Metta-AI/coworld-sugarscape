@@ -657,7 +657,7 @@ if (motionQuery) {
     // which is the whole point. Turning it off used to force-START playback -
     // over an explicit pause, for anyone whose OS flips the setting on a
     // schedule. Resuming is the viewer's decision, not the media query's.
-    if (reducedMotion && frames.length > 0) {
+    if (reducedMotion && frameCount() > 0) {
       setPlaying(false);
       renderOnce();
     }
@@ -724,11 +724,616 @@ function syncBackingStores(stageWidth) {
   terrainShown = null;
 }
 
-const frames = [];
-const frameIndexByTimestep = new Map();
-const events = [];               // derived beats, in frame order
-const wealthSeries = [];         // [{ timestep, scores: number[], population: number[] }]
+const CHECKPOINT_EVERY = 32;
+const MATERIALIZED_LIMIT = 3;
+const FULL_FRAME_TAIL = 64;
+const V1_AGENT_FIELDS = [
+  "id", "cell", "slot", "age", "sugar", "spice", "sugarMetabolism",
+  "spiceMetabolism", "vision", "movement", "depressed", "sick", "tribe", "race",
+];
+
+/** Select the narrowest typed array that preserves every JSON number exactly. */
+function losslessNumericArray(values) {
+  const integral = values.every(Number.isSafeInteger);
+  if (integral && values.every((value) => value >= -32768 && value <= 32767)) {
+    return Int16Array.from(values);
+  }
+  if (integral && values.every((value) => value >= -2147483648 && value <= 2147483647)) {
+    return Int32Array.from(values);
+  }
+  if (values.every((value) => Number.isFinite(value) && Math.fround(value) === value)) {
+    return Float32Array.from(values);
+  }
+  return Float64Array.from(values);
+}
+
+function defaultStats(runtime, timestep, population) {
+  const stats = Object.assign({ timestep, population }, runtime || {});
+  for (const key of ["giniCoefficient", "agentStarvationDeaths", "agentAgingDeaths",
+    "agentCombatDeaths", "agentDiseaseDeaths"]) {
+    if (stats[key] === undefined) stats[key] = 0;
+  }
+  return stats;
+}
+
+/** Packed, seekable replay storage. Only frameAt() crosses into renderer shape. */
+class FrameStore {
+  constructor() {
+    this.count = 0;
+    this.cache = new Map();
+    this.summaries = [];
+    this.events = [];
+    this.wealthSeries = [];
+    this.timestepIndex = new Map();
+    this.mode = "empty";
+    this.legacyDeltas = [];
+    this.legacyMetadata = [];
+    this.legacyCheckpoints = [];
+    this.legacyTail = new Map();
+    this.legacyStrings = [];
+    this.legacyStringIds = new Map();
+  }
+
+  static fromV3(document_) {
+    const store = new FrameStore();
+    store.mode = "v3";
+    const header = document_.header;
+    const grid = header.initial_grid;
+    store.width = grid.width;
+    store.height = grid.height;
+    store.config = header.config ?? {};
+    store.scheduled = Number(store.config.timesteps ?? document_.frames.length);
+    store.startingAgents = header.initial_agents.length;
+    store.wealthQuantum = V3_WEALTH_QUANTUM;
+    store.maxSugar = Math.max(0, ...grid.cells.map((cell) => Number(cell[3] ?? 0)));
+    store.maxSpice = Math.max(0, ...grid.cells.map((cell) => Number(cell[4] ?? 0)));
+    const players = store.config.players ?? [];
+    const seatCount = Math.max(1, (header.targets ?? []).length);
+    store.slots = Array.from({ length: seatCount }, (_, seat) => ({
+      name: players[seat]?.name || `Seat ${seat + 1}`,
+      decisionModels: [],
+    }));
+    store.targets = header.targets ?? [];
+    store.finalScores = header.scores ?? [];
+
+    const timesteps = [0];
+    const stats = [null];
+    const cellOffsets = [0];
+    const cellIndices = [];
+    const sugar = [];
+    const spice = [];
+    const pollution = [];
+    const upsertOffsets = [0];
+    const upserts = [];
+    const removeOffsets = [0];
+    const removes = [];
+    const rosterRows = [...header.roster];
+    const latest = new Map();
+    const measuredNow = new Map();
+    store.coworld = [];
+
+    const coworld = () => {
+      const seats = store.targets.map((target, seat) => {
+        const reading = latest.get(seat) ?? {};
+        const histogram = reading.histogram ?? {};
+        const seatRow = {
+          seat,
+          name: store.slots[seat % store.slots.length].name,
+          targetId: target.id,
+          variable: target.variable,
+          bins: target.bins ?? [],
+          targetProbs: target.probs ?? [],
+          measuredProbs: histogram.probs ?? [],
+          sampleCount: histogram.sample_count ?? 0,
+          measured: Boolean(histogram.probs),
+          ...(reading.score !== undefined ? { score: reading.score } : {}),
+          assigned: true,
+        };
+        return seatRow;
+      });
+      return { seats, choices: targetChoices(header, measuredNow), finalScores: store.finalScores };
+    };
+    store.coworld.push(coworld());
+
+    for (const frame of document_.frames) {
+      timesteps.push(frame.timestep);
+      stats.push(frame.runtimeStats ?? null);
+      for (const row of frame.cell_deltas) {
+        cellIndices.push(row[0]);
+        sugar.push(row[1]);
+        spice.push(row[2]);
+        pollution.push(row[3]);
+      }
+      cellOffsets.push(cellIndices.length);
+      for (const row of frame.agent_deltas.births) rosterRows.push(row);
+      for (const row of frame.agent_deltas.upsert) upserts.push(...row);
+      upsertOffsets.push(upserts.length / 7);
+      for (const id of frame.agent_deltas.remove) removes.push(id);
+      removeOffsets.push(removes.length);
+      let changed = false;
+      for (const reading of frame.running ?? []) {
+        latest.set(reading.seat, reading);
+        changed = true;
+      }
+      for (const [variable, histogram] of Object.entries(frame.measured ?? {})) {
+        measuredNow.set(variable, histogram);
+        changed = true;
+      }
+      store.coworld.push(changed ? coworld() : store.coworld.at(-1));
+    }
+
+    store.timesteps = Int32Array.from(timesteps);
+    store.stats = stats;
+    store.cellOffsets = Uint32Array.from(cellOffsets);
+    store.cellIndices = Uint32Array.from(cellIndices);
+    store.cellSugar = losslessNumericArray(sugar);
+    store.cellSpice = losslessNumericArray(spice);
+    store.cellPollution = losslessNumericArray(pollution);
+    store.upsertOffsets = Uint32Array.from(upsertOffsets);
+    store.upserts = losslessNumericArray(upserts);
+    store.removeOffsets = Uint32Array.from(removeOffsets);
+    store.removes = Uint32Array.from(removes);
+    store.roster = losslessNumericArray(rosterRows.flat());
+    store.rosterById = new Map();
+    for (let offset = 0; offset < store.roster.length; offset += 9) {
+      store.rosterById.set(store.roster[offset], offset);
+    }
+    store.initialCells = [0, 1, 2].map((plane) =>
+      losslessNumericArray(grid.cells.map((cell) => cell[plane])));
+    store.initialLive = losslessNumericArray(header.initial_agents.flat());
+    store.count = timesteps.length;
+    for (let index = 0; index < store.count; index += 1) {
+      store.timestepIndex.set(store.timesteps[index], index);
+    }
+    store.buildCheckpoints();
+    store.buildV3Derived();
+    return store;
+  }
+
+  static fromV1(frames, config = {}) {
+    const store = new FrameStore();
+    store.mode = "v1";
+    store.config = config;
+    for (const frame of frames) store.appendFrame(frame);
+    return store;
+  }
+
+  buildCheckpoints() {
+    this.checkpoints = [];
+    let cells = this.initialCells.map((plane) => plane.slice());
+    let live = new Map();
+    for (let offset = 0; offset < this.initialLive.length; offset += 7) {
+      live.set(this.initialLive[offset], Array.from(this.initialLive.slice(offset, offset + 7)));
+    }
+    const save = (index) => {
+      const rows = [...live.values()].sort((a, b) => a[0] - b[0]).flat();
+      this.checkpoints.push({ index, cells: cells.map((plane) => plane.slice()), live: losslessNumericArray(rows) });
+    };
+    save(0);
+    for (let index = 1; index < this.count; index += 1) {
+      this.applyDelta({ index: index - 1, cells, live }, index);
+      if (index % CHECKPOINT_EVERY === 0) save(index);
+    }
+    this.decoder = this.restoreCheckpoint(this.checkpoints[0]);
+  }
+
+  buildV3Derived() {
+    const live = new Map();
+    for (let offset = 0; offset < this.initialLive.length; offset += 7) {
+      live.set(this.initialLive[offset], Array.from(this.initialLive.slice(offset, offset + 7)));
+    }
+    const sugar = Array(this.slots.length).fill(0);
+    const spice = Array(this.slots.length).fill(0);
+    const population = Array(this.slots.length).fill(0);
+    const tribes = new Map();
+    const adjust = (dynamic, direction) => {
+      const rosterOffset = this.rosterById.get(dynamic[0]);
+      const slot = rosterOffset === undefined ? 0 : this.roster[rosterOffset + 1];
+      sugar[slot] = (sugar[slot] ?? 0) + direction * dynamic[3];
+      spice[slot] = (spice[slot] ?? 0) + direction * dynamic[4];
+      population[slot] = (population[slot] ?? 0) + direction;
+      if (dynamic[5] >= 0) {
+        const next = (tribes.get(dynamic[5]) ?? 0) + direction;
+        if (next > 0) tribes.set(dynamic[5], next);
+        else tribes.delete(dynamic[5]);
+      }
+    };
+    for (const dynamic of live.values()) adjust(dynamic, 1);
+
+    let lastLeader = -1;
+    for (let index = 0; index < this.count; index += 1) {
+      let lost = [];
+      if (index > 0) {
+        const delta = index - 1;
+        for (let offset = this.removeOffsets[delta]; offset < this.removeOffsets[delta + 1]; offset += 1) {
+          const dynamic = live.get(this.removes[offset]);
+          if (!dynamic) continue;
+          const rosterOffset = this.rosterById.get(dynamic[0]);
+          const slot = rosterOffset === undefined ? 0 : this.roster[rosterOffset + 1];
+          lost.push({ id: dynamic[0], cell: dynamic[1] * this.height + dynamic[2], slot });
+        }
+        for (let row = this.upsertOffsets[delta]; row < this.upsertOffsets[delta + 1]; row += 1) {
+          const offset = row * 7;
+          const dynamic = Array.from(this.upserts.slice(offset, offset + 7));
+          const before = live.get(dynamic[0]);
+          if (before) adjust(before, -1);
+          live.set(dynamic[0], dynamic);
+          adjust(dynamic, 1);
+        }
+        for (let offset = this.removeOffsets[delta]; offset < this.removeOffsets[delta + 1]; offset += 1) {
+          const dynamic = live.get(this.removes[offset]);
+          if (dynamic) adjust(dynamic, -1);
+          live.delete(this.removes[offset]);
+        }
+      }
+      const timestep = this.timesteps[index];
+      const scores = sugar.map((value, slot) => Math.trunc(value + spice[slot]));
+      const rows = this.slots.map((slot, seat) => ({
+        index: seat,
+        name: slot.name || `Population ${seat + 1}`,
+        wealth: sugar[seat] + spice[seat],
+        sugar: sugar[seat],
+        spice: spice[seat],
+        population: population[seat],
+        score: scores[seat],
+      }));
+      const point = {
+        timestep,
+        scores: scores.slice(),
+        sugar: sugar.slice(),
+        spice: spice.slice(),
+        population: population.slice(),
+      };
+      const stats = defaultStats(this.stats[index], timestep, live.size);
+      this.wealthSeries.push(point);
+      this.summaries.push({ rows, tribes: [...tribes], stats, coworld: this.coworld[index] });
+      if (lost.length > 0) {
+        const bySlot = new Map();
+        for (const agent of lost) bySlot.set(agent.slot, (bySlot.get(agent.slot) ?? 0) + 1);
+        this.events.push({
+          index, timestep, kind: "death", count: lost.length,
+          cause: deathCause({ stats }), bySlot: [...bySlot], agents: lost,
+        });
+      }
+      const leader = leaderOf(scores);
+      if (leader >= 0) {
+        if (lastLeader >= 0 && lastLeader !== leader) {
+          const rankedRows = rows.slice().sort((a, b) => b.score - a.score || a.index - b.index);
+          this.events.push({
+            index, timestep, kind: "lead", slot: leader, name: rows[leader].name,
+            margin: rankedRows[0].score - (rankedRows[1]?.score ?? 0),
+          });
+        }
+        lastLeader = leader;
+      }
+    }
+  }
+
+  restoreCheckpoint(checkpoint) {
+    const live = new Map();
+    for (let offset = 0; offset < checkpoint.live.length; offset += 7) {
+      live.set(checkpoint.live[offset], Array.from(checkpoint.live.slice(offset, offset + 7)));
+    }
+    return { index: checkpoint.index, cells: checkpoint.cells.map((plane) => plane.slice()), live };
+  }
+
+  applyDelta(decoder, targetIndex) {
+    if (targetIndex === 0) return;
+    const delta = targetIndex - 1;
+    for (let offset = this.cellOffsets[delta]; offset < this.cellOffsets[delta + 1]; offset += 1) {
+      const cell = this.cellIndices[offset];
+      decoder.cells[0][cell] = this.cellSugar[offset];
+      decoder.cells[1][cell] = this.cellSpice[offset];
+      decoder.cells[2][cell] = this.cellPollution[offset];
+    }
+    for (let row = this.upsertOffsets[delta]; row < this.upsertOffsets[delta + 1]; row += 1) {
+      const offset = row * 7;
+      const dynamic = Array.from(this.upserts.slice(offset, offset + 7));
+      decoder.live.set(dynamic[0], dynamic);
+    }
+    for (let offset = this.removeOffsets[delta]; offset < this.removeOffsets[delta + 1]; offset += 1) {
+      decoder.live.delete(this.removes[offset]);
+    }
+    decoder.index = targetIndex;
+  }
+
+  decoderAt(index) {
+    if (this.decoder && index === this.decoder.index + 1) {
+      this.applyDelta(this.decoder, index);
+      return this.decoder;
+    }
+    if (this.decoder && index === this.decoder.index) return this.decoder;
+    const checkpoint = this.checkpoints[Math.floor(index / CHECKPOINT_EVERY)];
+    this.decoder = this.restoreCheckpoint(checkpoint);
+    while (this.decoder.index < index) this.applyDelta(this.decoder, this.decoder.index + 1);
+    return this.decoder;
+  }
+
+  materializeV3(index) {
+    const decoder = this.decoderAt(index);
+    const timestep = this.timesteps[index];
+    const agents = [];
+    for (const id of [...decoder.live.keys()].sort((a, b) => a - b)) {
+      const dynamic = decoder.live.get(id);
+      const offset = this.rosterById.get(id);
+      const stat = offset === undefined ? [id, 0, 0, 0, 0, 0, 0, 0, -1]
+        : Array.from(this.roster.slice(offset, offset + 9));
+      agents.push({
+        id,
+        cell: dynamic[1] * this.height + dynamic[2],
+        slot: stat[1],
+        decisionModel: this.slots[stat[1] % this.slots.length].name,
+        age: Math.max(0, timestep - stat[2]),
+        sugar: dynamic[3],
+        spice: dynamic[4],
+        sugarMetabolism: stat[6],
+        spiceMetabolism: stat[7],
+        vision: stat[4],
+        movement: stat[5],
+        depressed: false,
+        sick: Boolean(dynamic[6]),
+        tribe: dynamic[5],
+      });
+    }
+    const cells = Array.from({ length: decoder.cells[0].length }, (_, cell) => [
+      decoder.cells[0][cell], decoder.cells[1][cell], decoder.cells[2][cell],
+    ]);
+    return {
+      format: FRAME_FORMAT,
+      timestep,
+      maxTimestep: this.scheduled,
+      environmentMaxSugar: this.maxSugar,
+      environmentMaxSpice: this.maxSpice,
+      startingAgents: this.startingAgents,
+      wealthQuantum: this.wealthQuantum,
+      width: this.width,
+      height: this.height,
+      cells,
+      agents,
+      links: [],
+      slots: this.slots,
+      stats: this.summaries[index].stats,
+      final: index > 0 && index === this.count - 1,
+      coworld: this.coworld[index],
+    };
+  }
+
+  frameAt(index) {
+    if (index < 0 || index >= this.count) return undefined;
+    if (this.cache.has(index)) {
+      const frame = this.cache.get(index);
+      this.cache.delete(index);
+      this.cache.set(index, frame);
+      return frame;
+    }
+    const frame = this.mode === "v3" ? this.materializeV3(index)
+      : this.legacyTail.get(index) ?? this.materializeLegacy(index);
+    this.cache.set(index, frame);
+    while (this.cache.size > MATERIALIZED_LIMIT) this.cache.delete(this.cache.keys().next().value);
+    return frame;
+  }
+
+  timestepAt(index) { return this.timesteps?.[index] ?? this.legacyMetadata[index]?.timestep; }
+  summaryAt(index) { return this.summaries[index]; }
+
+  appendFrame(frame) {
+    if (this.mode === "empty") this.mode = "v1";
+    if (this.mode !== "v1") throw new Error("appendFrame accepts full-frame stores only");
+    const existing = this.timestepIndex.get(frame.timestep);
+    if (existing !== undefined) return this.replaceLegacy(existing, frame);
+    return this.appendLegacy(frame);
+  }
+
+  legacyString(value) {
+    const text = value === undefined ? "" : String(value);
+    if (!this.legacyStringIds.has(text)) {
+      this.legacyStringIds.set(text, this.legacyStrings.length);
+      this.legacyStrings.push(text);
+    }
+    return this.legacyStringIds.get(text);
+  }
+
+  encodeLegacyAgents(agents) {
+    const values = [];
+    for (const agent of agents) {
+      for (const field of V1_AGENT_FIELDS) {
+        const value = agent[field];
+        values.push(typeof value === "boolean" ? Number(value)
+          : value === undefined ? Number.NaN : Number(value));
+      }
+      values.push(this.legacyString(agent.decisionModel), this.legacyString(agent.sex));
+    }
+    return losslessNumericArray(values);
+  }
+
+  decodeLegacyAgents(packed) {
+    const agents = [];
+    const width = V1_AGENT_FIELDS.length + 2;
+    for (let offset = 0; offset < packed.length; offset += width) {
+      const agent = {};
+      for (let field = 0; field < V1_AGENT_FIELDS.length; field += 1) {
+        const name = V1_AGENT_FIELDS[field];
+        const value = packed[offset + field];
+        if (Number.isNaN(value)) continue;
+        agent[name] = name === "depressed" || name === "sick" ? Boolean(value) : value;
+      }
+      agent.decisionModel = this.legacyStrings[packed[offset + V1_AGENT_FIELDS.length]];
+      const sex = this.legacyStrings[packed[offset + V1_AGENT_FIELDS.length + 1]];
+      if (sex) agent.sex = sex;
+      agents.push(agent);
+    }
+    return agents;
+  }
+
+  packLegacyCells(cells) {
+    return [0, 1, 2].map((plane) => losslessNumericArray(cells.map((cell) => cell[plane])));
+  }
+
+  appendLegacy(frame) {
+    const index = this.count;
+    const metadata = {};
+    for (const [key, value] of Object.entries(frame)) {
+      if (key !== "cells" && key !== "agents") metadata[key] = value;
+    }
+    this.legacyMetadata.push(metadata);
+    if (index === 0) {
+      this.legacyBaseline = {
+        cells: this.packLegacyCells(frame.cells),
+        agents: this.encodeLegacyAgents(frame.agents),
+      };
+      this.legacyDeltas.push(null);
+      this.legacyCheckpoints.push({ index: 0, ...this.legacyBaseline });
+    } else {
+      const previous = this.frameAt(index - 1);
+      const changedCells = [];
+      const cellValues = [[], [], []];
+      for (let cell = 0; cell < frame.cells.length; cell += 1) {
+        if (frame.cells[cell].some((value, plane) => value !== previous.cells[cell][plane])) {
+          changedCells.push(cell);
+          for (let plane = 0; plane < 3; plane += 1) cellValues[plane].push(frame.cells[cell][plane]);
+        }
+      }
+      const previousAgents = new Map(previous.agents.map((agent) => [agent.id, agent]));
+      const currentAgents = new Map(frame.agents.map((agent) => [agent.id, agent]));
+      const changedAgents = frame.agents.filter((agent) => {
+        const before = previousAgents.get(agent.id);
+        return !before || V1_AGENT_FIELDS.some((field) => before[field] !== agent[field])
+          || before.decisionModel !== agent.decisionModel || before.sex !== agent.sex;
+      });
+      const removed = previous.agents.filter((agent) => !currentAgents.has(agent.id)).map((agent) => agent.id);
+      this.legacyDeltas.push({
+        cellIndices: Uint32Array.from(changedCells),
+        cells: cellValues.map(losslessNumericArray),
+        agents: this.encodeLegacyAgents(changedAgents),
+        removes: Uint32Array.from(removed),
+      });
+      if (index % CHECKPOINT_EVERY === 0) {
+        this.legacyCheckpoints.push({
+          index,
+          cells: this.packLegacyCells(frame.cells),
+          agents: this.encodeLegacyAgents(frame.agents),
+        });
+      }
+    }
+    this.timestepIndex.set(frame.timestep, index);
+    this.legacyTail.set(index, frame);
+    while (this.legacyTail.size > FULL_FRAME_TAIL) this.legacyTail.delete(this.legacyTail.keys().next().value);
+    this.count += 1;
+    this.rebuildDerived(Math.max(0, this.count - 2));
+    return index;
+  }
+
+  replaceLegacy(existing, frame) {
+    const suffix = [];
+    for (let index = existing + 1; index < this.count; index += 1) suffix.push(this.frameAt(index));
+    for (let index = existing; index < this.count; index += 1) {
+      this.timestepIndex.delete(this.legacyMetadata[index].timestep);
+      this.legacyTail.delete(index);
+      this.cache.delete(index);
+    }
+    this.legacyMetadata.length = existing;
+    this.legacyDeltas.length = existing;
+    this.legacyCheckpoints = this.legacyCheckpoints.filter((checkpoint) => checkpoint.index < existing);
+    this.count = existing;
+    this.summaries.length = existing;
+    this.wealthSeries.length = existing;
+    this.events = this.events.filter((event) => event.index < existing);
+    const replaced = this.appendLegacy(frame);
+    for (const later of suffix) this.appendLegacy(later);
+    return replaced;
+  }
+
+  materializeLegacy(index) {
+    let checkpoint = this.legacyCheckpoints[0];
+    for (const candidate of this.legacyCheckpoints) {
+      if (candidate.index > index) break;
+      checkpoint = candidate;
+    }
+    const cells = checkpoint.cells.map((plane) => plane.slice());
+    const agents = new Map(this.decodeLegacyAgents(checkpoint.agents).map((agent) => [agent.id, agent]));
+    for (let step = checkpoint.index + 1; step <= index; step += 1) {
+      const delta = this.legacyDeltas[step];
+      for (let offset = 0; offset < delta.cellIndices.length; offset += 1) {
+        const cell = delta.cellIndices[offset];
+        for (let plane = 0; plane < 3; plane += 1) cells[plane][cell] = delta.cells[plane][offset];
+      }
+      for (const id of delta.removes) agents.delete(id);
+      for (const agent of this.decodeLegacyAgents(delta.agents)) agents.set(agent.id, agent);
+    }
+    return {
+      ...this.legacyMetadata[index],
+      cells: Array.from({ length: cells[0].length }, (_, cell) => [
+        cells[0][cell], cells[1][cell], cells[2][cell],
+      ]),
+      agents: [...agents.values()].sort((a, b) => a.id - b.id),
+    };
+  }
+
+  rebuildDerived(from) {
+    if (from === 0) {
+      this.summaries.length = 0;
+      this.wealthSeries.length = 0;
+      this.events.length = 0;
+    } else {
+      this.summaries.length = from;
+      this.wealthSeries.length = from;
+      this.events = this.events.filter((event) => event.index < from);
+    }
+    for (let index = from; index < this.count; index += 1) {
+      const frame = this.frameAt(index);
+      const rows = standings(frame);
+      const point = {
+        timestep: frame.timestep,
+        scores: rows.map((row) => row.score),
+        sugar: rows.map((row) => row.sugar),
+        spice: rows.map((row) => row.spice),
+        population: rows.map((row) => row.population),
+      };
+      this.wealthSeries[index] = point;
+      const tribes = new Map();
+      for (const agent of frame.agents) tribes.set(agent.tribe, (tribes.get(agent.tribe) ?? 0) + 1);
+      this.summaries[index] = { rows, tribes: [...tribes], stats: frame.stats, coworld: frame.coworld };
+      if (index === 0) continue;
+      const previous = this.frameAt(index - 1);
+      const living = new Set(frame.agents.map((agent) => agent.id));
+      const lost = previous.agents.filter((agent) => !living.has(agent.id));
+      if (lost.length > 0) {
+        const bySlot = new Map();
+        for (const agent of lost) bySlot.set(slotOf(agent), (bySlot.get(slotOf(agent)) ?? 0) + 1);
+        this.events.push({
+          index, timestep: frame.timestep, kind: "death", count: lost.length,
+          cause: deathCause(frame), bySlot: [...bySlot],
+          agents: lost.map((agent) => ({ id: agent.id, cell: agent.cell, slot: agent.slot })),
+        });
+      }
+      const leader = leaderOf(point.scores);
+      if (leader < 0) continue;
+      let previousLeader = -1;
+      for (let step = index - 1; step >= 0; step -= 1) {
+        previousLeader = leaderOf(this.wealthSeries[step].scores);
+        if (previousLeader >= 0) break;
+      }
+      if (previousLeader >= 0 && previousLeader !== leader) {
+        const rankedRows = rows.slice().sort((a, b) => b.score - a.score || a.index - b.index);
+        this.events.push({
+          index, timestep: frame.timestep, kind: "lead", slot: leader,
+          name: frame.slots[leader]?.name ?? `Population ${leader + 1}`,
+          margin: rankedRows[0].score - (rankedRows[1]?.score ?? 0),
+        });
+      }
+    }
+  }
+}
+
+let frameStore = new FrameStore();
+let events = frameStore.events;  // derived beats, in frame order
+let wealthSeries = frameStore.wealthSeries;
 const motes = [];                // transient death effects, in CELL coordinates
+
+function frameCount() { return frameStore?.count ?? 0; }
+function frameAt(index) { return frameStore?.frameAt(index); }
+function firstFrame() { return frameAt(0); }
+function lastFrame() { return frameAt(frameCount() - 1); }
 
 const state = {
   streamId: null,
@@ -1034,7 +1639,7 @@ function standings(frame) {
  *  a stream that opens partway through — every total derived from "since the
  *  start" is then a window, and the broadcast has to say which. */
 function joinedLate() {
-  return !state.sawStart && frames.length > 0 && frames[0].timestep > 0;
+  return !state.sawStart && frameCount() > 0 && firstFrame().timestep > 0;
 }
 
 function ranked(frame) {
@@ -1058,65 +1663,6 @@ function deathCause(frame) {
   return causes[0][1] > 0 ? causes[0][0] : "lost";
 }
 
-/** Derive this frame's beats by diffing against the previous one — a replay has
- *  no event stream, so deaths and lead changes are read out of the state. */
-function deriveEvents(index) {
-  if (index === 0) return;
-  const previous = frames[index - 1];
-  const frame = frames[index];
-  const living = new Set(frame.agents.map((agent) => agent.id));
-  const lost = previous.agents.filter((agent) => !living.has(agent.id));
-
-  if (lost.length > 0) {
-    const bySlot = new Map();
-    for (const agent of lost) bySlot.set(slotOf(agent), (bySlot.get(slotOf(agent)) ?? 0) + 1);
-    events.push({
-      index,
-      timestep: frame.timestep,
-      kind: "death",
-      count: lost.length,
-      cause: deathCause(frame),
-      bySlot: [...bySlot.entries()],
-      agents: lost,
-    });
-  }
-
-  /* A lead change is measured against the last frame that HAD a leader.
-   *
-   * Comparing adjacent frames and suppressing whenever either was tied dropped
-   * the change entirely when the lead passed THROUGH a tie: A ahead, level, B
-   * ahead emitted nothing, because ranked()'s slot-index tiebreak keeps A first
-   * through the tie and the frame where B pulls ahead is compared against a tied
-   * one and suppressed. The chart's count, the transport's gold marks and the
-   * end card's "won from behind" arc all under-reported. Scanning back to the
-   * last unambiguous leader costs a short walk over wealthSeries, which is
-   * already computed, and gets the transit right. */
-  const after = ranked(frame);
-  const leader = leaderOf(wealthSeries[index]?.scores);
-  if (leader < 0) return;
-  let previousLeader = -1;
-  for (let step = index - 1; step >= 0; step -= 1) {
-    const candidate = leaderOf(wealthSeries[step]?.scores);
-    if (candidate >= 0) {
-      previousLeader = candidate;
-      break;
-    }
-  }
-  if (previousLeader >= 0 && previousLeader !== leader) {
-    events.push({
-      index,
-      timestep: frame.timestep,
-      kind: "lead",
-      slot: leader,
-      name: frame.slots[leader]?.name ?? `Population ${leader + 1}`,
-      margin: after[0].score - (after[1]?.score ?? 0),
-    });
-  }
-}
-
-/** Which slot leads on these scores, or -1 when nothing does. A tie has no
- *  leader: ranked() breaks ties by slot index, and treating that as a result
- *  invented two lead changes around a leader who never lost it. */
 function leaderOf(scores) {
   if (!Array.isArray(scores) || scores.length === 0) return -1;
   let best = 0;
@@ -1134,43 +1680,10 @@ function recordFrame(frame) {
   }
   if (frame.streamId !== undefined) state.streamId = frame.streamId;
 
-  // A repeated timestep must update everything derived from it, not just the
-  // frame: replacing in place and returning left the race chart and the event
-  // feed describing the frame that was overwritten.
-  const existing = frameIndexByTimestep.get(frame.timestep);
-  if (existing !== undefined) {
-    frames[existing] = frame;
-    const rows = standings(frame);
-    for (const row of rows) state.maxWealth = Math.max(state.maxWealth, row.score);
-    wealthSeries[existing] = {
-      timestep: frame.timestep,
-      scores: rows.map((row) => row.score),
-      sugar: rows.map((row) => row.sugar),
-      spice: rows.map((row) => row.spice),
-      population: rows.map((row) => row.population),
-    };
-    for (let index = events.length - 1; index >= 0; index -= 1) {
-      if (events[index].index === existing) events.splice(index, 1);
-    }
-    deriveEvents(existing);
-    // The world's scale is derived from the frames too, so a replacement has to
-    // refresh it: replacing a frame that carried spice used to leave the score
-    // still labelled "sugar".
-    for (const cell of frame.cells) {
-      if (cell[0] > state.maxSugar) state.maxSugar = cell[0];
-      if (cell[1] > state.maxSpice) state.maxSpice = cell[1];
-    }
-    state.maxWealth = Math.max(1, ...wealthSeries.flatMap((point) => point.scores));
-    standingsSignature = "";
-    terrainShown = null;
-    if (state.live && state.playing) startPaintLoop();
-    else if (state.live) renderOnce();
-    return;
-  }
-
-  frameIndexByTimestep.set(frame.timestep, frames.length);
-  frames.push(frame);
-  const index = frames.length - 1;
+  const replacing = frameStore.timestepIndex.has(frame.timestep);
+  const index = frameStore.appendFrame(frame);
+  events = frameStore.events;
+  wealthSeries = frameStore.wealthSeries;
 
   if (frame.timestep === 0) state.sawStart = true;
   /* The world's SCALE comes from the server, not from the window in hand.
@@ -1211,29 +1724,36 @@ function recordFrame(frame) {
   }
   state.maxTimestep = Math.max(state.maxTimestep, frame.timestep);
 
-  const rows = standings(frame);
-  for (const row of rows) state.maxWealth = Math.max(state.maxWealth, row.score);
-  wealthSeries.push({
-    timestep: frame.timestep,
-    scores: rows.map((row) => row.score),
-    sugar: rows.map((row) => row.sugar),
-    spice: rows.map((row) => row.spice),
-    population: rows.map((row) => row.population),
-  });
+  const rows = frameStore.summaryAt(index).rows;
+  if (replacing) {
+    state.maxWealth = Math.max(1, ...wealthSeries.flatMap((point) => point.scores));
+    if (declaredSugar <= 0 || declaredSpice <= 0) {
+      state.maxSugar = declaredSugar > 0 ? declaredSugar : 1;
+      state.maxSpice = declaredSpice > 0 ? declaredSpice : 0;
+      for (let step = 0; step < frameCount(); step += 1) {
+        for (const cell of frameAt(step).cells) {
+          if (declaredSugar <= 0) state.maxSugar = Math.max(state.maxSugar, cell[0]);
+          if (declaredSpice <= 0) state.maxSpice = Math.max(state.maxSpice, cell[1]);
+        }
+      }
+    }
+    standingsSignature = "";
+    terrainShown = null;
+  } else {
+    for (const row of rows) state.maxWealth = Math.max(state.maxWealth, row.score);
+  }
 
-  deriveEvents(index);
   syncScrub();
-  if (state.live && state.playing) state.cursor = frames.length - 1;
+  if (state.live && state.playing) state.cursor = frameCount() - 1;
   if (state.live && state.playing) startPaintLoop();
   else if (state.live) renderOnce();
 }
 
 function resetStream() {
   stopPaintLoop();
-  frames.length = 0;
-  frameIndexByTimestep.clear();
-  events.length = 0;
-  wealthSeries.length = 0;
+  frameStore = new FrameStore();
+  events = frameStore.events;
+  wealthSeries = frameStore.wealthSeries;
   motes.length = 0;
   // A crossfade is remembered by AGENT ID, and a new stream starts its ids over
   // from zero: without this, the first settlers of the next episode inherit the
@@ -2508,7 +3028,7 @@ function scorebug(frame) {
 
   // FINAL belongs to where the CURSOR is, not to whether the stream has ended:
   // scrubbing back into the middle of a finished episode is mid-match again.
-  const atEnd = state.finished && currentIndex() >= frames.length - 1;
+  const atEnd = state.finished && currentIndex() >= frameCount() - 1;
   // No percentage. On a 100-timestep match "62 / 100", a filled bar and "62%"
   // are three encodings of one number, two of them the same digits, in the
   // scarcest space on the frame. The fraction and the bar stay; the badge now
@@ -2580,9 +3100,9 @@ function scorebug(frame) {
   // then scrubs a window while looking exactly like a whole match. Say so.
   if (!big) {
     const note = state.truncated
-      ? `stream ended at t${frames.at(-1).timestep} of ${scheduled} — no result`
+      ? `stream ended at t${lastFrame().timestep} of ${scheduled} — no result`
       : joinedLate()
-        ? `joined at t${frames[0].timestep} — earlier timesteps were not delivered`
+        ? `joined at t${firstFrame().timestep} — earlier timesteps were not delivered`
         : "";
     if (note) {
       markup += text(note, MARGIN + 2, 92, {
@@ -3520,12 +4040,13 @@ function inequalityOverTime(frame, x, y, width, height) {
   const plotW = width - 70;
   const plotTop = y + (big ? 46 : 26) + 18;
   const plotH = Math.max(24, height - (plotTop - y) - 54);
-  const span = Math.max(1, frames.length - 1);
+  const span = Math.max(1, frameCount() - 1);
   // Gini is a 0..1 quantity and the whole point is where it SITS on that scale,
   // so the axis is the scale. Autoscaling would make any run look dramatic.
   const xFor = (index) => plotX + (index / span) * plotW;
   const yFor = (value) => plotTop + plotH - Math.max(0, Math.min(1, value)) * plotH;
   const giniAt = (each) => Number(each?.stats?.giniCoefficient ?? 0);
+  const giniSummaryAt = (index) => Number(frameStore.summaryAt(index)?.stats?.giniCoefficient ?? 0);
 
   markup += `<line x1="${plotX}" y1="${plotTop + plotH}" x2="${plotX + plotW}" `
     + `y2="${plotTop + plotH}" stroke="${C.axis}" stroke-width="1"/>`;
@@ -3541,15 +4062,15 @@ function inequalityOverTime(frame, x, y, width, height) {
     { size: T(16), weight: 500, family: F.mono, fill: C.dim, anchor: "end" });
 
   const points = [];
-  for (let index = 0; index <= upto && index < frames.length; index += 1) {
-    points.push(`${xFor(index).toFixed(1)},${yFor(giniAt(frames[index])).toFixed(1)}`);
+  for (let index = 0; index <= upto && index < frameCount(); index += 1) {
+    points.push(`${xFor(index).toFixed(1)},${yFor(giniSummaryAt(index)).toFixed(1)}`);
   }
   if (points.length > 1) {
     markup += `<polyline points="${points.join(" ")}" fill="none" `
       + `stroke="${C.gold}" stroke-width="2.5" stroke-linejoin="round"/>`;
   }
   const now = giniAt(frame);
-  const opened = giniAt(frames[0]);
+  const opened = giniSummaryAt(0);
   if (points.length) {
     markup += `<circle cx="${xFor(upto).toFixed(1)}" cy="${yFor(now).toFixed(1)}" r="4" fill="${C.gold}"/>`;
   }
@@ -3615,7 +4136,7 @@ function settlerPanel(frame, x, y, width, height) {
   const ink = typeof agent.tribe === "number" && agent.tribe >= 0
     ? TRIBE_INK[agent.tribe % TRIBE_INK.length] : C.paper;
   const index = currentIndex();
-  const was = index > 0 ? frames[index - 1].agents.find((each) => each.id === agent.id) : null;
+  const was = index > 0 ? frameAt(index - 1).agents.find((each) => each.id === agent.id) : null;
   const wealth = agent.sugar + agent.spice;
   const moved = was && was.cell !== agent.cell;
   let stepped = 0;
@@ -3710,13 +4231,15 @@ function tribeShares(frame, x, y, width, height) {
   };
 
   const tribes = new Set();
-  for (const each of frames) for (const tribe of sharesAt(each).counts.keys()) tribes.add(tribe);
+  for (let index = 0; index < frameCount(); index += 1) {
+    for (const [tribe] of frameStore.summaryAt(index).tribes) tribes.add(tribe);
+  }
   const order = [...tribes].sort((a, b) => a - b);
   const plotX = x + 44;
   const plotW = width - 62;
   const plotTop = y + (big ? 46 : 26) + 20;
   const plotH = Math.max(24, height - (plotTop - y) - 46);
-  const span = Math.max(1, frames.length - 1);
+  const span = Math.max(1, frameCount() - 1);
   const xFor = (index) => plotX + (index / span) * plotW;
   const yFor = (share) => plotTop + plotH - Math.max(0, Math.min(1, share)) * plotH;
 
@@ -3738,8 +4261,10 @@ function tribeShares(frame, x, y, width, height) {
   let leaderShare = 0;
   order.forEach((tribe, position) => {
     const points = [];
-    for (let index = 0; index <= upto && index < frames.length; index += 1) {
-      const { counts, total } = sharesAt(frames[index]);
+    for (let index = 0; index <= upto && index < frameCount(); index += 1) {
+      const counts = new Map(frameStore.summaryAt(index).tribes);
+      let total = 0;
+      for (const value of counts.values()) total += value;
       if (total <= 0) continue;
       points.push(`${xFor(index).toFixed(1)},${yFor((counts.get(tribe) ?? 0) / total).toFixed(1)}`);
     }
@@ -4071,7 +4596,7 @@ let standingsSignature = "";
 let beatsSignature = "";
 
 function drawBeats(frame) {
-  const atEnd = state.finished && currentIndex() >= frames.length - 1;
+  const atEnd = state.finished && currentIndex() >= frameCount() - 1;
   const full = `${atEnd}|${currentIndex()}`;
   if (full === beatsSignature) return;
   beatsSignature = full;
@@ -4082,7 +4607,7 @@ function drawBeats(frame) {
 }
 
 function drawHud(frame, index) {
-  const atEnd = state.finished && currentIndex() >= frames.length - 1;
+  const atEnd = state.finished && currentIndex() >= frameCount() - 1;
   const signature = `${index}|${atEnd}|${view.follow}`;
   if (signature === standingsSignature) return;
   standingsSignature = signature;
@@ -4216,7 +4741,7 @@ targetSelect.addEventListener("change", () => {
   // The rail is signature-cached, so force the redraw rather than waiting for a
   // timestep boundary that may never come while paused.
   standingsSignature = "";
-  const frame = frames[currentIndex()];
+  const frame = frameAt(currentIndex());
   if (frame) drawHud(frame, currentIndex());
 });
 
@@ -4235,7 +4760,7 @@ let lastBodies = [];
 let dragging = null;
 
 function cellUnderPointer(event) {
-  const frame = frames[currentIndex()];
+  const frame = frameAt(currentIndex());
   if (!frame) return null;
   const rect = board.getBoundingClientRect();
   const scale = rect.width / W;
@@ -4279,7 +4804,7 @@ board.addEventListener("pointermove", (event) => {
   if (!dragging) return;
   const rect = board.getBoundingClientRect();
   const scale = rect.width / W;
-  const frame = frames[currentIndex()];
+  const frame = frameAt(currentIndex());
   if (!frame) return;
   const base = Math.min(BOARD.w / frame.width, BOARD.h / frame.height);
   const dx = (event.clientX - dragging.x) / scale;
@@ -4346,7 +4871,7 @@ function zoomBy(factor) {
   if (view.follow !== null) { clearFollow(); standingsSignature = ""; }
   // All the way out IS the fit, so it recentres rather than leaving the lattice
   // parked wherever the last drag left it. This is what Escape does too.
-  const frame = frames[currentIndex()];
+  const frame = frameAt(currentIndex());
   if (frame && view.scale <= VIEW_MIN + 0.001) {
     view.cx = frame.width / 2;
     view.cy = frame.height / 2;
@@ -4390,20 +4915,20 @@ let markedLeads = -1;
  *  assistive technology, so this text is the whole broadcast and it has to carry
  *  everything the panels do, not a subset of it. */
 function speak(frame) {
-  const atEnd = state.finished && currentIndex() >= frames.length - 1;
+  const atEnd = state.finished && currentIndex() >= frameCount() - 1;
   /* A stream that stopped short is the loudest thing on the picture and used to
    * be SILENT here. The scorebug prints CUT SHORT in the loss colour and a
    * second line saying why; speak() had no branch for it, and because a
    * truncated stream never sets `finished`, the assertive verdict never fired
    * either. An assistive-technology user got an ordinary running commentary
    * that simply stopped. */
-  if (state.truncated && currentIndex() >= frames.length - 1) {
+  if (state.truncated && currentIndex() >= frameCount() - 1) {
     if (spokenVerdict) return;
     spokenVerdict = true;
     commentary.textContent = "";
     verdictLine.textContent =
-      `This episode was cut short at timestep ${frames.at(-1).timestep} of `
-      + `${state.maxTimestep || frames.at(-1).timestep}. There is no result. `
+      `This episode was cut short at timestep ${lastFrame().timestep} of `
+      + `${state.maxTimestep || lastFrame().timestep}. There is no result. `
       + `${standingSentence(frame)}`;
     return;
   }
@@ -4461,7 +4986,7 @@ function speak(frame) {
       ? ` ${frame.agents.length} settlers alive of ${state.startingPopulation}, ${lost} lost.`
       : ` ${frame.agents.length} settlers alive.`)
     + (joinedLate()
-      ? ` This stream was joined at timestep ${frames[0].timestep};`
+      ? ` This stream was joined at timestep ${firstFrame().timestep};`
         + " earlier timesteps were not delivered."
       : "")
     + ` Inequality, as a Gini coefficient, ${gini.toFixed(3)}: `
@@ -4493,7 +5018,7 @@ function spreadSentence(frame, gini) {
 }
 
 function currentIndex() {
-  return Math.max(0, Math.min(frames.length - 1, Math.floor(state.cursor)));
+  return Math.max(0, Math.min(frameCount() - 1, Math.floor(state.cursor)));
 }
 
 /* The transport speaks in TIMESTEPS, not frame indices.
@@ -4506,27 +5031,27 @@ function currentIndex() {
  * that is not zero. So the range's own min/max/value are timesteps and the
  * played track is measured on the same axis. */
 function syncScrub() {
-  if (frames.length === 0) return;
-  controls.scrub.min = String(frames[0].timestep);
-  controls.scrub.max = String(frames.at(-1).timestep);
+  if (frameCount() === 0) return;
+  controls.scrub.min = String(frameStore.timestepAt(0));
+  controls.scrub.max = String(frameStore.timestepAt(frameCount() - 1));
 }
 
 function played(index) {
-  const first = frames[0]?.timestep ?? 0;
-  const last = frames.at(-1)?.timestep ?? first;
+  const first = frameStore.timestepAt(0) ?? 0;
+  const last = frameStore.timestepAt(frameCount() - 1) ?? first;
   const span = Math.max(1, last - first);
-  return Math.min(1, Math.max(0, ((frames[index]?.timestep ?? first) - first) / span));
+  return Math.min(1, Math.max(0, ((frameStore.timestepAt(index) ?? first) - first) / span));
 }
 
 /** The nearest recorded frame to a timestep. Nearest, not exact: a recording is
  *  allowed to skip, and the range steps by one. */
 function indexOfTimestep(timestep) {
-  const exact = frameIndexByTimestep.get(timestep);
+  const exact = frameStore.timestepIndex.get(timestep);
   if (exact !== undefined) return exact;
   let best = 0;
   let bestGap = Infinity;
-  for (let index = 0; index < frames.length; index += 1) {
-    const gap = Math.abs(frames[index].timestep - timestep);
+  for (let index = 0; index < frameCount(); index += 1) {
+    const gap = Math.abs(frameStore.timestepAt(index) - timestep);
     if (gap < bestGap) {
       bestGap = gap;
       best = index;
@@ -4536,7 +5061,7 @@ function indexOfTimestep(timestep) {
 }
 
 function onFrameEntered(index, now) {
-  const frame = frames[index];
+  const frame = frameAt(index);
   if (!frame) return;
 
   for (const event of events) {
@@ -4574,15 +5099,15 @@ function tick() {
   const now = performance.now();
   const elapsed = Math.min(200, now - lastTick);
   lastTick = now;
-  if (frames.length === 0) return;
+  if (frameCount() === 0) return;
 
   if (state.playing) {
     if (state.live) {
-      state.cursor = frames.length - 1;
+      state.cursor = frameCount() - 1;
     } else {
       state.cursor += elapsed / frameDwellMs(state.speed);
-      if (state.cursor >= frames.length - 1) {
-        state.cursor = frames.length - 1;
+      if (state.cursor >= frameCount() - 1) {
+        state.cursor = frameCount() - 1;
         if (state.finished) {
           // Hold the end card, then loop — the replay contract expects looping.
           if (!state.holdUntil) state.holdUntil = now + 5200 / state.speed;
@@ -4605,7 +5130,7 @@ function tick() {
     } else {
       onFrameEntered(index, now);
     }
-    controls.scrub.value = String(frames[index].timestep);
+    controls.scrub.value = String(frameAt(index).timestep);
     controls.scrub.style.setProperty("--played", `${played(index) * 100}%`);
     // Mark the lead changes on the timeline itself, so the shape of the match is
     // visible from the transport and not only from the chart.
@@ -4629,13 +5154,13 @@ function tick() {
     // valuenow read a different number from the one valuetext announced.
     controls.scrub.setAttribute(
       "aria-valuetext",
-      `timestep ${frames[index].timestep} of `
-      + `${state.maxTimestep || frames.at(-1).timestep}`,
+      `timestep ${frameAt(index).timestep} of `
+      + `${state.maxTimestep || lastFrame().timestep}`,
     );
   }
 
-  const frame = frames[index];
-  const previous = index > 0 ? frames[index - 1] : null;
+  const frame = frameAt(index);
+  const previous = index > 0 ? frameAt(index - 1) : null;
   const fraction = Math.max(0, Math.min(1, state.cursor - index));
 
   // The engine moves an agent and THEN lets it collect, so the cell it emptied
@@ -4647,7 +5172,7 @@ function tick() {
   // scrubbed, or held on the final frame - is always settled; only a walk in
   // progress shows the state they are leaving.
   const settled = !previous || reducedMotion || !state.playing
-    || fraction >= 0.88 || index >= frames.length - 1;
+    || fraction >= 0.88 || index >= frameCount() - 1;
   const terrainFrame = settled ? frame : previous;
   if (terrainFrame !== terrainShown) {
     showTerrain(terrainFrame);
@@ -4680,7 +5205,7 @@ function stopPaintLoop() {
 }
 
 function startPaintLoop() {
-  if (paintTimer !== null || !state.playing || frames.length === 0 || pageHidden()) return;
+  if (paintTimer !== null || !state.playing || frameCount() === 0 || pageHidden()) return;
   lastTick = performance.now();
   tick();
   paintTimer = setInterval(tick, 16);
@@ -4688,7 +5213,7 @@ function startPaintLoop() {
 
 /** Paint an explicit state change once; paused and hidden views have no loop. */
 function renderOnce() {
-  if (frames.length === 0 || pageHidden()) return;
+  if (frameCount() === 0 || pageHidden()) return;
   tick();
 }
 
@@ -4708,12 +5233,12 @@ function seek(index) {
   setPlaying(false);
   state.live = false;
   state.holdUntil = 0;
-  state.cursor = Math.max(0, Math.min(frames.length - 1, index));
+  state.cursor = Math.max(0, Math.min(frameCount() - 1, index));
   renderOnce();
 }
 
 controls.play.addEventListener("click", () => {
-  if (!state.playing && state.cursor >= frames.length - 1 && state.finished) state.cursor = 0;
+  if (!state.playing && state.cursor >= frameCount() - 1 && state.finished) state.cursor = 0;
   state.holdUntil = 0;
   setPlaying(!state.playing);
   if (!state.playing) renderOnce();
@@ -4752,7 +5277,7 @@ function fail(message, detail = "") {
   // scrub, no step and no way back: fifty good frames still on screen and no
   // longer watchable. A failure with frames in hand is a failure of the STREAM,
   // not of the recording.
-  if (frames.length > 0) return;
+  if (frameCount() > 0) return;
   // Nothing to play. Take the transport away and MOVE THE FOCUS with it. A
   // keyboard user standing on the play button when the stream died was left
   // focused on an element that had just been hidden: the focus ring vanished,
@@ -4811,19 +5336,19 @@ function connect() {
   // maxTimestep sat pinned in live mode forever with a progress percentage on a
   // match that was over. maxTimestep stays as the fallback for a server too old
   // to stamp it.
-  const complete = () => frames.length > 0
-    && (frames.at(-1).final === true
-      || (state.maxTimestep > 0 && frames.at(-1).timestep >= state.maxTimestep));
+  const complete = () => frameCount() > 0
+    && (lastFrame().final === true
+      || (state.maxTimestep > 0 && lastFrame().timestep >= state.maxTimestep));
   // A socket can open and never speak - an episode with no recorded frames does
   // exactly that. Without this the canvas is never touched and the embed is the
   // ground colour, forever, with nothing said.
   const silence = setTimeout(() => {
-    if (frames.length === 0) {
+    if (frameCount() === 0) {
       fail("This episode is not sending any frames to replay.");
     }
   }, 12000);
   const markFinished = () => {
-    if (frames.length === 0) return;
+    if (frameCount() === 0) return;
     state.live = false;
     if (complete()) {
       state.finished = true;
@@ -4853,7 +5378,7 @@ function connect() {
     // delayed.
     clearTimeout(silence);
     if (!isRenderableFrame(frame)) return;
-    if (frames.length === 0) { state.live = true; ready(); }
+    if (frameCount() === 0) { state.live = true; ready(); }
     recordFrame(frame);
     // The server streams recorded frames back to back and then goes quiet; a
     // pause means the episode is over and playback should own the timeline.
@@ -4870,14 +5395,14 @@ function connect() {
   socket.addEventListener("close", () => {
     clearTimeout(idleTimer);
     clearTimeout(silence);
-    if (frames.length === 0) {
+    if (frameCount() === 0) {
       fail("The episode stream closed before sending any frames.");
       return;
     }
     markFinished();
   });
   socket.addEventListener("error", () => {
-    if (frames.length === 0) {
+    if (frameCount() === 0) {
       fail("Could not reach the episode stream for this replay.");
     }
   });
@@ -4885,12 +5410,12 @@ function connect() {
 
 /** Load a `sugarscape.replay.v1` artifact named by `?replay=`. Nothing in the
  *  viewer needs the game container on this path. */
-/* A v3 RECORDING, TURNED INTO FRAMES, IN THE BROWSER.
+/* A v3 RECORDING, PACKED AND MATERIALIZED ON DEMAND IN THE BROWSER.
  *
  * This viewer renders whole frames: every cell and every settler, per timestep.
  * A v3 recording is deltas against an initial state, plus a header. The two are
- * far closer than that makes them sound, which is why this is a conversion and
- * not a second renderer:
+ * far closer than that makes them sound, which is why FrameStore is a storage
+ * adapter and not a second renderer:
  *
  *   - both index cells `x * height + y`, so the lattice maps across untransposed;
  *   - v3's cell row [sugar, spice, pollution, maxSugar, maxSpice] is a SUPERSET
@@ -4959,156 +5484,32 @@ function targetChoices(header, measuredNow) {
   });
 }
 
-function v3ToReplay(document_) {
-  const header = document_.header;
-  const grid = header.initial_grid;
-  const width = grid.width;
-  const height = grid.height;
-  const cells = grid.cells.map((cell) => cell.slice(0, 3));
-  let maxSugar = 0;
-  let maxSpice = 0;
-  for (const cell of grid.cells) {
-    maxSugar = Math.max(maxSugar, cell[3] ?? 0);
-    maxSpice = Math.max(maxSpice, cell[4] ?? 0);
-  }
-  // roster: [id, seat, born, sex01, vision, movement, mSugar, mSpice, maxAge]
-  const roster = new Map(header.roster.map((row) => [row[0], row]));
-  // live:   [id, x, y, sugarBucket, spiceBucket, tribe, diseases]
-  const live = new Map(header.initial_agents.map((row) => [row[0], row.slice()]));
-  const players = header.config?.players ?? [];
-  const seatCount = Math.max(1, (header.targets ?? []).length);
-  const slots = [];
-  for (let seat = 0; seat < seatCount; seat += 1) {
-    slots.push({ name: players[seat]?.name || `Seat ${seat + 1}`, decisionModels: [] });
-  }
-  const scheduled = Number(header.config?.timesteps ?? document_.frames.length);
-  const startingAgents = header.initial_agents.length;
-
-  const latest = new Map();      // seat -> newest running score
-  const measuredNow = new Map(); // variable -> newest measured histogram
-
-  const coworld = () => {
-    const seats = (header.targets ?? []).map((target, seat) => {
-      const reading = latest.get(seat) ?? {};
-      const histogram = reading.histogram ?? {};
-      return {
-        seat,
-        name: slots[seat % slots.length].name,
-        targetId: target.id,
-        variable: target.variable,
-        bins: target.bins ?? [],
-        targetProbs: target.probs ?? [],
-        measuredProbs: histogram.probs ?? [],
-        sampleCount: histogram.sample_count ?? 0,
-        measured: Boolean(histogram.probs),
-        score: reading.score,
-        assigned: true,
-      };
-    });
-    return { seats, choices: targetChoices(header, measuredNow), finalScores: header.scores ?? [] };
-  };
-
-  const materialise = (timestep, stats, final) => {
-    const agents = [];
-    for (const id of [...live.keys()].sort((a, b) => a - b)) {
-      const dynamic = live.get(id);
-      const stat = roster.get(id) ?? [id, 0, 0, 0, 0, 0, 0, 0, -1];
-      agents.push({
-        id,
-        cell: dynamic[1] * height + dynamic[2],
-        slot: stat[1],
-        decisionModel: slots[stat[1] % slots.length].name,
-        age: Math.max(0, timestep - stat[2]),
-        sugar: dynamic[3],
-        spice: dynamic[4],
-        sugarMetabolism: stat[6],
-        spiceMetabolism: stat[7],
-        vision: stat[4],
-        movement: stat[5],
-        depressed: false,
-        sick: Boolean(dynamic[6]),
-        tribe: dynamic[5],
-      });
-    }
-    return {
-      format: "sugarscape.frame.v1",
-      timestep,
-      maxTimestep: scheduled,
-      environmentMaxSugar: maxSugar,
-      environmentMaxSpice: maxSpice,
-      startingAgents,
-      wealthQuantum: V3_WEALTH_QUANTUM,
-      width,
-      height,
-      cells: cells.map((cell) => cell.slice()),
-      agents,
-      links: [],
-      slots,
-      stats,
-      final,
-      coworld: coworld(),
-    };
-  };
-
-  const statsFrom = (runtime, timestep) => {
-    const out = Object.assign({ timestep, population: live.size }, runtime || {});
-    for (const key of ["giniCoefficient", "agentStarvationDeaths", "agentAgingDeaths",
-      "agentCombatDeaths", "agentDiseaseDeaths"]) {
-      if (out[key] === undefined) out[key] = 0;
-    }
-    return out;
-  };
-
-  const frames = [materialise(0, statsFrom({}, 0), false)];
-  document_.frames.forEach((frame, position) => {
-    for (const [index, sugar, spice, pollution] of frame.cell_deltas) {
-      cells[index] = [sugar, spice, pollution];
-    }
-    const deltas = frame.agent_deltas;
-    for (const row of deltas.births) roster.set(row[0], row);
-    for (const row of deltas.upsert) live.set(row[0], row.slice());
-    for (const id of deltas.remove) live.delete(id);
-    for (const reading of frame.running ?? []) latest.set(reading.seat, reading);
-    for (const [variable, histogram] of Object.entries(frame.measured ?? {})) {
-      measuredNow.set(variable, histogram);
-    }
-    frames.push(materialise(
-      frame.timestep,
-      statsFrom(frame.runtimeStats, frame.timestep),
-      position === document_.frames.length - 1,
-    ));
-  });
-
-  return { format: "sugarscape.replay.v1", config: header.config, frames };
-}
-
-/** Inflate a deflate-compressed recording. v3 writes them compressed; the
- *  Observatory hands the same bytes over postMessage. */
-async function inflateReplay(bytes) {
+/** Parse a deflate-compressed recording without retaining a decoded-string
+ *  copy beside JSON.parse's object graph. */
+async function parseCompressedReplay(bytes) {
   if (!("DecompressionStream" in window)) {
     throw new Error("This browser cannot decompress replays (DecompressionStream).");
   }
   const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate"));
-  return new Uint8Array(await new Response(stream).arrayBuffer());
+  return new Response(stream).json();
 }
 
 /** Bytes in, playable replay out, whichever generation recorded them. */
 async function replayFromBytes(bytes) {
-  let text;
+  let parsed;
   try {
-    text = new TextDecoder().decode(await inflateReplay(bytes));
+    parsed = await parseCompressedReplay(bytes);
   } catch (error) {
     // Not compressed: a v1 recording is plain JSON on disk.
-    text = new TextDecoder().decode(bytes);
+    parsed = JSON.parse(new TextDecoder().decode(bytes));
   }
-  const parsed = JSON.parse(text);
   if (parsed.format === "sugarscape.replay.v3") {
     if (parsed.version !== 2) {
       throw new Error(
         `This replay was recorded in format version ${parsed.version}; this viewer plays version 2.`,
       );
     }
-    return v3ToReplay(parsed);
+    return FrameStore.fromV3(parsed);
   }
   return parsed;
 }
@@ -5143,6 +5544,32 @@ async function loadArtifact(url) {
  *  the fetch path and the postMessage path cannot drift in their validation —
  *  the socket path's guards were once missing from the artifact path entirely. */
 async function adoptReplay(payload, url) {
+  if (payload instanceof FrameStore) {
+    if (payload.count === 0) {
+      fail("This replay recorded no frames.");
+      return;
+    }
+    resetStream();
+    frameStore = payload;
+    events = payload.events;
+    wealthSeries = payload.wealthSeries;
+    const first = firstFrame();
+    if (!isRenderableFrame(first)) return;
+    const scheduled = Number(payload.config?.timesteps ?? payload.scheduled ?? 0);
+    if (scheduled > 0) state.maxTimestep = scheduled;
+    state.maxSugar = Math.max(1, payload.maxSugar ?? 1);
+    state.maxSpice = Math.max(0, payload.maxSpice ?? 0);
+    state.startingPopulation = payload.startingAgents || first.agents.length;
+    state.sawStart = first.timestep === 0;
+    state.maxWealth = Math.max(1, ...wealthSeries.flatMap((point) => point.scores));
+    state.finished = true;
+    state.live = false;
+    state.cursor = 0;
+    syncScrub();
+    ready();
+    setPlaying(!reducedMotion);
+    return;
+  }
   if (!payload || payload.format !== "sugarscape.replay.v1" || !Array.isArray(payload.frames)) {
     fail("That file is not a Sugarscape recording this viewer can read.", url);
     return;
@@ -5244,7 +5671,7 @@ async function boot() {
   const replay = params.get("replay");
   if (replay) await loadArtifact(replay);
   else if (typeof connect === "function" && socketUrl()) connect();
-  if (frames.length > 0) ready();
+  if (frameCount() > 0) ready();
 }
 
 // Never let boot reject into the void. It was called bare, so anything that
