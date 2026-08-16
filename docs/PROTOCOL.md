@@ -80,6 +80,10 @@ the player submission timeout elapses (180 seconds by default), and
 protocol-level Ping frames receive automatic Pong responses throughout that
 interval.
 
+The initial `status` greeting is immediate, but the server briefly paces the
+first live `frame`. This keeps control frames ahead of a burst of simulation
+messages when a client performs Ping/Pong before it begins consuming the stream.
+
 `GET /healthz` returns HTTP 200 once the submission server is ready.
 
 ## Replay
