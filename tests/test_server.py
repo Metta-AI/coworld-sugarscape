@@ -140,6 +140,7 @@ def test_server_end_to_end_contract(tmp_path: Path) -> None:
             # test_global_answers_a_ping_after_the_episode_has_finished is the
             # one that needs it, and sets its own.
             "spectator_grace_seconds": 0,
+            "spectator_stream_start_delay_seconds": 0,
         }
     )
     config_path = tmp_path / "config.json"
@@ -313,6 +314,11 @@ def test_certification_fixture_completes_with_bundled_baseline_players(tmp_path:
     )
     try:
         _wait_for_health(f"http://127.0.0.1:{port}", game)
+        # Match the hosted certifier: connect /global before the players, then
+        # don't consume its application messages until after Ping/Pong. If the
+        # game floods all 50 frames immediately, websockets' default 16-message
+        # client queue fills and the automatic Pong is trapped behind them.
+        spectator = connect(f"ws://127.0.0.1:{port}/global", proxy=None)
         players = []
         for slot, token in enumerate(config["tokens"]):
             player_environment = environment.copy()
@@ -333,6 +339,9 @@ def test_certification_fixture_completes_with_bundled_baseline_players(tmp_path:
         for player in players:
             output, _ = player.communicate(timeout=10)
             assert player.returncode == 0, output
+        spectator.ping(b"coworld-certification-ping").wait(timeout=2)
+        assert json.loads(spectator.recv(timeout=2))["type"] == "status"
+        spectator.close()
         game_output, _ = game.communicate(timeout=10)
         assert game.returncode == 0, game_output
         results = json.loads(results_path.read_text(encoding="utf-8"))

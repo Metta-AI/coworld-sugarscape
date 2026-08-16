@@ -42,6 +42,11 @@ from .targets import load_target_catalog, resolve_seat_targets
 PROTOCOL = "sugarscape-v3/1"
 MAX_PLAYER_MESSAGE_BYTES = 64 * 1024
 SPECTATOR_QUEUE_SIZE = 64
+# Give a newly connected spectator time to complete protocol probes before live
+# frames can fill a client's receive queue. The hosted certifier deliberately
+# sends Ping before calling recv(); without this pause, a short episode can put
+# more than websockets' default 16 messages ahead of the automatic Pong.
+SPECTATOR_STREAM_START_DELAY_SECONDS = 3.0
 # How long the server keeps listening after the episode's artifacts are written.
 # The hosted certifier's viewer probe connects to /global and pings it, and on a
 # small config the episode is over in ~2s — so a server that closed as soon as
@@ -292,10 +297,21 @@ class SugarscapeServer:
                 await connection.send(self._result_message)
                 await self._linger(connection)
                 return
+            stream_started = False
             while True:
                 message = await queue.get()
+                message_type = json.loads(message).get("type")
+                if message_type == "frame" and not stream_started:
+                    delay = float(
+                        self.config.get(
+                            "spectator_stream_start_delay_seconds",
+                            SPECTATOR_STREAM_START_DELAY_SECONDS,
+                        )
+                    )
+                    await asyncio.sleep(max(0.0, delay))
+                    stream_started = True
                 await connection.send(message)
-                if json.loads(message).get("type") == "result":
+                if message_type == "result":
                     await self._linger(connection)
                     return
         except ConnectionClosed:
