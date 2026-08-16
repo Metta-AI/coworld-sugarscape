@@ -74,6 +74,12 @@ Each spectator has a bounded queue; a slow spectator may drop old presentation
 frames but cannot slow the simulation. `GET /client/global` is a minimal
 raw-message browser client.
 
+After the terminal result, the server remains available briefly for late
+spectators. An established spectator remains open until its peer disconnects or
+the player submission timeout elapses (180 seconds by default), and
+protocol-level Ping frames receive automatic Pong responses throughout that
+interval.
+
 `GET /healthz` returns HTTP 200 once the submission server is ready.
 
 ## Replay
