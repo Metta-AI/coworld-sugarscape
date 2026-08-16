@@ -367,7 +367,7 @@ class SugarscapeServer:
         self._result_ready.set()
 
     async def _linger(self, connection: ServerConnection) -> None:
-        """Hold a finished spectator connection open until the PEER hangs up.
+        """Hold a finished spectator connection open until the peer hangs up.
 
         Sending the result and returning closes the socket from this side, and a
         reader that wanted to ping it then gets `no close frame received or
@@ -378,16 +378,15 @@ class SugarscapeServer:
         reader task while we sit here.
         """
 
-        # BOUNDED by the same grace knob, for two reasons. Leaving the socket
-        # open indefinitely blocks shutdown — exiting the `serve()` context
-        # waits on live handler tasks, so an un-timed wait here turns a finished
-        # episode into a hung container. And a deployment that sets the grace to
-        # zero is saying "do not hold anything open", which has to include this.
-        grace = float(self.config.get("spectator_grace_seconds", SPECTATOR_GRACE_SECONDS))
-        if grace <= 0:
+        # A connected certifier may be waiting for Kubernetes player pods to
+        # start before it sends Ping, so it must outlive the late-arrival grace.
+        # Keep the wait bounded by the existing player startup timeout so an
+        # abandoned spectator still cannot hang the game container forever.
+        linger = self._spectator_linger_seconds()
+        if linger <= 0:
             return
         try:
-            await asyncio.wait_for(connection.wait_closed(), timeout=grace)
+            await asyncio.wait_for(connection.wait_closed(), timeout=linger)
         except (ConnectionClosed, TimeoutError):
             return
 
@@ -403,26 +402,39 @@ class SugarscapeServer:
         20x20 config the whole episode is over in about two seconds, so the
         window it had to hit was essentially zero.
 
-        So the server now holds open for a bounded grace whether or not anyone is
+        So the server holds open for a bounded grace whether or not anyone is
         connected, and a spectator arriving inside that window is handed the
-        finished result immediately (see _spectator_handler). Bounded, because a
-        game container that never exits is a hung job: the grace is the ceiling,
-        and connected readers still shorten it by draining.
+        finished result immediately (see _spectator_handler). An established
+        spectator may remain through the longer player startup timeout because
+        hosted certification waits for those pods before sending Ping. Both
+        deadlines are bounded so an abandoned reader cannot hang the container.
         """
 
         loop = asyncio.get_running_loop()
-        grace = float(self.config.get("spectator_grace_seconds", SPECTATOR_GRACE_SECONDS))
-        deadline = loop.time() + max(0.0, grace)
-        _log("terminal_grace_open", seconds=grace)
-        # Drain anyone already attached first; they are why the episode ran.
-        drain = loop.time() + 2.0
-        while (self._active_players or self._spectators) and loop.time() < drain:
-            await asyncio.sleep(0.01)
-        # Then simply remain listening. A reader that connects here gets the
-        # result on arrival, so the wait is not a silent one.
-        while loop.time() < deadline:
+        grace = float(
+            self.config.get("spectator_grace_seconds", SPECTATOR_GRACE_SECONDS)
+        )
+        grace_deadline = loop.time() + max(0.0, grace)
+        linger = self._spectator_linger_seconds()
+        linger_deadline = loop.time() + max(0.0, linger)
+        _log("terminal_grace_open", seconds=grace, connected_seconds=linger)
+        # Stay available for late readers through the grace period. A reader
+        # already attached extends shutdown through the player startup timeout,
+        # which covers the certifier's connect -> wait for players -> Ping order.
+        while loop.time() < grace_deadline or (
+            self._spectators and loop.time() < linger_deadline
+        ):
             await asyncio.sleep(0.05)
         _log("terminal_grace_closed")
+
+    def _spectator_linger_seconds(self) -> float:
+        grace = float(
+            self.config.get("spectator_grace_seconds", SPECTATOR_GRACE_SECONDS)
+        )
+        player_startup = float(
+            self.config.get("player_connect_timeout_seconds", 180)
+        )
+        return max(grace, player_startup)
 
     def _fan_out(self, message: str) -> None:
         for queue in tuple(self._spectators):

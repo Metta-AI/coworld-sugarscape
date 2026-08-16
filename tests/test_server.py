@@ -324,19 +324,22 @@ def test_global_answers_a_ping_after_the_episode_has_finished(
     tmp_path: Path,
     tiny_episode_config: dict[str, object],
 ) -> None:
-    """The hosted certifier connects to /global AFTER the run and pings it.
+    """A finished /global connection must survive until the certifier pings it.
 
     This is the failure that kept every published version uncertified — the
     reported reason being "Game websocket did not answer a WebSocket Ping with
-    Pong: ws://127.0.0.1:8080/global". Two causes, both fixed:
+    Pong: ws://127.0.0.1:8080/global". Three causes are covered here:
 
     1. The server closed as soon as its already-connected readers drained, which
        on a small config is ~2 s after start. The probe arrived at nothing.
     2. Once it outlived the episode, a finished spectator was sent the result and
        immediately disconnected from THIS side, so the ping met a closed socket.
+    3. The hosted certifier connects before the episode but waits for Kubernetes
+       player pods to start before sending Ping. Reusing the late-arrival grace
+       for that established connection closed it while the certifier was waiting.
 
-    So this test does exactly what the certifier does, in that order: let the
-    episode finish, connect fresh, and ping.
+    This test reaches the same terminal lifecycle directly: finish the episode,
+    connect inside the late-arrival grace, wait beyond that grace, then ping.
     """
 
     config = {
@@ -346,8 +349,11 @@ def test_global_answers_a_ping_after_the_episode_has_finished(
         "players": [{"name": "solo"}],
         "tokens": ["token-zero"],
         "targets": ["wealth.skewed-gini-0.5"],
-        # Long enough to connect inside, short enough to keep the suite quick.
-        "spectator_grace_seconds": 12,
+        # The hosted certifier connects first, then waits for Kubernetes player
+        # pods to start before it sends Ping. Keep the late-arrival grace short
+        # here so this test proves an established spectator outlives that wait.
+        "spectator_grace_seconds": 0.2,
+        "player_connect_timeout_seconds": 2,
     }
     config_path = tmp_path / "config.json"
     results_path = tmp_path / "results.json"
@@ -388,10 +394,11 @@ def test_global_answers_a_ping_after_the_episode_has_finished(
         player.close()
         assert results_path.exists(), "the episode never wrote its results"
 
-        # NOW behave like the certifier: a fresh connection, then a ping.
+        # Reproduce the certifier's established-but-delayed Ping lifecycle.
         spectator = connect(f"ws://127.0.0.1:{port}/global", proxy=None)
         try:
             assert json.loads(spectator.recv(timeout=10))["type"] in {"status", "result"}
+            time.sleep(0.3)
             # ping() returns once the peer's Pong comes back; a closed or
             # unresponsive socket raises instead.
             spectator.ping().wait(timeout=10)
