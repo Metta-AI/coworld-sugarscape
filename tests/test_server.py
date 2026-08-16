@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from pathlib import Path
 import socket
 import subprocess
+import threading
 import time
 from urllib.request import urlopen
 
@@ -13,7 +15,7 @@ from websockets.exceptions import ConnectionClosedError, InvalidStatus
 from websockets.sync.client import connect
 
 from coworld.replay import decode_replay
-from coworld.server import atomic_write_uri, public_config
+from coworld.server import SugarscapeServer, atomic_write_uri, public_config
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -51,6 +53,61 @@ def test_atomic_file_uri_write_replaces_complete_payload(tmp_path: Path) -> None
 
     assert destination.read_bytes() == b"complete-new-payload"
     assert list(tmp_path.iterdir()) == [destination]
+
+
+def test_artifact_upload_does_not_block_websocket_event_loop(
+    tiny_episode_config: dict[str, object],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A slow hosted artifact PUT must not delay protocol-level Pong frames."""
+
+    upload_started = threading.Event()
+    allow_upload = threading.Event()
+    write_count = 0
+
+    def fake_run_episode(*_args: object, **_kwargs: object):
+        return (
+            {
+                "scores": [1.0, 1.0],
+                "details": [{}, {}],
+                "score.match_mean": 1.0,
+                "score.match_min": 1.0,
+                "result.population_final": 8,
+            },
+            b"replay",
+            {},
+        )
+
+    def slow_artifact_write(_uri: str, _data: bytes) -> int:
+        nonlocal write_count
+        write_count += 1
+        if write_count == 1:
+            upload_started.set()
+            if not allow_upload.wait(timeout=1):
+                raise AssertionError("artifact upload blocked the WebSocket event loop")
+        return 1
+
+    monkeypatch.setattr("coworld.server.run_episode", fake_run_episode)
+    monkeypatch.setattr("coworld.server._timed_atomic_write", slow_artifact_write)
+    monkeypatch.setattr("coworld.server._encode_results", lambda _results: b"{}")
+
+    config = {
+        **tiny_episode_config,
+        "tokens": ["zero", "one"],
+        "players": [{"name": "Zero"}, {"name": "One"}],
+        "targets": ["wealth.skewed-gini-0.5", "wealth.egalitarian"],
+        "measurement_window": 2,
+    }
+    server = SugarscapeServer(config, "https://results.test", "https://replay.test")
+
+    async def exercise() -> None:
+        episode = asyncio.create_task(server._execute_episode(asyncio.get_running_loop()))
+        assert await asyncio.to_thread(upload_started.wait, 0.5)
+        allow_upload.set()
+        await asyncio.wait_for(episode, timeout=1)
+
+    asyncio.run(exercise())
+    assert write_count == 2
 
 
 def test_server_entry_reexecutes_with_zero_hash_seed() -> None:

@@ -334,18 +334,14 @@ class SugarscapeServer:
             "submission_window_ns": self._submission_window_ns,
             "seats": [timing.as_dict() for timing in self._seat_timings],
         }
-        replay_write_ns = _timed_atomic_write(self.replay_uri, replay)
-        timings["artifact_writes"] = {
-            "replay_os_replace_ns": replay_write_ns,
-            "results_provisional_payload_ns": 0,
-        }
-        provisional_started = perf_counter_ns()
-        _encode_results(results)
-        timings["artifact_writes"]["results_provisional_payload_ns"] = (
-            perf_counter_ns() - provisional_started
+        replay_write_ns, results_write_ns = await asyncio.to_thread(
+            _publish_episode_artifacts,
+            self.replay_uri,
+            self.results_uri,
+            replay,
+            results,
+            timings,
         )
-        final_payload = _encode_results(results)
-        results_write_ns = _timed_atomic_write(self.results_uri, final_payload)
         _log(
             "artifact_writes_complete",
             replay_os_replace_ns=replay_write_ns,
@@ -662,6 +658,30 @@ def _strip_tokens(value: Any) -> Any:
     if isinstance(value, list):
         return [_strip_tokens(item) for item in value]
     return value
+
+
+def _publish_episode_artifacts(
+    replay_uri: str,
+    results_uri: str,
+    replay: bytes,
+    results: Mapping[str, object],
+    timings: dict[str, object],
+) -> tuple[int, int]:
+    """Publish artifacts without blocking the WebSocket event loop."""
+
+    replay_write_ns = _timed_atomic_write(replay_uri, replay)
+    artifact_timings = {
+        "replay_os_replace_ns": replay_write_ns,
+        "results_provisional_payload_ns": 0,
+    }
+    timings["artifact_writes"] = artifact_timings
+    provisional_started = perf_counter_ns()
+    _encode_results(results)
+    artifact_timings["results_provisional_payload_ns"] = (
+        perf_counter_ns() - provisional_started
+    )
+    results_write_ns = _timed_atomic_write(results_uri, _encode_results(results))
+    return replay_write_ns, results_write_ns
 
 
 def _timed_atomic_write(uri: str, data: bytes) -> int:
