@@ -47,6 +47,7 @@ def test_variants_and_certification_are_token_free_and_fixture_lengths_match() -
     assert {variant["id"] for variant in manifest["variants"]} == {
         "solo-wealth",
         "solo-ladder",
+        "duo-ladder",
         "duel-4seat",
     }
     for variant in manifest["variants"]:
