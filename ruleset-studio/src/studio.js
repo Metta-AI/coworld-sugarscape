@@ -23,10 +23,31 @@ let applyingSnapshot = false;
 
 const darkScheme = window.matchMedia("(prefers-color-scheme: dark)");
 
+// Zelos hardcodes block icons (the operand-count mutator cog) at the front of
+// the row; trailing the cog keeps the operator glyph first, where the eye
+// starts reading the expression.
+class StudioRenderInfo extends Blockly.zelos.RenderInfo {
+  createRows_() {
+    super.createRows_();
+    for (const row of this.rows) {
+      const icons = row.elements.filter(element => Blockly.blockRendering.Types.isIcon(element));
+      if (icons.length) {
+        row.elements = row.elements.filter(element => !Blockly.blockRendering.Types.isIcon(element)).concat(icons);
+      }
+    }
+  }
+}
+class StudioRenderer extends Blockly.zelos.Renderer {
+  makeRenderInfo_(block) {
+    return new StudioRenderInfo(this, block);
+  }
+}
+Blockly.blockRendering.register("studio_zelos", StudioRenderer);
+
 const workspace = Blockly.inject("blockly", {
   toolbox: TOOLBOX,
   theme: studioTheme(darkScheme.matches),
-  renderer: "zelos",
+  renderer: "studio_zelos",
   media: "vendor/blockly/media/",
   sounds: false,
   trashcan: true,
