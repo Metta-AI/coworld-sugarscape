@@ -29,7 +29,8 @@ implementation.
   variable must use that variable's canonical support and bins.
 - `players/baseline/` is the bundled one-shot player; `replay-viewer/` is a
   dependency-free static bundle.
-- Run `.venv/bin/python -m pytest` offline. Server socket tests need permission
+- Setup from a fresh clone: `uv sync` (creates `.venv` from `pyproject.toml`).
+  Run `.venv/bin/python -m pytest` offline. Server socket tests need permission
   to bind a localhost port. Do not introduce async outside `server.py`.
 
 Deterministic comparisons use `canonical_results_payload()`, which excludes

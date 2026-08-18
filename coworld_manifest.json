@@ -96,7 +96,9 @@
       "readme": {"type": "uri", "value": "https://github.com/Metta-AI/coworld-sugarscape/blob/main/README.md"},
       "pages": [
         {"id": "rules", "title": "SugarLang rules", "content": {"type": "uri", "value": "https://github.com/Metta-AI/coworld-sugarscape/blob/main/docs/RULES.md"}},
-        {"id": "targets", "title": "Target catalog", "content": {"type": "uri", "value": "https://github.com/Metta-AI/coworld-sugarscape/blob/main/docs/TARGETS.md"}}
+        {"id": "targets", "title": "Target catalog", "content": {"type": "uri", "value": "https://github.com/Metta-AI/coworld-sugarscape/blob/main/docs/TARGETS.md"}},
+        {"id": "scenarios", "title": "Ladder scenario catalog", "content": {"type": "uri", "value": "https://github.com/Metta-AI/coworld-sugarscape/blob/main/docs/SCENARIOS.md"}},
+        {"id": "getting-started", "title": "Getting started", "content": {"type": "uri", "value": "https://github.com/Metta-AI/coworld-sugarscape/blob/main/docs/getting-started.md"}}
       ]
     }
   },
@@ -130,7 +132,7 @@
     {
       "id": "solo-ladder",
       "name": "Solo Ladder",
-      "description": "One scientist, one drawn world: 24 validated scenarios spanning all seven targets.",
+      "description": "One scientist, one drawn world: 80 scenarios (12 base worlds crossed with mechanic packs) spanning all seven targets.",
       "game_config": {
         "seed": -1,
         "seats": 1,

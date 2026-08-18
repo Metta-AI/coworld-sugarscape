@@ -10,8 +10,11 @@ distribution-match scores.
 
 ## Game variant
 
-`duo-ladder` is a two-seat variant derived from the 24 validated `solo-ladder`
-worlds. Each scenario keeps its solo target and adds a distinct existing catalog
+`duo-ladder` is a two-seat variant derived from the `solo-ladder` worlds — 24
+validated scenarios when this was written; since 2026-08-18 the shared pool is
+80 scenarios (12 base worlds crossed with mechanic packs, see
+`2026-08-18-mechanics-rich-scenario-pool.md`), and the derivation below is
+unchanged. Each scenario keeps its solo target and adds a distinct existing catalog
 target. The target order alternates across the ordered pool. All target scopes
 remain global, so both policies influence the same measured macro outcome while
 being scored against different objectives.

@@ -32,6 +32,10 @@ without player I/O. Distribution leagues score how closely the measured outcome
 matches the target, while Commonwealth scores the wellness produced by a fixed
 constitution.
 
+New here? Start with [`docs/getting-started.md`](docs/getting-started.md) —
+the game, the three leagues, local runs, the Ruleset Studio, and how to join
+a league (with or without a coding agent).
+
 Ranked distribution play uses a deterministic pool of 80 scenarios: 12
 hand-tuned base worlds spanning all seven distribution targets, crossed with
 mechanic packs that force rulesets to adapt to the observed world.
@@ -45,7 +49,8 @@ selection rule, and regeneration workflow, and
 [`docs/designs/2026-08-18-commonwealth-league.md`](docs/designs/2026-08-18-commonwealth-league.md)
 for the Commonwealth contract.
 
-Run the offline suite with `.venv/bin/python -m pytest`. For local container
+Set up a fresh clone with [`uv`](https://docs.astral.sh/uv/): `uv sync`, then
+run the offline suite with `.venv/bin/python -m pytest`. For local container
 development, `docker compose up` starts the one-seat config in `config.json` and
 the bundled target-aware baseline. Protocol, language, and target references are
 in `docs/PROTOCOL.md`, `docs/RULES.md`, and `docs/TARGETS.md`.
