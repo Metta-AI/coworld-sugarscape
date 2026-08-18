@@ -59,6 +59,7 @@ main { flex: 1; min-height: 0; display: flex; }
 /* Blockly draws block labels white by default — illegible on the pale category
    fills. Ink follows the theme; editable field wells stay paper-toned. */
 #blockly .blocklyText, .blocklyFlyout .blocklyText { fill: var(--block-ink) !important; }
+#blockly text.studio-op, .blocklyFlyout text.studio-op { font-size: 15px !important; font-weight: 700 !important; }
 #blockly .blocklyEditableText rect, .blocklyFlyout .blocklyEditableText rect,
 #blockly rect.blocklyFieldRect, .blocklyFlyout rect.blocklyFieldRect { fill: var(--field-bg) !important; stroke: var(--border-strong) !important; }
 /* Zelos hardcodes a white body for single-field blocks (our number literals),

@@ -39,7 +39,14 @@ export const FEATURES = {
 const NARY_OPERATORS = ["+", "-", "*", "/", "min", "max", "and", "or"];
 const UNARY_OPERATORS = ["abs", "neg", "not"];
 const BINARY_OPERATORS = ["pow", "<", "<=", ">", ">=", "==", "!="];
-const OPERATOR_LABELS = {"*": "×", "/": "÷", "<=": "≤", ">=": "≥", "==": "=", "!=": "≠"};
+const OPERATOR_LABELS = {"-": "−", "*": "×", "/": "÷", "<=": "≤", ">=": "≥", "==": "=", "!=": "≠"};
+
+// Symbol operators get a larger label so they read as the block's operation,
+// not as a separator between the mutator cog and the first operand.
+function operatorField(operator) {
+  const label = OPERATOR_LABELS[operator] ?? operator;
+  return new Blockly.FieldLabel(label, /[a-z]/.test(label) ? undefined : "studio-op");
+}
 
 const LIGHT_STYLES = {
   rule_blocks: {colourPrimary: "#eef2f7", colourSecondary: "#c8d4e6", colourTertiary: "#1a3875"},
@@ -104,7 +111,7 @@ function updateVariadicShape(block) {
   }
   for (let inputIndex = 0; inputIndex < block.itemCount_; inputIndex += 1) {
     const input = block.appendValueInput(`ARG${inputIndex}`).setCheck("Number");
-    if (inputIndex === 0) input.appendField(OPERATOR_LABELS[block.operator_] ?? block.operator_);
+    if (inputIndex === 0) input.appendField(operatorField(block.operator_));
   }
   block.setInputsInline(true);
 }
@@ -215,7 +222,7 @@ export function registerStudioBlocks() {
     Blockly.Blocks[`operator_${operatorName(operator)}`] = {
       init() {
         this.appendValueInput("ARG0").setCheck("Number");
-        this.appendValueInput("ARG1").setCheck("Number").appendField(OPERATOR_LABELS[operator] ?? operator);
+        this.appendValueInput("ARG1").setCheck("Number").appendField(operatorField(operator));
         this.setInputsInline(true);
         this.setOutput(true, "Number");
         this.setStyle(operator === "pow" ? "math_blocks" : "compare_blocks");
