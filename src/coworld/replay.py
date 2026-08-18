@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 import json
 import zlib
 from collections.abc import Callable, Mapping, Sequence
@@ -17,6 +18,7 @@ REPLAY_FORMAT = "sugarscape.replay.v3"
 REPLAY_VERSION = 2
 WEALTH_QUANTUM = 50
 FrameSink = Callable[[dict[str, object]], None]
+HeaderSink = Callable[[dict[str, object]], None]
 
 # Version 2 agent encoding: every agent's full state rides the replay, split
 # so completeness does not defeat delta compaction.
@@ -54,6 +56,7 @@ class ReplayWriter:
         rulesets: Sequence[CompiledRuleset],
         measurements: RollingMeasurements,
         histogram_interval: int = 10,
+        header_sink: HeaderSink | None = None,
         frame_sink: FrameSink | None = None,
     ) -> None:
         if histogram_interval <= 0:
@@ -73,6 +76,8 @@ class ReplayWriter:
             record[0]: tuple(record[1:]) for record in self.initial_agents
         }
         self.frames: list[dict[str, object]] = []
+        if header_sink is not None:
+            header_sink(deepcopy(self._initial_header()))
 
     def capture_frame(self, world: Any) -> dict[str, object]:
         """Capture one completed tick and synchronously publish it if requested."""
@@ -129,30 +134,25 @@ class ReplayWriter:
     def finish(
         self,
         *,
+        world: Any,
         scores: Sequence[float],
         seat_details: Sequence[Mapping[str, object]],
     ) -> ReplayArtifact:
         """Build the final header and return deterministic zlib bytes."""
 
+        if self.frames:
+            terminal = self.frames[-1]
+            if "running" not in terminal:
+                terminal["running"] = self._running_scores(world)
+            if "measured" not in terminal:
+                terminal["measured"] = self._measured_variables()
+        header = self._initial_header()
+        header["scores"] = list(scores)
+        header["seat_details"] = list(seat_details)
         document = {
             "format": REPLAY_FORMAT,
             "version": REPLAY_VERSION,
-            "header": {
-                "score_method": (
-                    WELLNESS_SCORE_METHOD
-                    if self.targets and self.targets[0].kind == "maximize"
-                    else SCORE_METHOD
-                ),
-                "config": self.config,
-                "seed": self.config["seed"],
-                "targets": [target.as_dict() for target in self.targets],
-                "rulesets": [ruleset.normalized for ruleset in self.rulesets],
-                "scores": list(scores),
-                "seat_details": list(seat_details),
-                "initial_grid": self.initial_grid,
-                "roster": self.roster,
-                "initial_agents": self.initial_agents,
-            },
+            "header": header,
             "frames": self.frames,
         }
         raw = json.dumps(
@@ -164,6 +164,24 @@ class ReplayWriter:
         ).encode("utf-8")
         compressed = zlib.compress(raw, level=9)
         return ReplayArtifact(compressed, len(raw), len(compressed))
+
+    def _initial_header(self) -> dict[str, object]:
+        """Return replay header fields known before simulation starts."""
+
+        return {
+            "score_method": (
+                WELLNESS_SCORE_METHOD
+                if self.targets and self.targets[0].kind == "maximize"
+                else SCORE_METHOD
+            ),
+            "config": self.config,
+            "seed": self.config["seed"],
+            "targets": [target.as_dict() for target in self.targets],
+            "rulesets": [ruleset.normalized for ruleset in self.rulesets],
+            "initial_grid": self.initial_grid,
+            "roster": self.roster,
+            "initial_agents": self.initial_agents,
+        }
 
     def _measured_variables(self) -> dict[str, object]:
         """Every measured variable's current global histogram, not just the targeted one.
