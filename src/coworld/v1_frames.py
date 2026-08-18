@@ -7,9 +7,9 @@ path and materializes after every delta.
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 import json
 from pathlib import Path
-from typing import Sequence
 
 from .replay import WEALTH_QUANTUM
 from .scoring import (
@@ -151,8 +151,9 @@ class V1FrameMaterializer:
         *,
         final: bool = False,
         final_scores: Sequence[float] | None = None,
+        final_details: object = None,
     ) -> dict[str, object]:
-        """Build the current whole frame, optionally injecting final scores."""
+        """Build the current whole frame, optionally injecting final results."""
 
         if final_scores is not None:
             self.final_scores = list(final_scores)
@@ -195,12 +196,17 @@ class V1FrameMaterializer:
             "slots": self.slots,
             "stats": self.stats,
             "final": final,
-            "coworld": self.coworld_block(),
+            "coworld": self.coworld_block(final_details=final_details),
         }
 
-    def coworld_block(self) -> dict[str, object]:
+    def coworld_block(self, *, final_details: object = None) -> dict[str, object]:
         """Build target, running-measurement, and authoritative-score metadata."""
 
+        details_by_seat = {
+            int(detail["seat"]): detail
+            for detail in final_details or []
+            if isinstance(detail, Mapping) and isinstance(detail.get("seat"), int)
+        }
         seats = []
         for seat, target in enumerate(self.targets):
             reading = self.latest.get(seat) or {}
@@ -230,6 +236,18 @@ class V1FrameMaterializer:
                 seat_row["meanWellness"] = reading["mean_wellness"]
             if scalar and reading.get("component_means"):
                 seat_row["componentMeans"] = reading["component_means"]
+            detail = details_by_seat.get(seat)
+            if detail is not None:
+                if detail.get("target_kind"):
+                    seat_row["targetKind"] = detail["target_kind"]
+                if detail.get("score_method"):
+                    seat_row["scoreMethod"] = detail["score_method"]
+                if detail.get("survivor_count") is not None:
+                    seat_row["survivorCount"] = detail["survivor_count"]
+                if detail.get("mean_wellness") is not None:
+                    seat_row["meanWellness"] = detail["mean_wellness"]
+                if detail.get("component_means"):
+                    seat_row["componentMeans"] = detail["component_means"]
             seats.append(seat_row)
         choices = []
         for target in self.catalog:

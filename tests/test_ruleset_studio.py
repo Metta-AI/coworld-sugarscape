@@ -159,6 +159,23 @@ def test_context_uses_effective_runtime_defaults_and_scenario_overrides(tmp_path
         assert trade["trait_ranges"]["trade"] == [0, 1]
 
 
+def test_scenarios_expose_play_choices_with_matching_context_ids(tmp_path: Path) -> None:
+    with running_server(tmp_path) as (host, port, _rulesets):
+        response = request((host, port), "GET", "/api/scenarios")
+
+    assert response[0] == 200
+    payload = decoded(response)
+    variants = {variant["id"]: variant for variant in payload["variants"]}
+    assert "duel-4seat" not in variants
+    assert variants["commonwealth"]["kind"] == "fixed"
+    assert variants["commonwealth"]["context_id"] == "commonwealth"
+    assert all(
+        scenario["context_id"] == f"solo-ladder:{scenario['id']}"
+        for scenario in variants["solo-ladder"]["scenarios"]
+    )
+    assert '"tokens"' not in json.dumps(payload)
+
+
 def test_cors_is_pinned_to_the_link_server_origin(tmp_path: Path) -> None:
     with running_server(tmp_path) as (host, port, _rulesets):
         denied = request((host, port), "GET", "/api/context", origin="http://evil.test")
@@ -166,7 +183,9 @@ def test_cors_is_pinned_to_the_link_server_origin(tmp_path: Path) -> None:
         allowed = request((host, port), "OPTIONS", "/api/validate")
         assert allowed[0] == 204
         assert allowed[1]["Access-Control-Allow-Origin"] == "http://localhost:9876"
-        assert allowed[1]["Access-Control-Allow-Methods"] == "GET, POST, PUT, OPTIONS"
+        assert allowed[1]["Access-Control-Allow-Methods"] == (
+            "GET, POST, PUT, DELETE, OPTIONS"
+        )
 
 
 def test_vendored_blockly_and_starter_are_offline_and_pinned() -> None:
