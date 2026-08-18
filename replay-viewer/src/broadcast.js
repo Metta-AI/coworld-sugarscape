@@ -71,9 +71,10 @@ const C = {
   maskOut: "rgba(0,0,0,0)",
 };
 
-// The original assigns palette colours to decision models in order
-// (reference/dtl-python/gui.py: palette[0] red, palette[1] blue), so the two
-// populations are red and blue exactly as in the model everyone recognises.
+// Player hue is stable everywhere in the broadcast: player one is blue, player
+// two is red. Culture varies the lightness within that hue, while the redundant
+// circle/diamond/triangle/square glyph keeps player identity independent of
+// colour vision.
 // Each hue is lifted slightly from the source so the same colour is legible
 // BOTH as a dot on the white plate and as a chip on the dark broadcast panels,
 // and each carries a redundant shape so the read never depends on hue alone.
@@ -88,12 +89,23 @@ const C = {
 // rim, and the surface underneath is the panel — darker than the ink, so the
 // chips already cleared AA there. The lift is for the band.)
 const SEATS = [
-  // #f5504a on ink 4.69:1 -> #ff6b60 5.80:1
-  { color: "#f5504a", text: "#ff6b60" },   // gui.py palette[0] #FA3232
   // #5a7cff on ink 4.40:1 (FAILS AA) -> #6b8bff 5.19:1
-  { color: "#5a7cff", text: "#6b8bff" },   // gui.py palette[1] #3232FA
+  { color: "#5a7cff", text: "#6b8bff" },
+  // #f5504a on ink 4.69:1 -> #ff6b60 5.80:1
+  { color: "#f5504a", text: "#ff6b60" },
   { color: "#6bd47f", text: "#6bd47f" },   // palette[2] #32FA32, 8.7:1
   { color: "#52d6e8", text: "#52d6e8" },   // palette[3] #32FAFA, 9.3:1
+];
+
+/** Player hue x culture lightness. DTL numbers its three starting tribes 0..2,
+ * so the rows read light pastel, mid-tone, dark as culture 1..3. Additional
+ * players retain the existing green/cyan seat hues; additional cultures cycle
+ * the three-level ramp just as the old finite tribe palette cycled. */
+const PLAYER_CULTURE_INKS = [
+  ["#c2dfff", "#6aa9e9", "#285f99"],
+  ["#ffd0d0", "#ed7777", "#a03a49"],
+  ["#d2f1d6", "#72c981", "#2f7041"],
+  ["#c8f3f7", "#65c9d4", "#276f78"],
 ];
 
 const F = { display: "Space Grotesk", mono: "IBM Plex Mono" };
@@ -1188,6 +1200,14 @@ function slotOf(agent) {
   return agent.slot >= 0 ? agent.slot : -1;
 }
 
+function playerCultureInk(slot, tribe) {
+  const player = ((slot % PLAYER_CULTURE_INKS.length) + PLAYER_CULTURE_INKS.length)
+    % PLAYER_CULTURE_INKS.length;
+  const shades = PLAYER_CULTURE_INKS[player];
+  const culture = ((tribe % shades.length) + shades.length) % shades.length;
+  return shades[culture];
+}
+
 /** Per-population standing. The score axis is total living wealth, matching
  *  `buildResults` in coworld.nim (which truncates the float sum to an integer);
  *  population count is the visible race but NOT the score. */
@@ -2008,15 +2028,12 @@ function drawBoard(frame, previous, t, now) {
   // field. Keep it thin: a first attempt at cell*0.13 swallowed the body and the
   // settlers read as asterisks at the embed floor.
   const ring = Math.max(1, cell * 0.075);
-  /* A settler's BODY is its culture, when the world has cultures.
+  /* A settler's BODY carries player and culture, when the world has cultures.
    *
    * Cultural tagging is live in the shipped world and every settler carries a
-   * tribe, so the dot that was a population marker now carries the one attribute
-   * that actually changes during a run. Tribes are a property of the world, not
-   * of a seat, so this reads correctly however many seats there are — but it
-   * does mean seat identity is no longer in the body colour. Multi-seat worlds
-   * put that identity back as a small neutral shape badge, leaving every colour
-   * available to mean culture and nothing else.
+   * tribe. Hue carries the player (blue first, red second) and lightness carries
+   * the culture (pastel first, dark third). The neutral shape badge remains as a
+   * redundant player label rather than making the read depend on colour alone.
    */
   const tribal = frame.agents.some((agent) => typeof agent.tribe === "number" && agent.tribe >= 0);
   const sheet = settlerSheet();
@@ -2035,7 +2052,7 @@ function drawBoard(frame, previous, t, now) {
     }
     const arrived = swayAge(body, now);
     let skin = tribal && typeof body.tribe === "number" && body.tribe >= 0
-      ? TRIBE_INK[body.tribe % TRIBE_INK.length]
+      ? playerCultureInk(body.slot, body.tribe)
       : seat.color;
     // THE COLOUR CROSSES OVER; it does not snap. A settler that was green on one
     // frame and blue on the next made a mass conversion read as a mass repaint —
@@ -2043,7 +2060,7 @@ function drawBoard(frame, previous, t, now) {
     if (arrived < 1) {
       const held = swayLog.get(body.agent.id);
       const from = typeof held?.from === "number" && held.from >= 0
-        ? TRIBE_INK[held.from % TRIBE_INK.length]
+        ? playerCultureInk(body.slot, held.from)
         : skin;
       // Quantised, or the per-colour tile cache mints a new sprite every frame.
       skin = blendHex(from, skin, Math.round(arrived * SWAY_STEPS) / SWAY_STEPS);
@@ -2087,7 +2104,7 @@ function drawBoard(frame, previous, t, now) {
          * The body may cross over gradually; the mark announcing where it is
          * going may not. */
         const joining = typeof body.tribe === "number" && body.tribe >= 0
-          ? TRIBE_INK[body.tribe % TRIBE_INK.length]
+          ? playerCultureInk(body.slot, body.tribe)
           : skin;
         context.beginPath();
         context.arc(body.px, body.py, cell * (0.42 + 0.30 * open), 0, Math.PI * 2);
@@ -2548,10 +2565,10 @@ function panel(x, y, width, height, radius = 10) {
     + `fill="${C.panel}" stroke="${C.border}" stroke-width="1.5"/>`;
 }
 
-/** A seat's repeated identity glyph. Culture owns colour on the board, so player
- *  identity is shape: circle for player one, diamond for player two, then
- *  triangle and square if a replay ever has more seats. The HUD keeps its seat
- *  colour as a redundant signal, but never relies on it alone. */
+/** A seat's repeated identity glyph. Player identity is both hue and shape:
+ *  circle for player one, diamond for player two, then triangle and square if a
+ *  replay ever has more seats. Culture changes the hue's lightness on settlers,
+ *  but never supplants this shape label. */
 function playerShape(x, y, slot, radius, fill, stroke, strokeWidth) {
   const shape = playerShapeIndex(slot);
   if (shape === 0) {
@@ -2612,23 +2629,28 @@ function boardKey(frame) {
   }
 
   // The settlers themselves, drawn from the atlas so the key cannot drift from
-  // the board again. Falls back to a disc when the sprite is not in play.
+  // the board again. Each visible player gets the same culture-lightness ramp as
+  // the board, plus its shape badge. Falls back to a disc when the sprite is not
+  // in play.
   const tribes = [...new Set(frame.agents
     .map((agent) => agent.tribe)
     .filter((tribe) => typeof tribe === "number" && tribe >= 0))].sort((a, b) => a - b);
   const mark = G(15);
   if (tribes.length > 0) {
-    markup += text("cultures", x, y, style);
-    x += advance("cultures", size) + G(8);
-    for (const tribe of tribes) {
-      const ink = TRIBE_INK[tribe % TRIBE_INK.length];
-      markup += settlerSwatch(ink, x, y - mark + G(3), mark, 1);
-      x += mark + G(2);
+    markup += text("players · cultures", x, y, style);
+    x += advance("players · cultures", size) + G(8);
+    for (let slot = 0; slot < frame.slots.length; slot += 1) {
+      for (const tribe of tribes) {
+        const ink = playerCultureInk(slot, tribe);
+        markup += settlerSwatch(ink, x, y - mark + G(3), mark, 1, slot);
+        x += mark + G(2);
+      }
+      x += G(3);
     }
     x += gap - G(2);
     // Swayed is the culture it LEFT, so the swatch has to be a ring, not a dot.
     markup += `<circle cx="${x + mark / 2}" cy="${y - mark / 2 + G(2)}" r="${mark / 2}" `
-      + `fill="none" stroke="${TRIBE_INK[0]}" stroke-width="${G(2.4)}"/>`;
+      + `fill="none" stroke="${playerCultureInk(0, 0)}" stroke-width="${G(2.4)}"/>`;
     markup += text("just swayed", x + mark + G(7), y, style);
     x += mark + G(7) + advance("just swayed", size) + gap;
     /* THE BOARD'S OTHER RING.
@@ -2649,7 +2671,7 @@ function boardKey(frame) {
     // Starving fades rather than hollows, so the swatch fades too — and it is
     // only offered when the replay can actually answer the question.
     if (!quantised(frame)) {
-      markup += settlerSwatch(TRIBE_INK[1 % TRIBE_INK.length], x, y - mark + G(3), mark, STARVING_ALPHA);
+      markup += settlerSwatch(playerCultureInk(0, 1), x, y - mark + G(3), mark, STARVING_ALPHA, 0);
       markup += text("about to starve", x + mark + G(7), y, style);
     }
     return markup;
@@ -2677,19 +2699,25 @@ function boardKey(frame) {
 /** One settler, at key size, as an inline image so the legend is literally the
  *  same art the board blits. Cached: toDataURL is far too slow for a redraw. */
 const swatchCache = new Map();
-function settlerSwatch(ink, x, y, box, alpha) {
+function settlerSwatch(ink, x, y, box, alpha, slot = null) {
   const sheet = settlerSheet();
+  let markup;
   if (!sheet) {
-    return `<circle cx="${x + box / 2}" cy="${y + box / 2}" r="${box / 2}" `
+    markup = `<circle cx="${x + box / 2}" cy="${y + box / 2}" r="${box / 2}" `
       + `fill="${ink}" opacity="${alpha}"/>`;
+  } else {
+    let url = swatchCache.get(ink);
+    if (!url) {
+      url = sheet.tileFor(ink, 1, 0).toDataURL();
+      swatchCache.set(ink, url);
+    }
+    markup = `<image href="${url}" x="${x}" y="${y}" width="${box}" height="${box}" `
+      + `opacity="${alpha}" style="image-rendering:pixelated"/>`;
   }
-  let url = swatchCache.get(ink);
-  if (!url) {
-    url = sheet.tileFor(ink, 1, 0).toDataURL();
-    swatchCache.set(ink, url);
-  }
-  return `<image href="${url}" x="${x}" y="${y}" width="${box}" height="${box}" `
-    + `opacity="${alpha}" style="image-rendering:pixelated"/>`;
+  if (slot === null) return markup;
+  return markup + playerShape(
+    x + box * 0.76, y + box * 0.76, slot, box * 0.15, C.paper, C.ink, Math.max(0.7, box * 0.055),
+  );
 }
 
 function scorebug(frame) {
@@ -4110,7 +4138,7 @@ function settlerPanel(frame, x, y, width, height) {
   }
 
   const ink = typeof agent.tribe === "number" && agent.tribe >= 0
-    ? TRIBE_INK[agent.tribe % TRIBE_INK.length] : C.paper;
+    ? playerCultureInk(slotOf(agent), agent.tribe) : seatOf(slotOf(agent)).text;
   const index = currentIndex();
   const was = index > 0 ? frameAt(index - 1).agents.find((each) => each.id === agent.id) : null;
   const wealth = agent.sugar + agent.spice;
@@ -4173,21 +4201,11 @@ function settlerPanel(frame, x, y, width, height) {
  * the others fall away, independently of whether the population is growing or
  * dying. Drawn from the frames, so it works on any replay carrying tribes.
  */
-/* Tribe inks, MEASURED against the two things they have to survive.
- *
- * Each clears 7:1 against PLATE_HEX, because that is the ground a settler
- * actually stands on: 99.2% of agent-frames sit on a cell the settler has
- * already stripped, so the body value carries the mark and the ink ring cannot
- * help there (ink is 1.09:1 against the plate).
- *
- * Two were wrong, and both were mine. #f0a63c was BYTE-IDENTICAL to SPICE_HEX,
- * so the first tribe's settlers were exactly the colour of the spice dots they
- * stand among — a 1.00:1 collision, worse than the 1.07:1 that put the ink ring
- * there in the first place. #d98cae measured 6.98:1 against the plate, under the
- * bar it was picked to clear. Now #ef8f7c (7.46:1 plate, 1.15:1 spice) and
- * #dd9ab8 (7.88:1 plate). Anything added here gets measured, not eyeballed.
- */
-const TRIBE_INK = ["#ef8f7c", "#7fb3d5", "#c9d17a", "#dd9ab8", "#8fd1c0", "#e8c07d"];
+/* The culture chart aggregates across players, so it keeps a player-independent
+ * categorical palette. On settlers, playerCultureInk is authoritative: player
+ * is hue and culture is lightness. These chart inks remain bright enough for
+ * thin lines on the dark panel and distinct from the sugar/spice marks. */
+const TRIBE_CHART_INK = ["#ef8f7c", "#7fb3d5", "#c9d17a", "#dd9ab8", "#8fd1c0", "#e8c07d"];
 
 function tribeShares(frame, x, y, width, height) {
   const big = dense();
@@ -4254,7 +4272,7 @@ function tribeShares(frame, x, y, width, height) {
       + `${yFor(history[index].share).toFixed(1)}`);
     if (points.length > 1) {
       markup += `<polyline points="${points.join(" ")}" fill="none" `
-        + `stroke="${TRIBE_INK[position % TRIBE_INK.length]}" stroke-width="2.5" `
+        + `stroke="${TRIBE_CHART_INK[position % TRIBE_CHART_INK.length]}" stroke-width="2.5" `
         + `stroke-linejoin="round"/>`;
     }
   });

@@ -366,6 +366,37 @@ assert.match(duoPresentation.playerOne, /^<circle/);
 assert.match(duoPresentation.playerTwo, /^<path/);
 assert.notEqual(duoPresentation.playerOne, duoPresentation.playerTwo);
 
+// Player and culture are orthogonal visual channels. Player one stays blue and
+// player two red while culture 1..3 descends from pastel to dark; the existing
+// circle/diamond glyph remains a redundant player label.
+const playerCulturePalette = JSON.parse(vm.runInContext(`JSON.stringify(
+  [0, 1].map((slot) => [0, 1, 2].map((tribe) => playerCultureInk(slot, tribe)))
+)`, viewerContext));
+const rgb = (hex) => [0, 2, 4].map((index) => parseInt(hex.slice(1 + index, 3 + index), 16));
+const luminance = (hex) => {
+  const [red, green, blue] = rgb(hex).map((channel) => {
+    const value = channel / 255;
+    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+};
+assert.ok(playerCulturePalette[0].every((ink) => {
+  const [red, , blue] = rgb(ink);
+  return blue > red;
+}), "every player-one culture shade must remain blue in hue");
+assert.ok(playerCulturePalette[1].every((ink) => {
+  const [red, , blue] = rgb(ink);
+  return red > blue;
+}), "every player-two culture shade must remain red in hue");
+for (const ramp of playerCulturePalette) {
+  assert.ok(luminance(ramp[0]) > luminance(ramp[1]));
+  assert.ok(luminance(ramp[1]) > luminance(ramp[2]));
+  assert.ok(luminance(ramp[0]) >= 0.7, "culture one must be a very light pastel");
+  assert.ok(luminance(ramp[2]) <= 0.13, "culture three must be dark");
+}
+assert.equal(new Set(playerCulturePalette.flat()).size, 6,
+  "player and culture combinations must remain visually distinct");
+
 // Commonwealth is a scalar objective, not a distribution target. Its rail
 // carries the running wellness sum and DTL component diagnostics, and never
 // offers the distribution overlay or counterfactual target picker.
@@ -1350,12 +1381,10 @@ assert.match(strapline.twoSeats, /^2 seats ·/, "and two seats takes the plural"
 
 /* A SETTLER MUST NOT BE THE COLOUR OF THE GROUND IT STANDS ON.
  *
- * TRIBE_INK[0] shipped byte-identical to SPICE_HEX — settlers of the first tribe
- * were exactly the colour of the spice dots around them, a 1.00:1 collision, and
- * nothing in this file noticed. TRIBE_INK[3] measured 6.98:1 against the plate,
- * under the bar it was chosen to clear. Both are measured here now, because a
- * settler standing on stripped ground has only its body value to carry it: the
- * ink ring is 1.09:1 against the plate and cannot do the work. */
+ * The requested dark culture-three shades intentionally cannot meet the old 7:1
+ * body-value floor on a dark plate; the sprite's beard, boots, outline, and player
+ * badge keep its silhouette. The palette must still avoid exact resource-colour
+ * collisions, and even its darkest requested shades must separate from the plate. */
 const inks = JSON.parse(vm.runInContext(`
   const lin = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
   const lum = (hex) => {
@@ -1367,7 +1396,7 @@ const inks = JSON.parse(vm.runInContext(`
     const [x, y] = [lum(a), lum(b)];
     return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
   };
-  JSON.stringify(TRIBE_INK.map((ink) => ({
+  JSON.stringify(PLAYER_CULTURE_INKS.slice(0, 2).flat().map((ink) => ({
     ink,
     plate: ratio(ink, PLATE_HEX),
     spice: ratio(ink, SPICE_HEX),
@@ -1375,15 +1404,15 @@ const inks = JSON.parse(vm.runInContext(`
   })));
 `, viewerContext));
 for (const row of inks) {
-  assert.ok(row.plate >= 7,
-    `tribe ink ${row.ink} must clear 7:1 on the plate it stands on, got ${row.plate.toFixed(2)}`);
-  assert.ok(row.spice > 1.05,
-    `tribe ink ${row.ink} must not be the colour of a spice dot, got ${row.spice.toFixed(2)}`);
-  assert.ok(row.sugar > 1.05,
+  assert.ok(row.plate >= 2.5,
+    `player-culture ink ${row.ink} must separate from the plate, got ${row.plate.toFixed(2)}`);
+  assert.ok(row.spice > 1.15,
+    `player-culture ink ${row.ink} must not be the colour of a spice dot, got ${row.spice.toFixed(2)}`);
+  assert.ok(row.sugar > 1.15,
     `nor of a sugar dot, got ${row.sugar.toFixed(2)} for ${row.ink}`);
 }
 assert.equal(new Set(inks.map((row) => row.ink)).size, inks.length,
-  "and no two tribes may share an ink");
+  "and no player-culture combination may share an ink");
 
 assert.equal(dots.perCell, 8, "four sugar plus four spice positions per cell");
 assert.equal(dots.missing, 0, "every position must be placed");
@@ -1676,8 +1705,8 @@ const diverging = JSON.parse(vm.runInContext(`
       stackedAbove: clipped('lead-above', '.24').length,
       stackedBelow: clipped('lead-below', '.24').length,
       // Each half is drawn in its own seat's colour, never both in one.
-      aboveIsSeat0: clipped('lead-above', '.46').every((p) => p.includes('#f5504a')),
-      belowIsSeat1: clipped('lead-below', '.46').every((p) => p.includes('#5a7cff')),
+      aboveIsSeat0: clipped('lead-above', '.46').every((p) => p.includes(seatOf(0).color)),
+      belowIsSeat1: clipped('lead-below', '.46').every((p) => p.includes(seatOf(1).color)),
       polesNamed: /&gt;Alpha&lt;|>Alpha</.test(markup) && /&gt;Beta&lt;|>Beta</.test(markup),
       keyed: /lead:/.test(markup) && /&gt;sugar&lt;|>sugar</.test(markup),
       captionY: Number((markup.match(/<text x="[^"]*" y="([\\d.]+)"[^>]*>[^<]*ahead</) || [])[1] ?? -1),
