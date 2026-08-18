@@ -6,7 +6,6 @@ import json
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
-from itertools import pairwise
 from pathlib import Path
 
 DEFAULT_CATALOG_PATH = Path(__file__).resolve().parents[2] / "targets"
@@ -145,7 +144,7 @@ def parse_target(raw: object, *, location: str = "target") -> Target:
     """Validate one decoded target object with actionable field errors."""
 
     if not isinstance(raw, Mapping):
-        raise TypeError(f"{location}: target must be an object")
+        raise ValueError(f"{location}: target must be an object")
     kind = raw.get("kind", "distribution")
     if not isinstance(kind, str) or kind not in TARGET_KINDS:
         raise ValueError(
@@ -191,7 +190,7 @@ def parse_target(raw: object, *, location: str = "target") -> Target:
     if support[0] >= support[1]:
         raise ValueError(f"{location}.support must be strictly increasing")
     bins = tuple(_number_array(raw["bins"], f"{location}.bins"))
-    if len(bins) < 2 or any(left >= right for left, right in pairwise(bins)):
+    if len(bins) < 2 or any(left >= right for left, right in zip(bins, bins[1:])):
         raise ValueError(
             f"{location}.bins must contain at least two strictly increasing edges"
         )
@@ -210,7 +209,7 @@ def parse_target(raw: object, *, location: str = "target") -> Target:
     source = _nonempty_string(raw["source"], f"{location}.source")
     provisional = raw["provisional"]
     if not isinstance(provisional, bool):
-        raise TypeError(f"{location}.provisional must be a boolean")
+        raise ValueError(f"{location}.provisional must be a boolean")
     generation = raw["generation"]
     if not isinstance(generation, Mapping) or not generation.get("description"):
         raise ValueError(

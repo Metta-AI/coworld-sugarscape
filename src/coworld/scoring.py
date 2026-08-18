@@ -6,7 +6,6 @@ import math
 from bisect import bisect_right
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from itertools import pairwise
 
 SCORE_METHOD = "w1-hyperbolic/1"
 LEGACY_SCORE_METHOD = "w1-support/1"
@@ -74,7 +73,9 @@ def make_histogram(samples: Iterable[float], bins: Sequence[float]) -> Histogram
     """Bin finite samples, clamping out-of-support values to the edge bins."""
 
     edges = tuple(float(edge) for edge in bins)
-    if len(edges) < 2 or any(left >= right for left, right in pairwise(edges)):
+    if len(edges) < 2 or any(
+        left >= right for left, right in zip(edges, edges[1:])
+    ):
         raise ValueError("bins must contain at least two strictly increasing edges")
     counts = [0] * (len(edges) - 1)
     sample_count = 0
@@ -103,7 +104,9 @@ def wasserstein_1(
     cumulative_measured = 0.0
     cumulative_target = 0.0
     distance = 0.0
-    for index, width in enumerate(right - left for left, right in pairwise(bins)):
+    for index, width in enumerate(
+        right - left for left, right in zip(bins, bins[1:])
+    ):
         cumulative_measured += measured[index]
         cumulative_target += target[index]
         distance += abs(cumulative_measured - cumulative_target) * width

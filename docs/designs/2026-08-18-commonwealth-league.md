@@ -34,8 +34,8 @@ These were settled explicitly and are not open:
 2. **Per-agent wellness is normalized to [0, 1]** (non-negative). Population
    growth therefore strictly helps; that is accepted.
 3. **Per-agent value = mean over the final measurement window**, not a
-   final-tick snapshot. Window shortened to **50 ticks** (open to dropping to
-   10; see open questions).
+   final-tick snapshot. The window is **50 ticks**; see the resolved-questions
+   entry below.
 4. **Seed is random per episode** (`seed: -1`); the game config is otherwise
    fixed — pinned DTL defaults with the agent mechanics enabled (pollution and
    seasons stay off). No scenario pool.
