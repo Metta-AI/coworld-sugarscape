@@ -16,7 +16,7 @@ export const FEATURES = {
     ["vision", "agent.vision", "Effective vision"],
     ["movement", "agent.movement", "Effective movement range"],
     ["age", "agent.age", "Current age"],
-    ["time to live", "agent.ttl", "DTL findTimeToLive() result"],
+    ["starves in", "agent.ttl", "Ticks until starvation at current burn: DTL findTimeToLive(), min(sugar/metabolism, spice/metabolism); age is not included"],
     ["MRS", "agent.mrs", "DTL marginal rate of substitution"],
   ],
   cell: [
