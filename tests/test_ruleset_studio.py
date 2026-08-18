@@ -249,3 +249,18 @@ def test_studio_docs_and_static_contract_match_the_implemented_phase() -> None:
     assert '<script src="/link-client.js"></script>' in html
     assert "window.linkApplyPatch" in script
     assert "link.submit" not in script
+
+
+def test_csp_permits_blockly_runtime_style_injection() -> None:
+    # Blockly injects its layout CSS as inline <style> elements at runtime.
+    # A style-src without 'unsafe-inline' silently blocks them, which
+    # collapses the SVG layout: the toolbox flyout renders as a huge inline
+    # strip over the side panel and nothing in it is clickable.
+    index = (ROOT / "ruleset-studio/src/index.html").read_text(encoding="utf-8")
+    for line in index.splitlines():
+        if "Content-Security-Policy" in line and "style-src" in line:
+            directives = line.split("style-src", 1)[1].split(";", 1)[0]
+            assert "'unsafe-inline'" in directives, (
+                "CSP style-src must include 'unsafe-inline' for Blockly's "
+                "runtime style injection"
+            )
