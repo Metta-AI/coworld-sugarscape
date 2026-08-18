@@ -1,8 +1,10 @@
 # Solo-ladder scenario pool
 
-**Status:** implemented and deployed. The original reachability gate below is
-historical; `docs/SCENARIOS.md` now defines calibration under
-`w1-hyperbolic/1`.
+> **Superseded (2026-08-18):** the 24-scenario structure and reachability
+> gate described here were removed. See
+> [2026-08-18-mechanics-rich-scenario-pool.md](2026-08-18-mechanics-rich-scenario-pool.md).
+
+**Status:** implemented and deployed 2026-08-13; superseded 2026-08-18.
 **Date:** 2026-08-13
 **Owner:** James Boggs
 

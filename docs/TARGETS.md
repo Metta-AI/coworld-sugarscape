@@ -156,20 +156,6 @@ Replacing a provisional histogram with generated or empirical data requires
 preserving that variable's canonical support and bins, updating the provenance,
 and setting `provisional` accurately.
 
-## Probing a variant/target pair
-
-`tools/probe_reachability.py` runs a small evolutionary search over SugarLang
-rulesets against a variant (or config file) and reports the best match score
-found — a **lower bound on the achievable ceiling** to pair with the
-null-ruleset floor when judging a pair's skill spread. The initial population
-includes the null and greedy rulesets, so the reported ceiling never falls
-below the baseline. The tool can demonstrate reachability, never disprove it:
-a search that finds nothing above the floor only predicts that players will
-struggle too. Targets deliberately need not be reachable to ship (decided
-2026-08-11); the probe is a calibration instrument, not a gate. Note the
-evolved `best-ruleset.json` is a machine-discovered strategy — treat it as a
-spoiler for whichever league the variant runs in.
-
 ## Probing Commonwealth components
 
 `tools/probe_commonwealth.py` runs the bundled fixed constitution against the

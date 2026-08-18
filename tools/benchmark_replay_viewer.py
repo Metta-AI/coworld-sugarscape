@@ -17,11 +17,12 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
+from copy import deepcopy
+from pathlib import Path
 from time import perf_counter
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -30,13 +31,16 @@ TOOLS = ROOT / "tools"
 sys.path.insert(0, str(SRC))
 sys.path.insert(0, str(TOOLS))
 
-from coworld.episode import run_episode  # noqa: E402
-from generate_scenario_pool import emit_configs  # noqa: E402
+from generate_scenario_pool import load_manifest, solo_ladder_config  # noqa: E402
 from v3_to_v1_replay import convert, load_v3  # noqa: E402
+
+from coworld.episode import run_episode  # noqa: E402
 
 SCENARIOS = (
     ("capacity.compact-regrow-1", 6 * 1024 * 1024),
-    ("capacity.dense-regrow-2", 10 * 1024 * 1024),
+    # This 56x56, 320-agent replacement is smaller than the retired 60x60,
+    # 400-agent dense case. Keep 10 MiB pending the next real browser run.
+    ("capacity.sparse-regrow-2", 10 * 1024 * 1024),
 )
 SEED = 11
 
@@ -56,11 +60,19 @@ def find_chrome(explicit: str | None) -> Path:
 
 
 def generate_replays(directory: Path) -> list[dict[str, object]]:
-    configs_dir = directory / "configs"
-    emitted = {path.stem: path for path in emit_configs(configs_dir)}
+    manifest = load_manifest()
+    ladder_config = deepcopy(solo_ladder_config(manifest))
+    scenario_pool = {
+        scenario["id"]: scenario
+        for scenario in ladder_config.pop("scenario_pool")
+    }
+    ladder_config.pop("seed", None)
     replays: list[dict[str, object]] = []
     for scenario, retained_budget in SCENARIOS:
-        config = json.loads(emitted[scenario].read_text(encoding="utf-8"))
+        pool_entry = scenario_pool[scenario]
+        config = deepcopy(ladder_config)
+        config.update(deepcopy(pool_entry["config_overrides"]))
+        config["targets"] = deepcopy(pool_entry["targets"])
         config["seed"] = SEED
         started = perf_counter()
         results, replay, _ = run_episode(config, [None], emit_timing_logs=False)
