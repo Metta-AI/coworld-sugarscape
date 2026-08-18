@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Ruleset Studio</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="masthead">
+      <div class="eyebrow">Coworld Sugarscape · SugarLang v1</div>
+      <h1>Ruleset Studio</h1>
+    </div>
+    <div class="file-state">
+      <div><span class="muted">rulesets/</span><strong id="active-file">loading…</strong></div>
+      <label>Context <select id="context-select" aria-label="Ruleset context"></select></label>
+    </div>
+    <div class="spacer"></div>
+    <span class="chip chip-wait" id="valid-chip"><span class="dot"></span>Loading</span>
+    <div class="actions">
+      <button class="btn" id="new-button" type="button">New</button>
+      <select id="file-select" aria-label="Ruleset file"></select>
+      <button class="btn btn-secondary" id="load-button" type="button">Load</button>
+      <button class="btn btn-primary" id="save-button" type="button">Save</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="center" aria-label="Ruleset editor">
+      <div class="canvas-title"><strong>Movement</strong> — the first matching rule scores each candidate cell.</div>
+      <div id="blockly" aria-label="SugarLang block workspace"></div>
+      <section id="traits-panel">
+        <div class="col-head">Traits</div>
+        <p class="strip-cap">Optional overrides clamp into the selected context's range at spawn.</p>
+        <div id="traits" class="traits"></div>
+      </section>
+    </section>
+
+    <aside id="inspector" aria-label="Agent and ruleset status">
+      <section id="agent-panel" class="dsection">
+        <button class="disclose" type="button" aria-expanded="true">
+          <span class="dlabel">Agent</span>
+          <span class="chip chip-off" id="bridge-chip"><span class="dot"></span>Not connected</span>
+          <span class="chev">▸</span>
+        </button>
+        <div class="disc-body"><div class="disc-inner agent-inner">
+          <div id="chat-thread" class="thread" aria-live="polite">
+            <div class="msg system"><p>The editor works without an agent. Start the printed bridge watch command for live help.</p></div>
+          </div>
+          <form id="chat-form" class="chat-input">
+            <div class="inrow">
+              <input id="chat-text" type="text" placeholder="Ask about this ruleset…" aria-label="Message the agent">
+              <button class="btn btn-secondary" type="submit">Send</button>
+            </div>
+            <div class="cap" id="chat-cap">Replies come from the coding session that launched this page.</div>
+          </form>
+        </div></div>
+      </section>
+
+      <section id="json-panel" class="dsection collapsed">
+        <button class="disclose" type="button" aria-expanded="false">
+          <span class="dlabel">Compiled ruleset</span>
+          <span class="dcap">exact Save bytes</span><span class="chev">▸</span>
+        </button>
+        <div class="disc-body"><div class="disc-inner"><pre id="json-preview"></pre></div></div>
+      </section>
+
+      <section id="budgets" class="dsection">
+        <button class="disclose" type="button" aria-expanded="true">
+          <span class="dlabel">Budgets</span><span class="dcap" id="budget-summary"></span><span class="chev">▸</span>
+        </button>
+        <div class="disc-body"><div class="disc-inner budget-inner">
+          <div class="budget"><span>nodes</span><div class="track"><div class="fill" id="bar-nodes"></div></div><output id="val-nodes"></output></div>
+          <div class="budget"><span>depth</span><div class="track"><div class="fill" id="bar-depth"></div></div><output id="val-depth"></output></div>
+          <div class="budget"><span>payload</span><div class="track"><div class="fill" id="bar-bytes"></div></div><output id="val-bytes"></output></div>
+        </div></div>
+      </section>
+
+      <section id="validation">
+        <div class="col-head">Validation</div>
+        <div id="validation-list" aria-live="polite"></div>
+        <p class="validation-cap">Checked on every edit by the repo's <code>validate_ruleset</code>. Select an error to find its block.</p>
+      </section>
+    </aside>
+  </main>
+  <div id="toast" role="status"></div>
+
+  <script src="vendor/blockly/blockly.min.js"></script>
+  <script src="/link-client.js"></script>
+  <script type="module" src="studio.js"></script>
+</body>
+</html>

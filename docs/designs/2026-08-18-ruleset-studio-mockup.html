@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ruleset Studio — design mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700;900&family=Merriweather+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #fffdf4;
+    --surface: #fffaf0;
+    --surface-alt: #f8f6ef;
+    --fg: #111827;
+    --fg-subtle: #555555;
+    --fg-muted: #999999;
+    --ink-navy: #1a3875;
+    --ink-sage: #6e8050;
+    --ink-terracotta: #b36e4e;
+    --ink-gold: #d4a853;
+    --accent: #859ebe;
+    --accent-soft: #eef2f7;
+    --cta: #0e2758;
+    --cta-hover: #1a3875;
+    --cta-fg: #fffdf4;
+    --border: #e4dac8;
+    --border-strong: #d4c9b5;
+    --border-subtle: #f0ebe1;
+    --serif: "Merriweather", Georgia, serif;
+    --sans: "Merriweather Sans", "Helvetica Neue", sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+    /* block category tints — semantic: category encodes grammar role */
+    --blk-rule-bg: #eef2f7;   --blk-rule-bd: #c8d4e6;  --blk-rule-fg: #1a3875;
+    --blk-feat-bg: #e9edda;   --blk-feat-bd: #ccd6ae;  --blk-feat-fg: #4c5a2b;
+    --blk-math-bg: #f7edd3;   --blk-math-bd: #e4cf9a;  --blk-math-fg: #78591a;
+    --blk-cmp-bg:  #f5e5da;   --blk-cmp-bd:  #ddc0ac;  --blk-cmp-fg:  #86492b;
+    --blk-num-bg:  #fffdf4;   --blk-num-bd:  #d4c9b5;  --blk-num-fg:  #111827;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 13px;
+    line-height: 1.5;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 1040px;   /* desktop tool; below this the shell scrolls sideways */
+    overflow-x: auto;
+  }
+  .eyebrow {
+    font: 600 10px var(--sans);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--fg-subtle);
+  }
+  button { font-family: var(--sans); cursor: pointer; }
+  button:focus-visible, input:focus-visible, [tabindex]:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* ── masthead ─────────────────────────────────────────────── */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 10px 20px 12px;
+    border-bottom: 2px solid var(--border-strong);
+    flex-shrink: 0;
+  }
+  .masthead h1 {
+    font: 900 21px/1.15 var(--serif);
+    letter-spacing: -0.01em;
+  }
+  .masthead .eyebrow { margin-bottom: 1px; }
+  .file {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding-left: 20px;
+    border-left: 1px solid var(--border);
+  }
+  .file .name { font: 12px var(--mono); color: var(--fg); }
+  .file .name b { font-weight: 700; }
+  .file .ctx { font-size: 10.5px; color: var(--fg-muted); }
+  .file .ctx code { font: 10.5px var(--mono); color: var(--fg-subtle); }
+  header .spacer { flex: 1; }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 22px;
+    padding: 0 9px;
+    border-radius: 999px;
+    font: 700 9.5px var(--sans);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .chip-ok    { background: rgba(110,128,80,0.14); color: var(--ink-sage); }
+  .chip-live  { background: var(--accent-soft); color: var(--ink-navy); }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .dot.pulse { animation: pulse-dot 1.5s ease infinite; }
+  @keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+  @media (prefers-reduced-motion: reduce) { .dot.pulse { animation: none; } }
+
+  .btn {
+    height: 28px;
+    padding: 0 13px;
+    border-radius: 3px;
+    font: 600 12px var(--sans);
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--fg);
+    transition: background 120ms ease;
+  }
+  .btn:hover { background: var(--surface-alt); }
+  .btn:active { background: var(--border-subtle); }
+  .btn-secondary { background: var(--surface); border-color: var(--border-strong); }
+  .btn-primary {
+    background: var(--cta);
+    color: var(--cta-fg);
+    border-color: #0a1c42;
+  }
+  .btn-primary:hover { background: var(--cta-hover); }
+  .btn-primary:active { background: #0a1c42; }
+  .actions { display: flex; align-items: center; gap: 8px; }
+
+  /* ── shell ────────────────────────────────────────────────── */
+  main { flex: 1; display: flex; min-height: 0; }
+  .col-head {
+    font: 700 11px var(--sans);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-navy);
+    padding: 12px 16px 8px;
+  }
+
+  /* palette rail */
+  #palette {
+    width: 196px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding-bottom: 16px;
+  }
+  .pal-group { padding: 8px 16px 4px; }
+  .pal-group + .pal-group { border-top: 1px solid var(--border-subtle); }
+  .pal-group h3 {
+    font: 700 9.5px var(--sans);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--fg-subtle);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  .pal-group h3 .count { color: var(--fg-muted); font-weight: 400; margin-left: auto; letter-spacing: 0; }
+  .pal-items { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
+  .mini {
+    font: 600 10.5px var(--mono);
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid;
+    cursor: grab;
+  }
+  .mini.rule { border-radius: 5px; font-family: var(--sans); }
+  .mini:hover { filter: brightness(0.97); }
+  .c-rule { background: var(--blk-rule-bg); border-color: var(--blk-rule-bd); color: var(--blk-rule-fg); }
+  .c-feat { background: var(--blk-feat-bg); border-color: var(--blk-feat-bd); color: var(--blk-feat-fg); }
+  .c-math { background: var(--blk-math-bg); border-color: var(--blk-math-bd); color: var(--blk-math-fg); }
+  .c-cmp  { background: var(--blk-cmp-bg);  border-color: var(--blk-cmp-bd);  color: var(--blk-cmp-fg); }
+  .c-num  { background: var(--blk-num-bg);  border-color: var(--blk-num-bd);  color: var(--blk-num-fg); }
+  .pal-note { font-size: 10px; color: var(--fg-muted); line-height: 1.45; }
+
+  /* canvas column */
+  #center { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  #canvas {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 18px 26px 26px;
+    background-color: var(--surface);
+    background-image: radial-gradient(var(--border) 1px, transparent 1px);
+    background-size: 18px 18px;
+  }
+  .canvas-cap {
+    font-size: 10.5px;
+    color: var(--fg-muted);
+    margin: 0 0 12px 2px;
+  }
+  .canvas-cap b { color: var(--fg-subtle); font-weight: 600; }
+
+  /* blocks */
+  .stack { display: flex; flex-direction: column; max-width: 720px; }
+  .rule-block {
+    background: var(--blk-rule-bg);
+    border: 1px solid var(--blk-rule-bd);
+    border-radius: 6px;
+    padding: 9px 12px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    row-gap: 6px;
+    column-gap: 7px;
+    position: relative;
+  }
+  .rule-block + .rule-block { margin-top: 10px; }
+  .rule-block.selected { box-shadow: 0 0 0 2px var(--accent); }
+  .rule-order {
+    position: absolute;
+    left: -22px;
+    top: 50%;
+    transform: translateY(-50%);
+    font: 700 10px var(--mono);
+    color: var(--fg-muted);
+  }
+  .stack { margin-left: 22px; }
+  .kw { font: 700 11px var(--sans); text-transform: uppercase; letter-spacing: 0.06em; color: var(--blk-rule-fg); }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid;
+    border-radius: 999px;
+    padding: 2.5px 10px;
+    font: 600 11.5px var(--mono);
+    white-space: nowrap;
+  }
+  .pill .op { font-weight: 700; }
+  .pill.c-num { padding: 2.5px 8px; }
+  .flow { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; row-gap: 6px; }
+  .rule-gap {
+    text-align: center;
+    font-size: 10px;
+    color: var(--fg-muted);
+    padding: 1px 0;
+  }
+
+  /* traits strip */
+  #traits-panel {
+    border-top: 1px solid var(--border);
+    background: var(--bg);
+    flex-shrink: 0;
+    padding: 10px 20px 14px;
+  }
+  #traits-panel .col-head { padding: 0 0 2px; }
+  #traits-panel .strip-cap { font-size: 10.5px; color: var(--fg-muted); margin-bottom: 10px; }
+  .traits {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 22px;
+  }
+  .trait { }
+  .trait .row1 {
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    margin-bottom: 5px;
+  }
+  .trait label.tname { font: 700 12px var(--serif); }
+  .trait .row1 input[type=checkbox] { accent-color: var(--ink-navy); transform: translateY(1px); }
+  .trait .val { margin-left: auto; font: 700 12px var(--mono); font-feature-settings: "tnum" 1; }
+  .trait .val.off { color: var(--fg-muted); font-weight: 400; }
+  .trait input[type=range] {
+    width: 100%;
+    accent-color: var(--ink-navy);
+    height: 20px;
+  }
+  .trait.off input[type=range] { accent-color: var(--fg-muted); opacity: 0.45; }
+  .trait .range-cap {
+    display: flex;
+    justify-content: space-between;
+    font: 10px var(--mono);
+    color: var(--fg-muted);
+    margin-top: 1px;
+  }
+  .trait .range-cap .mid { font-family: var(--sans); }
+
+  /* inspector column */
+  #inspector {
+    width: 316px;
+    flex-shrink: 0;
+    border-left: 1px solid var(--border);
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  #inspector section { padding: 0 16px 14px; }
+  #inspector section + section { border-top: 1px solid var(--border-subtle); }
+
+  /* compiled-ruleset disclosure — collapsed by default; expanded, it grows
+     to soak up whatever height the column has left */
+  #json-panel { border-top: 1px solid var(--border-subtle); padding: 0 16px 6px; }
+  #json-panel:not(.collapsed) {
+    flex: 1 1 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  #json-panel:not(.collapsed) .disc-body { flex: 1; min-height: 0; }
+  #json-panel .disc-inner { display: flex; flex-direction: column; }
+  .disclose {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    width: 100%;
+    flex-shrink: 0;
+    padding: 11px 0 8px;
+    background: transparent;
+    border: none;
+    text-align: left;
+  }
+  .disclose:hover .dlabel { color: var(--cta-hover); }
+  .disclose .dlabel {
+    font: 700 11px var(--sans);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-navy);
+  }
+  .disclose .dcap { font: 400 9.5px var(--sans); color: var(--fg-muted); margin-left: auto; }
+  .disclose .chev {
+    font-size: 10px;
+    color: var(--fg-subtle);
+    transition: transform 160ms ease;
+  }
+  .dsection:not(.collapsed) .chev { transform: rotate(90deg); }
+  .disc-body {
+    display: grid;
+    grid-template-rows: 1fr;
+    transition: grid-template-rows 200ms ease-out;
+  }
+  .dsection.collapsed .disc-body { grid-template-rows: 0fr; }
+  .disc-inner { overflow: hidden; min-height: 0; }
+  /* budgets: show the compact summary only while collapsed */
+  #budgets:not(.collapsed) .dcap { display: none; }
+  pre#json {
+    flex: 1 1 auto;
+    min-height: 100px;
+    overflow: auto;
+    margin-bottom: 8px;
+    background: var(--surface-alt);
+    border: 1px solid var(--border-subtle);
+    border-radius: 3px;
+    padding: 10px 12px;
+    font: 10.5px/1.55 var(--mono);
+    color: var(--fg);
+  }
+  pre#json .j-num { color: var(--ink-navy); }
+  pre#json .j-str { color: var(--ink-sage); }
+  pre#json .j-key { color: var(--fg-subtle); }
+
+  .budget { display: flex; align-items: center; gap: 10px; margin-top: 7px; }
+  .budget .blabel { width: 52px; font-size: 10.5px; color: var(--fg-subtle); }
+  .budget .track {
+    flex: 1;
+    height: 4px;
+    background: var(--border-subtle);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .budget .fill { height: 100%; background: var(--ink-navy); border-radius: 999px; min-width: 3px; }
+  .budget .bval {
+    width: 84px;
+    text-align: right;
+    font: 11px var(--mono);
+    font-feature-settings: "tnum" 1;
+    color: var(--fg);
+  }
+  .budget .bval .of { color: var(--fg-muted); }
+
+  #validation .vrow {
+    display: flex;
+    gap: 8px;
+    font-size: 11.5px;
+    color: var(--fg-subtle);
+    padding: 3px 0;
+  }
+  #validation .vrow .tick { color: var(--ink-sage); font-weight: 700; }
+  #validation .vcap { font-size: 10px; color: var(--fg-muted); margin-top: 6px; }
+  #validation .vcap code { font: 10px var(--mono); }
+  #validation .col-head { display: flex; align-items: center; gap: 8px; }
+
+  /* agent chat — docked at the top of the right column, collapsible */
+  #agent-panel {
+    flex: 2 1 0;   /* chat outweighs an open JSON pane 2:1 — it's the interactive one */
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  #agent-panel.collapsed { flex: 0 0 auto; }
+  #agent-panel .disclose {
+    align-items: center;
+    padding: 12px 16px 8px;
+    width: auto;
+  }
+  #agent-panel .disclose .chip { margin-left: auto; }
+  #agent-panel .disc-body { flex: 1; min-height: 0; }
+  .agent-inner { display: flex; flex-direction: column; }
+  #agent-panel .thread { flex: 1; min-height: 150px; overflow-y: auto; padding: 4px 16px; }
+  #agent-panel.collapsed .thread { min-height: 0; }
+  .msg { padding: 9px 0 10px; }
+  .msg + .msg { border-top: 1px solid var(--border-subtle); }
+  .msg .who { margin-bottom: 3px; }
+  .msg .who.agent { color: var(--ink-navy); }
+  .msg p { font-size: 11.5px; line-height: 1.55; color: var(--fg); }
+  .msg p code { font: 10.5px var(--mono); background: var(--surface-alt); padding: 0 3px; border-radius: 2px; }
+  .msg .patch-offer {
+    margin-top: 8px;
+    display: flex;
+    gap: 6px;
+  }
+  .patch-offer .btn { height: 24px; font-size: 11px; padding: 0 10px; }
+  .chat-input {
+    flex-shrink: 0;
+    padding: 8px 16px 12px;
+  }
+  .chat-input .inrow { display: flex; gap: 6px; }
+  .chat-input input[type=text] {
+    flex: 1;
+    height: 28px;
+    border: 1px solid var(--border-strong);
+    border-radius: 3px;
+    background: var(--surface-alt);
+    padding: 0 9px;
+    font: 12px var(--sans);
+    color: var(--fg);
+  }
+  .chat-input input::placeholder { color: var(--fg-muted); }
+  .chat-input .cap { font-size: 9.5px; color: var(--fg-muted); margin-top: 6px; line-height: 1.5; }
+
+  /* toast */
+  #toast {
+    position: fixed;
+    bottom: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--cta);
+    color: var(--cta-fg);
+    font: 600 11.5px var(--sans);
+    padding: 8px 14px;
+    border-radius: 3px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 180ms ease;
+  }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="masthead">
+    <div class="eyebrow">Coworld Sugarscape · SugarLang v1 · design mockup</div>
+    <h1>Ruleset Studio</h1>
+  </div>
+  <div class="file">
+    <span class="name">rulesets/<b>gini-chaser.json</b> · saved 2 min ago</span>
+    <span class="ctx">context: target <code>wealth.skewed-gini-0.5</code> · trait ranges from <code>config.json</code></span>
+  </div>
+  <div class="spacer"></div>
+  <span class="chip chip-ok" id="valid-chip"><span class="dot"></span>Valid</span>
+  <div class="actions">
+    <button class="btn" onclick="toast('Mockup — the real tool opens a fresh canvas')">New</button>
+    <button class="btn btn-secondary" onclick="toast('Mockup — the real tool lists rulesets/*.json')">Load</button>
+    <button class="btn btn-primary" onclick="toast('Mockup — the real tool validates, then writes the file')">Save</button>
+  </div>
+</header>
+
+<main>
+
+  <!-- ── block palette ── -->
+  <nav id="palette" aria-label="Block palette">
+    <div class="col-head">Blocks</div>
+
+    <div class="pal-group">
+      <h3><span class="dot" style="color:var(--blk-rule-fg)"></span>Rules</h3>
+      <div class="pal-items">
+        <span class="mini rule c-rule" tabindex="0">when … score …</span>
+        <span class="mini rule c-rule" tabindex="0">otherwise score …</span>
+      </div>
+      <div class="pal-note">Drag into the movement stack. Evaluated top to bottom; first match scores the candidate cell.</div>
+    </div>
+
+    <div class="pal-group">
+      <h3><span class="dot" style="color:var(--blk-feat-fg)"></span>Features <span class="count">21</span></h3>
+      <div class="pal-items">
+        <span class="mini c-feat" tabindex="0">agent.ttl ▾</span>
+        <span class="mini c-feat" tabindex="0">cell.welfare ▾</span>
+        <span class="mini c-feat" tabindex="0">world.gini ▾</span>
+      </div>
+      <div class="pal-note">agent · 10, cell · 7, world · 4 — the full <span style="font-family:var(--mono)">RULES.md</span> vocabulary, with each feature's meaning on hover.</div>
+    </div>
+
+    <div class="pal-group">
+      <h3><span class="dot" style="color:var(--blk-math-fg)"></span>Math</h3>
+      <div class="pal-items">
+        <span class="mini c-math" tabindex="0">+</span>
+        <span class="mini c-math" tabindex="0">−</span>
+        <span class="mini c-math" tabindex="0">×</span>
+        <span class="mini c-math" tabindex="0">÷</span>
+        <span class="mini c-math" tabindex="0">min</span>
+        <span class="mini c-math" tabindex="0">max</span>
+        <span class="mini c-math" tabindex="0">abs</span>
+        <span class="mini c-math" tabindex="0">neg</span>
+        <span class="mini c-math" tabindex="0">pow</span>
+      </div>
+    </div>
+
+    <div class="pal-group">
+      <h3><span class="dot" style="color:var(--blk-cmp-fg)"></span>Compare &amp; logic</h3>
+      <div class="pal-items">
+        <span class="mini c-cmp" tabindex="0">&lt;</span>
+        <span class="mini c-cmp" tabindex="0">≤</span>
+        <span class="mini c-cmp" tabindex="0">&gt;</span>
+        <span class="mini c-cmp" tabindex="0">≥</span>
+        <span class="mini c-cmp" tabindex="0">=</span>
+        <span class="mini c-cmp" tabindex="0">≠</span>
+        <span class="mini c-cmp" tabindex="0">and</span>
+        <span class="mini c-cmp" tabindex="0">or</span>
+        <span class="mini c-cmp" tabindex="0">not</span>
+        <span class="mini c-cmp" tabindex="0">if</span>
+      </div>
+    </div>
+
+    <div class="pal-group">
+      <h3><span class="dot" style="color:var(--fg-muted)"></span>Values</h3>
+      <div class="pal-items">
+        <span class="mini c-num" tabindex="0">0.0</span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ── canvas + traits ── -->
+  <div id="center">
+    <div id="canvas">
+      <p class="canvas-cap"><b>Movement</b> — for every candidate cell, the first matching rule supplies the score; the agent takes the highest-scoring cell.</p>
+
+      <div class="stack">
+        <div class="rule-block" tabindex="0">
+          <span class="rule-order">1</span>
+          <span class="kw">when</span>
+          <span class="flow">
+            <span class="pill c-cmp"><span class="pill c-feat">agent.ttl</span> <span class="op">&lt;</span> <span class="pill c-num">3</span></span>
+          </span>
+          <span class="kw">score</span>
+          <span class="flow">
+            <span class="pill c-feat">cell.welfare</span>
+          </span>
+        </div>
+
+        <div class="rule-gap">↓ no match falls through</div>
+
+        <div class="rule-block selected" tabindex="0">
+          <span class="rule-order">2</span>
+          <span class="kw">otherwise score</span>
+          <span class="flow">
+            <span class="pill c-math"><span class="pill c-feat">cell.welfare</span> <span class="op">−</span>
+              <span class="pill c-math"><span class="pill c-num">0.4</span> <span class="op">×</span> <span class="pill c-feat">cell.distance</span></span> <span class="op">−</span>
+              <span class="pill c-math"><span class="pill c-num">2.0</span> <span class="op">×</span> <span class="pill c-feat">cell.pollution</span></span>
+            </span>
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div id="traits-panel">
+      <div class="col-head">Traits</div>
+      <div class="traits" id="traits"></div>
+    </div>
+  </div>
+
+  <!-- ── right column: agent chat + collapsed JSON + budgets + validation ── -->
+  <aside id="inspector" aria-label="Agent and ruleset status">
+    <div id="agent-panel" class="dsection">
+      <button class="disclose" onclick="toggleSection(this)" aria-expanded="true">
+        <span class="dlabel">Agent</span>
+        <span class="chip chip-live"><span class="dot pulse" style="color:var(--ink-gold)"></span>Bridge live</span>
+        <span class="chev">▸</span>
+      </button>
+      <div class="disc-body"><div class="disc-inner agent-inner">
+      <div class="thread">
+        <div class="msg">
+          <div class="who eyebrow">You</div>
+          <p>Why score pollution at −2.0 when welfare already accounts for it?</p>
+        </div>
+        <div class="msg">
+          <div class="who eyebrow agent">Agent · your live session</div>
+          <p><code>cell.welfare</code> already folds DTL's stock pollution effect into its ranking, so the explicit <code>−2.0 × cell.pollution</code> term double-counts pollution near the peaks. I'd drop the term, or rebase the rule on raw <code>cell.sugar + cell.spice</code> if you want your own pollution weight. Apply the first option?</p>
+          <div class="patch-offer">
+            <button class="btn btn-secondary" onclick="toast('Mockup — the real tool patches the blocks, undoably')">Apply to canvas</button>
+            <button class="btn" onclick="toast('Mockup')">Not now</button>
+          </div>
+        </div>
+      </div>
+      <div class="chat-input">
+        <div class="inrow">
+          <input type="text" placeholder="Ask about this ruleset…" aria-label="Message the agent">
+          <button class="btn btn-secondary" onclick="toast('Mockup — messages go over the ux.surface bridge')">Send</button>
+        </div>
+        <div class="cap">Answered by the coding session that opened this page; replies can edit the blocks.</div>
+      </div>
+      </div></div>
+    </div>
+
+    <section id="json-panel" class="dsection collapsed">
+      <button class="disclose" onclick="toggleSection(this)" aria-expanded="false">
+        <span class="dlabel">Compiled ruleset</span>
+        <span class="dcap">the exact bytes Save writes</span>
+        <span class="chev">▸</span>
+      </button>
+      <div class="disc-body"><div class="disc-inner"><pre id="json"></pre></div></div>
+    </section>
+
+    <section id="budgets" class="dsection">
+      <button class="disclose" onclick="toggleSection(this)" aria-expanded="true">
+        <span class="dlabel">Budgets</span>
+        <span class="dcap" id="budget-summary"></span>
+        <span class="chev">▸</span>
+      </button>
+      <div class="disc-body"><div class="disc-inner">
+        <div class="budget"><span class="blabel">nodes</span><div class="track"><div class="fill" id="bar-nodes"></div></div><span class="bval" id="val-nodes"></span></div>
+        <div class="budget"><span class="blabel">depth</span><div class="track"><div class="fill" id="bar-depth"></div></div><span class="bval" id="val-depth"></span></div>
+        <div class="budget"><span class="blabel">payload</span><div class="track"><div class="fill" id="bar-bytes"></div></div><span class="bval" id="val-bytes"></span></div>
+      </div></div>
+    </section>
+
+    <section id="validation">
+      <div class="col-head">Validation</div>
+      <div class="vrow"><span class="tick">✓</span>final rule is unconditional</div>
+      <div class="vrow"><span class="tick">✓</span>all features known, arities correct</div>
+      <div class="vrow"><span class="tick">✓</span>enabled traits inside their ranges</div>
+      <div class="vcap">Checked on every edit by the repo's own <code>validate_ruleset</code> — errors land here with their JSON path and light up the offending block.</div>
+    </section>
+  </aside>
+
+</main>
+
+<div id="toast" role="status"></div>
+
+<script>
+"use strict";
+/* Mockup state — the ruleset shown is the worked example from docs/RULES.md,
+   with the aggression override left off to show trait optionality. */
+
+const MOVEMENT = [
+  { if: ["<", ["get", "agent.ttl"], 3], score: ["get", "cell.welfare"] },
+  { score: ["-", ["get", "cell.welfare"],
+                 ["*", 0.4, ["get", "cell.distance"]],
+                 ["*", 2.0, ["get", "cell.pollution"]]] },
+];
+
+/* dtl = the value DTL generates when the trait is not overridden. In this
+   context every factor's DTL default range is [0, 0] (sugarscape.py internal
+   defaults); scenarios that set agent*Factor ranges change these. */
+const TRAITS = [
+  { name: "aggression", on: false, val: 0.0, dtl: 0.0, min: 0,   max: 1, step: 0.05 },
+  { name: "trade",      on: true,  val: 1.0, dtl: 0.0, min: 0,   max: 1, step: 0.05 },
+  { name: "lending",    on: true,  val: 0.0, dtl: 0.0, min: 0,   max: 1, step: 0.05 },
+  { name: "fertility",  on: true,  val: 1.0, dtl: 0.0, min: 0.5, max: 2, step: 0.05 },
+];
+
+/* Budget counters mirror the spec'd RULES.md formulas: every operator or
+   numeric literal is one node; the feature string inside "get" is not. */
+function countNodes(e) {
+  if (typeof e === "number") return 1;
+  if (e[0] === "get") return 1;
+  return 1 + e.slice(1).reduce((n, c) => n + countNodes(c), 0);
+}
+function depth(e) {
+  if (typeof e === "number" || e[0] === "get") return 1;
+  return 1 + Math.max(...e.slice(1).map(depth));
+}
+
+function ruleset() {
+  const traits = {};
+  for (const t of TRAITS) if (t.on) traits[t.name] = t.val;
+  return { version: 1, traits, movement: MOVEMENT };
+}
+
+/* Pretty-printer: arrays render inline when short, so expressions read as
+   they do in docs/RULES.md. */
+function fmt(v, indent) {
+  if (typeof v === "number") return `<span class="j-num">${v}</span>`;
+  if (typeof v === "string") return `<span class="j-str">"${v}"</span>`;
+  const pad = "  ".repeat(indent), padIn = "  ".repeat(indent + 1);
+  if (Array.isArray(v)) {
+    const inline = JSON.stringify(v);
+    if (inline.length <= 46)
+      return "[" + v.map((x) => fmt(x, 0)).join(", ") + "]";
+    return "[\n" + v.map((x) => padIn + fmt(x, indent + 1)).join(",\n") + "\n" + pad + "]";
+  }
+  const entries = Object.entries(v).map(
+    ([k, x]) => `${padIn}<span class="j-key">"${k}"</span>: ${fmt(x, indent + 1)}`);
+  return "{\n" + entries.join(",\n") + "\n" + pad + "}";
+}
+
+function render() {
+  const rs = ruleset();
+  document.getElementById("json").innerHTML = fmt(rs, 0);
+
+  const nodes = MOVEMENT.reduce((n, r) =>
+    n + (r.if ? countNodes(r.if) : 0) + countNodes(r.score), 0);
+  const dep = Math.max(...MOVEMENT.flatMap((r) =>
+    [r.if ? depth(r.if) : 1, depth(r.score)]));
+  const bytes = new TextEncoder().encode(JSON.stringify(rs)).length;
+
+  setBudget("nodes", nodes, 256);
+  setBudget("depth", dep, 16);
+  setBudget("bytes", bytes, 32768);
+  document.getElementById("budget-summary").textContent =
+    `${nodes}/256 · depth ${dep} · ${bytes.toLocaleString()} B`;
+}
+
+function setBudget(id, used, cap) {
+  document.getElementById("bar-" + id).style.width =
+    Math.max(1, (100 * used) / cap) + "%";
+  document.getElementById("val-" + id).innerHTML =
+    `${used.toLocaleString()} <span class="of">/ ${cap.toLocaleString()}</span>`;
+}
+
+function renderTraits() {
+  const host = document.getElementById("traits");
+  host.innerHTML = "";
+  TRAITS.forEach((t, i) => {
+    const div = document.createElement("div");
+    div.className = "trait" + (t.on ? "" : " off");
+    div.innerHTML = `
+      <div class="row1">
+        <input type="checkbox" id="t-${t.name}" ${t.on ? "checked" : ""} aria-label="Override ${t.name}">
+        <label class="tname" for="t-${t.name}">${t.name}</label>
+        <span class="val ${t.on ? "" : "off"}" ${t.on ? "" : 'title="DTL-generated value (no override)"'}>${(t.on ? t.val : t.dtl).toFixed(2)}</span>
+      </div>
+      <input type="range" min="${t.min}" max="${t.max}" step="${t.step}"
+             value="${t.on ? t.val : Math.min(Math.max(t.dtl, t.min), t.max)}"
+             ${t.on ? "" : "disabled"} aria-label="${t.name} value">
+      <div class="range-cap"><span>${t.min}</span><span class="mid">clamps at spawn</span><span>${t.max}</span></div>`;
+    div.querySelector("input[type=checkbox]").addEventListener("change", (e) => {
+      t.on = e.target.checked; renderTraits(); render();
+    });
+    div.querySelector("input[type=range]").addEventListener("input", (e) => {
+      t.val = parseFloat(e.target.value);
+      div.querySelector(".val").textContent = t.val.toFixed(2);
+      render();
+    });
+    host.appendChild(div);
+  });
+}
+
+function toggleSection(btn) {
+  const section = btn.closest(".dsection");
+  const collapsed = section.classList.toggle("collapsed");
+  btn.setAttribute("aria-expanded", String(!collapsed));
+}
+
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("show"), 2600);
+}
+
+renderTraits();
+render();
+</script>
+</body>
+</html>

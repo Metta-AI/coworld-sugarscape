@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "traits": {
+    "aggression": 0,
+    "trade": 1,
+    "lending": 0,
+    "fertility": 1
+  },
+  "movement": [
+    {
+      "if": ["<", ["get", "agent.ttl"], 3],
+      "score": ["get", "cell.welfare"]
+    },
+    {
+      "score": [
+        "-",
+        ["get", "cell.welfare"],
+        ["*", 0.4, ["get", "cell.distance"]],
+        ["*", 2, ["get", "cell.pollution"]]
+      ]
+    }
+  ]
+}
