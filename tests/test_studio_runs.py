@@ -438,6 +438,35 @@ def test_failure_path_is_sanitized_and_next_post_reaps_slot(tmp_path: Path) -> N
     assert run_coordinator.status(second["run_id"])["state"] == "done"
 
 
+def test_live_transport_error_is_reported_without_failing_the_run(tmp_path: Path) -> None:
+    ready = Event()
+    release = Event()
+
+    def runner(config: dict, _rulesets: tuple, **kwargs: object) -> tuple:
+        header = fixture_header()
+        header["config"]["timesteps"] = config["timesteps"]
+        kwargs["header_sink"](header)
+        ready.set()
+        release.wait(2)
+        kwargs["frame_sink"](fixture_document()["frames"][0])
+        return fixture_results(), b"replay", {}
+
+    run_coordinator, registry, _artifacts = coordinator(tmp_path, runner)
+    started = start_duo(run_coordinator)
+    assert ready.wait(2)
+
+    run_coordinator.record_transport_error(started["run_id"], "live frame too large")
+    running = run_coordinator.status(started["run_id"])
+    release.set()
+    wait_for_worker(registry, started["run_id"])
+    finished = run_coordinator.status(started["run_id"])
+
+    assert running["state"] == "running"
+    assert running["transport_error"] == "live frame too large"
+    assert finished["state"] == "done"
+    assert finished["transport_error"] == "live frame too large"
+
+
 @pytest.mark.parametrize("failure_stage", ["publisher", "artifact"])
 def test_sink_and_artifact_failures_also_leave_a_reapable_slot(
     tmp_path: Path,

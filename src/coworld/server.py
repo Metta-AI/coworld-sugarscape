@@ -16,14 +16,16 @@ if __name__ == "__main__" and os.environ.get("PYTHONHASHSEED") != "0":
 
 import argparse
 import asyncio
+from collections import deque
 from dataclasses import dataclass, field
 import json
 import logging
 from pathlib import Path
+import re
 import secrets
 import tempfile
 from time import perf_counter_ns, sleep
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, unquote, urlsplit
 from urllib.request import Request as UploadRequest, urlopen
@@ -53,6 +55,10 @@ SPECTATOR_STREAM_START_DELAY_SECONDS = 3.0
 # its already-connected readers drained was simply not there when the probe
 # arrived. Bounded: a game container that never exits is a hung job.
 SPECTATOR_GRACE_SECONDS = 30.0
+STUDIO_CATCH_UP_BYTES = 24 * 1024 * 1024
+STUDIO_MAX_FRAME_BYTES = 8 * 1024 * 1024
+STUDIO_SPECTATOR_QUEUE_BYTES = 24 * 1024 * 1024
+STUDIO_FINAL_LINGER_SECONDS = 2.0
 _LOGGER = logging.getLogger("coworld.server")
 _PRIVATE_CONFIG_KEYS = {
     "agentLogfile",
@@ -71,6 +77,511 @@ _PRIVATE_CONFIG_KEYS = {
     "targets",
     "tokens",
 }
+
+
+@dataclass(frozen=True, slots=True)
+class LiveFrame:
+    """One validated serialized v1 frame plus queue-policy metadata."""
+
+    payload: bytes
+    timestep: int
+    final: bool
+
+    @property
+    def guaranteed(self) -> bool:
+        return self.timestep == 0 or self.final
+
+    @classmethod
+    def parse(cls, payload: bytes) -> LiveFrame:
+        try:
+            frame = json.loads(payload)
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise ValueError("live payload must be UTF-8 JSON") from error
+        if not isinstance(frame, dict) or frame.get("format") != "sugarscape.frame.v1":
+            raise ValueError("live payload must be a sugarscape.frame.v1 object")
+        timestep = frame.get("timestep")
+        final = frame.get("final")
+        if isinstance(timestep, bool) or not isinstance(timestep, int) or timestep < 0:
+            raise ValueError("live frame timestep must be a non-negative integer")
+        if not isinstance(final, bool):
+            raise ValueError("live frame final must be a boolean")
+        return cls(payload, timestep, final)
+
+
+class CatchUpBuffer:
+    """Retain serialized frames under exact byte and preservation policies."""
+
+    def __init__(
+        self,
+        *,
+        max_bytes: int = STUDIO_CATCH_UP_BYTES,
+        max_frame_bytes: int = STUDIO_MAX_FRAME_BYTES,
+    ) -> None:
+        if max_bytes <= 0 or max_frame_bytes <= 0:
+            raise ValueError("live buffer byte limits must be positive")
+        self.max_bytes = max_bytes
+        self.max_frame_bytes = max_frame_bytes
+        self.frames: deque[LiveFrame] = deque()
+        self.byte_count = 0
+        self.disabled = False
+
+    def append(self, frame: LiveFrame) -> tuple[bool, str | None]:
+        if self.disabled:
+            return False, None
+        size = len(frame.payload)
+        if size > self.max_frame_bytes:
+            if frame.guaranteed:
+                return False, self._disable("a guaranteed live frame exceeds the size limit")
+            return False, None
+
+        self.frames.append(frame)
+        self.byte_count += size
+        accepted = True
+        while self.byte_count > self.max_bytes:
+            victim = next((item for item in self.frames if not item.guaranteed), None)
+            if victim is None:
+                return False, self._disable("guaranteed live frames exceed the buffer limit")
+            self.frames.remove(victim)
+            self.byte_count -= len(victim.payload)
+            if victim is frame:
+                accepted = False
+        return accepted, None
+
+    def snapshot(self) -> tuple[LiveFrame, ...]:
+        return tuple(self.frames)
+
+    def clear(self) -> None:
+        self.frames.clear()
+        self.byte_count = 0
+
+    def _disable(self, message: str) -> str:
+        self.clear()
+        self.disabled = True
+        return message
+
+
+class SpectatorQueue:
+    """Byte-bound one client while preserving bootstrap and terminal frames."""
+
+    def __init__(self, *, max_bytes: int = STUDIO_SPECTATOR_QUEUE_BYTES) -> None:
+        if max_bytes <= 0:
+            raise ValueError("spectator queue byte limit must be positive")
+        self.max_bytes = max_bytes
+        self.frames: deque[LiveFrame] = deque()
+        self.byte_count = 0
+        self.closed = False
+        self._available = asyncio.Event()
+
+    def seed(self, frames: tuple[LiveFrame, ...]) -> None:
+        size = sum(len(frame.payload) for frame in frames)
+        if size > self.max_bytes:
+            raise ValueError("catch-up snapshot exceeds spectator queue limit")
+        self.frames.extend(frames)
+        self.byte_count += size
+        if frames:
+            self._available.set()
+
+    def put(self, frame: LiveFrame) -> None:
+        if self.closed:
+            return
+        if not frame.guaranteed:
+            if self.byte_count + len(frame.payload) > self.max_bytes:
+                self._remove_intermediates()
+                if self.byte_count + len(frame.payload) > self.max_bytes:
+                    return
+        else:
+            while self.byte_count + len(frame.payload) > self.max_bytes:
+                victim = next((item for item in self.frames if not item.guaranteed), None)
+                if victim is None:
+                    raise RuntimeError("guaranteed frames exceed spectator queue limit")
+                self.frames.remove(victim)
+                self.byte_count -= len(victim.payload)
+        self.frames.append(frame)
+        self.byte_count += len(frame.payload)
+        self._available.set()
+
+    async def get(self) -> LiveFrame | None:
+        while not self.frames:
+            if self.closed:
+                return None
+            self._available.clear()
+            await self._available.wait()
+        frame = self.frames.popleft()
+        self.byte_count -= len(frame.payload)
+        return frame
+
+    def close(self) -> None:
+        self.closed = True
+        self._available.set()
+
+    def _remove_intermediates(self) -> None:
+        retained = deque(frame for frame in self.frames if frame.guaranteed)
+        self.frames = retained
+        self.byte_count = sum(len(frame.payload) for frame in retained)
+
+
+@dataclass(slots=True)
+class _LiveRunState:
+    buffer: CatchUpBuffer
+    spectators: set[SpectatorQueue] = field(default_factory=set)
+    closed: bool = False
+
+
+class LiveRunHub:
+    """Own catch-up and subscriber ordering on one loop for one server lifetime."""
+
+    def __init__(
+        self,
+        *,
+        on_transport_error: Callable[[str, str], None],
+        catch_up_bytes: int = STUDIO_CATCH_UP_BYTES,
+        max_frame_bytes: int = STUDIO_MAX_FRAME_BYTES,
+        spectator_queue_bytes: int = STUDIO_SPECTATOR_QUEUE_BYTES,
+    ) -> None:
+        if spectator_queue_bytes < catch_up_bytes:
+            raise ValueError("spectator queues must hold one complete catch-up snapshot")
+        if spectator_queue_bytes < 2 * max_frame_bytes:
+            raise ValueError("spectator queues must hold tick 0 and the terminal frame")
+        self.on_transport_error = on_transport_error
+        self.catch_up_bytes = catch_up_bytes
+        self.max_frame_bytes = max_frame_bytes
+        self.spectator_queue_bytes = spectator_queue_bytes
+        self._runs: dict[str, _LiveRunState] = {}
+        self._closed_run_id: str | None = None
+        self._active_run_id: str | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
+
+    def publish(self, run_id: str, payload: bytes) -> None:
+        self._assert_loop()
+        try:
+            frame = LiveFrame.parse(payload)
+        except ValueError:
+            self.disable(run_id, "live frame serialization is invalid")
+            return
+        self.publish_frame(run_id, frame)
+
+    def publish_frame(self, run_id: str, frame: LiveFrame) -> None:
+        self._assert_loop()
+        if self._active_run_id is None:
+            self._active_run_id = run_id
+        elif self._active_run_id != run_id:
+            self.close_all()
+            self._runs.clear()
+            self._active_run_id = run_id
+        state = self._runs.setdefault(run_id, self._new_state())
+        if state.closed or state.buffer.disabled:
+            return
+        accepted, error = state.buffer.append(frame)
+        if error is not None:
+            self._disable(run_id, state, error)
+            return
+        if accepted:
+            for spectator in tuple(state.spectators):
+                try:
+                    spectator.put(frame)
+                except RuntimeError:
+                    spectator.close()
+                    state.spectators.discard(spectator)
+                    _LOGGER.warning("studio spectator queue rejected a guaranteed frame")
+
+    def subscribe(self, run_id: str) -> SpectatorQueue | None:
+        self._assert_loop()
+        active = (
+            self._runs.get(self._active_run_id)
+            if self._active_run_id is not None
+            else None
+        )
+        if self._active_run_id is not None and (
+            self._active_run_id == self._closed_run_id
+            or (active is not None and active.closed)
+        ):
+            self._active_run_id = None
+        if run_id == self._closed_run_id:
+            return None
+        if self._active_run_id not in {None, run_id}:
+            return None
+        state = self._runs.setdefault(run_id, self._new_state())
+        if state.closed or state.buffer.disabled:
+            return None
+        if self._active_run_id is None:
+            self._active_run_id = run_id
+            self._closed_run_id = None
+        queue = SpectatorQueue(max_bytes=self.spectator_queue_bytes)
+        # No await between snapshot and subscription: a loop callback cannot
+        # publish into the gap and duplicate or skip a frame.
+        queue.seed(state.buffer.snapshot())
+        state.spectators.add(queue)
+        return queue
+
+    def unsubscribe(self, run_id: str, queue: SpectatorQueue) -> None:
+        self._assert_loop()
+        state = self._runs.get(run_id)
+        if state is not None:
+            state.spectators.discard(queue)
+
+    def close_run(self, run_id: str) -> None:
+        self._assert_loop()
+        state = self._runs.pop(run_id, None)
+        if state is not None:
+            state.closed = True
+            state.buffer.clear()
+            for spectator in tuple(state.spectators):
+                spectator.close()
+            state.spectators.clear()
+        self._closed_run_id = run_id
+        if self._active_run_id == run_id:
+            self._active_run_id = None
+
+    def close_all(self) -> None:
+        self._assert_loop()
+        for run_id in tuple(self._runs):
+            self.close_run(run_id)
+
+    def disable(self, run_id: str, message: str) -> None:
+        self._assert_loop()
+        if self._active_run_id is None:
+            self._active_run_id = run_id
+        elif self._active_run_id != run_id:
+            self.close_all()
+            self._runs.clear()
+            self._active_run_id = run_id
+        self._disable(run_id, self._runs.setdefault(run_id, self._new_state()), message)
+
+    def _disable(self, run_id: str, state: _LiveRunState, message: str) -> None:
+        if state.closed:
+            return
+        state.closed = True
+        for spectator in tuple(state.spectators):
+            spectator.close()
+        try:
+            self.on_transport_error(run_id, message)
+        except Exception:
+            _LOGGER.exception("studio transport error callback failed")
+
+    def _new_state(self) -> _LiveRunState:
+        return _LiveRunState(
+            CatchUpBuffer(
+                max_bytes=self.catch_up_bytes,
+                max_frame_bytes=self.max_frame_bytes,
+            )
+        )
+
+    def _assert_loop(self) -> None:
+        loop = asyncio.get_running_loop()
+        if self._loop is None:
+            self._loop = loop
+        elif self._loop is not loop:
+            raise RuntimeError("LiveRunHub may only be used by its owning asyncio loop")
+
+
+class StudioRunStageServer:
+    """Single-serve listener for Studio viewers, artifacts, and live sockets."""
+
+    def __init__(
+        self,
+        *,
+        run_exists: Callable[[str], bool],
+        live_run_exists: Callable[[str], bool],
+        artifact_reader: Callable[[str, str], bytes],
+        on_transport_error: Callable[[str, str], None],
+        origin: str,
+        host: str = "127.0.0.1",
+        port: int = 8766,
+        viewer_path: Path | str | None = None,
+        linger_seconds: float = STUDIO_FINAL_LINGER_SECONDS,
+        catch_up_bytes: int = STUDIO_CATCH_UP_BYTES,
+        max_frame_bytes: int = STUDIO_MAX_FRAME_BYTES,
+        spectator_queue_bytes: int = STUDIO_SPECTATOR_QUEUE_BYTES,
+    ) -> None:
+        if linger_seconds < STUDIO_FINAL_LINGER_SECONDS:
+            raise ValueError("studio final-frame linger must be at least two seconds")
+        self.run_exists = run_exists
+        self.live_run_exists = live_run_exists
+        self.artifact_reader = artifact_reader
+        self.origin = origin
+        self.host = host
+        self.port = port
+        self.viewer = Path(
+            viewer_path
+            or Path(__file__).resolve().parents[2] / "replay-viewer" / "index.html"
+        ).read_bytes()
+        self.linger_seconds = linger_seconds
+        self.bound_port: int | None = None
+        self.hub = LiveRunHub(
+            on_transport_error=on_transport_error,
+            catch_up_bytes=catch_up_bytes,
+            max_frame_bytes=max_frame_bytes,
+            spectator_queue_bytes=spectator_queue_bytes,
+        )
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._stop: asyncio.Event | None = None
+        self._on_transport_error = on_transport_error
+        self._served = False
+
+    async def serve(self) -> None:
+        if self._served:
+            raise RuntimeError("studio run-stage server instances are single-serve")
+        self._served = True
+        self._loop = asyncio.get_running_loop()
+        self._stop = asyncio.Event()
+        try:
+            async with serve(
+                self._handler,
+                self.host,
+                self.port,
+                process_request=self._process_request,
+                origins=[self.origin],
+                max_size=MAX_PLAYER_MESSAGE_BYTES,
+            ) as websocket_server:
+                self.bound_port = websocket_server.sockets[0].getsockname()[1]
+                await self._stop.wait()
+                self.hub.close_all()
+        finally:
+            self.bound_port = None
+            self._stop = None
+            self._loop = None
+
+    def publish(self, run_id: str, payload: bytes) -> None:
+        """Schedule one serialized frame from a worker thread without blocking."""
+
+        loop = self._loop
+        if loop is None or loop.is_closed():
+            self._report_transport_error(run_id, "live listener is unavailable")
+            return
+        try:
+            frame = LiveFrame.parse(payload)
+        except ValueError:
+            callback = self.hub.disable
+            arguments = (run_id, "live frame serialization is invalid")
+        else:
+            callback = self.hub.publish_frame
+            arguments = (run_id, frame)
+        try:
+            loop.call_soon_threadsafe(callback, *arguments)
+        except RuntimeError:
+            self._report_transport_error(run_id, "live listener is unavailable")
+
+    def close_run(self, run_id: str) -> None:
+        loop = self._loop
+        if loop is not None and not loop.is_closed():
+            loop.call_soon_threadsafe(self.hub.close_run, run_id)
+
+    def stop(self) -> None:
+        loop = self._loop
+        stop = self._stop
+        if loop is not None and stop is not None and not loop.is_closed():
+            loop.call_soon_threadsafe(stop.set)
+
+    async def _process_request(
+        self,
+        connection: ServerConnection,
+        request: Request,
+    ) -> Response | None:
+        parsed = urlsplit(request.path)
+        route = self._run_route(parsed.path)
+        if request.method != "GET" or route is None:
+            return _http_bytes_response(404, b"not found\n", "text/plain; charset=utf-8")
+        run_id, endpoint = route
+        if not await asyncio.to_thread(self.run_exists, run_id):
+            return _http_bytes_response(404, b"run not found\n", "text/plain; charset=utf-8")
+        if endpoint == "client/replay":
+            return _http_bytes_response(200, self.viewer, "text/html; charset=utf-8")
+        if endpoint == "replay.bin":
+            try:
+                replay = await asyncio.to_thread(
+                    self.artifact_reader,
+                    run_id,
+                    "replay.bin",
+                )
+            except (FileNotFoundError, ValueError):
+                return _http_bytes_response(
+                    404,
+                    b"run artifact not found\n",
+                    "text/plain; charset=utf-8",
+                )
+            except Exception:
+                _LOGGER.exception("studio replay artifact read failed")
+                return _http_bytes_response(
+                    500,
+                    b"could not read run artifact\n",
+                    "text/plain; charset=utf-8",
+                )
+            return _http_bytes_response(200, replay, "application/octet-stream")
+        return None
+
+    async def _handler(self, connection: ServerConnection) -> None:
+        route = self._run_route(urlsplit(connection.request.path).path)
+        if route is None or route[1] != "replay":
+            await connection.close(code=1008, reason="unsupported websocket path")
+            return
+        run_id = route[0]
+        if not await asyncio.to_thread(self.live_run_exists, run_id):
+            await connection.close(code=1008, reason="live stream unavailable")
+            return
+        queue = self.hub.subscribe(run_id)
+        if queue is None:
+            await connection.close(code=1008, reason="live stream unavailable")
+            return
+        try:
+            while True:
+                frame = await self._next_frame(connection, queue)
+                if frame is None:
+                    return
+                await connection.send(frame.payload.decode("utf-8"))
+                if frame.final:
+                    await self._linger(connection)
+                    return
+        except ConnectionClosed:
+            return
+        finally:
+            self.hub.unsubscribe(run_id, queue)
+
+    @staticmethod
+    async def _next_frame(
+        connection: ServerConnection,
+        queue: SpectatorQueue,
+    ) -> LiveFrame | None:
+        frame_ready = asyncio.create_task(queue.get())
+        connection_closed = asyncio.create_task(connection.wait_closed())
+        try:
+            done, _pending = await asyncio.wait(
+                {frame_ready, connection_closed},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if connection_closed in done:
+                return None
+            return frame_ready.result()
+        finally:
+            for task in (frame_ready, connection_closed):
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(frame_ready, connection_closed, return_exceptions=True)
+
+    async def _linger(self, connection: ServerConnection) -> None:
+        try:
+            await asyncio.wait_for(
+                connection.wait_closed(),
+                timeout=self.linger_seconds,
+            )
+        except (ConnectionClosed, TimeoutError):
+            return
+
+    @staticmethod
+    def _run_route(path: str) -> tuple[str, str] | None:
+        decoded = unquote(path)
+        match = re.fullmatch(
+            r"/runs/([0-9a-f]{32})/(client/replay|replay\.bin|replay)",
+            decoded,
+        )
+        if match is None:
+            return None
+        return match.group(1), match.group(2)
+
+    def _report_transport_error(self, run_id: str, message: str) -> None:
+        try:
+            self._on_transport_error(run_id, message)
+        except Exception:
+            _LOGGER.exception("studio transport error callback failed")
 
 
 @dataclass(slots=True)
@@ -629,15 +1140,18 @@ def _parse_action(message: str | bytes) -> tuple[object, list[dict[str, str]]]:
 
 
 def _http_response(status: int, body: str, content_type: str) -> Response:
-    encoded = body.encode("utf-8")
+    return _http_bytes_response(status, body.encode("utf-8"), content_type)
+
+
+def _http_bytes_response(status: int, body: bytes, content_type: str) -> Response:
     headers = Headers(
         {
             "Content-Type": content_type,
-            "Content-Length": str(len(encoded)),
+            "Content-Length": str(len(body)),
             "Connection": "close",
         }
     )
-    return Response(status, "OK" if status == 200 else "Error", headers, encoded)
+    return Response(status, "OK" if status == 200 else "Error", headers, body)
 
 
 def _player_page() -> str:

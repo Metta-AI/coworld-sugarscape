@@ -80,6 +80,7 @@ class StudioRun:
     started_at: float = field(default_factory=time.time)
     results: dict[str, object] | None = None
     error: str | None = None
+    transport_error: str | None = None
     worker: Thread | None = field(default=None, repr=False)
     cancel_requested: Event = field(default_factory=Event, repr=False)
 
@@ -162,6 +163,21 @@ class RunRegistry:
     def status(self, run_id: str) -> dict[str, object]:
         with self._lock:
             return deepcopy(self._status_locked(self._require_locked(run_id)))
+
+    def has_run(self, run_id: str) -> bool:
+        with self._lock:
+            return run_id in self._runs
+
+    def is_live_run(self, run_id: str) -> bool:
+        with self._lock:
+            run = self._runs.get(run_id)
+            return run is not None and run.state not in _TERMINAL_STATES
+
+    def record_transport_error(self, run_id: str, message: str) -> None:
+        with self._lock:
+            run = self._require_locked(run_id)
+            if run.transport_error is None:
+                run.transport_error = message
 
     def worker(self, run_id: str) -> Thread | None:
         with self._lock:
@@ -259,6 +275,8 @@ class RunRegistry:
             )
         elif run.state == "error":
             status["error"] = run.error or "run failed"
+        if run.transport_error is not None:
+            status["transport_error"] = run.transport_error
         return status
 
 
@@ -395,6 +413,15 @@ class ArtifactStore:
             if run_path.is_symlink() or path.is_symlink() or not path.is_file():
                 raise FileNotFoundError(path)
             return path.read_bytes()
+
+    def has_run(self, run_id: str) -> bool:
+        try:
+            self._validate_run_id(run_id)
+        except ValueError:
+            return False
+        with self._lock:
+            run_path = self.root / run_id
+            return run_path.is_dir() and not run_path.is_symlink()
 
     def prune(self, *, protected: set[str] | None = None) -> list[str]:
         protected_ids = set(protected or ())
@@ -543,6 +570,15 @@ class RunCoordinator:
 
     def status(self, run_id: str) -> dict[str, object]:
         return self.registry.status(run_id)
+
+    def has_run(self, run_id: str) -> bool:
+        return self.registry.has_run(run_id) or self.artifacts.has_run(run_id)
+
+    def is_live_run(self, run_id: str) -> bool:
+        return self.registry.is_live_run(run_id)
+
+    def record_transport_error(self, run_id: str, message: str) -> None:
+        self.registry.record_transport_error(run_id, message)
 
     def set_displayed(self, run_id: str | None) -> None:
         self.registry.set_displayed(run_id)
