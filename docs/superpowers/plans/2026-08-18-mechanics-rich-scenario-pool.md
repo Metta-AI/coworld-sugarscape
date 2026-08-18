@@ -97,7 +97,7 @@ In `tools/generate_scenario_pool.py`:
 
 - [ ] **Step 3: Migrate `tools/benchmark_replay_viewer.py` off `emit_configs`**
 
-The benchmark imports `emit_configs` (line ~34) and calls it (line ~58) to obtain a standalone merged config, and hard-codes `capacity.dense-regrow-2` (line ~37), a scenario Task 2 drops. Replace the `emit_configs` call with in-memory construction — load the manifest, take the solo-ladder `game_config` minus `seed`/`scenario_pool`, `update()` it with the chosen scenario's `config_overrides` and `targets` (the exact merge `emit_configs` performed) — and switch the scenario id to `capacity.sparse-regrow-2` (a kept base; `capacity.compact-regrow-1` is already the benchmark's other case, so reusing it would duplicate). Sanity-check the case's retained-memory budget still fits the larger 56×56 world. Verify with a bare `.venv/bin/python tools/benchmark_replay_viewer.py --help` (arg parsing and imports must succeed).
+The benchmark imports `emit_configs` (line ~34) and calls it (line ~58) to obtain a standalone merged config, and hard-codes `capacity.dense-regrow-2` (line ~37), a scenario Task 2 drops. Replace the `emit_configs` call with in-memory construction — load the manifest, take the solo-ladder `game_config` minus `seed`/`scenario_pool`, `update()` it with the chosen scenario's `config_overrides` and `targets` (the exact merge `emit_configs` performed) — and switch the scenario id to `capacity.sparse-regrow-2` (a kept base; `capacity.compact-regrow-1` is already the benchmark's other case, so reusing it would duplicate). Verify with a bare `.venv/bin/python tools/benchmark_replay_viewer.py --help` (arg parsing and imports must succeed). The retained-memory bound in `tools/benchmark_replay_viewer.mjs` is only exercised when someone actually runs the browser benchmark (a manual dev tool needing Chrome — deliberately NOT run by this plan); add a one-line comment beside the swapped case noting the 56×56 world is larger than the old 52×52 case and the ~10 MiB budget may need recalibrating on the next real benchmark run.
 
 - [ ] **Step 4: Sweep for dangling references**
 
@@ -268,11 +268,21 @@ def test_pack_invariants() -> None:
         assert chaos["agentReplacements"] == base["agentReplacements"], base_id
         assert chaos["trait_ranges"]["fertility"] == base["trait_ranges"]["fertility"], base_id
         if base_id.startswith("price."):
-            assert chaos["agentStartingSpice"] == base["agentStartingSpice"], base_id
-            assert chaos["agentSpiceMetabolism"] == base["agentSpiceMetabolism"], base_id
-            assert chaos["agentTradeFactor"] == base["agentTradeFactor"], base_id
+            for key in (
+                "agentStartingSpice",
+                "agentSpiceMetabolism",
+                "agentTradeFactor",
+                "environmentMaxSpice",
+                "environmentSpicePeaks",
+                "environmentSpiceRegrowRate",
+            ):
+                assert chaos[key] == base[key], f"{base_id}: {key}"
+            assert chaos["trait_ranges"]["trade"] == base["trait_ranges"]["trade"], base_id
+        else:
+            assert chaos["trait_ranges"]["trade"] == [0, 1], base_id
         if base_id.startswith("tribe-"):
             assert chaos["environmentMaxTribes"] == base["environmentMaxTribes"], base_id
+        assert chaos["trait_ranges"]["aggression"] == [0, 2], base_id
 ```
 
 Also add a key-validity invariant (a typo'd DTL key would otherwise pass the
@@ -543,7 +553,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 ### Task 3: Full-pool runtime smoke test
 
-Every one of the 80 merged configs must actually construct and step a world on the pinned interpreter — this catches DTL key typos and mechanics that crash at runtime (disease endowments, combat, pollution), which static resolve/validate cannot.
+Every one of the 80 merged configs must actually construct and step a world on the pinned interpreter — this catches construction and runtime failures (disease endowments, combat, pollution) that static resolve/validate cannot. (Unknown/typo'd keys are NOT caught here — DTL ignores them; that is what `test_every_override_key_is_a_known_config_key` is for.)
 
 **Files:**
 - Modify: `tests/test_scenario_pool.py`
