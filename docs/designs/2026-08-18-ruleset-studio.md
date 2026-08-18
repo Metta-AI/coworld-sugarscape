@@ -146,9 +146,12 @@ canvas compiles to valid-shaped JSON.
   `abs neg pow`, comparisons `< ≤ > ≥ = ≠`, logic `and or not`,
   `if ⟨c⟩ then ⟨e⟩ else ⟨e⟩`, and a numeric literal field.
 - **feature blocks** — three dropdown getters (agent / cell / world)
-  listing the exact `docs/RULES.md` vocabulary, with the doc's meaning
-  string as hover help (e.g. `cell.welfare` explains it is DTL's
-  pre-SugarLang welfare).
+  covering the exact `docs/RULES.md` vocabulary (the compiled `get`
+  values are always the doc's feature names), with meaning strings as
+  hover help. Display labels may diverge from the raw names where a
+  plainer word is truer — e.g. `agent.ttl` shows as "starves in"
+  (2026-08-18), since DTL's `findTimeToLive()` is a starvation clock
+  with no age component.
 - **compiler / decompiler** — `blocks.js` walks the workspace to emit
   SugarLang JSON and, inversely, builds blocks from parsed JSON with
   auto-layout. Saved files are **pure SugarLang** — block positions are
@@ -255,6 +258,22 @@ hierarchy, no decorative cards. Blockly gets a custom theme (category
 colors drawn from the house palette, house typeface for block labels) so
 the canvas doesn't read as stock-Google. Post-build conformance pass via
 `/ux.ify` with screenshots, per the standing rule.
+
+Post-implementation refinements (2026-08-18, all shipped):
+
+- **Dark mode, system-following**: full token override under
+  `prefers-color-scheme: dark` (house dark palette) plus a matching dark
+  Blockly theme, swapped live via `matchMedia` — no manual toggle.
+- **Block ink follows the theme**: Blockly's stock white block text was
+  illegible on the pale category fills; label ink is near-black on paper
+  and near-white in dark mode, and zelos's hardcoded white single-field
+  (number literal) bodies are overridden by block class.
+- **Operator emphasis**: symbol operators (`+ − × ÷`, comparisons)
+  render at 15px/700 via a dedicated label class, and subtraction uses a
+  true minus glyph; word operators keep standard size.
+- **Trailing mutator cog**: a small renderer subclass (`studio_zelos`)
+  moves block icons to the end of the row so variadic blocks read
+  operator-first with the operand-count cog as a trailing control.
 
 ## Validation & testing
 
