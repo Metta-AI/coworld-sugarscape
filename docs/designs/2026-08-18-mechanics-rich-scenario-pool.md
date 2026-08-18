@@ -168,12 +168,23 @@ adjustment rule if needed.
 - `tests/test_scenario_pool.py` updated for the new structure: generator
   `--check` round-trip against the manifest, pool size 80, id uniqueness and
   `<family>.<base>.<pack>` shape, duo target alternation.
-- New pack invariants: every `combat`/`everything` scenario has tagging on;
-  every `market` scenario has nonzero spice metabolism and trade; `baseline`
-  ids carry no pack suffix; skipped no-op packs emit no duplicate configs.
+- New pack invariants: exact per-pack counts and per-family ordered pack
+  sequences; every `combat`/`everything` scenario has tagging on; every
+  `market` scenario has nonzero spice metabolism and trade; `baseline` ids
+  carry no pack suffix; skipped no-op packs emit no duplicate configs;
+  `everything` preserves each base's regime (price market values, tribe
+  counts, fertility/replacements).
+- Key validity: every override key must exist in the pinned DTL defaults (or
+  be a coworld-level key like `trait_ranges`) — DTL silently ignores unknown
+  keys, so a typo'd key would otherwise fall back to the default unnoticed.
 - Smoke: each of the 80 merged configs must construct and step a short
-  episode on the pinned interpreter (guards against DTL key typos), bounded
-  to a handful of ticks so the suite stays fast.
+  episode on the pinned interpreter, bounded to a handful of ticks so the
+  suite stays fast; plus one 70-tick run per pack (crash canaries across the
+  activation horizon: births from age ~12, season flip at 50, first
+  pollution diffusion at ~60).
+- Disclosure: representative pack mechanics must survive the server's
+  `public_config` filter so players see the resolved world they must adapt
+  to, while seed/pool/seat assignments stay hidden.
 
 ## Risks
 

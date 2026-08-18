@@ -27,6 +27,8 @@
 
 ### Task 0: Checkpoint pre-existing in-flight work
 
+**STATUS: ALREADY COMPLETED** — the checkpoint exists as commit `7258d33` and the design/plan commit as `26b9813` (revised in `55a8204`). Executors: verify with `git log --oneline -4` and skip straight to Task 1. The steps below are kept as a record; if they ever need re-running, note the broad add must also exclude `.venv` (`':!.venv'`).
+
 The tree carries uncommitted scoring-v2 / replay-viewer / probe changes that must be preserved in history before probe files are deleted and pool files rewritten.
 
 **Files:**
@@ -95,7 +97,7 @@ In `tools/generate_scenario_pool.py`:
 
 - [ ] **Step 3: Migrate `tools/benchmark_replay_viewer.py` off `emit_configs`**
 
-The benchmark imports `emit_configs` (line ~34) and calls it (line ~58) to obtain a standalone merged config, and hard-codes `capacity.dense-regrow-2` (line ~37), a scenario Task 2 drops. Replace the `emit_configs` call with in-memory construction — load the manifest, take the solo-ladder `game_config` minus `seed`/`scenario_pool`, `update()` it with the chosen scenario's `config_overrides` and `targets` (the exact merge `emit_configs` performed) — and switch the scenario id to `capacity.compact-regrow-1` (a kept base). Verify with a bare `.venv/bin/python tools/benchmark_replay_viewer.py --help` (arg parsing and imports must succeed).
+The benchmark imports `emit_configs` (line ~34) and calls it (line ~58) to obtain a standalone merged config, and hard-codes `capacity.dense-regrow-2` (line ~37), a scenario Task 2 drops. Replace the `emit_configs` call with in-memory construction — load the manifest, take the solo-ladder `game_config` minus `seed`/`scenario_pool`, `update()` it with the chosen scenario's `config_overrides` and `targets` (the exact merge `emit_configs` performed) — and switch the scenario id to `capacity.sparse-regrow-2` (a kept base; `capacity.compact-regrow-1` is already the benchmark's other case, so reusing it would duplicate). Sanity-check the case's retained-memory budget still fits the larger 56×56 world. Verify with a bare `.venv/bin/python tools/benchmark_replay_viewer.py --help` (arg parsing and imports must succeed).
 
 - [ ] **Step 4: Sweep for dangling references**
 
@@ -257,6 +259,20 @@ def test_pack_invariants() -> None:
 
     # price never emits redundant spice/market packs
     assert not any(s.endswith((".spice", ".market")) for s in by_id if s.startswith("price."))
+
+    # `everything` preserves each base's regime instead of overwriting it.
+    for base_id in sequence:
+        base = by_id[base_id]
+        chaos = by_id[f"{base_id}.everything"]
+        assert chaos["agentFertilityFactor"] == base["agentFertilityFactor"], base_id
+        assert chaos["agentReplacements"] == base["agentReplacements"], base_id
+        assert chaos["trait_ranges"]["fertility"] == base["trait_ranges"]["fertility"], base_id
+        if base_id.startswith("price."):
+            assert chaos["agentStartingSpice"] == base["agentStartingSpice"], base_id
+            assert chaos["agentSpiceMetabolism"] == base["agentSpiceMetabolism"], base_id
+            assert chaos["agentTradeFactor"] == base["agentTradeFactor"], base_id
+        if base_id.startswith("tribe-"):
+            assert chaos["environmentMaxTribes"] == base["environmentMaxTribes"], base_id
 ```
 
 Also add a key-validity invariant (a typo'd DTL key would otherwise pass the
@@ -490,7 +506,7 @@ SCENARIOS: list[dict[str, object]] = build_scenarios()
 
 Everything downstream (`duo_scenarios`, `write_manifest`, `check_manifest`, `rendered_pool`) is unchanged and keeps consuming `SCENARIOS`.
 
-`everything` acceptance criteria: spice+trade+tagging+combat+disease+pollution+seasons all end up on; bases that already run a market (price) keep their own spice/trade values untouched; each base's pre-existing `environmentMaxTribes`, fertility factor, fertility trait range, and replacement setting are preserved (tribe convergence has 3 tribes, tribe diversity 2, and both tribe bases already reproduce — "everything excludes reproduction" means it does not ADD or ALTER reproduction, not that it turns it off); `trait_ranges` carries trade `[0, 1]` and aggression `[0, 2]` merged over the base mapping.
+`everything` acceptance criteria: spice+trade+tagging+combat+disease+pollution+seasons all end up on; bases that already run a market (price) keep their own spice/trade values untouched; tribe bases keep their explicitly configured tribe counts (convergence 3, diversity 2) while non-tribe bases intentionally acquire `environmentMaxTribes: 2` via the combat layer; each base's fertility factor, fertility trait range, and replacement setting are preserved (both tribe bases already reproduce — "everything excludes reproduction" means it does not ADD or ALTER reproduction, not that it turns it off); `trait_ranges` carries trade `[0, 1]` and aggression `[0, 2]` merged over the base mapping.
 
 - [ ] **Step 4: Regenerate the manifest and run the pool tests**
 
@@ -500,7 +516,7 @@ Everything downstream (`duo_scenarios`, `write_manifest`, `check_manifest`, `ren
 .venv/bin/python -m pytest tests/test_scenario_pool.py -x -q
 ```
 
-Expected: `--check` prints "scenario pool matches generator"; all pool tests PASS, including the new `test_pack_invariants` and the pre-existing `test_all_scenarios_resolve_and_validate` (which now sweeps all 80 configs through `resolve_episode_config` + `build_dtl_config` and will catch any key DTL rejects or rewrites).
+Expected: `--check` prints "scenario pool matches generator"; all pool tests PASS, including the new `test_pack_invariants`, `test_every_override_key_is_a_known_config_key` (typo'd keys — DTL silently ignores unknown keys, so only this invariant catches them), and the pre-existing `test_all_scenarios_resolve_and_validate` (which now sweeps all 80 configs through `resolve_episode_config` + `build_dtl_config` and catches values DTL rewrites/normalizes).
 
 - [ ] **Step 5: Run the broader suite for regressions**
 
@@ -563,7 +579,7 @@ A 3-tick sweep cannot reach late-activating mechanics (fertile ages 12-15, seaso
 
 ```python
 PACK_REPRESENTATIVES = [
-    "wealth-skewed.twin-peaks",
+    "wealth-skewed.twin-peaks.spice",
     "wealth-skewed.twin-peaks.reproduction",
     "wealth-skewed.twin-peaks.pollution",
     "wealth-egalitarian.central-plateau.disease",
@@ -659,7 +675,7 @@ Keep the document's existing section order and tone. Required changes:
 - Intro: "draws one of 24 curated world/target scenarios" → "draws one of 80 scenarios (12 hand-tuned base worlds × mechanic packs)". Same for the duo paragraph.
 - Selection: `scenario_pool[seed % 24]` → `scenario_pool[seed % 80]`.
 - "Duo target pairs" section: unchanged except delete the `capacity.wide-regrow-1` 275/276 sentence (that base is gone; note instead that all current bases have even starting populations and the generator still bumps odd duo copies by one).
-- Replace the "Families" section with two tables: (a) the base-world table (family, two base ids, target, one-line regime) and (b) the pack table (pack name, what it enables, which families get it) — copy content from the spec's "Pool structure" and "Mechanic packs" sections, keeping the DTL key detail (spice mirroring rule, combat-needs-tagging note, the disease spice-penalty guard, `[-1, -1]` timeframe convention).
+- Replace the "Families" section with two tables: (a) the base-world table (family, two base ids, target, one-line regime) and (b) the pack table (pack name, what it enables, which families get it) — copy content from the spec's "Pool structure" and "Mechanic packs" sections, keeping the DTL key detail (spice mirroring rule, combat-needs-tagging note, the disease spice-penalty guard, pollution active over `[0, 1000]` with diffusion `[50, 1000]` and delay 10).
 - Delete the "disable unwanted hazards" paragraph and the egalitarian income-interval caveat sentence about spice edge cases only if it no longer applies — it still applies to egalitarian baseline worlds, so keep that sentence.
 - "Source of truth" section: drop the `--emit-configs` command and its explanatory sentence; the workflow is now edit generator → `--write` → update this catalog → run scenario-pool tests.
 - Delete the entire "Reachability gate" section and anything after it that describes probe passes/roles.
