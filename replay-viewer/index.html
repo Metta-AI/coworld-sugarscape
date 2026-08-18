@@ -2267,6 +2267,45 @@ function clearFollow() {
   view.follow = null;
 }
 
+/** Draw the monochrome player glyph at a gnome's lower-right edge. It is small
+ *  enough not to cover the culture-coloured body, but backed by paper and ink
+ *  so it survives every terrain and tribe colour. */
+function playerShapeIndex(slot) {
+  return ((slot % 4) + 4) % 4;
+}
+
+function drawPlayerBadge(context, x, y, slot, cell) {
+  const radius = Math.min(8, Math.max(1.7, cell * 0.15));
+  const cx = x + cell * 0.25;
+  const cy = y + cell * 0.25;
+  const shape = playerShapeIndex(slot);
+  context.save();
+  context.globalAlpha = 1;
+  context.beginPath();
+  if (shape === 0) {
+    context.arc(cx, cy, radius, 0, Math.PI * 2);
+  } else if (shape === 1) {
+    context.moveTo(cx, cy - radius);
+    context.lineTo(cx + radius, cy);
+    context.lineTo(cx, cy + radius);
+    context.lineTo(cx - radius, cy);
+    context.closePath();
+  } else if (shape === 2) {
+    context.moveTo(cx, cy - radius);
+    context.lineTo(cx + radius, cy + radius);
+    context.lineTo(cx - radius, cy + radius);
+    context.closePath();
+  } else {
+    context.rect(cx - radius, cy - radius, radius * 2, radius * 2);
+  }
+  context.fillStyle = C.paper;
+  context.fill();
+  context.lineWidth = Math.max(0.8, cell * 0.065);
+  context.strokeStyle = PLATE_HEX;
+  context.stroke();
+  context.restore();
+}
+
 function drawBoard(frame, previous, t, now) {
   // One cell size for both axes is only right for a SQUARE world.
   // initEnvironment takes independent width and height, and gui.py computes its
@@ -2373,8 +2412,9 @@ function drawBoard(frame, previous, t, now) {
    * tribe, so the dot that was a population marker now carries the one attribute
    * that actually changes during a run. Tribes are a property of the world, not
    * of a seat, so this reads correctly however many seats there are — but it
-   * does mean seat identity is no longer in the body colour. With one seat that
-   * costs nothing; a multi-seat world would need the seat back as a second ring.
+   * does mean seat identity is no longer in the body colour. Multi-seat worlds
+   * put that identity back as a small neutral shape badge, leaving every colour
+   * available to mean culture and nothing else.
    */
   const tribal = frame.agents.some((agent) => typeof agent.tribe === "number" && agent.tribe >= 0);
   const sheet = settlerSheet();
@@ -2521,6 +2561,7 @@ function drawBoard(frame, previous, t, now) {
       context.imageSmoothingEnabled = false;
       for (const [sx, sy] of spots) {
         context.drawImage(tile, sx - box / 2, sy - box / 2, box, box);
+        if (frame.slots.length > 1) drawPlayerBadge(context, sx, sy, body.slot, cell);
       }
       context.imageSmoothingEnabled = true;
       context.globalAlpha = 1;
@@ -2546,6 +2587,7 @@ function drawBoard(frame, previous, t, now) {
       context.strokeStyle = C.ink;
       context.stroke();
     }
+    if (frame.slots.length > 1) drawPlayerBadge(context, body.px, body.py, body.slot, cell);
   }
   context.restore();
 }
@@ -2899,15 +2941,31 @@ function panel(x, y, width, height, radius = 10) {
     + `fill="${C.panel}" stroke="${C.border}" stroke-width="1.5"/>`;
 }
 
-/** The original draws every agent as a plain oval, so the board carries no shape
- *  encoding and neither does the HUD - a legend teaching a key the field does not
- *  use is worse than none. Identity is the seat colour plus the name and rank,
- *  which is the strongest redundancy available; red and blue also stay separable
- *  under every common colour-vision deficiency. */
+/** A seat's repeated identity glyph. Culture owns colour on the board, so player
+ *  identity is shape: circle for player one, diamond for player two, then
+ *  triangle and square if a replay ever has more seats. The HUD keeps its seat
+ *  colour as a redundant signal, but never relies on it alone. */
+function playerShape(x, y, slot, radius, fill, stroke, strokeWidth) {
+  const shape = playerShapeIndex(slot);
+  if (shape === 0) {
+    return `<circle cx="${x}" cy="${y}" r="${radius}" fill="${fill}" `
+      + `stroke="${stroke}" stroke-width="${strokeWidth}"/>`;
+  }
+  if (shape === 1) {
+    return `<path d="M ${x} ${y - radius} L ${x + radius} ${y} L ${x} ${y + radius} `
+      + `L ${x - radius} ${y} Z" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"/>`;
+  }
+  if (shape === 2) {
+    return `<path d="M ${x} ${y - radius} L ${x + radius} ${y + radius} `
+      + `L ${x - radius} ${y + radius} Z" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"/>`;
+  }
+  return `<rect x="${x - radius}" y="${y - radius}" width="${radius * 2}" height="${radius * 2}" `
+    + `rx="${radius * 0.16}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"/>`;
+}
+
 function seatMark(x, y, slot, radius) {
   const seat = seatOf(slot);
-  return `<circle cx="${x}" cy="${y}" r="${radius}" fill="${seat.color}" `
-    + `stroke="${C.ink}" stroke-width="1.6"/>`;
+  return playerShape(x, y, slot, radius, seat.color, C.ink, 1.6);
 }
 
 /** The board's key. Nothing on screen said the yellow field was sugar, and the
@@ -4014,12 +4072,60 @@ function readingFor(frame) {
   };
 }
 
+/** Fit assigned targets into the rail without letting a chart cross its card.
+ *  Sparse duos read naturally as a vertical pair; dense duos and worlds with
+ *  more seats use two columns so the physical type floor does not consume the
+ *  chart's entire height. */
+function targetReadingLayout(count, big, x, y, width, height) {
+  const top = y + (big ? 92 : 64);
+  const bottom = y + height - 14;
+  const columns = big || count > 2 ? 2 : 1;
+  const rows = Math.ceil(count / columns);
+  const columnGap = 12;
+  const rowGap = 10;
+  const innerWidth = width - 36;
+  const cardWidth = (innerWidth - columnGap * (columns - 1)) / columns;
+  const cardHeight = (bottom - top - rowGap * (rows - 1)) / rows;
+  return Array.from({ length: count }, (_, index) => ({
+    x: x + 18 + (index % columns) * (cardWidth + columnGap),
+    y: top + Math.floor(index / columns) * (cardHeight + rowGap),
+    width: cardWidth,
+    height: cardHeight,
+    column: index % columns,
+    row: Math.floor(index / columns),
+  }));
+}
+
 function targetHistogram(frame, x, y, width, height) {
   const big = dense();
   const seats = frame.coworld?.seats ?? [];
   let markup = panel(x, y, width, height);
-  markup += eyebrow("Did the rules grow the target?", x + 18, y + (big ? 46 : 26));
+  const multiple = seats.length > 1;
+  markup += eyebrow(
+    multiple ? "Did each ruleset grow its target?" : "Did the rules grow the target?",
+    x + 18, y + (big ? 46 : 26),
+  );
   if (seats.length === 0) return markup;
+
+  if (multiple) {
+    markup += text("filled bars = measured · white line = target", x + 18, y + (big ? 76 : 50), {
+      size: T(13), weight: 600, family: F.mono, fill: C.muted,
+    });
+    const cards = targetReadingLayout(seats.length, big, x, y, width, height);
+    seats.forEach((seat, index) => {
+      const card = cards[index];
+      if (card.row > 0) {
+        markup += `<line x1="${card.x}" y1="${card.y - 5}" x2="${card.x + card.width}" `
+          + `y2="${card.y - 5}" stroke="${C.border}" stroke-width="1"/>`;
+      }
+      if (card.column > 0) {
+        markup += `<line x1="${card.x - 6}" y1="${card.y}" x2="${card.x - 6}" `
+          + `y2="${card.y + card.height}" stroke="${C.border}" stroke-width="1"/>`;
+      }
+      markup += compactTargetReading(seat, card.x, card.y, card.width, card.height);
+    });
+    return markup;
+  }
 
   const seat = readingFor(frame);
   if (!seat) return markup;
@@ -4083,6 +4189,66 @@ function targetHistogram(frame, x, y, width, height) {
   return markup;
 }
 
+/** One of several assigned targets. Duo targets stay visible together: changing
+ *  the target picker would answer a different counterfactual question and hide
+ *  the other player's actual objective. */
+function compactTargetReading(seat, x, y, width, height) {
+  const score = typeof seat.score === "number" ? seat.score : null;
+  const markRadius = G(7);
+  let markup = seatMark(x + markRadius, y + T(14), seat.seat, markRadius);
+  const fit = (content, available, size) => {
+    const source = String(content);
+    if (advance(source, size) <= available) return source;
+    let clipped = source;
+    while (clipped.length > 1 && advance(`${clipped}\u2026`, size) > available) clipped = clipped.slice(0, -1);
+    return `${clipped}\u2026`;
+  };
+  const nameSize = T(20);
+  const name = fit(seat.name || `Player ${seat.seat + 1}`, width - G(94), nameSize);
+  markup += text(name, x + markRadius * 2 + G(8), y + T(20), {
+    size: nameSize, weight: 700, fill: C.paper,
+  });
+  markup += text(score === null ? "—" : score.toFixed(3), x + width, y + T(20), {
+    size: T(22), weight: 600, family: F.mono, fill: score === null ? C.muted : C.gold, anchor: "end",
+  });
+  const targetSize = T(16);
+  const targetLabel = fit(`${seat.variable ?? "wealth"} · ${seat.targetId ?? "target"}`, width, targetSize);
+  markup += text(targetLabel, x, y + T(41), {
+    size: targetSize, weight: 500, family: F.mono, fill: C.dim,
+  });
+
+  const plotTop = y + T(48);
+  const plotH = y + height - 8 - plotTop;
+  const target = seat.targetProbs ?? [];
+  const measured = seat.measuredProbs ?? [];
+  const buckets = Math.max(target.length, measured.length);
+  if (buckets === 0 || plotH < 18) return markup;
+  const ceiling = Math.max(0.0001, ...target, ...measured);
+  const barW = width / buckets;
+  const yFor = (probability) => plotTop + plotH - (probability / ceiling) * plotH;
+  for (let index = 0; index < buckets; index += 1) {
+    const value = measured[index] ?? 0;
+    if (value <= 0) continue;
+    const barTop = yFor(value);
+    markup += `<rect x="${(x + index * barW + 1).toFixed(1)}" y="${barTop.toFixed(1)}" `
+      + `width="${Math.max(1, barW - 2).toFixed(1)}" height="${(plotTop + plotH - barTop).toFixed(1)}" `
+      + `fill="${seatOf(seat.seat).color}" opacity="0.55"/>`;
+  }
+  if (target.length) {
+    const steps = [];
+    for (let index = 0; index < target.length; index += 1) {
+      const lineY = yFor(target[index]);
+      steps.push(`${(x + index * barW).toFixed(1)},${lineY.toFixed(1)}`);
+      steps.push(`${(x + (index + 1) * barW).toFixed(1)},${lineY.toFixed(1)}`);
+    }
+    markup += `<polyline points="${steps.join(" ")}" fill="none" stroke="${C.paper}" `
+      + `stroke-width="2" stroke-linejoin="round"/>`;
+  }
+  markup += `<line x1="${x}" y1="${plotTop + plotH}" x2="${x + width}" y2="${plotTop + plotH}" `
+    + `stroke="${C.axis}" stroke-width="1"/>`;
+  return markup;
+}
+
 /* INEQUALITY OVER TIME — the Gini coefficient, tick by tick.
  *
  * This replaced a Lorenz square with a Gini figure beside it, which the owner
@@ -4119,12 +4285,6 @@ function inequalityOverTime(frame, x, y, width, height) {
 
   markup += `<line x1="${plotX}" y1="${plotTop + plotH}" x2="${plotX + plotW}" `
     + `y2="${plotTop + plotH}" stroke="${C.axis}" stroke-width="1"/>`;
-  // A named landmark beats a bare axis: 0.4 is the conventional "high" line, and
-  // the classic Sugarscape run settles around 0.5.
-  markup += `<line x1="${plotX}" y1="${yFor(0.4).toFixed(1)}" x2="${plotX + plotW}" `
-    + `y2="${yFor(0.4).toFixed(1)}" stroke="${C.guide}" stroke-width="1" stroke-dasharray="4 4"/>`;
-  markup += text("0.4", plotX - 6, yFor(0.4) + 5,
-    { size: T(16), weight: 500, family: F.mono, fill: C.dim, anchor: "end" });
   markup += text("1", plotX - 6, plotTop + 10,
     { size: T(16), weight: 500, family: F.mono, fill: C.dim, anchor: "end" });
   markup += text("0", plotX - 6, plotTop + plotH,
@@ -4828,7 +4988,10 @@ let targetOptionsKey = "";
 
 function fillTargetPicker(frame) {
   const choices = frame.coworld?.choices ?? [];
-  if (choices.length === 0) {
+  // Browsing counterfactual catalog targets is useful for a solo episode. In a
+  // multi-seat episode it would replace both assigned objectives with one menu
+  // choice, which is precisely the ambiguity the paired target cards remove.
+  if (choices.length === 0 || (frame.coworld?.seats?.length ?? 0) > 1) {
     targetPick.hidden = true;
     return false;
   }
