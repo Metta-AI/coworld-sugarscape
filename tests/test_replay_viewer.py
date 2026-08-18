@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 import subprocess
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
 VIEWER = ROOT / "replay-viewer"
@@ -150,3 +152,25 @@ def test_v3_converter_keeps_empty_legacy_measurements_at_zero() -> None:
     target = {"bins": [0, 1, 2], "probs": [0.5, 0.5]}
     empty = {"bins": [0, 1, 2], "probs": [0.0, 0.0], "sample_count": 0}
     assert converter.score_against(target, empty, converter.LEGACY_SCORE_METHOD) == 0
+
+
+def test_v3_converter_excludes_scalar_targets_and_refuses_commonwealth() -> None:
+    import importlib.util
+
+    converter_path = ROOT / "tools" / "v3_to_v1_replay.py"
+    spec = importlib.util.spec_from_file_location("v3_to_v1_replay", converter_path)
+    assert spec is not None and spec.loader is not None
+    converter = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(converter)
+
+    catalog = converter.load_catalog()
+    assert catalog, "the converter catalog must still offer distribution targets"
+    assert all(
+        target.get("kind", "distribution") == "distribution" for target in catalog
+    )
+
+    commonwealth_header = {
+        "targets": [{"id": "wellness.max", "kind": "maximize", "variable": "wellness"}]
+    }
+    with pytest.raises(ValueError, match="no v1 equivalent"):
+        converter.convert({"header": commonwealth_header})
