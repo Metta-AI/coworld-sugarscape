@@ -38,7 +38,7 @@ def test_manifest_config_and_results_schemas_cover_platform_traps() -> None:
         "result.population_final",
         "result.gini_final",
         "result.extinct",
-        "result.rulesets_identical",
+        "rulesets_identical",
     }
     assert required_results <= set(results_schema["required"])
     assert results_schema["properties"]["score_method"] == {

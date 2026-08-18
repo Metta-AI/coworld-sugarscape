@@ -207,11 +207,13 @@ per-episode scalars only (no cross-episode or per-seat-array predicates),
 which is why the check is expressed as a within-episode agreement scalar.
 
 **The contract is constancy, not mere determinism.** The two seats'
-observations are not byte-identical — `seat` differs within an episode, and
-the resolved seed differs across episodes — and the commonwealth contract
-deliberately requires the same ruleset *regardless*: the policy IS the
-ruleset. A deterministic policy that branches on `seat`, the seed, or any
-other observation field is non-compliant by definition and is correctly
+observations are not byte-identical — `seat` differs within an episode, and a
+qualifier observation's public config reports `seats: 2` where ranked
+episodes report `seats: 1` (the resolved seed is stripped from observations
+entirely; `server.py public_config`). The commonwealth contract deliberately
+requires the same ruleset *regardless*: the policy IS the ruleset. A
+deterministic policy that branches on `seat`, `seats`, or any other
+observation field is non-compliant by definition and is correctly
 disqualified. (Raised in review 2026-08-18; resolved as intended behavior and
 documented here.)
 
@@ -222,7 +224,9 @@ qualifier run `seat_count: 2` against the one-seat commonwealth variant
 without a second variant or any change to ranked play.
 
 **Repo-side support:** each seat detail records `ruleset_sha256`, results
-expose the episode scalar `result.rulesets_identical` (true only when every
+expose the plain episode scalar `rulesets_identical` — gates traverse it as
+`result.rulesets_identical`; a literal dotted key would be unreachable to
+them — (true only when every
 seat submitted and all hashes agree — unsubmitted seats never count as
 agreeing), and a single-entry `targets` array broadcasts to every seat so the
 2-seat qualifier episode reuses the 1-seat variant's `wellness.max` target

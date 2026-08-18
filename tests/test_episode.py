@@ -383,9 +383,9 @@ def test_results_report_ruleset_hash_agreement(
         emit_timing_logs=False,
     )
 
-    assert same["result.rulesets_identical"] is True
-    assert different["result.rulesets_identical"] is False
-    assert unsubmitted["result.rulesets_identical"] is False
+    assert same["rulesets_identical"] is True
+    assert different["rulesets_identical"] is False
+    assert unsubmitted["rulesets_identical"] is False
 
 
 def test_two_seat_commonwealth_episode_broadcasts_the_single_target(
@@ -404,7 +404,7 @@ def test_two_seat_commonwealth_episode_broadcasts_the_single_target(
         "wellness.max",
         "wellness.max",
     ]
-    assert results["result.rulesets_identical"] is True
+    assert results["rulesets_identical"] is True
 
 
 def test_episode_rejects_mixed_target_kinds(

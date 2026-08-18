@@ -79,7 +79,9 @@ Distribution targets use `w1-hyperbolic/1`; Commonwealth uses
 `wellness-sum/1`. The top-level result `score_method` reports the episode's
 method (episodes never mix target kinds).
 
-Results also expose the episode scalar `result.rulesets_identical`: true only
+Results also expose the episode scalar `rulesets_identical` (a plain
+top-level key — platform gates address it by traversal as
+`result.rulesets_identical`): true only
 when every seat submitted and all seats' `ruleset_sha256` values agree.
 Platform qualification gates evaluate scalar keys, not per-seat arrays;
 Commonwealth qualifier rounds gate on this key to enforce constitution
