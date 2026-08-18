@@ -55,8 +55,9 @@ development, `docker compose up` starts the one-seat config in `config.json` and
 the bundled target-aware baseline. Protocol, language, and target references are
 in `docs/PROTOCOL.md`, `docs/RULES.md`, and `docs/TARGETS.md`.
 
-Use [`ruleset-studio/`](ruleset-studio/README.md) to build, validate, and save
-SugarLang rulesets in a local Blockly editor with optional live-agent chat.
+Use [`ruleset-studio/`](ruleset-studio/README.md) to build, validate, save, and
+Play SugarLang rulesets in a local Blockly editor with live replay handoff and
+optional agent chat.
 
 Reproducibility assumes `PYTHONHASHSEED=0`; both Dockerfiles set it, and the
 server re-executes itself with that value when necessary. A recorded results or

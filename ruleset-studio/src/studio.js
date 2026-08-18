@@ -656,6 +656,10 @@ function renderRun() {
   renderPlayButton();
 }
 
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"]/g, character => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[character]);
+}
+
 function renderVerdict() {
   const results = runState.status?.results;
   if (!results) return;

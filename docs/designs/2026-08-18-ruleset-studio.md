@@ -41,8 +41,9 @@ never fire?", "tighten this toward the pareto target").
 - Not a hosted/multi-user service. Localhost, one user, one session.
 - No SugarLang grammar changes. The editor is a client of `docs/RULES.md`
   as it stands; grammar evolution updates the block set, not vice versa.
-- No replacement for the replay viewer. Watching episodes stays there.
-- Phase 1 does not run episodes (see Phase 2).
+- No replacement for the replay viewer. Phase 2 embeds the existing viewer.
+- Episode execution is specified separately in the implemented
+  [Play design](2026-08-18-ruleset-studio-play.md).
 
 ## Prior art consulted (research-before-building)
 
@@ -74,7 +75,8 @@ link, a small stdlib-Python API server (patterned on
 
 ## Architecture
 
-Three processes, one page:
+One Python launcher process, one Node link-server child, one page. Phase 2 adds
+a second Python listener and a worker thread inside that launcher process:
 
 ```
 ┌───────────────────────────────  browser  ──────────────────────────────┐
@@ -106,11 +108,13 @@ critical path of ordinary editing.
 
 ```
 ruleset-studio/
-  src/                  # index.html, studio.js, blocks.js, style.css
+  src/                  # index.html, studio.js, play.js, blocks.js, style.css
   src/vendor/blockly/   # pinned runtime, media, license, provenance (no CDN)
   server.py             # studio API server (stdlib only)
 rulesets/               # saved SugarLang JSON files (the load/save dir)
-tools/ruleset_studio.py # launcher: starts both servers, prints agent runbook
+src/coworld/studio.py, studio_runs.py # Play config and synchronous lifecycle
+src/coworld/server.py   # isolated async Studio run-stage listener
+tools/ruleset_studio.py # launcher: listeners + link child + agent runbook
 docs/designs/2026-08-18-ruleset-studio.md   # this document
 ```
 
@@ -120,8 +124,9 @@ Blockly ships a browser UMD build.
 
 ### Launch story (how an agent opens it)
 
-`.venv/bin/python -m tools.ruleset_studio` starts the studio API server and the
-ux.surface link-server (`LINK_APP_DIR=ruleset-studio/src`), which
+`.venv/bin/python -m tools.ruleset_studio` starts the in-process Studio API and
+run-stage listeners plus the ux.surface link-server
+(`LINK_APP_DIR=ruleset-studio/src`), which
 auto-opens the user's browser. The launcher prints the exact
 `link-bridge.mjs watch` runbook so the agent parks a watch loop and
 answers chat; the same runbook lives in `ruleset-studio/README.md`.
@@ -234,20 +239,20 @@ strands empty space while any pane is open.
 | `/api/rulesets/{name}` | PUT | Validate, then atomic write (tmp+rename); never writes invalid JSON silently — invalid saves require `?force=1` and return the errors either way |
 | `/api/validate` | POST | Body = candidate ruleset; returns `validate_ruleset` errors with JSON paths |
 | `/api/context` | GET | `trait_ranges` + scenario list (from `config.json` / `coworld_manifest.json`) for slider ranges and the scenario picker |
+| `/api/scenarios` | GET | Play variants, modes, scenarios, and matching context ids |
+| `/api/run` | POST | Validate the compiled Blockly value and reserve a local run |
+| `/api/run/{id}` | GET / DELETE | Poll progress/results or request cancellation |
+| `/api/displayed-run` | PUT | Pin or release the artifact shown by the parent UI |
 
 Filenames are validated against a `[A-Za-z0-9._-]+\.json` allowlist and
 resolved strictly inside `rulesets/` (trust boundary: browser input).
 
-## Phase 2 (explicitly deferred)
+## Phase 2
 
-- **Test-run scoring**: an `/api/run` that executes a short local
-  episode (chosen scenario + seed) with the working ruleset and returns
-  score + measured-vs-target histogram overlay. This closes the
-  design→score loop and is the biggest payoff, but it drags in episode
-  orchestration, progress streaming, and dataviz — worth its own design
-  pass once the editor exists.
-- **Duo-ladder awareness** (second seat / opponent context).
-- **Workspace niceties**: block search palette, keyboard-first editing.
+The implemented [Play design](2026-08-18-ruleset-studio-play.md) adds local
+compile-and-run, sampled live replay frames, canonical artifacts, pooled and
+fixed variant settings, baseline opponent seats, cancellation, and displayed
+run pinning. Workspace niceties such as block search remain deferred.
 
 ## Visual design
 
@@ -296,9 +301,9 @@ Post-implementation refinements (2026-08-18, all shipped):
   operand" gear); this is standard Blockly but the fiddliest part of the
   block set. Fallback: fix arity at 2 and let users nest — grammar-legal,
   slightly noisier canvases.
-- **Two servers, two ports** adds a CORS seam and a launcher that must
-  supervise both. Accepted for validator authority + instant mechanical
-  ops; the launcher owns lifecycle (child processes, shared shutdown).
+- **Three origins** add CORS and WebSocket-origin seams. The launcher owns exact
+  canonical origins, starts both Python listeners before the link child, and
+  coordinates shared shutdown.
 - **Bridge latency/absence**: chat depends on a watching session.
   Mitigated by the explicit degraded mode and status pill.
 - **ux.surface API drift**: the skill is versioned (0.6.x) and evolving;
@@ -308,8 +313,8 @@ Post-implementation refinements (2026-08-18, all shipped):
 
 ## Deferred decisions
 
-- Phase 1 saves shareable rulesets in the repository-root `rulesets/` and does
-  not run episodes or render target histograms.
+- Phase 1 saves shareable rulesets in the repository-root `rulesets/`; the
+  implemented Play extension runs them and embeds target-aware replays.
 - Phase 1 documents launch in `ruleset-studio/README.md` and launcher output;
   project or reusable Metta skill integration remains a separate later
   decision.
