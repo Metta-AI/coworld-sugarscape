@@ -10,7 +10,6 @@ behavior.
 from __future__ import annotations
 
 import argparse
-import importlib
 import json
 import sys
 from collections.abc import Iterable, Mapping
@@ -20,9 +19,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT))
 
-run_episode = importlib.import_module("coworld.episode").run_episode
-WELLNESS_COMPONENTS = importlib.import_module("coworld.scoring").WELLNESS_COMPONENTS
-choose_ruleset = importlib.import_module("players.baseline.player").choose_ruleset
+from coworld.episode import run_episode  # noqa: E402
+from coworld.scoring import WELLNESS_COMPONENTS  # noqa: E402
+from players.baseline.player import choose_ruleset  # noqa: E402
 
 
 def summarize_component_frames(
@@ -33,18 +32,11 @@ def summarize_component_frames(
     observed: dict[str, list[float]] = {name: [] for name in WELLNESS_COMPONENTS}
     for frame in frames:
         running = frame.get("running")
-        if not isinstance(running, list) or not running:
+        if not running:
             continue
-        reading = running[0]
-        if not isinstance(reading, Mapping):
-            continue
-        components = reading.get("component_means")
-        if not isinstance(components, Mapping):
-            continue
+        components = running[0]["component_means"]
         for name in WELLNESS_COMPONENTS:
-            value = components.get(name)
-            if isinstance(value, (int, float)) and not isinstance(value, bool):
-                observed[name].append(float(value))
+            observed[name].append(float(components[name]))
     return {
         name: {
             "samples": len(values),
