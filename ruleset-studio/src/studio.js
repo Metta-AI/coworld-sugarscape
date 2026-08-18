@@ -200,10 +200,9 @@ function selectContext(id) {
   activeContext = contexts.find(context => context.id === id) ?? contexts[0] ?? null;
   if (!activeContext) return;
   document.getElementById("context-select").value = activeContext.id;
-  for (const name of TRAIT_NAMES) {
-    const [minimum, maximum] = activeContext.trait_ranges[name];
-    traitState[name].value = Math.min(maximum, Math.max(minimum, traitState[name].value));
-  }
+  // Never rewrite stored trait values to the new context's range: switching
+  // contexts is browsing, not editing, and a locked scenario would silently
+  // zero the document's traits. Out-of-range values clamp at spawn anyway.
   renderTraits();
   updateStudio();
 }
@@ -216,15 +215,24 @@ function renderTraits() {
     const [minimum, maximum] = activeContext?.trait_ranges[name] ?? [0, 1];
     const [dtlMinimum, dtlMaximum] = activeContext?.dtl_factor_ranges[name] ?? [1, 1];
     const generated = dtlMinimum === dtlMaximum ? formatNumber(dtlMinimum) : `generated in [${formatNumber(dtlMinimum)}, ${formatNumber(dtlMaximum)}]`;
-    const step = minimum === maximum ? 1 : Math.max((maximum - minimum) / 100, 0.001);
+    // A degenerate range means this context locks the trait: any submitted
+    // override clamps to the same value, so the dial is not really yours.
+    const locked = minimum === maximum;
+    const step = locked ? 1 : Math.max((maximum - minimum) / 100, 0.001);
     const row = document.createElement("div");
-    row.className = `trait${state.enabled ? "" : " off"}`;
+    row.className = `trait${state.enabled ? "" : " off"}${locked ? " locked" : ""}`;
     row.dataset.trait = name;
-    row.innerHTML = `<div class="trait-head"><input type="checkbox" id="trait-${name}-enabled" aria-label="Override ${name}"><label class="trait-name" for="trait-${name}-enabled">${name}</label><span class="trait-value"></span></div><input type="range" id="trait-${name}" min="${minimum}" max="${maximum}" step="${step}" aria-label="${name} value"><div class="trait-range"><span>${formatNumber(minimum)}</span><span>clamps at spawn</span><span>${formatNumber(maximum)}</span></div>`;
+    if (locked) {
+      row.title = `This context locks ${name} at ${formatNumber(minimum)}: submitted overrides clamp to it (trait_ranges [${formatNumber(minimum)}, ${formatNumber(maximum)}]).`;
+    }
+    const rangeCaption = locked
+      ? `<span></span><span>locked at ${formatNumber(minimum)} by this context</span><span></span>`
+      : `<span>${formatNumber(minimum)}</span><span>clamps at spawn</span><span>${formatNumber(maximum)}</span>`;
+    row.innerHTML = `<div class="trait-head"><input type="checkbox" id="trait-${name}-enabled" aria-label="Override ${name}"><label class="trait-name" for="trait-${name}-enabled">${name}${locked ? ' <span class="trait-lock" aria-hidden="true">🔒</span>' : ""}</label><span class="trait-value"></span></div><input type="range" id="trait-${name}" min="${minimum}" max="${maximum}" step="${step}" aria-label="${name} value"><div class="trait-range">${rangeCaption}</div>`;
     const checkbox = row.querySelector("input[type=checkbox]");
     const slider = row.querySelector("input[type=range]");
     checkbox.checked = state.enabled;
-    slider.disabled = !state.enabled || minimum === maximum;
+    slider.disabled = !state.enabled || locked;
     slider.value = String(state.enabled ? state.value : Math.min(maximum, Math.max(minimum, dtlMinimum)));
     row.querySelector(".trait-value").textContent = state.enabled ? formatNumber(state.value) : generated;
     checkbox.addEventListener("change", () => {
@@ -313,7 +321,12 @@ function localIssues() {
     for (const name of TRAIT_NAMES) {
       const state = traitState[name];
       const [minimum, maximum] = activeContext.trait_ranges[name];
-      if (state.enabled && (state.value < minimum || state.value > maximum)) issues.push({path: `$.traits.${name}`, message: `trait must be inside [${minimum}, ${maximum}]`});
+      if (state.enabled && (state.value < minimum || state.value > maximum)) {
+        const clamp = minimum === maximum
+          ? `this context locks ${name} at ${minimum}; the override clamps to it at spawn`
+          : `outside this context's range [${minimum}, ${maximum}]; clamps at spawn`;
+        issues.push({path: `$.traits.${name}`, message: clamp});
+      }
     }
   }
   return issues;

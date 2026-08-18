@@ -97,7 +97,10 @@ def _effective_contexts(paths: StudioPaths) -> dict[str, object]:
         game_config = variant.get("game_config", {})
         if not isinstance(game_config, dict):
             continue
-        variant_config = {**defaults, **root_config, **game_config}
+        # Hosted episodes resolve variant configs over the pinned DTL
+        # defaults only; the local config.json is the dev world and must not
+        # leak its overrides (notably trait_ranges) into variant contexts.
+        variant_config = {**defaults, **game_config}
         pool = game_config.get("scenario_pool")
         if isinstance(pool, list):
             for scenario in pool:

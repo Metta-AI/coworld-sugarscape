@@ -47,10 +47,14 @@ was abandoned rather than allowing interpreter shutdown to hang.
   supervises Metta's read-only ux.surface child. The page query contains exact
   `api` and `run` origins.
 
-The context selector merges the pinned DTL runtime defaults, root `config.json`,
-variant config, then scenario overrides. Disabled traits display the effective
-DTL factor range; enabled values are clamped to the selected context's
-`trait_ranges`.
+The context selector mirrors hosted resolution: the "Local config.json"
+context merges the pinned DTL runtime defaults with root `config.json`, while
+variant and scenario contexts merge the defaults with the variant config and
+scenario overrides only (the local `config.json` never leaks into them).
+Disabled traits display the effective DTL factor range; enabled values are
+clamped to the selected context's `trait_ranges`, and a degenerate range shows
+as a locked dial with the reason. Switching contexts never rewrites the
+document's trait values.
 
 Agent replies may propose `{set: {ruleset: ..., note: ...}}`. The UI validates
 the full replacement with the Python API before offering it, then applies it as

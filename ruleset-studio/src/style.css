@@ -80,6 +80,7 @@ main { flex: 1; min-height: 0; display: flex; }
 .traits { display: grid; grid-template-columns: repeat(4, minmax(140px, 1fr)); gap: 22px; }
 .trait-head { display: flex; align-items: baseline; gap: 6px; }.trait-name { font: 700 12px var(--serif); }.trait-value { margin-left: auto; font: 700 11px var(--mono); }.trait.off .trait-value { color: var(--muted); font-weight: 400; }
 .trait input[type=range] { width: 100%; height: 18px; accent-color: var(--navy); }.trait.off input[type=range] { opacity: .45; }
+.trait.locked { opacity: .55; }.trait.locked .trait-range span:nth-child(2) { font-weight: 700; }.trait-lock { font-size: 10px; }
 .trait-range { display: flex; justify-content: space-between; color: var(--muted); font: 9px var(--mono); }.trait-range span:nth-child(2) { font-family: var(--sans); }
 #inspector { width: 330px; flex: none; min-height: 0; border-left: 1px solid var(--border); display: flex; flex-direction: column; background: var(--bg); }
 #inspector section { border-top: 1px solid var(--border-soft); }.dsection { flex: 0 0 auto; min-height: 0; }.dsection:not(.collapsed)#agent-panel { flex: 2 1 0; display: flex; flex-direction: column; }.dsection:not(.collapsed)#json-panel { flex: 1 1 0; display: flex; flex-direction: column; }
