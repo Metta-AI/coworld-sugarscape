@@ -24,6 +24,13 @@ const {
   compileWorkspace,
   decompileRuleset,
 } = await import("../ruleset-studio/src/blocks.js");
+const {
+  PlaySettings,
+  RunController,
+  STUDIO_SETTINGS_KEY,
+  readRunOrigin,
+  runViewerUrl,
+} = await import("../ruleset-studio/src/play.js");
 
 assert.equal(Blockly.VERSION, "13.2.0");
 
@@ -148,5 +155,107 @@ incomplete.dispose();
 const mapped = roundTrip(worked);
 assert.equal(mapped.pathTargets.get("$.movement[0].if[1][1]").kind, "block");
 assert.equal(mapped.pathTargets.get("$.movement[-1]").kind, "block");
+
+class MemoryStorage {
+  constructor(initial = {}) { this.values = new Map(Object.entries(initial)); }
+  getItem(key) { return this.values.get(key) ?? null; }
+  setItem(key, value) { this.values.set(key, value); }
+}
+
+class FakeTimers {
+  constructor() { this.callbacks = []; }
+  setTimeout(callback) { this.callbacks.push(callback); return callback; }
+  clearTimeout(callback) { this.callbacks = this.callbacks.filter(entry => entry !== callback); }
+  runNext() { const callback = this.callbacks.shift(); assert.ok(callback); callback(); }
+}
+
+const catalog = {
+  default_variant: "solo-ladder",
+  variants: [
+    {id: "solo-ladder", name: "Solo Ladder", kind: "pooled", modes: ["ranked-preview", "exploration"], context_id: "solo-ladder", seats: 1, timesteps: 1000, measurement_window: 100, scenarios: [
+      {id: "one", context_id: "solo-ladder:one", description: "One", targets: ["target.one"]},
+      {id: "two", context_id: "solo-ladder:two", description: "Two", targets: ["target.two"]},
+    ]},
+    {id: "commonwealth", name: "Commonwealth", kind: "fixed", modes: ["fixed"], context_id: "commonwealth", seats: 4, timesteps: 1000, measurement_window: 100, scenarios: []},
+  ],
+};
+
+{
+  const storage = new MemoryStorage({[STUDIO_SETTINGS_KEY]: JSON.stringify({version: 0, variantId: "commonwealth"})});
+  const settings = new PlaySettings(catalog, {storage});
+  assert.equal(settings.snapshot().variantId, "solo-ladder");
+  settings.setMode("exploration");
+  settings.update({scenarioId: "two", seedMode: "fixed", fixedSeed: "900719925474099312345", timesteps: 100});
+  assert.deepEqual(settings.runOptions(), {variant: "solo-ladder", mode: "exploration", seed: "900719925474099312345", scenario: "two", timesteps: 100});
+  assert.equal(settings.contextId(), "solo-ladder:two");
+  settings.setMode("ranked-preview");
+  assert.equal(settings.derivedScenario(), catalog.variants[0].scenarios[Number(900719925474099312345n % 2n)].id);
+  settings.setContext("commonwealth");
+  assert.equal(settings.snapshot().variantId, "commonwealth");
+  assert.equal(settings.snapshot().mode, "fixed");
+  settings.setContext("solo-ladder:one");
+  assert.equal(settings.snapshot().mode, "exploration");
+  assert.equal(settings.snapshot().scenarioId, "one");
+  settings.update({seedMode: "fixed", fixedSeed: "01"});
+  assert.throws(() => settings.runOptions(), /canonical/);
+  assert.equal(JSON.parse(storage.getItem(STUDIO_SETTINGS_KEY)).version, 1);
+}
+
+{
+  assert.equal(readRunOrigin({search: "?run=http%3A%2F%2Flocalhost%3A7002"}), "http://localhost:7002");
+  assert.throws(() => readRunOrigin({search: "?run=https%3A%2F%2Fevil.example"}), /loopback/);
+  const runId = "b".repeat(32);
+  assert.equal(runViewerUrl("http://127.0.0.1:7002", runId), `http://127.0.0.1:7002/runs/${runId}/client/replay`);
+  assert.match(runViewerUrl("http://127.0.0.1:7002", runId, {canonical: true}), /\?replay=\/runs\//);
+}
+
+{
+  const timers = new FakeTimers();
+  const runId = "c".repeat(32);
+  const displayed = [];
+  const statuses = [
+    {run_id: runId, state: "running", tick: 4, total: 10, running_scores: [0.4]},
+    {run_id: runId, state: "done", tick: 10, total: 10, results: {scores: [0.8], details: []}},
+  ];
+  const api = {
+    startRun: async ruleset => { assert.deepEqual(ruleset, worked); return {run_id: runId, seed: "9007199254740993", scenario_id: "one", context_id: "solo-ladder:one", seats: 1, timesteps: 10, opponents: []}; },
+    setDisplayedRun: async id => { displayed.push(id); },
+    getRun: async () => statuses.shift(),
+    cancelRun: async () => ({run_id: runId, state: "cancelling", tick: 4, total: 10}),
+  };
+  const controller = new RunController(api, "http://127.0.0.1:7002", {timers});
+  const frames = [];
+  controller.onFrame(frame => frames.push(frame));
+  await controller.start(worked, {variant: "solo-ladder", mode: "ranked-preview", seed: "9007199254740993"});
+  assert.equal(frames.length, 1);
+  assert.equal(frames[0], `http://127.0.0.1:7002/runs/${runId}/client/replay`);
+  timers.runNext(); await new Promise(resolvePromise => setImmediate(resolvePromise));
+  timers.runNext(); await new Promise(resolvePromise => setImmediate(resolvePromise));
+  assert.equal(controller.snapshot().phase, "done");
+  assert.equal(frames.length, 1, "terminal polling must not replace the live iframe");
+  await controller.openCanonical();
+  assert.match(frames.at(-1), /\?replay=\/runs\//);
+  await controller.showEditor();
+  assert.equal(frames.at(-1), null);
+  assert.deepEqual(displayed, [runId, runId, null]);
+}
+
+{
+  const timers = new FakeTimers();
+  const runId = "d".repeat(32);
+  const missing = Object.assign(new Error("run not found"), {status: 404});
+  let displayCalls = 0;
+  const api = {
+    startRun: async () => ({run_id: runId, seed: "1", scenario_id: null, context_id: "commonwealth", seats: 4, timesteps: 10, opponents: []}),
+    setDisplayedRun: async () => { if (++displayCalls > 1) throw missing; },
+    getRun: async () => ({run_id: runId, state: "done", tick: 10, total: 10, results: {scores: [2], details: []}}),
+  };
+  const controller = new RunController(api, "http://127.0.0.1:7002", {timers});
+  await controller.start(null, {variant: "commonwealth", mode: "fixed", seed: "1"});
+  timers.runNext(); await new Promise(resolvePromise => setImmediate(resolvePromise));
+  assert.equal(controller.snapshot().phase, "done");
+  await controller.reopen();
+  assert.equal(controller.snapshot().phase, "expired");
+}
 
 console.log("Ruleset Studio block model passed");

@@ -38,6 +38,7 @@ _LOGGER = logging.getLogger(__name__)
 
 FramePublisher = Callable[[str, bytes], None]
 EpisodeRunner = Callable[..., tuple[dict[str, object], bytes, dict[str, object]]]
+RunFinished = Callable[[str], None]
 
 
 class RunCancelled(Exception):
@@ -467,12 +468,14 @@ class RunCoordinator:
         artifacts: ArtifactStore,
         *,
         publisher: FramePublisher,
+        run_finished: RunFinished | None = None,
         episode_runner: EpisodeRunner = run_episode,
         target_catalog_path: Path | str = DEFAULT_CATALOG_PATH,
     ) -> None:
         self.registry = registry
         self.artifacts = artifacts
         self.publisher = publisher
+        self.run_finished = run_finished or (lambda _run_id: None)
         self.episode_runner = episode_runner
         self.target_catalog_path = target_catalog_path
 
@@ -649,6 +652,7 @@ class RunCoordinator:
                 results=results if state == "done" else None,
                 error=error or None,
             )
+            self.run_finished(run.run_id)
         if state == "done":
             try:
                 self.artifacts.prune(protected=self.registry.protected_run_ids())

@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*; frame-src http://127.0.0.1:* http://localhost:*; object-src 'none'; base-uri 'none'">
   <title>Ruleset Studio</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -18,23 +19,56 @@
     </div>
     <div class="spacer"></div>
     <span class="chip chip-wait" id="valid-chip"><span class="dot"></span>Loading</span>
+    <button class="score-chip" id="score-chip" type="button" hidden aria-label="Reopen the latest run"></button>
     <div class="actions">
       <button class="btn" id="new-button" type="button">New</button>
       <select id="file-select" aria-label="Ruleset file"></select>
       <button class="btn btn-secondary" id="load-button" type="button">Load</button>
       <button class="btn btn-primary" id="save-button" type="button">Save</button>
+      <div class="settings-anchor">
+        <button class="icon-button" id="settings-button" type="button" aria-label="Run settings" aria-expanded="false" aria-controls="settings-panel">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 8.25A3.75 3.75 0 1 0 12 15.75 3.75 3.75 0 0 0 12 8.25ZM19 13.5l1.5 1.15-1.75 3.03-1.85-.75a7.9 7.9 0 0 1-2.4 1.39L14.25 20h-3.5l-.25-1.68a7.9 7.9 0 0 1-2.4-1.39l-1.85.75-1.75-3.03L6 13.5a8.1 8.1 0 0 1 0-3L4.5 9.35l1.75-3.03 1.85.75a7.9 7.9 0 0 1 2.4-1.39L10.75 4h3.5l.25 1.68a7.9 7.9 0 0 1 2.4 1.39l1.85-.75 1.75 3.03L19 10.5a8.1 8.1 0 0 1 0 3Z"/></svg>
+          <span class="settings-dot" aria-hidden="true"></span>
+        </button>
+        <section class="settings-panel" id="settings-panel" hidden aria-label="Run settings">
+          <div class="settings-heading"><div><div class="eyebrow">Build configuration</div><h2>Run settings</h2></div><button class="icon-button quiet" id="close-settings" type="button" aria-label="Close run settings">×</button></div>
+          <label class="field">Variant<select id="variant-select"></select></label>
+          <fieldset id="mode-fieldset"><legend>Mode</legend><label><input type="radio" name="run-mode" value="ranked-preview"> Ranked preview</label><label><input type="radio" name="run-mode" value="exploration"> Exploration</label><label><input type="radio" name="run-mode" value="fixed"> Fixed config</label></fieldset>
+          <label class="field" id="scenario-field">Scenario<select id="scenario-select"></select></label>
+          <p class="field-note" id="ranked-scenario"></p>
+          <fieldset><legend>Seed</legend><label><input type="radio" name="seed-mode" value="auto"> Fresh seed each run</label><label><input type="radio" name="seed-mode" value="fixed"> Fixed seed</label></fieldset>
+          <div class="inline-field" id="fixed-seed-row"><label class="field" for="fixed-seed">Seed as decimal text</label><input id="fixed-seed" inputmode="numeric" autocomplete="off" spellcheck="false"><button class="btn small" id="last-seed-button" type="button">Use last run</button></div>
+          <div class="inline-field" id="timesteps-row"><label class="field" for="timesteps">Timesteps · 1–2,000</label><input id="timesteps" type="number" min="1" max="2000" step="1" placeholder="Variant default"><button class="btn small" id="quick-button" type="button">Quick · 100 ticks</button></div>
+          <p class="settings-summary" id="settings-summary"></p>
+        </section>
+      </div>
+      <button class="btn btn-primary play-button" id="play-button" type="button" aria-describedby="play-reason"><span aria-hidden="true">▶</span> Play</button>
     </div>
+    <p class="sr-only" id="play-reason">Waiting for validation.</p>
   </header>
 
   <main>
-    <section id="center" aria-label="Ruleset editor">
-      <div class="canvas-title"><strong>Movement</strong> — the first matching rule scores each candidate cell.</div>
-      <div id="blockly" aria-label="SugarLang block workspace"></div>
-      <section id="traits-panel">
-        <div class="col-head">Traits</div>
-        <p class="strip-cap">Optional overrides clamp into the selected context's range at spawn.</p>
-        <div id="traits" class="traits"></div>
-      </section>
+    <section id="center" aria-label="Ruleset workspace">
+      <div id="editor-view" class="editor-view">
+        <div class="canvas-title"><strong>Movement</strong> — the first matching rule scores each candidate cell.</div>
+        <div id="blockly" aria-label="SugarLang block workspace"></div>
+        <section id="traits-panel">
+          <div class="col-head">Traits</div>
+          <p class="strip-cap">Optional overrides clamp into the selected context's range at spawn.</p>
+          <div id="traits" class="traits"></div>
+        </section>
+      </div>
+      <div id="run-view" class="run-view" hidden>
+        <div class="run-toolbar"><button class="btn editor-button" id="editor-button" type="button"><span aria-hidden="true">◀</span> Editor</button><p class="run-status" id="run-status" role="status" aria-live="polite">Preparing the player…</p></div>
+        <progress class="run-progress" id="run-progress" aria-label="Episode progress" max="1" value="0"></progress>
+        <section class="verdict" id="verdict" hidden aria-labelledby="verdict-title">
+          <div class="verdict-heading"><div><div class="eyebrow">Build result</div><h2 id="verdict-title">Final verdict</h2></div><button class="btn btn-secondary small" id="canonical-button" type="button">Open canonical replay</button></div>
+          <div class="seat-verdicts" id="seat-verdicts"></div>
+          <p class="run-context" id="run-context"></p>
+        </section>
+        <section class="expired-run" id="expired-run" hidden><div class="eyebrow">Run unavailable</div><h2>This replay has expired.</h2><p>Its local artifact was pruned. Your ruleset is unchanged; press Play to build it again.</p></section>
+        <div class="player-frame"><iframe id="replay-frame" title="Sugarscape live player" allow="fullscreen"></iframe></div>
+      </div>
     </section>
 
     <aside id="inspector" aria-label="Agent and ruleset status">
