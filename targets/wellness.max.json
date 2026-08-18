@@ -1,0 +1,6 @@
+{
+  "id": "wellness.max",
+  "kind": "maximize",
+  "variable": "wellness",
+  "description": "Maximize the summed normalized DTL happiness of agents surviving to the final tick."
+}

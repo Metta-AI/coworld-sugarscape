@@ -3,9 +3,11 @@ from __future__ import annotations
 import pytest
 
 from coworld.scoring import (
+    AgentWellnessMean,
     jensen_shannon_divergence,
     make_histogram,
     score_histogram,
+    score_wellness,
     target_scale,
     wasserstein_1,
 )
@@ -45,7 +47,9 @@ def test_score_strictly_decreases_with_transport_distance() -> None:
 def test_js_divergence_known_pairs() -> None:
     assert jensen_shannon_divergence([1, 0], [1, 0]) == 0
     assert jensen_shannon_divergence([1, 0], [0, 1]) == 1
-    assert jensen_shannon_divergence([0.5, 0.5], [1, 0]) == pytest.approx(0.31127812445913283)
+    assert jensen_shannon_divergence([0.5, 0.5], [1, 0]) == pytest.approx(
+        0.31127812445913283
+    )
 
 
 def test_histogram_clamps_to_support_edges() -> None:
@@ -86,3 +90,25 @@ def test_replay_regression_case_scores_shape_collapse_below_half() -> None:
     assert result.raw_w1 == pytest.approx(39.82773333333348)
     assert result.w1_scale == pytest.approx(33.711466666666816)
     assert result.score == pytest.approx(0.45841492247218735)
+
+
+def test_wellness_score_sums_agents_and_averages_components_equally() -> None:
+    result = score_wellness(
+        [
+            AgentWellnessMean(1, 0, 0.25, (-1, 0, 1, 0.5, -0.5)),
+            AgentWellnessMean(2, 0, 0.75, (1, 0.5, -1, 0.5, 0.5)),
+        ]
+    )
+    assert result.score == 1
+    assert result.survivor_count == 2
+    assert result.mean_wellness == 0.5
+    assert result.component_dict() == pytest.approx(
+        {"health": 0, "conflict": 0.25, "social": 0, "family": 0.5, "wealth": 0}
+    )
+
+
+def test_empty_wellness_score_is_zero() -> None:
+    result = score_wellness([])
+    assert result.score == 0
+    assert result.survivor_count == 0
+    assert all(value == 0 for value in result.component_dict().values())

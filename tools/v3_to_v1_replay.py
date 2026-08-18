@@ -22,6 +22,10 @@ What does NOT survive, and cannot: v3 scores a seat on how closely its measured
 distribution matches a target, so there is no wealth race to win. The viewer's
 race panel will plot seat wealth because that is what it plots; read it as
 "what the ruleset grew", not as a scoreboard.
+
+Scalar-objective episodes (Commonwealth `wellness.max`) are refused outright:
+the v1 viewer has only distribution panels, so a converted Commonwealth replay
+would render as a misleading distribution view. Use the v3 viewer for those.
 """
 
 from __future__ import annotations
@@ -47,10 +51,22 @@ CATALOG = Path(__file__).resolve().parents[1] / "targets"
 
 
 def load_catalog() -> list[dict]:
-    """Every shipped target, so a viewer can offer the whole catalog."""
+    """Every shipped distribution target, so a viewer can offer the catalog.
 
+    Scalar-objective targets (e.g. wellness.max) have no histogram to score
+    against and are excluded — see the kind check in convert().
+    """
+
+    targets = [
+        json.loads(path.read_text(encoding="utf-8"))
+        for path in CATALOG.glob("*.json")
+    ]
     return sorted(
-        (json.loads(path.read_text(encoding="utf-8")) for path in CATALOG.glob("*.json")),
+        (
+            target
+            for target in targets
+            if target.get("kind", "distribution") == "distribution"
+        ),
         key=lambda target: (target.get("variable", ""), target.get("id", "")),
     )
 
@@ -108,6 +124,12 @@ def seat_names(header: dict) -> list[dict]:
 
 def convert(document: dict) -> dict:
     header = document["header"]
+    for target in header.get("targets") or []:
+        if target.get("kind", "distribution") != "distribution":
+            raise ValueError(
+                "scalar-objective replays (e.g. Commonwealth wellness.max) have "
+                "no v1 equivalent; view them in the v3 replay viewer"
+            )
     score_method = header.get("score_method", LEGACY_SCORE_METHOD)
     grid = header["initial_grid"]
     width, height = grid["width"], grid["height"]

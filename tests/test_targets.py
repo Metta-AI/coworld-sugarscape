@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from coworld.scoring import target_scale
-from coworld.targets import load_target_catalog, resolve_seat_targets
+from coworld.targets import load_target_catalog, parse_target, resolve_seat_targets
 
 
 def test_shipped_catalog_is_honest_global_and_provenance_complete() -> None:
@@ -20,10 +20,13 @@ def test_shipped_catalog_is_honest_global_and_provenance_complete() -> None:
     """
     catalog = load_target_catalog()
 
-    assert len(catalog.targets) == 7
+    assert len(catalog.targets) == 8
     assert not any(target_id.startswith("disease.") for target_id in catalog.targets)
-    assert all(target.scope == "global" for target in catalog.targets.values())
-    for target in catalog.targets.values():
+    distributions = [
+        target for target in catalog.targets.values() if target.kind == "distribution"
+    ]
+    assert all(target.scope == "global" for target in distributions)
+    for target in distributions:
         assert target.generation.get("description")
         if not target.provisional:
             method = target.generation.get("method")
@@ -31,10 +34,19 @@ def test_shipped_catalog_is_honest_global_and_provenance_complete() -> None:
             if method == "engine-run":
                 assert target.generation.get("engine_commit")
                 assert target.generation.get("seeds", 0) >= 30
-    assert catalog.get("wealth.skewed-gini-0.5").bins == catalog.get("wealth.egalitarian").bins
+    assert (
+        catalog.get("wealth.skewed-gini-0.5").bins
+        == catalog.get("wealth.egalitarian").bins
+    )
     # Shelving the disease targets must not drop sick_fraction from
     # measurement: it keeps measurement-only canonical bins.
     assert "sick_fraction" in catalog.bins_by_variable
+    wellness = catalog.get("wellness.max")
+    assert wellness.as_dict()["kind"] == "maximize"
+    assert set(wellness.as_dict()) == {"id", "kind", "variable", "description"}
+    assert catalog.bins_by_variable["wellness"] == tuple(
+        index / 10 for index in range(11)
+    )
 
 
 def test_catalog_rejects_inconsistent_binning_for_same_variable(tmp_path: Path) -> None:
@@ -49,7 +61,9 @@ def test_catalog_rejects_inconsistent_binning_for_same_variable(tmp_path: Path) 
         "provisional": True,
         "generation": {"description": "test fixture"},
     }
-    (tmp_path / "one.json").write_text(json.dumps({**base, "id": "one"}), encoding="utf-8")
+    (tmp_path / "one.json").write_text(
+        json.dumps({**base, "id": "one"}), encoding="utf-8"
+    )
     (tmp_path / "two.json").write_text(
         json.dumps({**base, "id": "two", "bins": [0, 0.5, 2]}), encoding="utf-8"
     )
@@ -73,6 +87,7 @@ def test_shipped_target_scales_are_pinned() -> None:
     assert {
         target_id: target_scale(target.probs, target.bins)
         for target_id, target in catalog.targets.items()
+        if target.kind == "distribution"
     } == pytest.approx(expected)
 
 
@@ -85,3 +100,45 @@ def test_assignments_default_to_global_and_use_effective_measurement_window() ->
         "wealth.skewed-gini-0.5",
     ]
     assert all(target.scope == "global" and target.window == 7 for target in targets)
+
+
+def test_distribution_kind_defaults_and_is_serialized_explicitly() -> None:
+    target = load_target_catalog().get("wealth.skewed-gini-0.5")
+    assert target.kind == "distribution"
+    assert target.as_dict()["kind"] == "distribution"
+
+
+@pytest.mark.parametrize("kind", ["maximize", "minimize"])
+def test_objective_target_has_minimal_shape(kind: str) -> None:
+    raw = {
+        "id": f"example.{kind}",
+        "kind": kind,
+        "variable": "wellness",
+        "description": "test objective",
+    }
+    assert parse_target(raw).as_dict() == raw
+
+
+def test_objective_target_rejects_distribution_fields() -> None:
+    raw = {
+        "id": "example.max",
+        "kind": "maximize",
+        "variable": "wellness",
+        "description": "test objective",
+        "bins": [0, 1],
+    }
+    with pytest.raises(ValueError, match="fields not allowed for maximize: bins"):
+        parse_target(raw)
+
+
+def test_inline_objective_must_name_a_measured_variable() -> None:
+    raw = {
+        "id": "unknown.max",
+        "kind": "maximize",
+        "variable": "unknown",
+        "description": "test objective",
+    }
+    with pytest.raises(ValueError, match='unknown variable "unknown"'):
+        resolve_seat_targets(
+            [raw], seats=1, measurement_window=5, catalog=load_target_catalog()
+        )

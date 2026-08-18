@@ -1,20 +1,23 @@
 # Sugarscape v3 target catalog
 
-Targets are normalized histograms describing outcomes that a player's SugarLang
-ruleset should grow. The shipped catalog lives in `targets/`, one JSON object per
-file. Four targets are **engine-generated** (2026-08-11): no tabulated data for
+Targets describe outcomes that a player's SugarLang ruleset should grow. Most
+are normalized distributions; scalar objective kinds support leagues such as
+Commonwealth. The shipped catalog lives in `targets/`, one JSON object per file.
+Four distribution targets are **engine-generated** (2026-08-11): no tabulated data for
 the classic Sugarscape results was ever published, so the honest primary source
 is the vendored DTL engine itself — `tools/generate_targets.py` runs the
 GAS-referenced example configs under DTL's internal defaults (greedy `"none"`
 decision model) for 30 seeds, pools the variable over the final 100 ticks, and
 bins canonically. Those files carry `"provisional": false` and full engine-run
-provenance in `generation`. The remaining five are **provisional parametric
-approximations** flagged `"provisional": true`, each identifying its parametric
-family and generation recipe.
+provenance in `generation`. Other distribution targets record their own
+provisional or generated provenance.
 
 ## Schema
 
-A target contains:
+A target always contains `id`, `kind`, and `variable`. Omitted `kind` means
+`distribution` for compatibility with older catalog and inline targets.
+
+A `distribution` target additionally contains:
 
 - `id`: stable catalog identifier.
 - `variable`: measured variable name.
@@ -34,6 +37,13 @@ All targets for one variable must use identical support and bin edges. Catalog
 loading rejects inconsistencies. Samples outside the support clamp into the
 first or last bin.
 
+A `maximize` or `minimize` target instead contains exactly `id`, `kind`,
+`variable`, and `description`. Objective targets do not carry a scope: they are
+implicitly measured over the submitting seat's agents. Episodes may not mix
+target kinds. `minimize` is schema-reserved but has no score method yet, so an
+episode using it is rejected explicitly rather than assigned an invented
+orientation or ceiling.
+
 ## Measured variables
 
 | Variable | Recipe |
@@ -45,10 +55,16 @@ first or last bin.
 | `majority_tribe_share` | One largest-tribe population share per tick. |
 | `sick_fraction` | One fraction of living agents with any disease per tick. |
 | `mean_trade_price` | One mean active-trader price per tick; zero when agents live but no trade occurs. |
+| `wellness` | For each observed agent identity, mean normalized DTL composite happiness `(h + 5) / 10` over the ticks it was present in the final window. Values clamp to `[0, 1]` and use canonical decile bins. |
 
 Every variable is measured globally and independently for each seat, regardless
 of which variables the episode targets. Per-agent and death-event measurements
 with no samples are marked empty. Population zero remains a real scalar sample.
+The wellness diagnostic histogram includes one window mean for every agent
+observed in the retained window, including agents that later died. Commonwealth
+scoring and component diagnostics separately filter those records to agents
+alive at the final tick; running replay summaries filter to agents alive at the
+sampled tick.
 
 ## Scoring
 
@@ -82,7 +98,22 @@ the viewer computes counterfactual target scores. Unknown identifiers fail
 closed rather than being guessed. See the full decision record in
 [`docs/designs/2026-08-18-w1-scoring-v2.md`](designs/2026-08-18-w1-scoring-v2.md).
 
+`wellness.max` uses `wellness-sum/1`:
+
+```text
+sum over seat agents alive at the final tick of mean_window_wellness(agent)
+```
+
+Extinction scores zero. Results report the survivor count, mean wellness, and
+equal-agent means for DTL's health, conflict, social, family, and wealth
+happiness components. The population sum is intentionally unbounded above.
+
 ## Shipped targets
+
+Scalar objective:
+
+- `wellness.max` — maximize summed final-survivor wellness in the Commonwealth
+  league.
 
 Engine-generated (`tools/generate_targets.py`; validation stats in each file's
 `generation.stats`):
@@ -138,3 +169,18 @@ struggle too. Targets deliberately need not be reachable to ship (decided
 2026-08-11); the probe is a calibration instrument, not a gate. Note the
 evolved `best-ruleset.json` is a machine-discovered strategy — treat it as a
 spoiler for whichever league the variant runs in.
+
+## Probing Commonwealth components
+
+`tools/probe_commonwealth.py` runs the bundled fixed constitution against the
+canonical Commonwealth config and fails unless every DTL happiness component
+has a nonzero running observation. It defaults to reproducible episode seed
+1729 while leaving the variant's mechanics unchanged:
+
+```console
+PYTHONHASHSEED=0 .venv/bin/python tools/probe_commonwealth.py \
+  --out build/commonwealth-probe/report.json
+```
+
+The report records sample counts and observed ranges for health, conflict,
+social, family, and wealth happiness, along with the final wellness score.

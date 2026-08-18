@@ -19,14 +19,18 @@ def test_absent_or_negative_one_seed_comes_from_os_entropy(
     assert resolve_episode_config(config, seed_source=lambda: 5151)["seed"] == 5151
 
 
-def test_explicit_seed_is_honored_without_calling_entropy(tiny_episode_config: dict[str, object]) -> None:
+def test_explicit_seed_is_honored_without_calling_entropy(
+    tiny_episode_config: dict[str, object],
+) -> None:
     def fail() -> int:
         raise AssertionError("entropy source was called")
 
     assert resolve_episode_config(tiny_episode_config, seed_source=fail)["seed"] == 17
 
 
-def test_platform_only_player_fields_never_reach_dtl(tiny_episode_config: dict[str, object]) -> None:
+def test_platform_only_player_fields_never_reach_dtl(
+    tiny_episode_config: dict[str, object],
+) -> None:
     config = dict(tiny_episode_config)
     config.update(
         {
@@ -42,7 +46,9 @@ def test_platform_only_player_fields_never_reach_dtl(tiny_episode_config: dict[s
     assert "player_connect_timeout_seconds" not in dtl_config
 
 
-def test_scenario_selection_does_not_consume_dtl_rng(tiny_episode_config: dict[str, object]) -> None:
+def test_scenario_selection_does_not_consume_dtl_rng(
+    tiny_episode_config: dict[str, object],
+) -> None:
     config = dict(tiny_episode_config)
     config["seed"] = 5
     config["scenario_pool"] = [
@@ -79,7 +85,9 @@ def test_replacement_target_cannot_require_unowned_agents(
         resolve_episode_config(config)
 
 
-def test_run_episode_is_deterministic_except_for_timings(tiny_episode_config: dict[str, object]) -> None:
+def test_run_episode_is_deterministic_except_for_timings(
+    tiny_episode_config: dict[str, object],
+) -> None:
     first, first_replay, first_timings = run_episode(
         tiny_episode_config, [None, None], emit_timing_logs=False
     )
@@ -137,7 +145,9 @@ def test_results_include_scores_details_all_histograms_and_flat_scalars(
     assert all("w1" not in detail for detail in results["details"])
     assert set(results["histograms"]) == {"global", "by_seat"}
     assert "age" in results["histograms"]["global"]
-    assert all("age" in entry["variables"] for entry in results["histograms"]["by_seat"])
+    assert all(
+        "age" in entry["variables"] for entry in results["histograms"]["by_seat"]
+    )
     assert results["score.match_min"] == min(results["scores"])
     assert results["score.match_mean"] == sum(results["scores"]) / 2
     assert results["score.seat_0"] == results["scores"][0]
@@ -179,7 +189,10 @@ def test_real_dtl_deaths_are_captured_as_age_events(
     )
     results, _, _ = run_episode(config, [None, None], emit_timing_logs=False)
 
-    assert results["histograms"]["global"]["age_at_death"]["sample_count"] == config["startingAgents"]
+    assert (
+        results["histograms"]["global"]["age_at_death"]["sample_count"]
+        == config["startingAgents"]
+    )
     assert not results["details"][0]["empty_measurement"]
 
 
@@ -248,7 +261,9 @@ def test_reproduction_runs_are_seed_deterministic_with_intentional_newborn_draw(
     assert canonical_results_payload(first) == canonical_results_payload(second)
 
 
-def test_extinction_before_final_tick_scores_zero(tiny_episode_config: dict[str, object]) -> None:
+def test_extinction_before_final_tick_scores_zero(
+    tiny_episode_config: dict[str, object],
+) -> None:
     """Survival rule (2026-08-11): banked window samples do not count if the
     scope's population is gone at the final tick."""
 
@@ -271,10 +286,128 @@ def test_extinction_before_final_tick_scores_zero(tiny_episode_config: dict[str,
             "environmentSpiceRegrowRate": 0,
         }
     )
-    results, _replay, _timings = run_episode(config, [None, None], emit_timing_logs=False)
+    results, _replay, _timings = run_episode(
+        config, [None, None], emit_timing_logs=False
+    )
 
     assert results["result.extinct"] is True
     wealth_hist = results["histograms"]["global"]["wealth"]
     assert wealth_hist["sample_count"] > 0  # samples were banked pre-extinction
     assert results["scores"] == [0.0, 0.0]
     assert all(detail["died_before_end"] for detail in results["details"])
+
+
+def test_commonwealth_scores_survivor_wellness_with_versioned_details(
+    tiny_episode_config: dict[str, object],
+) -> None:
+    config = dict(tiny_episode_config)
+    config.update({"seats": 1, "targets": ["wellness.max"], "measurement_window": 3})
+    results, replay, _ = run_episode(config, [None], emit_timing_logs=False)
+
+    detail = results["details"][0]
+    assert results["scores"] == [detail["score"]]
+    assert detail["target_kind"] == "maximize"
+    assert detail["score_method"] == "wellness-sum/1"
+    assert detail["survivor_count"] == detail["agents_final"]
+    assert detail["score"] == pytest.approx(
+        detail["survivor_count"] * detail["mean_wellness"]
+    )
+    assert set(detail["component_means"]) == {
+        "health",
+        "conflict",
+        "social",
+        "family",
+        "wealth",
+    }
+    assert len(detail["ruleset_sha256"]) == 64
+    assert results["score.match_mean"] == detail["score"]
+    assert results["histograms"]["global"]["wellness"]["sample_count"] > 0
+    assert replay
+
+
+def test_ruleset_hash_is_canonical_and_changes_with_ruleset(
+    tiny_episode_config: dict[str, object],
+) -> None:
+    config = dict(tiny_episode_config)
+    config.update({"seats": 1, "targets": ["wellness.max"]})
+    first_ruleset = {
+        "version": 1,
+        "traits": {"fertility": 1, "aggression": 0},
+        "movement": [{"score": ["get", "cell.welfare"]}],
+    }
+    reordered = {
+        "movement": [{"score": ["get", "cell.welfare"]}],
+        "traits": {"aggression": 0, "fertility": 1},
+        "version": 1,
+    }
+    changed = {"version": 1, "traits": {"fertility": 0}}
+
+    first, _, _ = run_episode(config, [first_ruleset], emit_timing_logs=False)
+    second, _, _ = run_episode(config, [reordered], emit_timing_logs=False)
+    third, _, _ = run_episode(config, [changed], emit_timing_logs=False)
+
+    assert (
+        first["details"][0]["ruleset_sha256"] == second["details"][0]["ruleset_sha256"]
+    )
+    assert (
+        first["details"][0]["ruleset_sha256"] != third["details"][0]["ruleset_sha256"]
+    )
+
+
+def test_episode_rejects_mixed_target_kinds(
+    tiny_episode_config: dict[str, object],
+) -> None:
+    config = dict(tiny_episode_config)
+    config["targets"] = ["wellness.max", "wealth.skewed-gini-0.5"]
+
+    with pytest.raises(ValueError, match="same target kind"):
+        run_episode(config, [None, None], emit_timing_logs=False)
+
+
+def test_episode_rejects_minimize_until_a_method_is_defined(
+    tiny_episode_config: dict[str, object],
+) -> None:
+    config = dict(tiny_episode_config)
+    config.update(
+        {
+            "seats": 1,
+            "targets": [
+                {
+                    "id": "wellness.min",
+                    "kind": "minimize",
+                    "variable": "wellness",
+                    "description": "unsupported symmetric objective",
+                }
+            ],
+        }
+    )
+
+    with pytest.raises(ValueError, match="no supported scoring method"):
+        run_episode(config, [None], emit_timing_logs=False)
+
+
+def test_commonwealth_extinction_scores_zero(
+    tiny_episode_config: dict[str, object],
+) -> None:
+    config = dict(tiny_episode_config)
+    config.update(
+        {
+            "seats": 1,
+            "targets": ["wellness.max"],
+            "timesteps": 12,
+            "measurement_window": 12,
+            "agentStartingSugar": [3, 4],
+            "agentStartingSpice": [3, 4],
+            "agentSugarMetabolism": [6, 6],
+            "agentSpiceMetabolism": [6, 6],
+            "agentFertilityFactor": [0, 0],
+            "environmentSugarRegrowRate": 0,
+            "environmentSpiceRegrowRate": 0,
+        }
+    )
+
+    results, _, _ = run_episode(config, [None], emit_timing_logs=False)
+
+    assert results["scores"] == [0]
+    assert results["details"][0]["survivor_count"] == 0
+    assert results["details"][0]["mean_wellness"] == 0

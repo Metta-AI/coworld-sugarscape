@@ -15,11 +15,31 @@ def test_every_catalog_target_selects_a_valid_canned_ruleset() -> None:
         assert result.valid, (target.id, result.errors)
 
 
+def test_commonwealth_ruleset_is_fixed_and_deterministic() -> None:
+    expected = {
+        "version": 1,
+        "traits": {"aggression": 0, "trade": 1, "lending": 1, "fertility": 1},
+        "movement": [{"score": ["get", "cell.welfare"]}],
+    }
+    assert choose_ruleset({"id": "wellness.max", "variable": "wellness"}) == expected
+    assert (
+        choose_ruleset(
+            {
+                "id": "wellness.max",
+                "kind": "maximize",
+                "variable": "ignored",
+                "description": "different",
+            }
+        )
+        == expected
+    )
+
+
 def test_platform_url_takes_priority_over_local_flags() -> None:
     args = argparse.Namespace(host="ignored", port=1, slot=7, token="ignored")
-    assert resolve_websocket_url(args, {"COWORLD_PLAYER_WS_URL": "ws://platform/player?slot=0&token=x"}) == (
-        "ws://platform/player?slot=0&token=x"
-    )
+    assert resolve_websocket_url(
+        args, {"COWORLD_PLAYER_WS_URL": "ws://platform/player?slot=0&token=x"}
+    ) == ("ws://platform/player?slot=0&token=x")
 
 
 def test_local_fallback_requires_slot_and_token() -> None:
@@ -29,4 +49,7 @@ def test_local_fallback_requires_slot_and_token() -> None:
 
     args.slot = 2
     args.token = "a token"
-    assert resolve_websocket_url(args, {}) == "ws://127.0.0.1:8080/player?slot=2&token=a+token"
+    assert (
+        resolve_websocket_url(args, {})
+        == "ws://127.0.0.1:8080/player?slot=2&token=a+token"
+    )
