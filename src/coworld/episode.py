@@ -195,6 +195,14 @@ def run_episode(
             "result.gini_final": stats["giniCoefficient"],
             "result.mean_wealth_final": stats["meanWealth"],
             "result.extinct": len(world.agents) == 0,
+            # True only when every seat submitted and all canonical ruleset
+            # hashes agree. A plain (undotted) top-level key because platform
+            # qualification gates resolve `result.<key>` by traversing the raw
+            # results document — a literal dotted key is unreachable to them.
+            # Commonwealth qualifier rounds gate on it for determinism.
+            "rulesets_identical": (
+                all(submitted_flags) and len(set(ruleset_hashes)) == 1
+            ),
             "result.timesteps_completed": world.timestep,
             "result.replay_raw_bytes": replay.raw_size_bytes,
             "result.replay_compressed_bytes": replay.compressed_size_bytes,

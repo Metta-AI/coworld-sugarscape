@@ -247,6 +247,11 @@ def resolve_seat_targets(
         entries = assignments
     else:
         raise ValueError("targets must be an array with one assignment per seat")
+    # A single-entry array broadcasts to every seat, so a variant keeps one
+    # canonical target while the platform varies the episode's seat count
+    # (e.g. multi-seat self-play qualification rounds).
+    if len(entries) == 1 and seats > 1:
+        entries = list(entries) * seats
     if len(entries) != seats:
         raise ValueError("targets must contain one assignment per seat")
     resolved: list[Target] = []

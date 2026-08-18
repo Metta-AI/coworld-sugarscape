@@ -60,7 +60,8 @@
         "score.match_min",
         "result.population_final",
         "result.gini_final",
-        "result.extinct"
+        "result.extinct",
+        "rulesets_identical"
       ],
       "properties": {
         "score_method": {"enum": ["w1-hyperbolic/1", "wellness-sum/1"]},
@@ -73,6 +74,7 @@
         "result.population_final": {"type": "integer", "minimum": 0},
         "result.gini_final": {"type": "number", "minimum": 0, "maximum": 1},
         "result.extinct": {"type": "boolean"},
+        "rulesets_identical": {"type": "boolean"},
         "result.timesteps_completed": {"type": "integer", "minimum": 0},
         "result.replay_raw_bytes": {"type": "integer", "minimum": 0},
         "result.replay_compressed_bytes": {"type": "integer", "minimum": 0}

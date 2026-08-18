@@ -28,6 +28,19 @@ def test_explicit_seed_is_honored_without_calling_entropy(
     assert resolve_episode_config(tiny_episode_config, seed_source=fail)["seed"] == 17
 
 
+def test_injected_token_count_overrides_declared_seats(
+    tiny_episode_config: dict[str, object],
+) -> None:
+    """The platform's arity signal is the token list, one per player pod."""
+
+    config = dict(tiny_episode_config)
+    config.update({"seats": 1, "tokens": ["qual-0", "qual-1"]})
+
+    resolved = resolve_episode_config(config)
+
+    assert resolved["seats"] == 2
+
+
 def test_platform_only_player_fields_never_reach_dtl(
     tiny_episode_config: dict[str, object],
 ) -> None:
@@ -352,6 +365,46 @@ def test_ruleset_hash_is_canonical_and_changes_with_ruleset(
     assert (
         first["details"][0]["ruleset_sha256"] != third["details"][0]["ruleset_sha256"]
     )
+
+
+def test_results_report_ruleset_hash_agreement(
+    tiny_episode_config: dict[str, object],
+) -> None:
+    ruleset = {"version": 1, "movement": [{"score": ["get", "cell.welfare"]}]}
+
+    same, _, _ = run_episode(tiny_episode_config, [None, None], emit_timing_logs=False)
+    different, _, _ = run_episode(
+        tiny_episode_config, [ruleset, None], emit_timing_logs=False
+    )
+    unsubmitted, _, _ = run_episode(
+        tiny_episode_config,
+        [None, None],
+        submitted=(True, False),
+        emit_timing_logs=False,
+    )
+
+    assert same["rulesets_identical"] is True
+    assert different["rulesets_identical"] is False
+    assert unsubmitted["rulesets_identical"] is False
+
+
+def test_two_seat_commonwealth_episode_broadcasts_the_single_target(
+    tiny_episode_config: dict[str, object],
+) -> None:
+    """The qualifier round shape: one wellness.max entry, two self-play seats."""
+
+    config = dict(tiny_episode_config)
+    config["targets"] = ["wellness.max"]
+    ruleset = {"version": 1, "movement": [{"score": ["get", "cell.welfare"]}]}
+
+    results, _, _ = run_episode(config, [ruleset, ruleset], emit_timing_logs=False)
+
+    assert results["score_method"] == "wellness-sum/1"
+    assert [detail["target_id"] for detail in results["details"]] == [
+        "wellness.max",
+        "wellness.max",
+    ]
+    assert results["rulesets_identical"] is True
 
 
 def test_episode_rejects_mixed_target_kinds(

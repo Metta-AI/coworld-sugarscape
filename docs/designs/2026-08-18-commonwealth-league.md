@@ -44,8 +44,9 @@ These were settled explicitly and are not open:
 5. **League signal = target id `wellness.max`**, carried by a new `maximize`
    target kind (add `minimize` alongside for symmetry).
 6. League/variant name: **`commonwealth`**.
-7. **Determinism is enforced by Observatory qualifier rounds** (3 fresh-process
-   episodes, canonical-ruleset-identical submissions required) before a submission becomes an
+7. **Determinism is enforced by Observatory qualifier rounds** (3 two-seat
+   self-play episodes — six fresh policy processes — all requiring
+   canonical-ruleset-identical submissions) before a submission becomes an
    active champion — never by re-prompting inside tournament episodes.
 
 ## Non-goals
@@ -186,24 +187,50 @@ score(seat) = Σ over seat agents alive at final tick of mean_window_wellness(ag
 Requirement: for the fixed commonwealth observation the policy must return the
 same canonical normalized ruleset every time.
 
-**Mechanism — qualifier rounds before champion acceptance.** Tournament
-episodes are untouched: one observation, one action, no re-prompting, no
-protocol change. Instead, before a submitted policy is accepted as an active
-commonwealth champion, the Observatory runs **3 qualifier episodes** against
-the canonical commonwealth config and asserts the submitted rulesets are
-canonically identical across all of them; any mismatch rejects the submission. The
-Observatory already has a champion-qualification mechanism; wiring the check
-into it is platform-side integration, outside this repository.
+**Mechanism — platform qualification rounds before champion acceptance
+(wired 2026-08-18).** Tournament episodes are untouched: one observation, one
+action, no re-prompting, no protocol change. The league's ladder settings
+declare a platform-owned `qualification` config (Observatory
+`settings.ladder.qualification`; spec 0069): a submitted policy enters the
+`qualifying` membership state, the platform runs **3 self-play qualifier
+episodes with the policy seated twice** (`num_episodes: 3`,
+`seat_count: 2`) against the league's canonical commonwealth variant, and a
+boolean gate requires `result.rulesets_identical == true` on every episode
+before the membership becomes `competing` (champion-eligible). A clean gate
+failure disqualifies the submission with per-predicate evidence.
 
-Each qualifier episode is a fresh policy process, so this is strictly stronger
-than in-episode re-prompting: a policy that seeds an RNG once at process start
-is self-consistent within one episode but drifts across processes, and fails
-qualification.
+Each seat is a separate fresh policy process, so one episode already proves
+cross-process determinism — a policy that seeds an RNG at process start
+produces two different rulesets in one episode and fails. Three episodes give
+six fresh-process prompts in total. The platform's gate language evaluates
+per-episode scalars only (no cross-episode or per-seat-array predicates),
+which is why the check is expressed as a within-episode agreement scalar.
 
-**Repo-side support:** episode results already record the submitted rulesets;
-we additionally surface a `ruleset_sha256` in each seat detail so the qualifier
-comparison (and any later offline audit of an active champion's episodes) is a
-cheap hash equality rather than a payload diff.
+**The contract is constancy, not mere determinism.** The two seats'
+observations are not byte-identical — `seat` differs within an episode, and a
+qualifier observation's public config reports `seats: 2` where ranked
+episodes report `seats: 1` (the resolved seed is stripped from observations
+entirely; `server.py public_config`). The commonwealth contract deliberately
+requires the same ruleset *regardless*: the policy IS the ruleset. A
+deterministic policy that branches on `seat`, `seats`, or any other
+observation field is non-compliant by definition and is correctly
+disqualified. (Raised in review 2026-08-18; resolved as intended behavior and
+documented here.)
+
+**Seat-count mechanics:** the platform launches one player pod per injected
+token and never patches a variant's declared `seats`, so the engine derives
+the seat count from the token list (`PROTOCOL.md`). That is what lets the
+qualifier run `seat_count: 2` against the one-seat commonwealth variant
+without a second variant or any change to ranked play.
+
+**Repo-side support:** each seat detail records `ruleset_sha256`, results
+expose the plain episode scalar `rulesets_identical` — gates traverse it as
+`result.rulesets_identical`; a literal dotted key would be unreachable to
+them — (true only when every
+seat submitted and all hashes agree — unsubmitted seats never count as
+agreeing), and a single-entry `targets` array broadcasts to every seat so the
+2-seat qualifier episode reuses the 1-seat variant's `wellness.max` target
+unchanged.
 
 The hash is over compact, sorted-key JSON for the validated normalized ruleset,
 including JSON `null` for a null ruleset. It deliberately does not preserve or

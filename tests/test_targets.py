@@ -91,6 +91,15 @@ def test_shipped_target_scales_are_pinned() -> None:
     } == pytest.approx(expected)
 
 
+def test_single_target_assignment_broadcasts_to_every_seat() -> None:
+    catalog = load_target_catalog()
+    targets = resolve_seat_targets(
+        ["wellness.max"], seats=2, measurement_window=7, catalog=catalog
+    )
+
+    assert [target.id for target in targets] == ["wellness.max", "wellness.max"]
+
+
 def test_assignments_default_to_global_and_use_effective_measurement_window() -> None:
     catalog = load_target_catalog()
     targets = resolve_seat_targets(None, seats=2, measurement_window=7, catalog=catalog)

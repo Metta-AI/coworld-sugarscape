@@ -79,6 +79,22 @@ Distribution targets use `w1-hyperbolic/1`; Commonwealth uses
 `wellness-sum/1`. The top-level result `score_method` reports the episode's
 method (episodes never mix target kinds).
 
+Results also expose the episode scalar `rulesets_identical` (a plain
+top-level key — platform gates address it by traversal as
+`result.rulesets_identical`): true only
+when every seat submitted and all seats' `ruleset_sha256` values agree.
+Platform qualification gates evaluate scalar keys, not per-seat arrays;
+Commonwealth qualifier rounds gate on this key to enforce constitution
+determinism. Relatedly, a `targets` array with exactly one entry broadcasts
+that target to every seat, so a multi-seat self-play episode can reuse a
+one-seat variant's canonical target.
+
+When the injected `tokens` list is present, its length defines the episode's
+seat count and overrides a variant's declared `seats` — the platform launches
+one player pod per token and never patches `seats`, so the token count is the
+only arity signal it guarantees. Declared `seats` still governs local runs
+without an explicit token list mismatch.
+
 Scoring includes a survival rule (2026-08-11): a seat's score is 0 unless its
 target's scope population is alive at the final tick — any living agent for
 global-scope targets, the seat's own agents for seat scope. Window samples
