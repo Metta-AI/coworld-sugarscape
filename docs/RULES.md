@@ -1,5 +1,8 @@
 # SugarLang v1 reference
 
+This is the normative language reference; for a guided introduction see the
+[SugarLang tutorial](sugarlang-tutorial.md).
+
 SugarLang is the declarative rules language for Sugarscape v3. A player submits
 one ruleset before the simulation starts. The ruleset may override four DTL
 agent traits and may replace how the agent ranks the candidate cells that DTL
