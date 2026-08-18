@@ -75,7 +75,9 @@ Every seat detail includes a versioned `score_method` and a
 `ruleset_sha256`. The hash is SHA-256 over compact, sorted-key JSON for the
 validated normalized ruleset (`null` hashes as JSON `null`), so it identifies
 canonical SugarLang semantics rather than original wire whitespace or key order.
-Distribution targets use `w1-support/1`; Commonwealth uses `wellness-sum/1`.
+Distribution targets use `w1-hyperbolic/1`; Commonwealth uses
+`wellness-sum/1`. The top-level result `score_method` reports the episode's
+method (episodes never mix target kinds).
 
 Scoring includes a survival rule (2026-08-11): a seat's score is 0 unless its
 target's scope population is alive at the final tick — any living agent for

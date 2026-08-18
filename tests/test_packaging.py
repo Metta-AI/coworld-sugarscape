@@ -40,7 +40,9 @@ def test_manifest_config_and_results_schemas_cover_platform_traps() -> None:
         "result.extinct",
     }
     assert required_results <= set(results_schema["required"])
-    assert results_schema["properties"]["score_method"] == {"const": "w1-hyperbolic/1"}
+    assert results_schema["properties"]["score_method"] == {
+        "enum": ["w1-hyperbolic/1", "wellness-sum/1"]
+    }
 
 
 def test_variants_and_certification_are_token_free_and_fixture_lengths_match() -> None:

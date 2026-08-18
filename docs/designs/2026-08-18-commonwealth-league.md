@@ -5,9 +5,11 @@
 **Decision record:** conversation with James, 2026-08-18. Living document;
 update as implementation reveals new information.
 
-**Implementation notes (2026-08-18):** This branch introduced `score_method`
-because it was not present at the implementation base; existing distribution
-scoring is named `w1-support/1`. Qualifier identity is canonical normalized
+**Implementation notes (2026-08-18):** This branch adds per-seat-detail and
+running-record `score_method` identifiers alongside the top-level one that
+landed with scoring v2; distribution scoring is `w1-hyperbolic/1` and
+commonwealth episodes report `wellness-sum/1` (episodes never mix target
+kinds). Qualifier identity is canonical normalized
 SugarLang JSON, not raw WebSocket bytes, and `ruleset_sha256` records that
 identity per seat. The existing two-seat distribution certification fixture
 remains unchanged: it exercises the shared protocol/server plumbing, while
@@ -158,12 +160,12 @@ identity so a per-agent windowed mean is computable:
 
 ## Scoring
 
-New score method **`wellness-sum/1`**, reported via the
-`score_method` field introduced for every seat detail and running replay record
-by this implementation. The `/1` is the method version suffix; current
-distribution scoring is identified as `w1-support/1`. The suffix identifies this
-revision of the scoring contract, so a future change to the formula ships as
-`wellness-sum/2` and replay tooling can fail closed on unknown identifiers.
+New score method **`wellness-sum/1`**, reported via the `score_method` field
+(top-level per episode, and on every seat detail and running replay record).
+The `/1` is the method version suffix, following `w1-hyperbolic/1` /
+`w1-support/1`: it identifies this revision of the scoring contract, so a
+future change to the formula ships as `wellness-sum/2` and replay tooling can
+fail closed on unknown identifiers.
 
 ```text
 score(seat) = Σ over seat agents alive at final tick of mean_window_wellness(agent)

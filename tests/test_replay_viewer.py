@@ -123,6 +123,8 @@ def test_viewer_scoring_matches_the_engine() -> None:
 
     for target_path in sorted((ROOT / "targets").glob("*.json")):
         target = json.loads(target_path.read_text(encoding="utf-8"))
+        if target.get("kind", "distribution") != "distribution":
+            continue
         for measured_index in range(len(target["probs"])):
             measured = [float(index == measured_index) for index in range(len(target["probs"]))]
             engine = score_histogram(

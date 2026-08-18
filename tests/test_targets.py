@@ -87,6 +87,7 @@ def test_shipped_target_scales_are_pinned() -> None:
     assert {
         target_id: target_scale(target.probs, target.bins)
         for target_id, target in catalog.targets.items()
+        if target.kind == "distribution"
     } == pytest.approx(expected)
 
 
