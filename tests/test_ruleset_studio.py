@@ -264,3 +264,20 @@ def test_csp_permits_blockly_runtime_style_injection() -> None:
                 "CSP style-src must include 'unsafe-inline' for Blockly's "
                 "runtime style injection"
             )
+
+
+def test_variant_contexts_exclude_local_config_overrides(tmp_path: Path) -> None:
+    # Hosted episodes resolve variant configs over the pinned DTL defaults
+    # only; the local config.json is the dev world and must not leak into
+    # variant contexts. Its widened fertility range [0.5, 2] once masked the
+    # engine's real fallback ([0, 1] for every trait, parse_trait_ranges).
+    with running_server(tmp_path) as (host, port, _rulesets):
+        response = request((host, port), "GET", "/api/context")
+        assert response[0] == 200
+        payload = decoded(response)
+        contexts = {context["id"]: context for context in payload["contexts"]}
+        default_ranges = {name: [0, 1] for name in ("aggression", "trade", "lending", "fertility")}
+        assert contexts["commonwealth"]["trait_ranges"] == default_ranges
+        assert contexts["solo-wealth"]["trait_ranges"] == default_ranges
+        # The local context still reflects config.json verbatim.
+        assert contexts["default"]["trait_ranges"]["fertility"] == [0.5, 2]
