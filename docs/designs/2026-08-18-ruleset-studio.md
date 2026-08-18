@@ -1,6 +1,6 @@
 # Ruleset Studio — visual SugarLang editor with a live agent bridge
 
-**Status:** proposal (2026-08-18) — nothing implemented; iterating on design
+**Status:** phase 1 implemented (2026-08-18)
 **Date:** 2026-08-18
 **Owner:** James Boggs
 
@@ -107,7 +107,7 @@ critical path of ordinary editing.
 ```
 ruleset-studio/
   src/                  # index.html, studio.js, blocks.js, style.css
-  vendor/blockly/       # pinned blockly.min.js + license (vendored, no CDN)
+  src/vendor/blockly/   # pinned runtime, media, license, provenance (no CDN)
   server.py             # studio API server (stdlib only)
 rulesets/               # saved SugarLang JSON files (the load/save dir)
 tools/ruleset_studio.py # launcher: starts both servers, prints agent runbook
@@ -120,13 +120,12 @@ Blockly ships a browser UMD build.
 
 ### Launch story (how an agent opens it)
 
-`python -m tools.ruleset_studio` starts the studio API server and the
+`.venv/bin/python -m tools.ruleset_studio` starts the studio API server and the
 ux.surface link-server (`LINK_APP_DIR=ruleset-studio/src`), which
 auto-opens the user's browser. The launcher prints the exact
 `link-bridge.mjs watch` runbook so the agent parks a watch loop and
-answers chat. A short project skill (`.claude/skills/` entry, phase 1
-deliverable) captures this so "open the ruleset studio" works in any
-future session. Degraded mode is explicit: if no bridge watch is
+answers chat; the same runbook lives in `ruleset-studio/README.md`.
+Degraded mode is explicit: if no bridge watch is
 running, the chat panel shows "agent not connected" (from
 `link.onStatus`) while editing/validation/save remain fully functional —
 the studio API server never depends on the agent.
@@ -158,11 +157,13 @@ canvas compiles to valid-shaped JSON.
 
 Traits deliberately live *outside* the canvas as sliders (better UX for
 four scalars, and it visually separates traits from movement policy).
-Slider ranges come from the active `trait_ranges` (default:
-`config.json`'s), shown with the clamping semantics ("values clamp into
-range at spawn"). An un-overridden trait shows the *value DTL would
-generate* in the current context (the scenario's `agent*Factor` range;
-DTL's internal default is `[0, 0]`), muted — not a vague "DTL default"
+Slider ranges come from the active `trait_ranges`, shown with the clamping
+semantics ("values clamp into range at spawn"). Context values merge the
+pinned runtime `src/sugarscape/config.json` defaults, root `config.json`,
+variant config, then scenario overrides. An un-overridden trait shows the
+effective `agent*Factor` range in that merged context; the pinned DTL runtime
+default for these factors is `[1, 1]`. It appears muted rather than as a vague
+"DTL default"
 label. *(Vocabulary: the UI says **traits** everywhere,
 matching the repo (`trait_ranges`, RULES.md "Traits") — confirmed by
 James 2026-08-18.)*
@@ -286,17 +287,10 @@ the canvas doesn't read as stock-Google. Post-build conformance pass via
   bridge CLI). The launcher pins the metta path and fails loudly if the
   contract file is missing.
 
-## Open questions (for iteration)
+## Deferred decisions
 
-1. **`rulesets/` location** — repo-root `rulesets/` (proposed) vs
-   `build/rulesets/` (gitignored)? Proposal assumes rulesets are worth
-   committing/sharing.
-2. **Phase 2 in or out of the first build** — is the editor useful
-   enough without test-run scoring, or is `/api/run` the actual MVP?
-3. **Scenario picker scope** — phase 1 uses scenarios only to source
-   `trait_ranges`/target names for context; is that enough, or should
-   the target histogram render in-studio from day one (cheap: static
-   render from `targets/*.json`)?
-4. **Launcher home** — `tools/ruleset_studio.py` + a project skill, or
-   should this eventually be a `ux.*` skill in metta so other coworlds
-   can reuse the pattern?
+- Phase 1 saves shareable rulesets in the repository-root `rulesets/` and does
+  not run episodes or render target histograms.
+- Phase 1 documents launch in `ruleset-studio/README.md` and launcher output;
+  project or reusable Metta skill integration remains a separate later
+  decision.

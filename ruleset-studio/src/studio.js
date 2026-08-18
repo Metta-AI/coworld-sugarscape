@@ -139,7 +139,7 @@ function renderTraits() {
   for (const name of TRAIT_NAMES) {
     const state = traitState[name];
     const [minimum, maximum] = activeContext?.trait_ranges[name] ?? [0, 1];
-    const [dtlMinimum, dtlMaximum] = activeContext?.dtl_factor_ranges[name] ?? [0, 0];
+    const [dtlMinimum, dtlMaximum] = activeContext?.dtl_factor_ranges[name] ?? [1, 1];
     const generated = dtlMinimum === dtlMaximum ? formatNumber(dtlMinimum) : `generated in [${formatNumber(dtlMinimum)}, ${formatNumber(dtlMaximum)}]`;
     const step = minimum === maximum ? 1 : Math.max((maximum - minimum) / 100, 0.001);
     const row = document.createElement("div");
