@@ -264,11 +264,16 @@ window justified: the field moves on game releases, not rival version bumps.
    reason from a target to a ruleset, worked examples, cross-linked with
    RULES.md as the normative reference, `rulesets/worked-example.json`, and
    the Studio).
-3. **Manifest fixes:** fill the empty `optimizer[]` slot with the
-   `sugarscape-mixin` repo URL (the machine-readable hook `coworld optimize`
-   resolves); add SCENARIOS.md to `game.docs.pages`; fix the stale
+3. **Manifest fixes:** add SCENARIOS.md to `game.docs.pages`; fix the stale
    "24 validated scenarios" description in the `solo-ladder` variant (and
    the same staleness note in `docs/designs/2026-08-17-duo-ladder.md`).
+   **Deviation from the approved design (found during planning):** the
+   `optimizer[]` slot stays empty — `coworld optimize` clones
+   `repository_url` and hard-asserts a `package.json` workbench
+   (`metta packages/coworld/src/coworld/optimizer/runtime.py:347-350`), so
+   pointing it at the mixin would break the command. The mixin pointer
+   lives in the README, getting-started doc, participation guide, and the
+   sugarscape page instead.
 
 Out of scope here: the studio-play `/api/run` merge (James is landing it
 separately).
