@@ -33,6 +33,10 @@ TRAIT_FACTORS = {
 }
 
 
+def _reject_json_constant(value: str) -> None:
+    raise ValueError(f"invalid JSON constant {value}")
+
+
 @dataclass(frozen=True)
 class StudioPaths:
     rulesets: Path
@@ -154,11 +158,13 @@ class RulesetStudioHandler(BaseHTTPRequestHandler):
         paths: StudioPaths,
         allowed_origin: str,
         catalog: object,
+        coordinator: object | None,
         **kwargs: object,
     ):
         self.paths = paths
         self.allowed_origin = allowed_origin
         self.catalog = catalog
+        self.coordinator = coordinator
         super().__init__(*args, **kwargs)
 
     def end_headers(self) -> None:
@@ -186,6 +192,16 @@ class RulesetStudioHandler(BaseHTTPRequestHandler):
             return self._json(HTTPStatus.OK, _effective_contexts(self.paths))
         if path == "/api/scenarios":
             return self._json(HTTPStatus.OK, self.catalog.public_dict())
+        if path.startswith("/api/run/") and self.coordinator is not None:
+            from coworld.studio_runs import StudioRunNotFound
+
+            try:
+                return self._json(
+                    HTTPStatus.OK,
+                    self.coordinator.status(path.removeprefix("/api/run/")),
+                )
+            except StudioRunNotFound:
+                return self._error(HTTPStatus.NOT_FOUND, "run not found")
         name = self._ruleset_name(path)
         if name is not None:
             destination = self.paths.rulesets / name
@@ -204,6 +220,8 @@ class RulesetStudioHandler(BaseHTTPRequestHandler):
         if not self._origin_allowed():
             return
         path, _query = self._request_target()
+        if path == "/api/run" and self.coordinator is not None:
+            return self._post_run()
         if path != "/api/validate":
             return self._error(HTTPStatus.NOT_FOUND, "route not found")
         payload = self._read_body()
@@ -217,6 +235,8 @@ class RulesetStudioHandler(BaseHTTPRequestHandler):
         if not self._origin_allowed():
             return
         path, query = self._request_target()
+        if path == "/api/displayed-run" and self.coordinator is not None:
+            return self._put_displayed_run()
         name = self._ruleset_name(path)
         if name is None:
             return self._error(HTTPStatus.BAD_REQUEST, "invalid ruleset filename")
@@ -236,6 +256,110 @@ class RulesetStudioHandler(BaseHTTPRequestHandler):
         _atomic_write(destination, payload)
         response.update({"written": True, "forced": not result.valid})
         self._json(HTTPStatus.OK, response)
+
+    def do_DELETE(self) -> None:  # noqa: N802 - stdlib handler API
+        if not self._origin_allowed():
+            return
+        path, _query = self._request_target()
+        if path.startswith("/api/run/") and self.coordinator is not None:
+            from coworld.studio_runs import StudioRunNotFound
+
+            try:
+                status = self.coordinator.cancel(path.removeprefix("/api/run/"))
+            except StudioRunNotFound:
+                return self._error(HTTPStatus.NOT_FOUND, "run not found")
+            return self._json(HTTPStatus.OK, status)
+        self._error(HTTPStatus.NOT_FOUND, "route not found")
+
+    def _post_run(self) -> None:
+        body = self._read_json_body()
+        if body is None:
+            return
+        allowed = {"ruleset", "variant", "mode", "scenario", "seed", "timesteps"}
+        if set(body) - allowed or not {"ruleset", "variant", "mode"} <= set(body):
+            return self._error(HTTPStatus.BAD_REQUEST, "invalid run request fields")
+        if not all(isinstance(body[name], str) for name in ("variant", "mode")):
+            return self._error(HTTPStatus.BAD_REQUEST, "variant and mode must be strings")
+        scenario = body.get("scenario")
+        seed = body.get("seed")
+        timesteps = body.get("timesteps")
+        if scenario is not None and not isinstance(scenario, str):
+            return self._error(HTTPStatus.BAD_REQUEST, "scenario must be a string or null")
+        if seed is not None and not isinstance(seed, str):
+            return self._error(HTTPStatus.BAD_REQUEST, "seed must be a string or null")
+        if timesteps is not None and (
+            isinstance(timesteps, bool) or not isinstance(timesteps, int)
+        ):
+            return self._error(HTTPStatus.BAD_REQUEST, "timesteps must be an integer or null")
+
+        from coworld.studio_runs import (
+            RunBusy,
+            RunServerStopping,
+            StudioCompileError,
+        )
+
+        try:
+            started = self.coordinator.start(
+                self.catalog,
+                ruleset=body["ruleset"],
+                variant_id=body["variant"],
+                mode=body["mode"],
+                scenario_id=scenario,
+                seed=seed,
+                timesteps=timesteps,
+            )
+        except StudioCompileError as error:
+            return self._json(
+                HTTPStatus.BAD_REQUEST,
+                {"error": "compile failed", "validation": error.validation},
+            )
+        except ValueError as error:
+            return self._error(HTTPStatus.BAD_REQUEST, f"invalid run request: {error}")
+        except RunBusy:
+            return self._error(HTTPStatus.CONFLICT, "a studio run is already in progress")
+        except RunServerStopping:
+            return self._error(HTTPStatus.SERVICE_UNAVAILABLE, "studio run service is stopping")
+        except Exception:
+            return self._error(HTTPStatus.INTERNAL_SERVER_ERROR, "run could not be started")
+        self._json(HTTPStatus.ACCEPTED, started)
+
+    def _put_displayed_run(self) -> None:
+        body = self._read_json_body()
+        if body is None:
+            return
+        if set(body) != {"run_id"} or (
+            body["run_id"] is not None and not isinstance(body["run_id"], str)
+        ):
+            return self._error(HTTPStatus.BAD_REQUEST, "run_id must be a string or null")
+
+        from coworld.studio_runs import StudioRunNotFound
+
+        try:
+            self.coordinator.set_displayed(body["run_id"])
+        except StudioRunNotFound:
+            return self._error(HTTPStatus.NOT_FOUND, "run not found")
+        self._json(HTTPStatus.OK, {"displayed_run": body["run_id"]})
+
+    def _read_json_body(self) -> dict[str, object] | None:
+        content_type = self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
+        if content_type != "application/json":
+            self._error(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, "Content-Type must be application/json")
+            return None
+        payload = self._read_body()
+        if payload is None:
+            return None
+        try:
+            value = json.loads(
+                payload,
+                parse_constant=_reject_json_constant,
+            )
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+            self._error(HTTPStatus.BAD_REQUEST, f"invalid JSON body: {error}")
+            return None
+        if not isinstance(value, dict):
+            self._error(HTTPStatus.BAD_REQUEST, "JSON body must be an object")
+            return None
+        return value
 
     def _origin_allowed(self) -> bool:
         origin = self.headers.get("Origin")
@@ -327,6 +451,7 @@ def create_server(
     paths: StudioPaths | None = None,
     allowed_origin: str = "http://localhost:4322",
     catalog: object | None = None,
+    coordinator: object | None = None,
 ) -> ThreadingHTTPServer:
     if catalog is None:
         from coworld.studio import StudioVariantCatalog
@@ -337,6 +462,7 @@ def create_server(
         paths=paths or StudioPaths.repository(),
         allowed_origin=allowed_origin,
         catalog=catalog,
+        coordinator=coordinator,
     )
     return ThreadingHTTPServer((host, port), handler)
 
