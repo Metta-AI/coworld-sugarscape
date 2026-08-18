@@ -424,6 +424,88 @@ assert.equal(commonwealthPresentation.pickerHidden, true);
 assert.match(commonwealthPresentation.end, /1\.500 wellness across 2 survivors/);
 assert.match(commonwealthPresentation.end, /summed final-window wellness/);
 
+// v3 exposes finalScores from frame zero. They become authoritative only once
+// a finished replay is actually at its terminal cursor; live playback and
+// historical scrubbing continue to show the running observation. The same
+// selector feeds the rail, end card, and spoken verdict.
+const terminalScores = JSON.parse(vm.runInContext(`(() => {
+  const runningFrame = frameAt(frameStore.count - 1);
+  const terminalFrame = {
+    ...runningFrame,
+    coworld: { ...runningFrame.coworld, finalScores: [9.25] },
+  };
+  const seat = terminalFrame.coworld.seats[0];
+  state.cursor = frameStore.count - 1; state.finished = true;
+  spokenVerdict = false;
+  speak(terminalFrame);
+  const terminal = {
+    score: coworldScore(terminalFrame, seat),
+    panel: commonwealthPanel(terminalFrame, 0, 0, 500, 358),
+    end: endCard(terminalFrame),
+    spoken: verdictLine.textContent,
+  };
+  state.cursor = 0;
+  const scrubbed = coworldScore(terminalFrame, seat);
+  state.cursor = frameStore.count - 1; state.finished = false;
+  const live = coworldScore(terminalFrame, seat);
+  state.finished = true;
+  const legacy = coworldScore({ ...terminalFrame, coworld: {
+    ...terminalFrame.coworld, finalScores: undefined,
+  } }, seat);
+  const counterfactual = coworldScore(terminalFrame, { ...seat, assigned: false, score: 0.125 });
+  return JSON.stringify({ terminal, scrubbed, live, legacy, counterfactual });
+})()`, viewerContext));
+assert.equal(terminalScores.terminal.score, 9.25);
+assert.match(terminalScores.terminal.panel, /9\.250/);
+assert.match(terminalScores.terminal.end, /9\.250 wellness across 2 survivors/);
+assert.match(terminalScores.terminal.spoken, /9\.250 wellness across 2 survivors/);
+assert.equal(terminalScores.scrubbed, 1.5, "scrubbing keeps the running score");
+assert.equal(terminalScores.live, 1.5, "an unfinished live frame keeps the running score");
+assert.equal(terminalScores.legacy, 1.5, "v1 without finalScores keeps legacy behavior");
+assert.equal(terminalScores.counterfactual, 0.125,
+  "a browsed counterfactual never borrows the assigned final score");
+
+// Target broadcast can assign the scalar Commonwealth objective to more than
+// one seat. Every constitution must remain visible; the old panel silently
+// rendered seat zero only.
+const commonwealthDuoDocument = JSON.parse(JSON.stringify(goldenFixture.document));
+commonwealthDuoDocument.header.targets = [0, 1].map((seat) => ({
+  id: `wellness.max.${seat}`, kind: "maximize", variable: "wellness",
+  description: "Maximize survivor wellness.",
+}));
+commonwealthDuoDocument.header.scores = [4.5, 6.75];
+commonwealthDuoDocument.header.seat_details = [0, 1].map((seat) => ({
+  seat, score: 1 + seat, score_method: "wellness-sum/1", survivor_count: 2 + seat,
+  mean_wellness: 0.5 + seat * 0.1,
+  component_means: { health: 1, conflict: 0, social: -0.25, family: 0.5, wealth: 0.1 },
+}));
+commonwealthDuoDocument.frames.forEach((frame, index) => {
+  frame.running = [0, 1].map((seat) => ({
+    seat, kind: "maximize", variable: "wellness", score_method: "wellness-sum/1",
+    score: 0.5 + seat + index * 0.25, survivor_count: 2 + seat, mean_wellness: 0.5,
+    component_means: { health: 1, conflict: 0, social: -0.25, family: 0.5, wealth: 0.1 },
+  }));
+});
+const commonwealthDuo = JSON.parse(vm.runInContext(`(() => {
+  frameStore = FrameStore.fromV3(${JSON.stringify(commonwealthDuoDocument)});
+  events = frameStore.events; wealthSeries = frameStore.wealthSeries;
+  state.cursor = frameStore.count - 1; state.finished = true;
+  const frame = frameAt(frameStore.count - 1);
+  spokenVerdict = false; speak(frame);
+  return JSON.stringify({
+    panel: commonwealthPanel(frame, 0, 0, 500, 358),
+    strapline: mastheadStrapline(frame, false),
+    spoken: verdictLine.textContent,
+  });
+})()`, viewerContext));
+assert.match(commonwealthDuo.panel, /Alpha/);
+assert.match(commonwealthDuo.panel, /Beta/);
+assert.match(commonwealthDuo.panel, /4\.500/);
+assert.match(commonwealthDuo.panel, /6\.750/);
+assert.match(commonwealthDuo.strapline, /2 constitutions/);
+assert.match(commonwealthDuo.spoken, /Alpha, 4\.500 wellness/);
+assert.match(commonwealthDuo.spoken, /Beta, 6\.750 wellness/);
+
 // Restore the distribution fixture for the remaining model assertions.
 vm.runInContext(`(() => {
   frameStore = FrameStore.fromV3(${JSON.stringify(goldenFixture.document)});

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 import zlib
 
 from coworld.config import build_dtl_config, resolve_episode_config
@@ -139,3 +140,115 @@ def test_commonwealth_replay_carries_running_wellness_diagnostics(
         for reading in running
     )
     assert running[-1]["score"] == results["scores"][0]
+
+
+def test_header_sink_precedes_frames_and_matches_final_initial_header(
+    tiny_episode_config: dict[str, object],
+) -> None:
+    events: list[str] = []
+    bootstrap_headers: list[dict[str, object]] = []
+
+    def capture_header(header: dict[str, object]) -> None:
+        events.append("header")
+        bootstrap_headers.append(deepcopy(header))
+        header_config = header["config"]
+        assert isinstance(header_config, dict)
+        header_config["seed"] = 999
+
+    def capture_frame(_frame: dict[str, object]) -> None:
+        events.append("frame")
+
+    _results, replay, _timings = run_episode(
+        tiny_episode_config,
+        [None, None],
+        emit_timing_logs=False,
+        header_sink=capture_header,
+        frame_sink=capture_frame,
+    )
+    final_header = decode_replay(replay)["header"]
+    initial_header = {
+        key: value
+        for key, value in final_header.items()
+        if key not in {"scores", "seat_details"}
+    }
+
+    assert events[0] == "header"
+    assert events.count("header") == 1
+    assert bootstrap_headers == [initial_header]
+    assert set(bootstrap_headers[0]).isdisjoint({"scores", "seat_details"})
+    assert final_header["seed"] == tiny_episode_config["seed"]
+    assert final_header["config"]["seed"] == tiny_episode_config["seed"]
+
+
+def _extinction_config(
+    tiny_episode_config: dict[str, object],
+) -> dict[str, object]:
+    config = dict(tiny_episode_config)
+    config.update(
+        {
+            "timesteps": 12,
+            "measurement_window": 12,
+            "replay_histogram_interval": 10,
+            "agentStartingSugar": [3, 4],
+            "agentStartingSpice": [3, 4],
+            "agentSugarMetabolism": [6, 6],
+            "agentSpiceMetabolism": [6, 6],
+            "agentFertilityFactor": [0, 0],
+            "environmentSugarRegrowRate": 0,
+            "environmentSpiceRegrowRate": 0,
+        }
+    )
+    return config
+
+
+def test_extinction_terminal_frame_gets_current_measurements(
+    tiny_episode_config: dict[str, object],
+) -> None:
+    config = _extinction_config(tiny_episode_config)
+
+    results, replay, _timings = run_episode(
+        config, [None, None], emit_timing_logs=False
+    )
+    document = decode_replay(replay)
+    terminal = document["frames"][-1]
+
+    assert results["result.extinct"] is True
+    assert terminal["timestep"] < config["timesteps"]
+    assert terminal["timestep"] % config["replay_histogram_interval"] != 0
+    assert "running" in terminal
+    assert "measured" in terminal
+    assert document["header"]["scores"] == results["scores"] == [0.0, 0.0]
+
+
+def test_commonwealth_extinction_terminal_frame_gets_current_wellness(
+    tiny_episode_config: dict[str, object],
+) -> None:
+    config = _extinction_config(tiny_episode_config)
+    config.update({"seats": 1, "targets": ["wellness.max"]})
+
+    results, replay, _timings = run_episode(
+        config, [None], emit_timing_logs=False
+    )
+    terminal = decode_replay(replay)["frames"][-1]
+
+    assert results["result.extinct"] is True
+    assert terminal["timestep"] % config["replay_histogram_interval"] != 0
+    assert terminal["running"][0]["score_method"] == "wellness-sum/1"
+    assert terminal["running"][0]["score"] == results["scores"][0]
+    assert "measured" in terminal
+
+
+def test_zero_frame_episode_serializes_without_terminal_measurements(
+    tiny_episode_config: dict[str, object],
+) -> None:
+    config = dict(tiny_episode_config)
+    config["timesteps"] = 0
+
+    results, replay, _timings = run_episode(
+        config, [None, None], emit_timing_logs=False
+    )
+    document = decode_replay(replay)
+
+    assert results["timesteps_completed"] == 0
+    assert document["frames"] == []
+    assert document["header"]["scores"] == results["scores"]

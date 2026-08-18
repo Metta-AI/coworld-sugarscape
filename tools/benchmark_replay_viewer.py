@@ -31,10 +31,10 @@ TOOLS = ROOT / "tools"
 sys.path.insert(0, str(SRC))
 sys.path.insert(0, str(TOOLS))
 
-from generate_scenario_pool import load_manifest, solo_ladder_config  # noqa: E402
-from v3_to_v1_replay import convert, load_v3  # noqa: E402
-
 from coworld.episode import run_episode  # noqa: E402
+from coworld.v1_frames import convert_document  # noqa: E402
+from generate_scenario_pool import load_manifest, solo_ladder_config  # noqa: E402
+from v3_to_v1_replay import load_v3  # noqa: E402
 
 SCENARIOS = (
     ("capacity.compact-regrow-1", 6 * 1024 * 1024),
@@ -81,7 +81,7 @@ def generate_replays(directory: Path) -> list[dict[str, object]]:
         replay_path.write_bytes(replay)
         oracle_path = directory / f"{scenario}.v1.json"
         oracle_path.write_text(
-            json.dumps(convert(load_v3(replay_path)), separators=(",", ":")),
+            json.dumps(convert_document(load_v3(replay_path)), separators=(",", ":")),
             encoding="utf-8",
         )
         replays.append(

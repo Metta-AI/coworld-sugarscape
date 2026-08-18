@@ -6,6 +6,7 @@ import pytest
 
 from coworld.config import build_dtl_config, resolve_episode_config
 from coworld.episode import canonical_results_payload, run_episode
+from coworld.replay import decode_replay
 from coworld.targets import load_target_catalog
 
 
@@ -139,6 +140,65 @@ def test_run_episode_is_deterministic_except_for_timings(
             "replay_frame",
         }
         assert expected_subphases <= set(timings["simulation"]["subphases_ns"])
+
+
+def test_frame_sink_exception_aborts_and_propagates(
+    tiny_episode_config: dict[str, object],
+) -> None:
+    class SinkStopped(RuntimeError):
+        pass
+
+    def stop(_frame: dict[str, object]) -> None:
+        raise SinkStopped("stop from sink")
+
+    with pytest.raises(SinkStopped, match="stop from sink"):
+        run_episode(
+            tiny_episode_config,
+            [None, None],
+            emit_timing_logs=False,
+            frame_sink=stop,
+        )
+
+
+def test_header_sink_exception_aborts_before_frames(
+    tiny_episode_config: dict[str, object],
+) -> None:
+    frame_calls = 0
+
+    def stop(_header: dict[str, object]) -> None:
+        raise RuntimeError("stop from header")
+
+    def capture_frame(_frame: dict[str, object]) -> None:
+        nonlocal frame_calls
+        frame_calls += 1
+
+    with pytest.raises(RuntimeError, match="stop from header"):
+        run_episode(
+            tiny_episode_config,
+            [None, None],
+            emit_timing_logs=False,
+            header_sink=stop,
+            frame_sink=capture_frame,
+        )
+    assert frame_calls == 0
+
+
+def test_four_seat_episode_reports_every_seat(
+    tiny_episode_config: dict[str, object],
+) -> None:
+    config = dict(tiny_episode_config)
+    config["seats"] = 4
+
+    results, replay, _timings = run_episode(
+        config, [None, None, None, None], emit_timing_logs=False
+    )
+    header = decode_replay(replay)["header"]
+
+    assert len(results["scores"]) == 4
+    assert len(results["details"]) == 4
+    assert len(header["targets"]) == 4
+    assert len(header["rulesets"]) == 4
+    assert header["scores"] == results["scores"]
 
 
 def test_results_include_scores_details_all_histograms_and_flat_scalars(

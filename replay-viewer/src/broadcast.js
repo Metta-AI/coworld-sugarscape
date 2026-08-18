@@ -1231,6 +1231,31 @@ function ranked(frame) {
     .sort((first, second) => second.score - first.score || first.index - second.index);
 }
 
+/** Final scores belong only to the terminal view. v3 carries them in every
+ * materialized frame, so their presence alone cannot decide what the cursor is
+ * showing. Legacy v1 frames have no finalScores and retain their running score. */
+function atTerminalCursor() {
+  return state.finished && frameCount() > 0 && currentIndex() === frameCount() - 1;
+}
+
+function coworldScore(frame, seat) {
+  if (!seat) return null;
+  if (atTerminalCursor() && seat.assigned !== false) {
+    const finalScore = frame.coworld?.finalScores?.[seat.seat];
+    if (typeof finalScore === "number") return finalScore;
+  }
+  return typeof seat.score === "number" ? seat.score : null;
+}
+
+function verdictRows(frame) {
+  const rows = standings(frame).map((row) => {
+    const seat = frame.coworld?.seats?.find((entry) => entry.seat === row.index);
+    const score = coworldScore(frame, seat);
+    return score === null ? row : { ...row, score };
+  });
+  return rows.sort((first, second) => second.score - first.score || first.index - second.index);
+}
+
 /** The engine ships a per-frame count for each death cause. Saying "starved"
  *  for every disappearance is right for the shipping variant and wrong the
  *  moment aging, combat or disease is enabled - so read the cause rather than
@@ -2436,7 +2461,9 @@ function mastheadStrapline(frame, big) {
   const seats = frame.coworld?.seats ?? [];
   if (seats.length > 0) {
     if (seats[0].targetKind === "maximize" && seats[0].variable === "wellness") {
-      return big ? "maximize survivor wellness" : "one constitution · maximize survivor wellness";
+      return big
+        ? "maximize survivor wellness"
+        : `${count(seats.length, "constitution")} · maximize survivor wellness`;
     }
     const variable = seats[0].variable ?? "wealth";
     // Measured, like the wording it replaces: the sparse line shares its band
@@ -2674,7 +2701,7 @@ function scorebug(frame) {
 
   // FINAL belongs to where the CURSOR is, not to whether the stream has ended:
   // scrubbing back into the middle of a finished episode is mid-match again.
-  const atEnd = state.finished && currentIndex() >= frameCount() - 1;
+  const atEnd = atTerminalCursor();
   // No percentage. On a 100-timestep match "62 / 100", a filled bar and "62%"
   // are three encodings of one number, two of them the same digits, in the
   // scarcest space on the frame. The fraction and the bar stay; the badge now
@@ -3634,10 +3661,13 @@ let targetChoice = null;
 function readingFor(frame) {
   const seat = frame.coworld?.seats?.[0];
   const choices = frame.coworld?.choices ?? [];
-  if (!targetChoice) return seat;
+  if (!targetChoice) {
+    const score = coworldScore(frame, seat);
+    return seat && score !== seat.score ? { ...seat, score } : seat;
+  }
   const pick = choices.find((choice) => choice.id === targetChoice);
   if (!pick) return seat;
-  return {
+  const reading = {
     seat: seat?.seat ?? 0,
     name: seat?.name,
     targetId: pick.id,
@@ -3650,6 +3680,8 @@ function readingFor(frame) {
     score: pick.score,
     assigned: pick.assigned,
   };
+  const score = coworldScore(frame, reading);
+  return score === reading.score ? reading : { ...reading, score };
 }
 
 /** Fit assigned targets into the rail without letting a chart cross its card.
@@ -3702,7 +3734,9 @@ function targetHistogram(frame, x, y, width, height) {
         markup += `<line x1="${card.x - 6}" y1="${card.y}" x2="${card.x - 6}" `
           + `y2="${card.y + card.height}" stroke="${C.border}" stroke-width="1"/>`;
       }
-      markup += compactTargetReading(seat, card.x, card.y, card.width, card.height);
+      const score = coworldScore(frame, seat);
+      const reading = score === seat.score ? seat : { ...seat, score };
+      markup += compactTargetReading(reading, card.x, card.y, card.width, card.height);
     });
     return markup;
   }
@@ -3772,17 +3806,68 @@ function targetHistogram(frame, x, y, width, height) {
 /** Commonwealth replaces the distribution overlay with the objective's own
  *  history and the five DTL happiness components that produced it. */
 function commonwealthPanel(frame, x, y, width, height) {
-  const seat = frame.coworld?.seats?.[0] ?? {};
+  const seats = frame.coworld?.seats ?? [];
+  const readings = seats.map((seat) => {
+    const score = coworldScore(frame, seat);
+    return score === seat.score ? seat : { ...seat, score };
+  });
+  const seat = readings[0] ?? {};
   const score = typeof seat.score === "number" ? seat.score : null;
   let markup = panel(x, y, width, height);
   markup += eyebrow("Commonwealth", x + 18, y + 32);
   markup += text("How much wellness survived?", x + 18, y + 68, {
     size: T(26), weight: 700, fill: C.paper,
   });
-  if (seat.scoreMethod && seat.scoreMethod !== "wellness-sum/1") {
-    return markup + text(`Unsupported score method: ${seat.scoreMethod}`, x + 18, y + 112, {
+  const unsupported = readings.find((reading) => reading.scoreMethod
+    && reading.scoreMethod !== "wellness-sum/1");
+  if (unsupported) {
+    return markup + text(`Unsupported score method: ${unsupported.scoreMethod}`, x + 18, y + 112, {
       size: T(20), weight: 600, family: F.mono, fill: C.loss,
     });
+  }
+  if (readings.length > 1) {
+    const cards = targetReadingLayout(readings.length, dense(), x, y, width, height);
+    readings.forEach((reading, index) => {
+      const card = cards[index];
+      const color = seatOf(reading.seat).color;
+      const survivorLabel = reading.survivorCount === undefined ? "— survivors"
+        : `${reading.survivorCount} survivor${reading.survivorCount === 1 ? "" : "s"}`;
+      const meanLabel = typeof reading.meanWellness === "number"
+        ? `mean ${reading.meanWellness.toFixed(3)}` : "mean —";
+      if (card.row > 0) {
+        markup += `<line x1="${card.x}" y1="${card.y - 5}" x2="${card.x + card.width}" `
+          + `y2="${card.y - 5}" stroke="${C.border}" stroke-width="1"/>`;
+      }
+      if (card.column > 0) {
+        markup += `<line x1="${card.x - 6}" y1="${card.y}" x2="${card.x - 6}" `
+          + `y2="${card.y + card.height}" stroke="${C.border}" stroke-width="1"/>`;
+      }
+      markup += seatMark(card.x + G(7), card.y + T(14), reading.seat, G(7));
+      markup += text(reading.name || `Player ${reading.seat + 1}`, card.x + G(22), card.y + T(18), {
+        size: T(20), weight: 700, fill: C.paper,
+      });
+      markup += text(typeof reading.score === "number" ? reading.score.toFixed(3) : "—",
+        card.x, card.y + T(60), {
+          size: T(36), weight: 700, family: F.mono,
+          fill: typeof reading.score === "number" ? color : C.muted,
+        });
+      markup += text(`${survivorLabel} · ${meanLabel}`, card.x, card.y + T(86), {
+        size: T(16), weight: 600, family: F.mono, fill: C.muted,
+      });
+      const labels = ["health", "conflict", "social", "family", "wealth"];
+      const components = reading.componentMeans ?? {};
+      labels.forEach((label, componentIndex) => {
+        const columnX = card.x + componentIndex * (card.width / labels.length);
+        const value = typeof components[label] === "number" ? components[label].toFixed(2) : "—";
+        markup += text(label, columnX, card.y + card.height - T(34), {
+          size: T(12), weight: 600, family: F.mono, fill: C.dim,
+        });
+        markup += text(value, columnX, card.y + card.height - T(10), {
+          size: T(16), weight: 600, family: F.mono, fill: C.paper,
+        });
+      });
+    });
+    return markup;
   }
   markup += text(score === null ? "—" : score.toFixed(3), x + 18, y + 126, {
     size: T(44), weight: 700, family: F.mono, fill: score === null ? C.muted : C.gold,
@@ -3801,8 +3886,9 @@ function commonwealthPanel(frame, x, y, width, height) {
   const points = [];
   for (let index = 0; index <= currentIndex(); index += 1) {
     const reading = frameStore.summaryAt(index)?.coworld?.seats?.[0];
-    if (typeof reading?.score === "number") {
-      points.push([frameStore.timestepAt(index), reading.score]);
+    const historyScore = index === currentIndex() ? coworldScore(frame, reading) : reading?.score;
+    if (typeof historyScore === "number") {
+      points.push([frameStore.timestepAt(index), historyScore]);
     }
   }
   const plotX = x + 18;
@@ -4298,7 +4384,7 @@ function emergence(frame, x, y, width, height) {
 /** A designed finish that HOLDS on the last frame: the winner, both scores, the
  *  margin, and a plain-language verdict a non-expert can read. */
 function endCard(frame) {
-  const rows = ranked(frame);
+  const rows = verdictRows(frame);
   const winner = rows[0];
   const runnerUp = rows[1];
   const margin = winner.score - (runnerUp?.score ?? 0);
@@ -4326,7 +4412,10 @@ function endCard(frame) {
    * and it is the same figure the histogram panel has been showing all along.
    * The actual value of the targeted variable goes beside it, because the match
    * says how close the SHAPE came and not what the world did. */
-  const seatScore = frame.coworld?.seats?.find((entry) => entry.seat === winner.index);
+  const rawSeatScore = frame.coworld?.seats?.find((entry) => entry.seat === winner.index);
+  const resolvedScore = coworldScore(frame, rawSeatScore);
+  const seatScore = rawSeatScore && resolvedScore !== rawSeatScore.score
+    ? { ...rawSeatScore, score: resolvedScore } : rawSeatScore;
   const matched = Boolean(seatScore);
   const commonwealth = seatScore?.targetKind === "maximize" && seatScore?.variable === "wellness";
   const actual = matched ? targetActual(frame, seatScore.variable) : null;
@@ -4442,9 +4531,10 @@ function endCard(frame) {
     // 0.930 and closing with 7,750 — two different numbers both presented as
     // the result.
     const rowMatch = frame.coworld?.seats?.find((entry) => entry.seat === row.index);
+    const rowScore = coworldScore(frame, rowMatch);
     markup += text(
       rowMatch
-        ? (typeof rowMatch.score === "number" ? rowMatch.score.toFixed(3) : "\u2014")
+        ? (rowScore === null ? "\u2014" : rowScore.toFixed(3))
         : format(row.score),
       x + cardW - pad - 36, rowY + rowH * 0.66, {
         size: T(34), weight: 700, family: F.mono, fill: leader ? C.gold : C.paper, anchor: "end",
@@ -4502,7 +4592,7 @@ let standingsSignature = "";
 let beatsSignature = "";
 
 function drawBeats(frame) {
-  const atEnd = state.finished && currentIndex() >= frameCount() - 1;
+  const atEnd = atTerminalCursor();
   const full = `${atEnd}|${currentIndex()}`;
   if (full === beatsSignature) return;
   beatsSignature = full;
@@ -4513,7 +4603,7 @@ function drawBeats(frame) {
 }
 
 function drawHud(frame, index) {
-  const atEnd = state.finished && currentIndex() >= frameCount() - 1;
+  const atEnd = atTerminalCursor();
   const signature = `${index}|${atEnd}|${view.follow}`;
   if (signature === standingsSignature) return;
   standingsSignature = signature;
@@ -4891,7 +4981,7 @@ const SPOKEN_CADENCE_MS = 1000;
  *  assistive technology, so this text is the whole broadcast and it has to carry
  *  everything the panels do, not a subset of it. */
 function speak(frame, now = performance.now()) {
-  const atEnd = state.finished && currentIndex() >= frameCount() - 1;
+  const atEnd = atTerminalCursor();
   /* A stream that stopped short is the loudest thing on the picture and used to
    * be SILENT here. The scorebug prints CUT SHORT in the loss colour and a
    * second line saying why; speak() had no branch for it, and because a
@@ -4912,7 +5002,22 @@ function speak(frame, now = performance.now()) {
     if (spokenVerdict) return;
     spokenVerdict = true;
     commentary.textContent = "";
-    const rows = ranked(frame);
+    const rows = verdictRows(frame);
+    const scoredSeats = frame.coworld?.seats ?? [];
+    if (scoredSeats.length > 0) {
+      const readings = rows.map((row) => {
+        const seat = scoredSeats.find((entry) => entry.seat === row.index);
+        const score = coworldScore(frame, seat);
+        if (seat?.targetKind === "maximize" && seat.variable === "wellness") {
+          return `${row.name}, ${score === null ? "no score" : `${score.toFixed(3)} wellness`} `
+            + `across ${seat.survivorCount ?? row.population} survivors`;
+        }
+        return `${row.name}, ${score === null ? "no score" : score.toFixed(3)} against `
+          + `${seat?.targetId ?? "its target"}`;
+      });
+      verdictLine.textContent = `Final. ${readings.join(". ")}.`;
+      return;
+    }
     const margin = rows[0].score - (rows[1]?.score ?? 0);
     const changes = events.filter((event) => event.kind === "lead").length;
     const share = ((margin / Math.max(1, rows[0].score)) * 100).toFixed(1);

@@ -10,7 +10,7 @@ from pathlib import Path
 from .config import build_dtl_config, resolve_episode_config, ruleset_limits
 from .instrumentation import EpisodeInstrumentation
 from .measurement import RollingMeasurements
-from .replay import FrameSink, ReplayWriter
+from .replay import FrameSink, HeaderSink, ReplayWriter
 from .ruleset import CompiledRuleset, compile_ruleset, validate_ruleset
 from .scoring import SCORE_METHOD, WELLNESS_SCORE_METHOD, score_histogram
 from .seats import parse_trait_ranges
@@ -25,10 +25,16 @@ def run_episode(
     seed_source: Callable[[], int] | None = None,
     emit_timing_logs: bool = True,
     submitted: Sequence[bool] | None = None,
+    header_sink: HeaderSink | None = None,
     frame_sink: FrameSink | None = None,
     target_catalog_path: Path | str = DEFAULT_CATALOG_PATH,
 ) -> tuple[dict[str, object], bytes, dict[str, object]]:
-    """Run an episode and return complete results, replay bytes, and timings."""
+    """Run an episode and return complete results, replay bytes, and timings.
+
+    ``header_sink`` receives the pre-simulation replay header once, before any
+    ``frame_sink`` call. An exception from either sink aborts the episode and
+    propagates to the caller; no replay artifact is returned.
+    """
 
     instrumentation = EpisodeInstrumentation(emit_logs=emit_timing_logs)
     with instrumentation.phase("config_resolution"):
@@ -99,6 +105,7 @@ def run_episode(
             rulesets=compiled,
             measurements=measurements,
             histogram_interval=int(resolved["replay_histogram_interval"]),
+            header_sink=header_sink,
             frame_sink=frame_sink,
         )
         world.replay_writer = replay_writer
@@ -174,7 +181,11 @@ def run_episode(
             details.append(detail)
 
     with instrumentation.phase("replay_serialization"):
-        replay = replay_writer.finish(scores=scores, seat_details=details)
+        replay = replay_writer.finish(
+            world=world,
+            scores=scores,
+            seat_details=details,
+        )
 
     with instrumentation.phase("result_assembly"):
         stats = world.runtimeStats
