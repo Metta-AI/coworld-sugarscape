@@ -41,7 +41,7 @@ const UNARY_OPERATORS = ["abs", "neg", "not"];
 const BINARY_OPERATORS = ["pow", "<", "<=", ">", ">=", "==", "!="];
 const OPERATOR_LABELS = {"*": "×", "/": "÷", "<=": "≤", ">=": "≥", "==": "=", "!=": "≠"};
 
-const STYLES = {
+const LIGHT_STYLES = {
   rule_blocks: {colourPrimary: "#eef2f7", colourSecondary: "#c8d4e6", colourTertiary: "#1a3875"},
   feature_blocks: {colourPrimary: "#e9edda", colourSecondary: "#ccd6ae", colourTertiary: "#4c5a2b"},
   math_blocks: {colourPrimary: "#f7edd3", colourSecondary: "#e4cf9a", colourTertiary: "#78591a"},
@@ -49,22 +49,44 @@ const STYLES = {
   value_blocks: {colourPrimary: "#fffdf4", colourSecondary: "#d4c9b5", colourTertiary: "#111827"},
 };
 
-export function studioTheme() {
-  return Blockly.Theme.defineTheme("ruleset_studio", {
+// Same category hues, inverted for dark surfaces: deep fills, lighter borders.
+const DARK_STYLES = {
+  rule_blocks: {colourPrimary: "#24395b", colourSecondary: "#3b537c", colourTertiary: "#9fb6dd"},
+  feature_blocks: {colourPrimary: "#333d1f", colourSecondary: "#4a582f", colourTertiary: "#b5c48a"},
+  math_blocks: {colourPrimary: "#40351a", colourSecondary: "#5c4d27", colourTertiary: "#d9bd7a"},
+  compare_blocks: {colourPrimary: "#3f2a1c", colourSecondary: "#5a3d29", colourTertiary: "#d6a483"},
+  value_blocks: {colourPrimary: "#1f2937", colourSecondary: "#374151", colourTertiary: "#e5e7eb"},
+};
+
+export function studioTheme(dark = false) {
+  return Blockly.Theme.defineTheme(dark ? "ruleset_studio_dark" : "ruleset_studio", {
     base: Blockly.Themes.Classic,
-    blockStyles: STYLES,
-    componentStyles: {
-      workspaceBackgroundColour: "#fffaf0",
-      toolboxBackgroundColour: "#fffaf0",
-      toolboxForegroundColour: "#111827",
-      flyoutBackgroundColour: "#f8f6ef",
-      flyoutForegroundColour: "#111827",
-      flyoutOpacity: 1,
-      scrollbarColour: "#d4c9b5",
-      insertionMarkerColour: "#859ebe",
-      insertionMarkerOpacity: 0.35,
-      cursorColour: "#1a3875",
-    },
+    blockStyles: dark ? DARK_STYLES : LIGHT_STYLES,
+    componentStyles: dark
+      ? {
+          workspaceBackgroundColour: "#0b1220",
+          toolboxBackgroundColour: "#111827",
+          toolboxForegroundColour: "#f3f4f6",
+          flyoutBackgroundColour: "#1f2937",
+          flyoutForegroundColour: "#f3f4f6",
+          flyoutOpacity: 1,
+          scrollbarColour: "#374151",
+          insertionMarkerColour: "#859ebe",
+          insertionMarkerOpacity: 0.4,
+          cursorColour: "#bacbf5",
+        }
+      : {
+          workspaceBackgroundColour: "#fffaf0",
+          toolboxBackgroundColour: "#fffaf0",
+          toolboxForegroundColour: "#111827",
+          flyoutBackgroundColour: "#f8f6ef",
+          flyoutForegroundColour: "#111827",
+          flyoutOpacity: 1,
+          scrollbarColour: "#d4c9b5",
+          insertionMarkerColour: "#859ebe",
+          insertionMarkerOpacity: 0.35,
+          cursorColour: "#1a3875",
+        },
     fontStyle: {family: 'Georgia, "Times New Roman", serif', weight: "600", size: 11},
   });
 }

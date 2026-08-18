@@ -21,16 +21,24 @@ let highlighted = null;
 let toastTimer = null;
 let applyingSnapshot = false;
 
+const darkScheme = window.matchMedia("(prefers-color-scheme: dark)");
+
 const workspace = Blockly.inject("blockly", {
   toolbox: TOOLBOX,
-  theme: studioTheme(),
+  theme: studioTheme(darkScheme.matches),
   renderer: "zelos",
   media: "vendor/blockly/media/",
   sounds: false,
   trashcan: true,
-  grid: {spacing: 18, length: 1, colour: "#e4dac8", snap: false},
+  grid: {spacing: 18, length: 1, colour: darkScheme.matches ? "#1f2937" : "#e4dac8", snap: false},
   zoom: {controls: true, wheel: true, startScale: 0.88, maxScale: 1.5, minScale: 0.45, scaleSpeed: 1.1},
   move: {scrollbars: true, drag: true, wheel: true},
+});
+
+darkScheme.addEventListener("change", event => {
+  workspace.setTheme(studioTheme(event.matches));
+  workspace.options.gridOptions.colour = event.matches ? "#1f2937" : "#e4dac8";
+  workspace.getGrid?.()?.setColour?.(workspace.options.gridOptions.colour);
 });
 
 class RulesetPatchEvent extends Blockly.Events.Abstract {

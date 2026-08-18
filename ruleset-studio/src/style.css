@@ -1,12 +1,30 @@
 :root {
+  color-scheme: light dark;
   --bg: #fffdf4; --surface: #fffaf0; --surface-alt: #f8f6ef;
   --fg: #111827; --subtle: #555; --muted: #8b8b8b;
   --navy: #1a3875; --sage: #6e8050; --terracotta: #b36e4e;
   --gold: #d4a853; --accent: #859ebe; --cta: #0e2758;
+  --cta-border: #0a1c42; --cta-fg: #fffdf4;
   --border: #e4dac8; --border-strong: #d4c9b5; --border-soft: #f0ebe1;
+  --chip-bad-bg: #f5e5da; --chip-bad-fg: #944329; --chip-wait-bg: #eef2f7;
+  --error-stroke: #c44f32;
+  --block-ink: #111827; --field-bg: #fffdf4;
   --serif: Georgia, "Times New Roman", serif;
   --sans: "Helvetica Neue", Arial, sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #030712; --surface: #111827; --surface-alt: #1f2937;
+    --fg: #f3f4f6; --subtle: #b3b9c4; --muted: #8b929e;
+    --navy: #bacbf5; --sage: #a3b88c; --terracotta: #d08d6b;
+    --gold: #d4a853; --accent: #859ebe; --cta: #bacbf5;
+    --cta-border: #859ebe; --cta-fg: #0e2758;
+    --border: #374151; --border-strong: #4b5563; --border-soft: #1f2937;
+    --chip-bad-bg: #3f2a1c; --chip-bad-fg: #d6a483; --chip-wait-bg: #24395b;
+    --error-stroke: #e06a45;
+    --block-ink: #f3f4f6; --field-bg: #1f2937;
+  }
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
@@ -25,9 +43,9 @@ header { min-height: 58px; padding: 9px 18px; border-bottom: 2px solid var(--bor
 .actions select { max-width: 170px; height: 29px; border: 1px solid var(--border-strong); background: var(--surface); border-radius: 3px; }
 .btn { height: 29px; padding: 0 12px; border: 1px solid transparent; border-radius: 3px; background: transparent; color: var(--fg); cursor: pointer; }
 .btn:hover { background: var(--surface-alt); }.btn-secondary { border-color: var(--border-strong); background: var(--surface); }
-.btn-primary { border-color: #0a1c42; background: var(--cta); color: var(--bg); }.btn-primary:hover { background: var(--navy); }
+.btn-primary { border-color: var(--cta-border); background: var(--cta); color: var(--cta-fg); }.btn-primary:hover { filter: brightness(1.12); }
 .chip { height: 22px; padding: 0 9px; border-radius: 999px; display: inline-flex; align-items: center; gap: 5px; font-size: 9px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; white-space: nowrap; }
-.chip-ok { color: var(--sage); background: rgba(110,128,80,.14); }.chip-bad { color: #944329; background: #f5e5da; }.chip-wait { color: var(--navy); background: #eef2f7; }.chip-off { color: var(--muted); background: var(--surface-alt); }
+.chip-ok { color: var(--sage); background: rgba(110,128,80,.14); }.chip-bad { color: var(--chip-bad-fg); background: var(--chip-bad-bg); }.chip-wait { color: var(--navy); background: var(--chip-wait-bg); }.chip-off { color: var(--muted); background: var(--surface-alt); }
 .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 main { flex: 1; min-height: 0; display: flex; }
 #center { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -37,7 +55,18 @@ main { flex: 1; min-height: 0; display: flex; }
 .blocklyToolboxDiv { border-right: 1px solid var(--border) !important; box-shadow: none !important; }
 .blocklyTreeRow { height: 30px !important; border-radius: 0 3px 3px 0; }.blocklyTreeLabel { font-family: var(--sans) !important; font-size: 11px !important; }
 .blocklyFlyoutBackground { fill: var(--surface-alt) !important; fill-opacity: 1 !important; }.blocklyScrollbarHandle { fill: var(--border-strong) !important; }
-.studio-error-highlight > .blocklyPath { stroke: #c44f32 !important; stroke-width: 4px !important; }
+.studio-error-highlight > .blocklyPath { stroke: var(--error-stroke) !important; stroke-width: 4px !important; }
+/* Blockly draws block labels white by default — illegible on the pale category
+   fills. Ink follows the theme; editable field wells stay paper-toned. */
+#blockly .blocklyText, .blocklyFlyout .blocklyText { fill: var(--block-ink) !important; }
+#blockly .blocklyEditableText rect, .blocklyFlyout .blocklyEditableText rect,
+#blockly rect.blocklyFieldRect, .blocklyFlyout rect.blocklyFieldRect { fill: var(--field-bg) !important; stroke: var(--border-strong) !important; }
+/* Zelos hardcodes a white body for single-field blocks (our number literals),
+   bypassing the theme's value_blocks style. */
+.number_literal > .blocklyPath { fill: var(--field-bg) !important; stroke: var(--border-strong) !important; }
+#blockly .blocklyEditableText .blocklyText, .blocklyFlyout .blocklyEditableText .blocklyText { fill: var(--fg) !important; }
+.blocklyDropDownDiv { background: var(--surface) !important; border-color: var(--border-strong) !important; color: var(--fg) !important; }
+.blocklyWidgetDiv input { background: var(--field-bg); color: var(--fg); }
 #traits-panel { flex: none; padding: 9px 18px 13px; border-top: 1px solid var(--border); background: var(--bg); }
 #traits-panel .col-head { margin-bottom: 0; }.strip-cap { margin: 0 0 8px; color: var(--muted); font-size: 10px; }
 .traits { display: grid; grid-template-columns: repeat(4, minmax(140px, 1fr)); gap: 22px; }
@@ -53,5 +82,5 @@ main { flex: 1; min-height: 0; display: flex; }
 #json-panel { padding: 0 15px 6px; }#json-panel .disclose { padding-left: 0; padding-right: 0; }#json-preview { height: 100%; min-height: 100px; margin: 0 0 7px; padding: 9px; overflow: auto; border: 1px solid var(--border-soft); border-radius: 3px; background: var(--surface-alt); font: 10px/1.5 var(--mono); }
 #budgets { padding: 0 15px 10px; }#budgets .disclose { padding-left: 0; padding-right: 0; }#budgets:not(.collapsed) .dcap { display: none; }.budget-inner { padding-bottom: 2px; }.budget { display: grid; grid-template-columns: 48px 1fr 78px; gap: 8px; align-items: center; margin: 6px 0; color: var(--subtle); font-size: 10px; }.track { height: 4px; overflow: hidden; border-radius: 4px; background: var(--border-soft); }.fill { min-width: 2px; height: 100%; border-radius: 4px; background: var(--navy); }.fill.over { background: var(--terracotta); }.budget output { text-align: right; color: var(--fg); font: 10px var(--mono); }
 #validation { padding: 10px 15px 13px; overflow: auto; }#validation .col-head { margin-bottom: 6px; }.validation-row { width: 100%; padding: 4px 0; border: 0; background: transparent; display: flex; gap: 7px; text-align: left; color: var(--subtle); cursor: pointer; font-size: 11px; }.validation-row:hover { color: var(--navy); }.validation-row .mark { color: var(--terracotta); font-weight: 700; }.validation-row.ok .mark { color: var(--sage); }.validation-row code { color: var(--muted); font-size: 9px; }.validation-cap { margin: 6px 0 0; color: var(--muted); font-size: 9px; }
-#toast { position: fixed; z-index: 1000; bottom: 18px; left: 50%; transform: translateX(-50%); padding: 8px 14px; border-radius: 3px; background: var(--cta); color: var(--bg); font-size: 11px; font-weight: 600; opacity: 0; pointer-events: none; transition: opacity 160ms; }#toast.show { opacity: 1; }
+#toast { position: fixed; z-index: 1000; bottom: 18px; left: 50%; transform: translateX(-50%); padding: 8px 14px; border-radius: 3px; background: var(--cta); color: var(--cta-fg); font-size: 11px; font-weight: 600; opacity: 0; pointer-events: none; transition: opacity 160ms; }#toast.show { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0s !important; } }
