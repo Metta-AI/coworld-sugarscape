@@ -87,6 +87,12 @@ determinism. Relatedly, a `targets` array with exactly one entry broadcasts
 that target to every seat, so a multi-seat self-play episode can reuse a
 one-seat variant's canonical target.
 
+When the injected `tokens` list is present, its length defines the episode's
+seat count and overrides a variant's declared `seats` — the platform launches
+one player pod per token and never patches `seats`, so the token count is the
+only arity signal it guarantees. Declared `seats` still governs local runs
+without an explicit token list mismatch.
+
 Scoring includes a survival rule (2026-08-11): a seat's score is 0 unless its
 target's scope population is alive at the final tick — any living agent for
 global-scope targets, the seat's own agents for seat scope. Window samples

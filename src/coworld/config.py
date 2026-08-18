@@ -90,6 +90,13 @@ def resolve_episode_config(
     else:
         config["scenario_index"] = None
 
+    tokens = config.get("tokens")
+    if isinstance(tokens, list) and tokens:
+        # The platform's only guaranteed arity signal is the injected token
+        # list (one per player pod); a variant's declared seats may lag it,
+        # e.g. multi-seat self-play qualification rounds on a one-seat
+        # variant. The token count wins so the world matches its players.
+        config["seats"] = len(tokens)
     seats = config.get("seats", 1)
     if isinstance(seats, bool) or not isinstance(seats, int) or seats <= 0:
         raise ValueError("seats must be a positive integer")

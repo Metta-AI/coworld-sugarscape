@@ -28,6 +28,19 @@ def test_explicit_seed_is_honored_without_calling_entropy(
     assert resolve_episode_config(tiny_episode_config, seed_source=fail)["seed"] == 17
 
 
+def test_injected_token_count_overrides_declared_seats(
+    tiny_episode_config: dict[str, object],
+) -> None:
+    """The platform's arity signal is the token list, one per player pod."""
+
+    config = dict(tiny_episode_config)
+    config.update({"seats": 1, "tokens": ["qual-0", "qual-1"]})
+
+    resolved = resolve_episode_config(config)
+
+    assert resolved["seats"] == 2
+
+
 def test_platform_only_player_fields_never_reach_dtl(
     tiny_episode_config: dict[str, object],
 ) -> None:
