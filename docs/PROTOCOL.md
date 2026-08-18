@@ -53,9 +53,9 @@ The server answers with `{"type":"ack","valid":true}`. Invalid actions receive
 and may be corrected until the window closes. A seat without a valid submission
 at close receives the null ruleset and is recorded with `submitted:false`.
 
-Connected players receive a terminal `result` containing per-seat `scores`,
-details, and summary scalars after artifacts are written. Players may exit after
-a valid acknowledgement; the bundled baseline does so.
+Connected players receive a terminal `result` containing `score_method`,
+per-seat `scores`, details, and summary scalars after artifacts are written.
+Players may exit after a valid acknowledgement; the bundled baseline does so.
 
 Scoring includes a survival rule (2026-08-11): a seat's score is 0 unless its
 target's scope population is alive at the final tick — any living agent for
@@ -90,7 +90,10 @@ messages when a client performs Ping/Pong before it begins consuming the stream.
 
 The replay is a zlib-compressed `sugarscape.replay.v3` JSON document containing
 the post-episode seed, sanitized config, targets, submitted rulesets, scores,
-initial grid, and presentation frames. The static viewer accepts
+the `score_method` identifier, initial grid, and presentation frames. Results
+carry the same method identifier; each seat detail includes raw Wasserstein-1
+distance (`raw_w1`), its target-derived scale (`w1_scale`), and diagnostic
+Jensen-Shannon divergence. The static viewer accepts
 `index.html?replay=<url-encoded URL>`, `postMessage({type:"coworld-replay",bytes})`,
 and `?chrome=off`.
 

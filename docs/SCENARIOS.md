@@ -87,9 +87,9 @@ this catalog, and run the scenario-pool tests. Changing the pool size also
 changes the selection modulus and pool-cycle duration, so update both here and
 in the approved design before shipping.
 
-## Reachability gate
+## Reachability calibration
 
-Run the full pool probe before putting a changed pool into ranked rotation:
+Use the full pool probe when calibrating a changed pool:
 
 ```console
 .venv/bin/python tools/probe_pool.py
@@ -103,11 +103,13 @@ keeps that probe's detailed report and best ruleset under
 `build/probe-pool/report.json` and prints a table containing the null floor,
 greedy baseline, evolved ceiling, skill gradient, and role.
 
-A scenario passes when its evolved ceiling is at least `0.50` — the target is
-demonstrably approachable in that world. The evolved score is a lower bound on
-what is achievable, so a pass is trustworthy; a failing scenario must be
-retuned or replaced before rotation, and passing one member never waives
-validation for another member of its family.
+A scenario with an evolved ceiling of at least `0.50` is demonstrably within one
+characteristic target scale under `w1-hyperbolic/1`. The evolved score remains a
+lower bound on what is achievable, so finding a high score proves reachability;
+failing to find one does not prove the target is unreachable. Targets may be
+aspirational, so this report is calibration evidence rather than a release gate.
+Investigate empirically inert, trivial, or excessively noisy scenarios instead
+of retuning solely to cross a threshold inherited from an earlier score scale.
 
 The gradient (ceiling minus null floor) classifies rather than gates:
 
@@ -122,6 +124,8 @@ The gradient (ceiling minus null floor) classifies rather than gates:
   0.96–0.99), because an engine-generated target paired with its native
   regime is nearly self-fulfilling.
 
-The shipped pool's full probe table lives in
+The shipped pool's historical support-normalized probe table lives in
 [`docs/probe-reports/2026-08-14-solo-ladder-pool.md`](probe-reports/2026-08-14-solo-ladder-pool.md):
-18 anchors, 6 skill scenarios, all 24 passing the ceiling gate.
+18 anchors, 6 skill scenarios, all 24 above its old reference threshold. The
+target-scaled calibration evidence is recorded in
+[`docs/designs/2026-08-18-w1-scoring-v2.md`](designs/2026-08-18-w1-scoring-v2.md).

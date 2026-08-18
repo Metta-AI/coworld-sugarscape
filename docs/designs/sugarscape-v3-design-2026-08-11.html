@@ -365,7 +365,7 @@
     custom Agent subclass that interprets rulesets, plus a thin coworld WebSocket edge. Each seat
     is assigned a <strong>target outcome distribution</strong> — drawn from the Sugarscape
     literature or from real-world observed data — and scored by
-    <strong>1&nbsp;−&nbsp;normalized Wasserstein-1 distance</strong> between the measured and
+    <strong>target-scaled Wasserstein-1 similarity</strong> between the measured and
     target histograms. Leaderboards rank players by an EWMA of these absolute scores, which the
     platform ladder already supports natively, so single-player episodes are first-class.</p>
     <p>The most consequential choices a reviewer should weigh: the ruleset DSL (a budgeted
@@ -888,16 +888,24 @@
   <!-- ============ 7 · Scoring ============ -->
   <section id="scoring">
     <h2>7 · Scoring</h2>
+    <div class="callout callout-info">
+      <span class="callout-label">Amended 2026-08-18</span>
+      Support-width normalization was replaced by target-scaled hyperbolic W1 after probe
+      calibration exposed misleadingly high scores for collapsed distributions. The decision,
+      migration, and evidence are recorded in
+      <a href="2026-08-18-w1-scoring-v2.md">the scoring-v2 design</a>.
+    </div>
     <ul class="key-points">
-      <li>Score = 1 − normalized Wasserstein-1 distance between measured and target histograms, in [0,1], higher is better.</li>
+      <li>Score = S / (S + D), where D is raw Wasserstein-1 distance and S is the target's characteristic binned spread, in [0,1], higher is better.</li>
       <li>KL divergence — James's initial prompt — was considered and rejected: empty-bin infinities, no metric structure, and it breaks cross-target comparability.</li>
       <li>Jensen–Shannon divergence is computed and reported as a diagnostic, but ranking is on W1.</li>
       <li>An empty measurement scores 0 — population extinction under global scope, own-agents extinction under seat scope. Extinction is never a scoring dodge.</li>
     </ul>
     <p>Both histograms live on the same declared support and bins. W1 is computed from the two
     CDFs — the sum over bins of |CDF<sub>measured</sub> − CDF<sub>target</sub>| × bin width — and
-    normalized by the support range, giving a distance in [0,1]. The score is
-    <code>1 − W1_norm</code> ∈ [0,1], higher is better. Intuitively, W1 is the <em>work required
+    compared with a target-derived scale S: the greater of its binned mean absolute deviation
+    from the leftmost median and that median bin's width. The score is
+    <code>S / (S + D)</code> ∈ (0,1], higher is better. Intuitively, W1 is the <em>work required
     to move probability mass</em> from where the simulation put it to where the target wants it;
     the score rewards getting the mass close even when the shape is not yet exact.</p>
 
@@ -968,7 +976,7 @@
         <text x="544" y="200" text-anchor="middle" font-family="Merriweather Sans" font-size="9.5" fill="#555555">same support, same bins, same target</text>
         <text x="544" y="224" text-anchor="middle" font-family="Merriweather Sans" font-size="10.5" fill="#b36e4e" font-weight="600">mass far from target &#8594; W1 large &#8594; score low</text>
 
-        <text x="360" y="252" text-anchor="middle" font-family="Merriweather Sans" font-size="10" fill="#555555">score = 1 &#8722; W1 / support range &#8712; [0, 1]</text>
+        <text x="360" y="252" text-anchor="middle" font-family="Merriweather Sans" font-size="10" fill="#555555">score = S / (S + raw W1) &#8712; (0, 1]</text>
       </svg>
       <figcaption><span class="fig-label">Figure 2</span>Scoring by Wasserstein-1. Both panels show
       a seat's measured histogram (bars) against the same right-skewed, fat-tailed target
@@ -991,9 +999,9 @@
         from the target costs the same as mass at the far end. W1 is exactly "how far must mass
         move," so nearby shapes score nearby — a smooth gradient that rewards incremental ruleset
         improvement, which is what makes hill-climbing the game fun.</li>
-        <li><strong>Bounded and comparable</strong>: after normalization W1 lives in [0,1]
-        regardless of variable units, so scores are comparable across targets and variants —
-        important for the EWMA leaderboard.</li>
+        <li><strong>Bounded and interpretable</strong>: target scaling removes variable units;
+        0.5 means one characteristic target scale of transport, so support bounds no longer
+        dictate apparent quality.</li>
       </ul>
       <p>Jensen–Shannon divergence (symmetric, bounded, always finite) is the respectable middle
       ground; v3 computes and <strong>reports</strong> it in the results as a diagnostic, but
@@ -1010,8 +1018,9 @@
     <h3>Results schema (sketch)</h3>
 <pre><code>scores: [per-seat match score]        // the platform's ranking scalar
                                       // (docs/what-is-a-coworld.md §1.4)
+score_method: "w1-hyperbolic/1"
 per-seat details:
-  { target_id, score, w1, js_divergence, submitted,
+  { target_id, score, raw_w1, w1_scale, js_divergence, submitted,
     ruleset_nodes, agents_final, histogram: [...] }
 histograms:                           // all measured stat histograms, for
   global:   { wealth: [...], age: [...], age_at_death: [...],   // completeness
@@ -1292,7 +1301,7 @@ tests/</code></pre>
         <tr><td>DSL power</td><td>decision list + expr trees, budgeted</td>
           <td>flat weight vector / Turing-complete</td>
           <td>expressivity floor vs. halting + perf + audit ceiling</td></tr>
-        <tr><td>Scoring metric</td><td>1 − normalized W1 (JS reported)</td>
+        <tr><td>Scoring metric</td><td>Target-scaled hyperbolic W1 (JS reported)</td>
           <td>KL divergence</td>
           <td>empty-bin infinities; no support metric; unbounded</td></tr>
         <tr><td>Rating</td><td>platform-native score EWMA</td>

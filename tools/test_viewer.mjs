@@ -444,6 +444,28 @@ assert.match(badgeCommands.commands.flat().join(" "), /arc.*restore.*move.*line/
   "canvas badges must draw the same circle/diamond identities as the HUD");
 assert.doesNotMatch(viewerHtml, /yFor\(0\.4\)/,
   "the removed inequality guide must stay out of the generated viewer");
+
+const scoreMethods = JSON.parse(vm.runInContext(`(() => {
+  const target = TARGET_CATALOG.find((entry) => entry.id === "wealth.skewed-gini-0.5");
+  const collapsed = {
+    bins: target.bins,
+    probs: target.probs.map((_value, index) => index === 0 ? 1 : 0),
+    sample_count: 344,
+  };
+  const tieTarget = { bins: [0, 1, 4], probs: [0.5, 0.5] };
+  return JSON.stringify({
+    current: scoreAgainst(target, collapsed, "w1-hyperbolic/1"),
+    legacy: scoreAgainst(target, collapsed, "w1-support/1"),
+    unknown: scoreAgainst(target, collapsed, "future-method/1"),
+    empty: scoreAgainst(target, { ...collapsed, sample_count: 0 }, "w1-hyperbolic/1"),
+    tieScale: targetScale(tieTarget.probs, tieTarget.bins),
+  });
+})()`, viewerContext));
+assert.ok(Math.abs(scoreMethods.current - 0.45841492247218735) < 1e-15);
+assert.ok(Math.abs(scoreMethods.legacy - 0.9601722666666665) < 1e-15);
+assert.equal(scoreMethods.unknown, null, "unknown scoring methods must fail closed");
+assert.equal(scoreMethods.empty, 0, "empty measurements retain the engine's hard zero");
+assert.equal(scoreMethods.tieScale, 1, "median ties use the leftmost bin width");
 vm.runInContext("resetStream()", viewerContext);
 
 const model = JSON.parse(vm.runInContext(`

@@ -11,7 +11,7 @@ from .instrumentation import EpisodeInstrumentation
 from .measurement import RollingMeasurements
 from .replay import FrameSink, ReplayWriter
 from .ruleset import CompiledRuleset, compile_ruleset, validate_ruleset
-from .scoring import score_histogram
+from .scoring import SCORE_METHOD, score_histogram
 from .seats import parse_trait_ranges
 from .simulation import CoworldSugarscape
 from .targets import DEFAULT_CATALOG_PATH, load_target_catalog, resolve_seat_targets
@@ -124,7 +124,8 @@ def run_episode(
                     "target_variable": target.variable,
                     "score": score,
                     "died_before_end": died_before_end,
-                    "w1": distribution_score.w1,
+                    "raw_w1": distribution_score.raw_w1,
+                    "w1_scale": distribution_score.w1_scale,
                     "js_divergence": distribution_score.js_divergence,
                     "submitted": submitted_flags[seat],
                     "ruleset_nodes": compiled[seat].node_count,
@@ -140,6 +141,7 @@ def run_episode(
     with instrumentation.phase("result_assembly"):
         stats = world.runtimeStats
         results: dict[str, object] = {
+            "score_method": SCORE_METHOD,
             "seed": resolved["seed"],
             "scenario_index": resolved["scenario_index"],
             "timesteps_completed": world.timestep,

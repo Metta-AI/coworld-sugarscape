@@ -32,7 +32,13 @@ import zlib
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from coworld.scoring import Histogram, score_histogram  # noqa: E402
+from coworld.scoring import (  # noqa: E402
+    LEGACY_SCORE_METHOD,
+    SCORE_METHOD,
+    Histogram,
+    score_histogram,
+    wasserstein_1,
+)
 from coworld.replay import WEALTH_QUANTUM  # noqa: E402
 
 V1_REPLAY_FORMAT = "sugarscape.replay.v1"
@@ -49,12 +55,15 @@ def load_catalog() -> list[dict]:
     )
 
 
-def score_against(target: dict, measured: dict | None) -> float | None:
+def score_against(
+    target: dict,
+    measured: dict | None,
+    score_method: str,
+) -> float | None:
     """Score a measured histogram against a target using the ENGINE's scorer.
 
-    Re-implementing `1 - normalized_W1` here would risk quietly disagreeing with
-    the number the episode was actually scored on, which is the one thing this
-    view must not do.
+    Missing replay method identifiers are resolved by the caller to the legacy
+    scorer. Unknown methods fail closed instead of displaying a false score.
     """
 
     if not measured or not measured.get("probs"):
@@ -66,7 +75,16 @@ def score_against(target: dict, measured: dict | None) -> float | None:
         probs=tuple(measured["probs"]),
         sample_count=int(measured.get("sample_count") or 0),
     )
-    return score_histogram(histogram, tuple(target["probs"])).score
+    if histogram.empty:
+        return 0.0
+    target_probs = tuple(target["probs"])
+    if score_method == SCORE_METHOD:
+        return score_histogram(histogram, target_probs).score
+    if score_method == LEGACY_SCORE_METHOD:
+        distance = wasserstein_1(histogram.probs, target_probs, histogram.bins)
+        support = histogram.bins[-1] - histogram.bins[0]
+        return min(1.0, max(0.0, 1.0 - distance / support))
+    return None
 
 
 def load_v3(path: Path) -> dict:
@@ -90,6 +108,7 @@ def seat_names(header: dict) -> list[dict]:
 
 def convert(document: dict) -> dict:
     header = document["header"]
+    score_method = header.get("score_method", LEGACY_SCORE_METHOD)
     grid = header["initial_grid"]
     width, height = grid["width"], grid["height"]
 
@@ -216,7 +235,7 @@ def convert(document: dict) -> dict:
                 "targetProbs": target.get("probs") or [],
                 "measuredProbs": measurement.get("probs") or [],
                 "sampleCount": measurement.get("sample_count", 0),
-                "score": score_against(target, measurement),
+                "score": score_against(target, measurement, score_method),
             })
         return {
             "seats": seats,
