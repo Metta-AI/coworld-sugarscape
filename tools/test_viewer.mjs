@@ -335,6 +335,115 @@ assert.deepEqual(goldenModel.events, goldenFixture.expected.events,
 assert.deepEqual(goldenModel.sought.map(frameHash),
   goldenFixture.expected.seek_order.map((index) => goldenHashes[index]),
   "random seeking must return the exact indexed materialized frame");
+
+// A duo is one world with two independently scored objectives. Both assigned
+// targets must be visible together, and the player glyphs must remain distinct
+// without borrowing the culture colour carried by the gnomes themselves.
+const duoPresentation = JSON.parse(vm.runInContext(`(() => {
+  const store = FrameStore.fromV3(${JSON.stringify(goldenFixture.document)});
+  const frame = store.frameAt(2);
+  targetPick.hidden = false;
+  const pickerShown = fillTargetPicker(frame);
+  return JSON.stringify({
+    markup: targetHistogram(frame, 0, 0, 500, 358),
+    pickerShown,
+    pickerHidden: targetPick.hidden,
+    playerOne: playerShape(10, 10, 0, 5, "white", "black", 1),
+    playerTwo: playerShape(10, 10, 1, 5, "white", "black", 1),
+  });
+})()`, viewerContext));
+assert.match(duoPresentation.markup, /Alpha/);
+assert.match(duoPresentation.markup, /Beta/);
+assert.match(duoPresentation.markup, /fixture\.alpha/);
+assert.match(duoPresentation.markup, /fixture\.beta/);
+assert.match(duoPresentation.markup, /0\.500/);
+assert.match(duoPresentation.markup, /0\.250/);
+assert.match(duoPresentation.markup, /filled bars = measured/);
+assert.equal(duoPresentation.pickerShown, false,
+  "a single target picker must not replace either assigned duo target");
+assert.equal(duoPresentation.pickerHidden, true);
+assert.match(duoPresentation.playerOne, /^<circle/);
+assert.match(duoPresentation.playerTwo, /^<path/);
+assert.notEqual(duoPresentation.playerOne, duoPresentation.playerTwo);
+
+const targetLayouts = JSON.parse(vm.runInContext(`(() => {
+  const within = (card, bottom) => card.y + card.height <= bottom;
+  const chartWithin = (card, seat) => {
+    const markup = compactTargetReading(seat, card.x, card.y, card.width, card.height);
+    const axis = markup.match(/<line x1="[^"]+" y1="([^"]+)" x2="[^"]+" y2="([^"]+)"/);
+    return axis && Number(axis[1]) <= card.y + card.height && Number(axis[2]) <= card.y + card.height;
+  };
+  setStageWidth(640); state.largeText = false; measureDensity();
+  const compactDuo = targetReadingLayout(2, dense(), 0, 0, 500, 358);
+  const compactFour = targetReadingLayout(4, dense(), 0, 0, 500, 358);
+  const longSeat = {
+    seat: 0, name: "A player with a deliberately long display name",
+    variable: "majority_tribe_share", targetId: "tribe.convergence",
+    targetProbs: [0.5, 0.5], measuredProbs: [0.4, 0.6], score: 0.75,
+  };
+  const longMarkup = compactTargetReading(
+    longSeat, compactDuo[0].x, compactDuo[0].y, compactDuo[0].width, compactDuo[0].height,
+  );
+  const compactDuoChartsBounded = compactDuo.every((card) => chartWithin(card, longSeat));
+  const compactFourChartsBounded = compactFour.every((card) => chartWithin(card, longSeat));
+  setStageWidth(1600); measureDensity();
+  const sparseDuo = targetReadingLayout(2, dense(), 0, 0, 500, 358);
+  return JSON.stringify({
+    compactDuo, compactFour, sparseDuo, longMarkup,
+    compactDuoBounded: compactDuo.every((card) => within(card, 344)),
+    compactFourBounded: compactFour.every((card) => within(card, 344)),
+    compactDuoChartsBounded, compactFourChartsBounded,
+  });
+})()`, viewerContext));
+assert.equal(targetLayouts.compactDuoBounded, true);
+assert.equal(targetLayouts.compactFourBounded, true);
+assert.equal(targetLayouts.compactDuoChartsBounded, true);
+assert.equal(targetLayouts.compactFourChartsBounded, true);
+assert.equal(new Set(targetLayouts.compactDuo.map((card) => card.column)).size, 2,
+  "dense duo targets must use columns to preserve chart height");
+assert.equal(new Set(targetLayouts.sparseDuo.map((card) => card.row)).size, 2,
+  "full-size duo targets remain a vertical pair");
+assert.match(targetLayouts.longMarkup, /…/,
+  "long production player and target labels must elide inside their card");
+assert.doesNotMatch(targetLayouts.longMarkup, /majority_tribe_share · tribe\.convergence/);
+
+const soloPicker = JSON.parse(vm.runInContext(`(() => {
+  targetOptionsKey = ""; targetChoice = null; targetPick.hidden = true;
+  const shown = fillTargetPicker({ coworld: {
+    seats: [{ seat: 0, targetId: "solo.target" }],
+    choices: [{ id: "solo.target", assigned: true, score: 1 }],
+  } });
+  return JSON.stringify({ shown, hidden: targetPick.hidden });
+})()`, viewerContext));
+assert.deepEqual(soloPicker, { shown: true, hidden: false },
+  "solo episodes retain counterfactual target browsing");
+
+const badgeCommands = JSON.parse(vm.runInContext(`(() => {
+  const commands = [];
+  const alphaStack = [];
+  const context = {
+    globalAlpha: 0.25,
+    save() { alphaStack.push(this.globalAlpha); commands.push(["save", this.globalAlpha]); },
+    restore() { this.globalAlpha = alphaStack.pop(); commands.push(["restore", this.globalAlpha]); },
+    beginPath() { commands.push("begin"); }, closePath() { commands.push("close"); },
+    arc() { commands.push("arc"); }, moveTo() { commands.push("move"); },
+    lineTo() { commands.push("line"); }, rect() { commands.push("rect"); },
+    fill() { commands.push(["fill", this.globalAlpha]); },
+    stroke() { commands.push(["stroke", this.globalAlpha]); },
+  };
+  drawPlayerBadge(context, 10, 10, 0, 12);
+  drawPlayerBadge(context, 10, 10, 1, 12);
+  return JSON.stringify({ commands, finalAlpha: context.globalAlpha });
+})()`, viewerContext));
+assert.equal(badgeCommands.commands.filter((command) => command[0] === "save").length, 2);
+assert.equal(badgeCommands.commands.filter((command) => command[0] === "restore").length, 2);
+assert.deepEqual(badgeCommands.commands.filter((command) => command[0] === "fill").map((command) => command[1]), [1, 1]);
+assert.deepEqual(badgeCommands.commands.filter((command) => command[0] === "stroke").map((command) => command[1]), [1, 1]);
+assert.equal(badgeCommands.finalAlpha, 0.25);
+assert.match(badgeCommands.commands.flat().join(" "), /arc.*restore.*move.*line/,
+  "canvas badges must draw the same circle/diamond identities as the HUD");
+assert.doesNotMatch(viewerHtml, /yFor\(0\.4\)/,
+  "the removed inequality guide must stay out of the generated viewer");
 vm.runInContext("resetStream()", viewerContext);
 
 const model = JSON.parse(vm.runInContext(`
