@@ -366,6 +366,70 @@ assert.match(duoPresentation.playerOne, /^<circle/);
 assert.match(duoPresentation.playerTwo, /^<path/);
 assert.notEqual(duoPresentation.playerOne, duoPresentation.playerTwo);
 
+// Commonwealth is a scalar objective, not a distribution target. Its rail
+// carries the running wellness sum and DTL component diagnostics, and never
+// offers the distribution overlay or counterfactual target picker.
+const commonwealthDocument = JSON.parse(JSON.stringify(goldenFixture.document));
+commonwealthDocument.header.config.players = [{ name: "Commonwealth" }];
+commonwealthDocument.header.targets = [{
+  id: "wellness.max", kind: "maximize", variable: "wellness",
+  description: "Maximize survivor wellness.",
+}];
+commonwealthDocument.header.scores = [1.5];
+commonwealthDocument.header.roster = commonwealthDocument.header.roster.filter((row) => row[1] === 0);
+commonwealthDocument.header.initial_agents = commonwealthDocument.header.initial_agents
+  .filter((row) => row[0] === 1);
+commonwealthDocument.header.seat_details = [{
+  seat: 0, score: 1.5, score_method: "wellness-sum/1", survivor_count: 2,
+  mean_wellness: 0.75,
+  component_means: { health: 1, conflict: 0, social: -0.25, family: 0.5, wealth: 0.1 },
+}];
+commonwealthDocument.frames.forEach((frame, index) => {
+  frame.agent_deltas.births = frame.agent_deltas.births.filter((row) => row[1] === 0);
+  frame.agent_deltas.upsert = frame.agent_deltas.upsert.filter((row) => row[0] === 1);
+  frame.agent_deltas.remove = frame.agent_deltas.remove.filter((id) => id === 1);
+  frame.running = [{
+    seat: 0, kind: "maximize", variable: "wellness", score_method: "wellness-sum/1",
+    score: 0.5 + index * 0.5, survivor_count: index + 1, mean_wellness: 0.5,
+    component_means: { health: 1, conflict: 0, social: -0.25, family: 0.5, wealth: 0.1 },
+    histogram: { support: [0, 1], bins: [0, 0.5, 1], probs: [0.5, 0.5], sample_count: 2 },
+  }];
+});
+const commonwealthPresentation = JSON.parse(vm.runInContext(`(() => {
+  frameStore = FrameStore.fromV3(${JSON.stringify(commonwealthDocument)});
+  events = frameStore.events; wealthSeries = frameStore.wealthSeries;
+  state.cursor = frameStore.count - 1; state.finished = true;
+  targetPick.hidden = false;
+  const frame = frameAt(frameStore.count - 1);
+  return JSON.stringify({
+    panel: commonwealthPanel(frame, 0, 0, 500, 358),
+    strapline: mastheadStrapline(frame, false),
+    pickerShown: fillTargetPicker(frame),
+    pickerHidden: targetPick.hidden,
+    end: endCard(frame),
+  });
+})()`, viewerContext));
+assert.match(commonwealthPresentation.panel, /How much wellness survived/);
+assert.match(commonwealthPresentation.panel, /wellness sum over time/);
+assert.match(commonwealthPresentation.panel, /health/);
+assert.match(commonwealthPresentation.panel, /conflict/);
+assert.match(commonwealthPresentation.panel, /social/);
+assert.match(commonwealthPresentation.panel, /family/);
+assert.match(commonwealthPresentation.panel, /wealth/);
+assert.match(commonwealthPresentation.panel, /<polyline/);
+assert.doesNotMatch(commonwealthPresentation.panel, /white line = target/);
+assert.match(commonwealthPresentation.strapline, /maximize survivor wellness/);
+assert.equal(commonwealthPresentation.pickerShown, false);
+assert.equal(commonwealthPresentation.pickerHidden, true);
+assert.match(commonwealthPresentation.end, /1\.500 wellness across 2 survivors/);
+assert.match(commonwealthPresentation.end, /summed final-window wellness/);
+
+// Restore the distribution fixture for the remaining model assertions.
+vm.runInContext(`(() => {
+  frameStore = FrameStore.fromV3(${JSON.stringify(goldenFixture.document)});
+  events = frameStore.events; wealthSeries = frameStore.wealthSeries; state.cursor = 0;
+})()`, viewerContext);
+
 const targetLayouts = JSON.parse(vm.runInContext(`(() => {
   const within = (card, bottom) => card.y + card.height <= bottom;
   const chartWithin = (card, seat) => {

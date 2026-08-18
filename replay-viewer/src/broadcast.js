@@ -401,13 +401,18 @@ class FrameStore {
           ...(reading.score !== undefined ? { score: reading.score } : {}),
           assigned: true,
         };
+        if (target.kind) seatRow.targetKind = target.kind;
+        if (reading.score_method) seatRow.scoreMethod = reading.score_method;
+        if (reading.survivor_count !== undefined) seatRow.survivorCount = reading.survivor_count;
+        if (reading.mean_wellness !== undefined) seatRow.meanWellness = reading.mean_wellness;
+        if (reading.component_means) seatRow.componentMeans = reading.component_means;
         return seatRow;
       });
       return { seats, choices: targetChoices(header, measuredNow), finalScores: store.finalScores };
     };
     store.coworld.push(coworld());
 
-    for (const frame of document_.frames) {
+    for (const [frameIndex, frame] of document_.frames.entries()) {
       timesteps.push(frame.timestep);
       stats.push(frame.runtimeStats ?? null);
       for (const row of frame.cell_deltas) {
@@ -430,6 +435,12 @@ class FrameStore {
       for (const [variable, histogram] of Object.entries(frame.measured ?? {})) {
         measuredNow.set(variable, histogram);
         changed = true;
+      }
+      if (frameIndex === document_.frames.length - 1) {
+        for (const detail of header.seat_details ?? []) {
+          latest.set(detail.seat, { ...(latest.get(detail.seat) ?? {}), ...detail });
+          changed = true;
+        }
       }
       store.coworld.push(changed ? coworld() : store.coworld.at(-1));
     }
@@ -2424,6 +2435,9 @@ function wealthTotal(frame) {
 function mastheadStrapline(frame, big) {
   const seats = frame.coworld?.seats ?? [];
   if (seats.length > 0) {
+    if (seats[0].targetKind === "maximize" && seats[0].variable === "wellness") {
+      return big ? "maximize survivor wellness" : "one constitution · maximize survivor wellness";
+    }
     const variable = seats[0].variable ?? "wealth";
     // Measured, like the wording it replaces: the sparse line shares its band
     // with the clock panel, which starts at 506. "one ruleset each · closest
@@ -3755,6 +3769,84 @@ function targetHistogram(frame, x, y, width, height) {
   return markup;
 }
 
+/** Commonwealth replaces the distribution overlay with the objective's own
+ *  history and the five DTL happiness components that produced it. */
+function commonwealthPanel(frame, x, y, width, height) {
+  const seat = frame.coworld?.seats?.[0] ?? {};
+  const score = typeof seat.score === "number" ? seat.score : null;
+  let markup = panel(x, y, width, height);
+  markup += eyebrow("Commonwealth", x + 18, y + 32);
+  markup += text("How much wellness survived?", x + 18, y + 68, {
+    size: T(26), weight: 700, fill: C.paper,
+  });
+  if (seat.scoreMethod && seat.scoreMethod !== "wellness-sum/1") {
+    return markup + text(`Unsupported score method: ${seat.scoreMethod}`, x + 18, y + 112, {
+      size: T(20), weight: 600, family: F.mono, fill: C.loss,
+    });
+  }
+  markup += text(score === null ? "—" : score.toFixed(3), x + 18, y + 126, {
+    size: T(44), weight: 700, family: F.mono, fill: score === null ? C.muted : C.gold,
+  });
+  markup += text("wellness sum", x + 18, y + 154, {
+    size: T(18), weight: 600, family: F.mono, fill: C.muted,
+  });
+  const survivorLabel = seat.survivorCount === undefined ? "— survivors"
+    : `${seat.survivorCount} survivor${seat.survivorCount === 1 ? "" : "s"}`;
+  const meanLabel = typeof seat.meanWellness === "number"
+    ? `mean ${seat.meanWellness.toFixed(3)}` : "mean —";
+  markup += text(`${survivorLabel} · ${meanLabel}`, x + width - 18, y + 126, {
+    size: T(20), weight: 600, family: F.mono, fill: C.paper, anchor: "end",
+  });
+
+  const points = [];
+  for (let index = 0; index <= currentIndex(); index += 1) {
+    const reading = frameStore.summaryAt(index)?.coworld?.seats?.[0];
+    if (typeof reading?.score === "number") {
+      points.push([frameStore.timestepAt(index), reading.score]);
+    }
+  }
+  const plotX = x + 18;
+  const plotY = y + 178;
+  const plotW = width - 36;
+  const plotH = Math.max(36, height - 292);
+  markup += `<line x1="${plotX}" y1="${plotY + plotH}" x2="${plotX + plotW}" `
+    + `y2="${plotY + plotH}" stroke="${C.axis}" stroke-width="1"/>`;
+  if (points.length) {
+    const firstTick = points[0][0];
+    const lastTick = Math.max(firstTick + 1, points.at(-1)[0]);
+    const ceiling = Math.max(1, ...points.map((point) => point[1]));
+    const budget = chartPointBudget(plotW);
+    const sampled = lttbIndices(points.length, budget,
+      (index) => points[index][0], (index) => points[index][1]);
+    const coordinates = sampled.map((index) => {
+      const [tick, value] = points[index];
+      const px = plotX + ((tick - firstTick) / (lastTick - firstTick)) * plotW;
+      const py = plotY + plotH - (value / ceiling) * plotH;
+      return `${px.toFixed(1)},${py.toFixed(1)}`;
+    });
+    markup += `<polyline points="${coordinates.join(" ")}" fill="none" stroke="${C.gold}" `
+      + `stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`;
+  }
+  markup += text("wellness sum over time", plotX, plotY + plotH + 22, {
+    size: T(17), weight: 600, family: F.mono, fill: C.muted,
+  });
+
+  const components = seat.componentMeans ?? {};
+  const labels = ["health", "conflict", "social", "family", "wealth"];
+  const componentY = y + height - 46;
+  labels.forEach((label, index) => {
+    const columnX = x + 18 + index * ((width - 36) / labels.length);
+    const value = typeof components[label] === "number" ? components[label].toFixed(3) : "—";
+    markup += text(label, columnX, componentY - 22, {
+      size: T(16), weight: 600, family: F.mono, fill: C.dim,
+    });
+    markup += text(value, columnX, componentY + 8, {
+      size: T(20), weight: 600, family: F.mono, fill: C.paper,
+    });
+  });
+  return markup;
+}
+
 /** One of several assigned targets. Duo targets stay visible together: changing
  *  the target picker would answer a different counterfactual question and hide
  *  the other player's actual objective. */
@@ -4236,8 +4328,12 @@ function endCard(frame) {
    * says how close the SHAPE came and not what the world did. */
   const seatScore = frame.coworld?.seats?.find((entry) => entry.seat === winner.index);
   const matched = Boolean(seatScore);
+  const commonwealth = seatScore?.targetKind === "maximize" && seatScore?.variable === "wellness";
   const actual = matched ? targetActual(frame, seatScore.variable) : null;
-  const verdict = matched && typeof seatScore.score === "number"
+  const verdict = commonwealth && typeof seatScore.score === "number"
+    ? `${winner.name} finishes with ${seatScore.score.toFixed(3)} wellness across `
+      + `${seatScore.survivorCount ?? winner.population} survivors.`
+    : matched && typeof seatScore.score === "number"
     ? `${winner.name} scores ${seatScore.score.toFixed(3)} against `
       + `${seatScore.targetId ?? "its target"}`
       + `${actual ? ` — ${actual.label} ${actual.value}` : ""}.`
@@ -4356,8 +4452,12 @@ function endCard(frame) {
     rowY += rowStep;
   }
   const scoredCard = Array.isArray(frame.coworld?.seats) && frame.coworld.seats.length > 0;
+  const commonwealthCard = frame.coworld?.seats?.[0]?.targetKind === "maximize"
+    && frame.coworld?.seats?.[0]?.variable === "wellness";
   markup += text(
-    scoredCard
+    commonwealthCard
+      ? "Score is summed final-window wellness for settlers alive at the final tick."
+      : scoredCard
       ? "Score is how closely the measured distribution matches the target — 1.000 is exact."
       : big
         ? `Score is all the ${resourceName()} still held by living settlers.`
@@ -4462,8 +4562,12 @@ function drawHud(frame, index) {
    * already know what a Lorenz curve is; inequality over time says the thing
    * that panel was reaching for and says it plainly.
    */
+  const commonwealth = frame.coworld?.seats?.[0]?.targetKind === "maximize"
+    && frame.coworld?.seats?.[0]?.variable === "wellness";
   let markup = scored
-    ? targetHistogram(frame, RAIL.x, RAIL.y, RAIL.w, raceH)
+    ? commonwealth
+      ? commonwealthPanel(frame, RAIL.x, RAIL.y, RAIL.w, raceH)
+      : targetHistogram(frame, RAIL.x, RAIL.y, RAIL.w, raceH)
     : raceChart(frame, RAIL.x, RAIL.y, RAIL.w, raceH);
   markup += inequalityOverTime(frame, RAIL.x, RAIL.y + raceH + railGap, RAIL.w, feedH);
   // Following a settler swaps the bottom panel for that settler. The two upper
@@ -4554,6 +4658,11 @@ let targetOptionsKey = "";
 
 function fillTargetPicker(frame) {
   const choices = frame.coworld?.choices ?? [];
+  if (frame.coworld?.seats?.[0]?.targetKind !== undefined
+      && frame.coworld.seats[0].targetKind !== "distribution") {
+    targetPick.hidden = true;
+    return false;
+  }
   // Browsing counterfactual catalog targets is useful for a solo episode. In a
   // multi-seat episode it would replace both assigned objectives with one menu
   // choice, which is precisely the ambiguity the paired target cards remove.
@@ -5392,7 +5501,8 @@ function scoreAgainst(target, measured, scoreMethod = LEGACY_SCORE_METHOD) {
 function targetChoices(header, measuredNow) {
   const assigned = new Set((header.targets ?? []).map((target) => target.id));
   const scoreMethod = header.score_method ?? LEGACY_SCORE_METHOD;
-  return TARGET_CATALOG.map((target) => {
+  return TARGET_CATALOG.filter((target) => (target.kind ?? "distribution") === "distribution")
+    .map((target) => {
     const measured = measuredNow.get(target.variable);
     return {
       id: target.id,
@@ -5404,7 +5514,7 @@ function targetChoices(header, measuredNow) {
       sampleCount: measured?.sample_count ?? 0,
       score: scoreAgainst(target, measured, scoreMethod),
     };
-  });
+    });
 }
 
 /** Parse a deflate-compressed recording without retaining a decoded-string

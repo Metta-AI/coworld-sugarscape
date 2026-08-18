@@ -27,16 +27,23 @@ touching platform-facing code.
 
 The current implementation is a Python coworld in `src/coworld/` backed by a
 minimally patched, pinned DTL simulation in `src/sugarscape/`. Each seat receives
-one target distribution and submits one declarative SugarLang ruleset; the world
-then runs without player I/O and scores how closely the measured outcome matches
-the target.
+one target and submits one declarative SugarLang ruleset; the world then runs
+without player I/O. Distribution leagues score how closely the measured outcome
+matches the target, while Commonwealth scores the wellness produced by a fixed
+constitution.
 
-Ranked play uses a deterministic pool of 24 curated scenarios spanning all
-seven targets and six mechanical families, forcing rulesets to adapt to the
+Ranked distribution play uses a deterministic pool of 24 curated scenarios spanning all
+seven distribution targets and six mechanical families, forcing rulesets to adapt to the
 observed world. `solo-ladder` assigns one policy one target; `duo-ladder` seats
 two policies in the same world with different global targets and independent
-scores. See [`docs/SCENARIOS.md`](docs/SCENARIOS.md) for the catalog, selection
-rule, regeneration workflow, and per-scenario reachability calibration.
+scores. `commonwealth` presents the same canonical world and `wellness.max`
+objective every episode: the submitted ruleset is the constitution, and its
+score is the summed final-window wellness of agents surviving to the final tick.
+See [`docs/SCENARIOS.md`](docs/SCENARIOS.md) for the distribution catalog,
+selection rule, regeneration workflow, and per-scenario reachability
+calibration, and
+[`docs/designs/2026-08-18-commonwealth-league.md`](docs/designs/2026-08-18-commonwealth-league.md)
+for the Commonwealth contract.
 
 Run the offline suite with `.venv/bin/python -m pytest`. For local container
 development, `docker compose up` starts the one-seat config in `config.json` and
