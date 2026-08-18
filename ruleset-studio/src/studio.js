@@ -6,6 +6,7 @@ import {
   selectedSubtree,
   studioTheme,
 } from "./blocks.js";
+import {PlaySettings, RunController, readRunOrigin} from "./play.js";
 
 const limits = {nodes: 256, depth: 16, bytes: 32768};
 const apiBase = new URLSearchParams(location.search).get("api") ?? "http://127.0.0.1:4323";
@@ -16,10 +17,27 @@ let activeFile = null;
 let compilation = null;
 let serverValidation = null;
 let validationGeneration = 0;
+let validatedGeneration = 0;
 let validationTimer = null;
 let highlighted = null;
 let toastTimer = null;
 let applyingSnapshot = false;
+let scenarioCatalog = null;
+let playSettings = null;
+let runState = {phase: "idle", run: null, status: null, message: "Ready to compile."};
+
+const playApi = {
+  startRun(ruleset, options) {
+    if (options.seed !== null && typeof options.seed !== "string") throw new TypeError("studio seeds must remain strings");
+    const body = {ruleset, variant: options.variant, mode: options.mode};
+    for (const name of ["scenario", "seed", "timesteps"]) if (options[name] !== undefined) body[name] = options[name];
+    return fetchJson("/api/run", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+  },
+  getRun(runId) { return fetchJson(`/api/run/${runId}`); },
+  cancelRun(runId) { return fetchJson(`/api/run/${runId}`, {method: "DELETE"}); },
+  setDisplayedRun(runId) { return fetchJson("/api/displayed-run", {method: "PUT", headers: {"Content-Type": "application/json"}, body: JSON.stringify({run_id: runId})}); },
+};
+const runController = new RunController(playApi, readRunOrigin());
 
 const darkScheme = window.matchMedia("(prefers-color-scheme: dark)");
 
@@ -114,8 +132,30 @@ document.getElementById("new-button").addEventListener("click", () => {
 });
 document.getElementById("load-button").addEventListener("click", () => loadRuleset(document.getElementById("file-select").value));
 document.getElementById("save-button").addEventListener("click", saveRuleset);
-document.getElementById("context-select").addEventListener("change", event => selectContext(event.target.value));
+document.getElementById("context-select").addEventListener("change", event => {
+  playSettings?.setContext(event.target.value);
+  selectContext(event.target.value);
+  renderPlaySettings();
+});
 document.getElementById("chat-form").addEventListener("submit", sendChat);
+document.getElementById("play-button").addEventListener("click", () => void playOrStop());
+document.getElementById("editor-button").addEventListener("click", async () => {
+  await runController.showEditor();
+  setEditorVisible(true);
+});
+document.getElementById("canonical-button").addEventListener("click", () => void runController.openCanonical());
+document.getElementById("score-chip").addEventListener("click", async () => {
+  await runController.reopen();
+  setEditorVisible(false);
+});
+bindPlaySettings();
+document.addEventListener("keydown", event => {
+  if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+    event.preventDefault();
+    if (canPlay() || ["running", "cancelling"].includes(runState.phase)) void playOrStop();
+  }
+  if (event.key === "Escape" && !document.getElementById("settings-panel").hidden) closePlaySettings();
+});
 
 async function fetchJson(path, options = {}) {
   const response = await fetch(`${apiBase}${path}`, options);
@@ -132,16 +172,22 @@ async function fetchJson(path, options = {}) {
 
 async function boot() {
   try {
-    const [contextPayload, filesPayload] = await Promise.all([fetchJson("/api/context"), fetchJson("/api/rulesets")]);
+    const [contextPayload, filesPayload, scenarios] = await Promise.all([
+      fetchJson("/api/context"), fetchJson("/api/rulesets"), fetchJson("/api/scenarios"),
+    ]);
     contexts = contextPayload.contexts;
+    scenarioCatalog = scenarios;
+    playSettings = new PlaySettings(scenarioCatalog);
     renderContexts();
     selectContext(contextPayload.default);
+    renderPlaySettings();
     renderFiles(filesPayload.rulesets);
     const latest = filesPayload.rulesets[0]?.name ?? "worked-example.json";
     await loadRuleset(latest);
   } catch (error) {
     setStatus("bad", "API unavailable");
     renderIssues([{path: "$", message: `Studio API unavailable: ${error.message}`}]);
+    renderPlayButton();
   }
 }
 
@@ -252,7 +298,9 @@ function updateStudio() {
   document.getElementById("json-preview").textContent = compilation.text;
   renderBudgets(compilation.budgets);
   serverValidation = null;
+  validatedGeneration = 0;
   setStatus("wait", "Checking");
+  renderPlayButton();
   renderIssues(localIssues());
   clearTimeout(validationTimer);
   const generation = ++validationGeneration;
@@ -276,13 +324,16 @@ async function validateCandidate(generation) {
     const result = await fetchJson("/api/validate", {method: "POST", headers: {"Content-Type": "application/json"}, body: compilation.text});
     if (generation !== validationGeneration) return;
     serverValidation = result;
+    validatedGeneration = generation;
     const issues = [...localIssues(), ...result.errors];
     renderIssues(issues);
     setStatus(issues.length || !result.valid ? "bad" : "ok", issues.length || !result.valid ? `${issues.length} issue${issues.length === 1 ? "" : "s"}` : "Valid");
+    renderPlayButton();
   } catch (error) {
     if (generation !== validationGeneration) return;
     renderIssues([...localIssues(), {path: "$", message: `Validation unavailable: ${error.message}`}]);
     setStatus("bad", "Offline");
+    renderPlayButton();
   }
 }
 
@@ -449,6 +500,202 @@ window.link.onStatus(health => {
   const chip = document.getElementById("bridge-chip");
   chip.className = `chip ${health.bridgeConnected ? "chip-ok" : "chip-off"}`;
   chip.lastChild.textContent = health.bridgeConnected ? "Bridge live" : "Not connected";
+});
+
+function canPlay() {
+  return Boolean(
+    playSettings
+    && serverValidation?.valid
+    && validatedGeneration === validationGeneration
+    && localIssues().length === 0
+    && (playSettings.state.seedMode !== "fixed" || playSettings.validFixedSeed())
+  );
+}
+
+function playReason() {
+  if (validatedGeneration !== validationGeneration || serverValidation === null) return "Waiting for compiler validation.";
+  const issues = localIssues().length + (serverValidation.errors?.length || 0);
+  if (!serverValidation.valid || issues) return `${issues || 1} validation ${issues === 1 ? "issue" : "issues"}.`;
+  if (!playSettings) return "Loading run configuration.";
+  if (playSettings.state.seedMode === "fixed" && !playSettings.validFixedSeed()) return "Fixed seed must use canonical decimal digits.";
+  return "Ready to compile and run.";
+}
+
+function renderPlayButton() {
+  const button = document.getElementById("play-button");
+  const active = ["running", "cancelling"].includes(runState.phase);
+  if (active) {
+    button.innerHTML = '<span aria-hidden="true">■</span> Stop';
+    button.disabled = runState.phase === "cancelling";
+    button.removeAttribute("aria-disabled");
+  } else if (runState.phase === "compiling") {
+    button.textContent = "Compiling…";
+    button.disabled = true;
+    button.removeAttribute("aria-disabled");
+  } else {
+    button.innerHTML = '<span aria-hidden="true">▶</span> Play';
+    button.disabled = false;
+    button.setAttribute("aria-disabled", String(!canPlay()));
+  }
+  const reason = active ? "Stop the active engine run." : playReason();
+  document.getElementById("play-reason").textContent = reason;
+  button.title = canPlay() ? "Build and run · Command or Control + Enter" : reason;
+}
+
+function bindPlaySettings() {
+  document.getElementById("settings-button").addEventListener("click", () => {
+    const panel = document.getElementById("settings-panel");
+    panel.hidden = !panel.hidden;
+    document.getElementById("settings-button").setAttribute("aria-expanded", String(!panel.hidden));
+  });
+  document.getElementById("close-settings").addEventListener("click", closePlaySettings);
+  document.getElementById("variant-select").addEventListener("change", event => { playSettings.setVariant(event.target.value); syncSettingsContext(); renderPlaySettings(); });
+  document.getElementById("mode-fieldset").addEventListener("change", event => {
+    if (event.target.name === "run-mode") { playSettings.setMode(event.target.value); syncSettingsContext(); renderPlaySettings(); }
+  });
+  document.getElementById("scenario-select").addEventListener("change", event => { playSettings.update({scenarioId: event.target.value}); syncSettingsContext(); renderPlaySettings(); });
+  document.querySelectorAll('input[name="seed-mode"]').forEach(input => input.addEventListener("change", event => { playSettings.update({seedMode: event.target.value}); syncSettingsContext(); renderPlaySettings(); }));
+  document.getElementById("fixed-seed").addEventListener("input", event => { playSettings.update({fixedSeed: event.target.value}); syncSettingsContext(); renderPlaySettings(); });
+  document.getElementById("last-seed-button").addEventListener("click", () => { playSettings.useLastRunSeed(); syncSettingsContext(); renderPlaySettings(); });
+  document.getElementById("timesteps").addEventListener("change", event => {
+    const value = event.target.value === "" ? null : Number(event.target.value);
+    if (value !== null && (!Number.isInteger(value) || value < 1 || value > 2000)) {
+      event.target.setCustomValidity("Choose an integer from 1 to 2,000 timesteps.");
+      event.target.reportValidity();
+      return;
+    }
+    event.target.setCustomValidity("");
+    playSettings.update({timesteps: value});
+    renderPlaySettings();
+  });
+  document.getElementById("quick-button").addEventListener("click", () => { playSettings.update({timesteps: 100}); renderPlaySettings(); });
+}
+
+function closePlaySettings() {
+  document.getElementById("settings-panel").hidden = true;
+  document.getElementById("settings-button").setAttribute("aria-expanded", "false");
+  document.getElementById("settings-button").focus();
+}
+
+function syncSettingsContext() {
+  const contextId = playSettings?.contextId();
+  if (contextId && activeContext?.id !== contextId) selectContext(contextId);
+}
+
+function renderPlaySettings() {
+  if (!playSettings || !scenarioCatalog) return;
+  const state = playSettings.snapshot();
+  const variant = playSettings.variant();
+  const variantSelect = document.getElementById("variant-select");
+  variantSelect.replaceChildren(...scenarioCatalog.variants.map(entry => new Option(entry.name, entry.id)));
+  variantSelect.value = state.variantId;
+  document.getElementById("mode-fieldset").querySelectorAll("input").forEach(input => {
+    input.checked = input.value === state.mode;
+    input.parentElement.hidden = !variant.modes.includes(input.value);
+  });
+  const scenarioField = document.getElementById("scenario-field");
+  scenarioField.hidden = state.mode !== "exploration";
+  const scenarioSelect = document.getElementById("scenario-select");
+  scenarioSelect.replaceChildren(...variant.scenarios.map(scenario => new Option(`${scenario.id} · ${scenario.description}`, scenario.id)));
+  scenarioSelect.value = state.scenarioId || "";
+  const ranked = document.getElementById("ranked-scenario");
+  ranked.hidden = state.mode !== "ranked-preview";
+  ranked.textContent = state.derivedScenario
+    ? `Scenario ${state.derivedScenario} is derived from the fixed seed.`
+    : "The scenario is derived from the fresh seed when Play starts.";
+  document.querySelectorAll('input[name="seed-mode"]').forEach(input => { input.checked = input.value === state.seedMode; });
+  document.getElementById("fixed-seed-row").hidden = state.seedMode !== "fixed";
+  const seed = document.getElementById("fixed-seed");
+  seed.value = state.fixedSeed;
+  seed.setCustomValidity(state.seedMode === "fixed" && !playSettings.validFixedSeed() ? "Use canonical decimal digits with no sign or leading zeroes." : "");
+  document.getElementById("last-seed-button").disabled = !playSettings.lastRunSeed;
+  document.getElementById("timesteps-row").hidden = state.mode === "ranked-preview";
+  document.getElementById("timesteps").value = state.timesteps ?? "";
+  document.getElementById("quick-button").hidden = state.mode !== "exploration";
+  const ticks = state.mode === "ranked-preview" ? `${Number(variant.timesteps).toLocaleString()} ranked ticks`
+    : state.timesteps ? `${state.timesteps.toLocaleString()} requested ticks` : `${Number(variant.timesteps).toLocaleString()} default ticks`;
+  document.getElementById("settings-summary").textContent = `${variant.name} · ${variant.seats} ${variant.seats === 1 ? "seat" : "seats"} · ${ticks} · ${variant.measurement_window} measured ticks`;
+  document.querySelector(".settings-dot").hidden = state.isDefault;
+  renderPlayButton();
+}
+
+function setEditorVisible(visible) {
+  document.getElementById("editor-view").hidden = !visible;
+  document.getElementById("run-view").hidden = visible;
+  document.body.classList.toggle("playing", !visible);
+  if (visible) Blockly.svgResize(workspace);
+}
+
+async function playOrStop() {
+  if (["running", "cancelling"].includes(runState.phase)) return runController.cancel();
+  if (!canPlay()) { toast(playReason()); return; }
+  try {
+    setEditorVisible(false);
+    document.getElementById("verdict").hidden = true;
+    document.getElementById("expired-run").hidden = true;
+    const ruleset = globalThis.structuredClone ? structuredClone(compilation.value) : JSON.parse(JSON.stringify(compilation.value));
+    const run = await runController.start(ruleset, playSettings.runOptions());
+    if (run) {
+      playSettings.rememberRunSeed(run.seed);
+      if (run.context_id) selectContext(run.context_id);
+      renderPlaySettings();
+    }
+  } catch (error) {
+    toast(error.payload?.validation ? "The server rejected this validated canvas during compilation." : error.message || "Run could not start.");
+  }
+}
+
+function renderRun() {
+  document.getElementById("run-status").textContent = runState.message;
+  const total = runState.status?.total || runState.run?.timesteps || 1;
+  document.getElementById("run-progress").max = total;
+  document.getElementById("run-progress").value = runState.status?.tick || 0;
+  document.getElementById("verdict").hidden = runState.phase !== "done";
+  document.getElementById("expired-run").hidden = runState.phase !== "expired";
+  if (runState.phase === "done") renderVerdict();
+  renderPlayButton();
+}
+
+function renderVerdict() {
+  const results = runState.status?.results;
+  if (!results) return;
+  const details = Array.isArray(results.details) ? results.details : [];
+  const opponents = new Map((runState.run?.opponents || []).map(entry => [entry.seat, entry]));
+  const normalized = results.score_method !== "wellness-sum/1";
+  document.getElementById("seat-verdicts").innerHTML = details.map((detail, index) => {
+    const seat = Number.isInteger(detail.seat) ? detail.seat : index;
+    const opponent = opponents.get(seat);
+    const name = seat === 0 ? "Working ruleset" : `${opponent?.name || `Seat ${seat + 1}`} · baseline`;
+    const score = Number(detail.score).toLocaleString(undefined, {maximumFractionDigits: 3});
+    const scoreLabel = normalized ? `${score} / 1.000 target match` : `${score} wellness sum`;
+    const target = detail.target_id || detail.target_variable || "target unavailable";
+    return `<div class="seat-verdict"><span class="seat-name">${escapeHtml(name)}</span><span class="seat-score">${escapeHtml(scoreLabel)}</span><span class="seat-target">${escapeHtml(target)}${detail.died_before_end ? '<br><span class="seat-death">Population died before the scheduled end · survival-adjusted to zero</span>' : ""}</span></div>`;
+  }).join("");
+  const run = runState.run;
+  document.getElementById("run-context").textContent = `Seed ${run.seed} · scenario ${run.scenario_id || "fixed configuration"} · ${results.timesteps_completed} ticks completed`;
+  const scores = results.scores || [];
+  const chip = document.getElementById("score-chip");
+  chip.hidden = scores.length === 0;
+  chip.textContent = scores.length === 1 ? `Score ${Number(scores[0]).toLocaleString(undefined, {maximumFractionDigits: 3})} · final`
+    : `Seat 1 ${Number(scores[0]).toLocaleString(undefined, {maximumFractionDigits: 3})} · ${scores.length} seats final`;
+  playSettings?.rememberRunSeed(run.seed);
+  renderPlaySettings();
+}
+
+runController.subscribe(snapshot => {
+  runState = snapshot;
+  if (snapshot.phase === "compiling") {
+    setEditorVisible(false);
+    document.getElementById("replay-frame").removeAttribute("src");
+  }
+  renderRun();
+});
+
+runController.onFrame(url => {
+  const frame = document.getElementById("replay-frame");
+  if (url === null) { frame.removeAttribute("src"); return; }
+  setEditorVisible(false);
+  if (frame.src !== url) frame.src = url;
 });
 
 function toast(message) {
