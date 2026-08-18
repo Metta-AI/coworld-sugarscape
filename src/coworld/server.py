@@ -366,6 +366,7 @@ class SugarscapeServer:
         terminal = {
             "type": "result",
             "protocol": PROTOCOL,
+            "score_method": results["score_method"],
             "scores": results["scores"],
             "details": results["details"],
             "summary": {

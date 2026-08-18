@@ -52,10 +52,35 @@ with no samples are marked empty. Population zero remains a real scalar sample.
 
 ## Scoring
 
-The ranked score is `1 - normalized_W1`. Wasserstein-1 distance is computed from
-the two cumulative histograms, weighted by bin width, and divided by the support
-width. Results also report base-2 Jensen-Shannon divergence as a diagnostic. An
-empty target measurement scores zero and sets `empty_measurement: true`.
+The ranked method is `w1-hyperbolic/1`. First compute raw Wasserstein-1 distance
+`D` from the two cumulative histograms, weighted by bin width. Its units are the
+measured variable's units; it is not divided by the declared support.
+
+The target supplies its own characteristic scale. Choose the leftmost median
+bin `i*` (equivalently, the smallest-index point mass minimizing W1 to the
+target), then compute:
+
+```text
+S = max(W1(point_mass_i*, target), width(i*))
+score = S / (S + D)
+```
+
+The first term is the target's binned mean absolute deviation from its median.
+The bin-width floor defines a positive resolution for a one-bin target. Thus an
+exact match scores 1, one characteristic scale of transport scores 0.5, and
+larger errors approach zero without losing their ordering to a clipped plateau.
+With unequal bin widths, leftmost median tie-breaking is part of the scoring
+contract because the chosen bin determines the floor.
+
+Results report `raw_w1`, `w1_scale`, and base-2 Jensen-Shannon divergence as
+diagnostics. Jensen-Shannon is not part of the ranked score because it does not
+encode distance between bins. An empty target measurement scores zero, reports
+`raw_w1: null`, and sets `empty_measurement: true`.
+
+Replays recorded before this method identifier use legacy `w1-support/1` when
+the viewer computes counterfactual target scores. Unknown identifiers fail
+closed rather than being guessed. See the full decision record in
+[`docs/designs/2026-08-18-w1-scoring-v2.md`](designs/2026-08-18-w1-scoring-v2.md).
 
 ## Shipped targets
 

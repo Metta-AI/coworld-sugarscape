@@ -9,7 +9,7 @@ import zlib
 
 from .measurement import RollingMeasurements
 from .ruleset import CompiledRuleset
-from .scoring import score_histogram
+from .scoring import SCORE_METHOD, score_histogram
 from .targets import Target
 
 
@@ -127,6 +127,7 @@ class ReplayWriter:
             "format": REPLAY_FORMAT,
             "version": REPLAY_VERSION,
             "header": {
+                "score_method": SCORE_METHOD,
                 "config": self.config,
                 "seed": self.config["seed"],
                 "targets": [target.as_dict() for target in self.targets],

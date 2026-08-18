@@ -5332,33 +5332,66 @@ const V3_WEALTH_QUANTUM = 50;
  *
  * Scoring therefore has to happen here, which is a fidelity hazard: a viewer
  * that computes a score slightly differently from the engine would quietly
- * disagree with the number the episode was actually judged on. So this is a
- * faithful port of coworld/scoring.py — `1 - normalized_W1`, the Wasserstein-1
- * distance between the two cumulative histograms, weighted by bin width and
- * divided by the support width — and tools/test_replay_viewer.py pins it against
- * scores the ENGINE produced, not against itself.
+ * disagree with the number the episode was actually judged on. The functions
+ * below faithfully port coworld/scoring.py and dispatch on the replay's method.
+ * Missing methods are legacy support-normalized W1; unknown methods fail closed
+ * instead of displaying a plausible but false score.
  */
 const TARGET_CATALOG = JSON.parse("{{TARGETS_JSON}}" || "[]");
+const SCORE_METHOD = "w1-hyperbolic/1";
+const LEGACY_SCORE_METHOD = "w1-support/1";
 
-function scoreAgainst(target, measured) {
+function rawWasserstein(targetProbs, measuredProbs, bins) {
+  let cumulativeMeasured = 0;
+  let cumulativeTarget = 0;
+  let distance = 0;
+  for (let i = 0; i < targetProbs.length; i += 1) {
+    cumulativeMeasured += measuredProbs[i] ?? 0;
+    cumulativeTarget += targetProbs[i];
+    distance += Math.abs(cumulativeMeasured - cumulativeTarget) * (bins[i + 1] - bins[i]);
+  }
+  return distance;
+}
+
+function targetScale(targetProbs, bins) {
+  let cumulative = 0;
+  let medianIndex = 0;
+  for (let i = 0; i < targetProbs.length; i += 1) {
+    cumulative += targetProbs[i];
+    if (cumulative >= 0.5) {
+      medianIndex = i;
+      break;
+    }
+  }
+  const pointMass = targetProbs.map((_value, index) => (index === medianIndex ? 1 : 0));
+  const medianDistance = rawWasserstein(targetProbs, pointMass, bins);
+  const medianBinWidth = bins[medianIndex + 1] - bins[medianIndex];
+  return Math.max(medianDistance, medianBinWidth);
+}
+
+function scoreAgainst(target, measured, scoreMethod = LEGACY_SCORE_METHOD) {
   if (!measured || !measured.probs || measured.probs.length === 0) return null;
+  if (measured.sample_count === 0) return 0;
   const bins = target.bins ?? [];
   if (bins.length !== (measured.bins ?? []).length) return null;
   for (let i = 0; i < bins.length; i += 1) if (bins[i] !== measured.bins[i]) return null;
   const probs = target.probs ?? [];
-  let carried = 0;
-  let distance = 0;
-  for (let i = 0; i < probs.length; i += 1) {
-    carried += (measured.probs[i] ?? 0) - probs[i];
-    distance += Math.abs(carried) * (bins[i + 1] - bins[i]);
+  const distance = rawWasserstein(probs, measured.probs, bins);
+  if (scoreMethod === SCORE_METHOD) {
+    const scale = targetScale(probs, bins);
+    return scale / (scale + distance);
   }
-  const support = bins[bins.length - 1] - bins[0];
-  if (!(support > 0)) return null;
-  return Math.max(0, Math.min(1, 1 - distance / support));
+  if (scoreMethod === LEGACY_SCORE_METHOD) {
+    const support = bins[bins.length - 1] - bins[0];
+    if (!(support > 0)) return null;
+    return Math.max(0, Math.min(1, 1 - distance / support));
+  }
+  return null;
 }
 
 function targetChoices(header, measuredNow) {
   const assigned = new Set((header.targets ?? []).map((target) => target.id));
+  const scoreMethod = header.score_method ?? LEGACY_SCORE_METHOD;
   return TARGET_CATALOG.map((target) => {
     const measured = measuredNow.get(target.variable);
     return {
@@ -5369,7 +5402,7 @@ function targetChoices(header, measuredNow) {
       targetProbs: target.probs ?? [],
       measuredProbs: measured?.probs ?? [],
       sampleCount: measured?.sample_count ?? 0,
-      score: scoreAgainst(target, measured),
+      score: scoreAgainst(target, measured, scoreMethod),
     };
   });
 }

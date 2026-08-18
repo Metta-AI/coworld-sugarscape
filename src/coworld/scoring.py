@@ -8,6 +8,10 @@ import math
 from typing import Iterable, Sequence
 
 
+SCORE_METHOD = "w1-hyperbolic/1"
+LEGACY_SCORE_METHOD = "w1-support/1"
+
+
 @dataclass(frozen=True, slots=True)
 class Histogram:
     """A normalized histogram and its sample provenance."""
@@ -35,7 +39,8 @@ class DistributionScore:
     """Primary score and diagnostic distances for one measured histogram."""
 
     score: float
-    w1: float
+    raw_w1: float | None
+    w1_scale: float
     js_divergence: float
     empty_measurement: bool
 
@@ -62,12 +67,12 @@ def make_histogram(samples: Iterable[float], bins: Sequence[float]) -> Histogram
     return Histogram(edges, probs, sample_count)
 
 
-def normalized_wasserstein_1(
+def wasserstein_1(
     measured: Sequence[float],
     target: Sequence[float],
     bins: Sequence[float],
 ) -> float:
-    """Return W1 divided by the declared support width."""
+    """Return raw binned Wasserstein-1 distance in the variable's units."""
 
     _validate_distributions(measured, target, bins)
     cumulative_measured = 0.0
@@ -77,8 +82,25 @@ def normalized_wasserstein_1(
         cumulative_measured += measured[index]
         cumulative_target += target[index]
         distance += abs(cumulative_measured - cumulative_target) * width
-    support_width = bins[-1] - bins[0]
-    return min(1.0, max(0.0, distance / support_width))
+    return distance
+
+
+def target_scale(target: Sequence[float], bins: Sequence[float]) -> float:
+    """Return the target's characteristic W1 scale, floored at one median bin."""
+
+    _validate_distributions(target, target, bins)
+    cumulative = 0.0
+    median_index = 0
+    for index, probability in enumerate(target):
+        cumulative += probability
+        if cumulative >= 0.5:
+            median_index = index
+            break
+    point_mass = [0.0] * len(target)
+    point_mass[median_index] = 1.0
+    median_distance = wasserstein_1(point_mass, target, bins)
+    median_bin_width = bins[median_index + 1] - bins[median_index]
+    return max(median_distance, median_bin_width)
 
 
 def jensen_shannon_divergence(measured: Sequence[float], target: Sequence[float]) -> float:
@@ -106,11 +128,12 @@ def jensen_shannon_divergence(measured: Sequence[float], target: Sequence[float]
 def score_histogram(histogram: Histogram, target_probs: Sequence[float]) -> DistributionScore:
     """Score one measurement, making empty measurements an explicit zero."""
 
+    scale = target_scale(target_probs, histogram.bins)
     if histogram.empty:
-        return DistributionScore(0.0, 1.0, 1.0, True)
-    w1 = normalized_wasserstein_1(histogram.probs, target_probs, histogram.bins)
+        return DistributionScore(0.0, None, scale, 1.0, True)
+    raw_w1 = wasserstein_1(histogram.probs, target_probs, histogram.bins)
     js = jensen_shannon_divergence(histogram.probs, target_probs)
-    return DistributionScore(1.0 - w1, w1, js, False)
+    return DistributionScore(scale / (scale + raw_w1), raw_w1, scale, js, False)
 
 
 def _validate_distributions(

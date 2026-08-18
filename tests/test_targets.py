@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from coworld.scoring import target_scale
 from coworld.targets import load_target_catalog, resolve_seat_targets
 
 
@@ -55,6 +56,24 @@ def test_catalog_rejects_inconsistent_binning_for_same_variable(tmp_path: Path) 
 
     with pytest.raises(ValueError, match="inconsistent support/bins"):
         load_target_catalog(tmp_path)
+
+
+def test_shipped_target_scales_are_pinned() -> None:
+    catalog = load_target_catalog()
+    expected = {
+        "age-at-death.survivorship": 11.688116881168808,
+        "population.carrying-capacity": 100.0,
+        "price.equilibrium": 0.25,
+        "tribe.convergence": 0.1,
+        "tribe.diversity": 0.1,
+        "wealth.egalitarian": 25.0,
+        "wealth.skewed-gini-0.5": 33.711466666666816,
+    }
+
+    assert {
+        target_id: target_scale(target.probs, target.bins)
+        for target_id, target in catalog.targets.items()
+    } == pytest.approx(expected)
 
 
 def test_assignments_default_to_global_and_use_effective_measurement_window() -> None:

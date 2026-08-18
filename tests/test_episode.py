@@ -131,7 +131,10 @@ def test_results_include_scores_details_all_histograms_and_flat_scalars(
     )
 
     assert len(results["scores"]) == 2
+    assert results["score_method"] == "w1-hyperbolic/1"
     assert [detail["submitted"] for detail in results["details"]] == [False, True]
+    assert all("raw_w1" in detail and "w1_scale" in detail for detail in results["details"])
+    assert all("w1" not in detail for detail in results["details"])
     assert set(results["histograms"]) == {"global", "by_seat"}
     assert "age" in results["histograms"]["global"]
     assert all("age" in entry["variables"] for entry in results["histograms"]["by_seat"])
@@ -193,6 +196,19 @@ def test_inline_seat_scope_targets_measure_each_subpopulation(
     seat_counts = [detail["histogram"]["sample_count"] for detail in results["details"]]
     assert sum(seat_counts) == global_count
     assert all(detail["target_scope"] == "seat" for detail in results["details"])
+
+
+def test_each_seat_reports_its_assigned_target_scale(
+    tiny_episode_config: dict[str, object],
+) -> None:
+    config = dict(tiny_episode_config)
+    config["targets"] = ["wealth.skewed-gini-0.5", "wealth.egalitarian"]
+
+    results, _, _ = run_episode(config, [None, None], emit_timing_logs=False)
+
+    assert [detail["w1_scale"] for detail in results["details"]] == pytest.approx(
+        [33.711466666666816, 25.0]
+    )
 
 
 def test_custom_movement_has_a_separate_ruleset_evaluation_timing(

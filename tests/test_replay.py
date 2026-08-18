@@ -28,6 +28,7 @@ def test_replay_round_trip_and_deltas_reconstruct_final_grid(
 
     assert document["format"] == "sugarscape.replay.v3"
     assert header["seed"] == config["seed"]
+    assert header["score_method"] == results["score_method"] == "w1-hyperbolic/1"
     assert "tokens" not in header["config"]
     assert header["scores"] == results["scores"]
     assert len(header["targets"]) == config["seats"]

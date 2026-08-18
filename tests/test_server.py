@@ -68,6 +68,7 @@ def test_artifact_upload_does_not_block_websocket_event_loop(
     def fake_run_episode(*_args: object, **_kwargs: object):
         return (
             {
+                "score_method": "w1-hyperbolic/1",
                 "scores": [1.0, 1.0],
                 "details": [{}, {}],
                 "score.match_mean": 1.0,
@@ -243,6 +244,7 @@ def test_server_end_to_end_contract(tmp_path: Path) -> None:
         terminal_zero = json.loads(player_zero.recv())
         terminal_one = json.loads(player_one.recv())
         assert terminal_zero["type"] == terminal_one["type"] == "result"
+        assert terminal_zero["score_method"] == terminal_one["score_method"] == "w1-hyperbolic/1"
         assert len(terminal_zero["scores"]) == 2
 
         spectator_messages = []

@@ -36,7 +36,7 @@ seven targets and six mechanical families, forcing rulesets to adapt to the
 observed world. `solo-ladder` assigns one policy one target; `duo-ladder` seats
 two policies in the same world with different global targets and independent
 scores. See [`docs/SCENARIOS.md`](docs/SCENARIOS.md) for the catalog, selection
-rule, regeneration workflow, and per-scenario reachability gate.
+rule, regeneration workflow, and per-scenario reachability calibration.
 
 Run the offline suite with `.venv/bin/python -m pytest`. For local container
 development, `docker compose up` starts the one-seat config in `config.json` and

@@ -5766,33 +5766,66 @@ const V3_WEALTH_QUANTUM = 50;
  *
  * Scoring therefore has to happen here, which is a fidelity hazard: a viewer
  * that computes a score slightly differently from the engine would quietly
- * disagree with the number the episode was actually judged on. So this is a
- * faithful port of coworld/scoring.py — `1 - normalized_W1`, the Wasserstein-1
- * distance between the two cumulative histograms, weighted by bin width and
- * divided by the support width — and tools/test_replay_viewer.py pins it against
- * scores the ENGINE produced, not against itself.
+ * disagree with the number the episode was actually judged on. The functions
+ * below faithfully port coworld/scoring.py and dispatch on the replay's method.
+ * Missing methods are legacy support-normalized W1; unknown methods fail closed
+ * instead of displaying a plausible but false score.
  */
 const TARGET_CATALOG = JSON.parse("[{\"id\":\"age-at-death.survivorship\",\"variable\":\"age_at_death\",\"scope\":\"global\",\"support\":[0,120],\"bins\":[0,10,20,30,40,50,60,70,80,90,100,110,120],\"probs\":[0.007360073600736008,0.003000030000300003,0.01021010210102101,0.015650156501565017,0.025320253202532027,0.05362053620536205,0.1024710247102471,0.1915419154191542,0.32401324013240135,0.24294242942429425,0.023760237602376024,0.00011000110001100011],\"window\":100,\"source\":\"Human Mortality Database (mortality.org), USA, both sexes, period life table 1x1, year 2019, dx column (deaths at age x per 100,000 births) summed into the canonical bins. HMD constructed data are CC BY 4.0; redistribution of this derived histogram with attribution is permitted per the HMD User Agreement.\",\"provisional\":false,\"generation\":{\"description\":\"Empirical: HMD USA, both sexes 2019 life-table dx column binned into the canonical 12 bins.\",\"method\":\"hmd-life-table\",\"input_file\":\"bltper_1x1.txt\",\"year\":2019,\"population\":\"USA, both sexes\",\"dx_total\":99999.0,\"regenerate_with\":\"tools/convert_hmd_survivorship.py\"}},{\"id\":\"tribe.convergence\",\"variable\":\"majority_tribe_share\",\"scope\":\"global\",\"support\":[0,1],\"bins\":[0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0],\"probs\":[0.0,0.0,0.0,0.0,0.0,0.011333333333333334,0.10566666666666667,0.378,0.49033333333333334,0.014666666666666666],\"window\":100,\"source\":\"Generated from the vendored DTL Sugarscape engine (commit a46ec6ff909e2bc73a4c9e9f36b2aed160eccad8, Unlicense) running examples/cultural_tagging.json under DTL internal defaults (decision model 'none'). Literature anchor: GAS ch. III, rule K: cultural convergence (Epstein & Axtell 1996). No tabulated data for this result was ever published; the engine run is the primary source per the 2026-08-11 sourcing research.\",\"provisional\":false,\"generation\":{\"description\":\"Engine run: examples/cultural_tagging.json under DTL internal defaults ('none' decision model), 30 seeds, variable pooled over the final 100 ticks and binned canonically.\",\"method\":\"engine-run\",\"engine_commit\":\"a46ec6ff909e2bc73a4c9e9f36b2aed160eccad8\",\"example_config\":\"cultural_tagging.json\",\"decision_model\":\"none (DTL internal defaults)\",\"seeds\":30,\"window_ticks\":100,\"validation\":\"pooled_samples > 0\",\"stats\":{\"seeds\":30,\"seeds_survived\":30,\"pooled_samples\":3000,\"pooled_mean\":0.7882,\"mean_final_gini\":0.1439,\"mean_final_population\":507.8667},\"generated\":\"2026-08-11\",\"regenerate_with\":\"tools/generate_targets.py\"}},{\"id\":\"tribe.diversity\",\"variable\":\"majority_tribe_share\",\"scope\":\"global\",\"support\":[0,1],\"bins\":[0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0],\"probs\":[0.0,0.0,0.0,0.0,0.0,0.383,0.343,0.203,0.071,0.0],\"window\":100,\"source\":\"Generated from the vendored DTL Sugarscape engine (commit a46ec6ff909e2bc73a4c9e9f36b2aed160eccad8, Unlicense) running examples/cultural_tagging.json under DTL internal defaults (decision model 'none'). Literature anchor: Counterfactual (GAS rule K converges): quadrant-separated tribes with slowed mixing hold a stable multi-tribe split (Epstein & Axtell 1996). No tabulated data for this result was ever published; the engine run is the primary source per the 2026-08-11 sourcing research.\",\"provisional\":false,\"generation\":{\"description\":\"Engine run: examples/cultural_tagging.json under DTL internal defaults ('none' decision model), 30 seeds, variable pooled over the final 100 ticks and binned canonically.\",\"method\":\"engine-run\",\"engine_commit\":\"a46ec6ff909e2bc73a4c9e9f36b2aed160eccad8\",\"example_config\":\"cultural_tagging.json\",\"decision_model\":\"none (DTL internal defaults)\",\"seeds\":30,\"window_ticks\":100,\"validation\":\"pooled mean majority share <= 0.65 (diversity must persist)\",\"stats\":{\"seeds\":30,\"seeds_survived\":30,\"pooled_samples\":3000,\"pooled_mean\":0.642,\"mean_final_gini\":0.1435,\"mean_final_population\":520.9333},\"generated\":\"2026-08-11\",\"regenerate_with\":\"tools/generate_targets.py\"}},{\"id\":\"price.equilibrium\",\"variable\":\"mean_trade_price\",\"scope\":\"global\",\"support\":[0,2.5],\"bins\":[0,0.25,0.5,0.75,1.0,1.25,1.5,1.75,2.0,2.25,2.5],\"probs\":[0.0,0.0,0.0,0.0,0.8833333333333333,0.11033333333333334,0.006,0.0,0.0003333333333333333,0.0],\"window\":100,\"source\":\"Generated from the vendored DTL Sugarscape engine (commit a46ec6ff909e2bc73a4c9e9f36b2aed160eccad8, Unlicense) running examples/trade_basic.json under DTL internal defaults (decision model 'none'). Literature anchor: GAS ch. IV, Figures IV-3/IV-4: {G1},{M},{T} price convergence (Epstein & Axtell 1996). No tabulated data for this result was ever published; the engine run is the primary source per the 2026-08-11 sourcing research.\",\"provisional\":false,\"generation\":{\"description\":\"Engine run: examples/trade_basic.json under DTL internal defaults ('none' decision model), 30 seeds, variable pooled over the final 100 ticks and binned canonically.\",\"method\":\"engine-run\",\"engine_commit\":\"a46ec6ff909e2bc73a4c9e9f36b2aed160eccad8\",\"example_config\":\"trade_basic.json\",\"decision_model\":\"none (DTL internal defaults)\",\"seeds\":30,\"window_ticks\":100,\"validation\":\"pooled mean trade price within [0.8, 1.25] (GAS equilibrium ~1)\",\"stats\":{\"seeds\":30,\"seeds_survived\":30,\"pooled_samples\":3000,\"pooled_mean\":1.113,\"mean_final_gini\":0.3239,\"mean_final_population\":64.3},\"generated\":\"2026-08-11\",\"regenerate_with\":\"tools/generate_targets.py\"}},{\"id\":\"population.carrying-capacity\",\"variable\":\"population\",\"scope\":\"global\",\"support\":[0,2000],\"bins\":[0,100,200,300,400,500,600,700,800,900,1000,1100,1200,1300,1400,1500,1600,1700,1800,1900,2000],\"probs\":[0.0,0.0,1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],\"window\":100,\"source\":\"Generated from the vendored DTL Sugarscape engine (commit a46ec6ff909e2bc73a4c9e9f36b2aed160eccad8, Unlicense) running examples/constant_growback.json under DTL internal defaults (decision model 'none'). Literature anchor: GAS ch. II: {G1},{M} carrying capacity (Animation II-2 region) (Epstein & Axtell 1996). No tabulated data for this result was ever published; the engine run is the primary source per the 2026-08-11 sourcing research.\",\"provisional\":false,\"generation\":{\"description\":\"Engine run: examples/constant_growback.json under DTL internal defaults ('none' decision model), 30 seeds, variable pooled over the final 100 ticks and binned canonically.\",\"method\":\"engine-run\",\"engine_commit\":\"a46ec6ff909e2bc73a4c9e9f36b2aed160eccad8\",\"example_config\":\"constant_growback.json\",\"decision_model\":\"none (DTL internal defaults)\",\"seeds\":30,\"window_ticks\":100,\"validation\":\"pooled_samples > 0\",\"stats\":{\"seeds\":30,\"seeds_survived\":30,\"pooled_samples\":3000,\"pooled_mean\":223.375,\"mean_final_gini\":0.3232,\"mean_final_population\":223.2667},\"generated\":\"2026-08-11\",\"regenerate_with\":\"tools/generate_targets.py\"}},{\"id\":\"wealth.egalitarian\",\"variable\":\"wealth\",\"scope\":\"global\",\"support\":[0,1000],\"bins\":[0,25,50,75,100,150,225,325,450,650,1000],\"probs\":[0.233112,0.4070026666666667,0.23108533333333334,0.09775066666666667,0.031046666666666667,2.666666666666667e-06,0.0,0.0,0.0,0.0],\"window\":100,\"source\":\"Generated from the vendored DTL Sugarscape engine (commit a46ec6ff909e2bc73a4c9e9f36b2aed160eccad8, Unlicense) running examples/agent_replacement.json under DTL internal defaults (decision model 'none'). Literature anchor: Counterfactual (no GAS or empirical anchor): equalized endowments and per-tick universal income compress the wealth distribution (Epstein & Axtell 1996). No tabulated data for this result was ever published; the engine run is the primary source per the 2026-08-11 sourcing research.\",\"provisional\":false,\"generation\":{\"description\":\"Engine run: examples/agent_replacement.json under DTL internal defaults ('none' decision model), 30 seeds, variable pooled over the final 100 ticks and binned canonically.\",\"method\":\"engine-run\",\"engine_commit\":\"a46ec6ff909e2bc73a4c9e9f36b2aed160eccad8\",\"example_config\":\"agent_replacement.json\",\"decision_model\":\"none (DTL internal defaults)\",\"seeds\":30,\"window_ticks\":100,\"validation\":\"final-tick Gini <= 0.35 (meaningfully compressed vs the ~0.47 default)\",\"stats\":{\"seeds\":30,\"seeds_survived\":30,\"pooled_samples\":750000,\"pooled_mean\":44.5312,\"mean_final_gini\":0.3015,\"mean_final_population\":250.0},\"generated\":\"2026-08-11\",\"regenerate_with\":\"tools/generate_targets.py\"}},{\"id\":\"wealth.skewed-gini-0.5\",\"variable\":\"wealth\",\"scope\":\"global\",\"support\":[0,1000],\"bins\":[0,25,50,75,100,150,225,325,450,650,1000],\"probs\":[0.37767466666666666,0.20487466666666668,0.14134133333333335,0.10684,0.116924,0.051257333333333335,0.001088,0.0,0.0,0.0],\"window\":100,\"source\":\"Generated from the vendored DTL Sugarscape engine (commit a46ec6ff909e2bc73a4c9e9f36b2aed160eccad8, Unlicense) running examples/agent_replacement.json under DTL internal defaults (decision model 'none'). Literature anchor: GAS ch. II, Animation II-4 region: {G1},{M},{R[60,100]} (Epstein & Axtell 1996). No tabulated data for this result was ever published; the engine run is the primary source per the 2026-08-11 sourcing research.\",\"provisional\":false,\"generation\":{\"description\":\"Engine run: examples/agent_replacement.json under DTL internal defaults ('none' decision model), 30 seeds, variable pooled over the final 100 ticks and binned canonically.\",\"method\":\"engine-run\",\"engine_commit\":\"a46ec6ff909e2bc73a4c9e9f36b2aed160eccad8\",\"example_config\":\"agent_replacement.json\",\"decision_model\":\"none (DTL internal defaults)\",\"seeds\":30,\"window_ticks\":100,\"validation\":\"final-tick Gini within [0.40, 0.60] (GAS reports ~0.5)\",\"stats\":{\"seeds\":30,\"seeds_survived\":30,\"pooled_samples\":750000,\"pooled_mean\":53.5807,\"mean_final_gini\":0.4718,\"mean_final_population\":250.0},\"generated\":\"2026-08-11\",\"regenerate_with\":\"tools/generate_targets.py\"}}]" || "[]");
+const SCORE_METHOD = "w1-hyperbolic/1";
+const LEGACY_SCORE_METHOD = "w1-support/1";
 
-function scoreAgainst(target, measured) {
+function rawWasserstein(targetProbs, measuredProbs, bins) {
+  let cumulativeMeasured = 0;
+  let cumulativeTarget = 0;
+  let distance = 0;
+  for (let i = 0; i < targetProbs.length; i += 1) {
+    cumulativeMeasured += measuredProbs[i] ?? 0;
+    cumulativeTarget += targetProbs[i];
+    distance += Math.abs(cumulativeMeasured - cumulativeTarget) * (bins[i + 1] - bins[i]);
+  }
+  return distance;
+}
+
+function targetScale(targetProbs, bins) {
+  let cumulative = 0;
+  let medianIndex = 0;
+  for (let i = 0; i < targetProbs.length; i += 1) {
+    cumulative += targetProbs[i];
+    if (cumulative >= 0.5) {
+      medianIndex = i;
+      break;
+    }
+  }
+  const pointMass = targetProbs.map((_value, index) => (index === medianIndex ? 1 : 0));
+  const medianDistance = rawWasserstein(targetProbs, pointMass, bins);
+  const medianBinWidth = bins[medianIndex + 1] - bins[medianIndex];
+  return Math.max(medianDistance, medianBinWidth);
+}
+
+function scoreAgainst(target, measured, scoreMethod = LEGACY_SCORE_METHOD) {
   if (!measured || !measured.probs || measured.probs.length === 0) return null;
+  if (measured.sample_count === 0) return 0;
   const bins = target.bins ?? [];
   if (bins.length !== (measured.bins ?? []).length) return null;
   for (let i = 0; i < bins.length; i += 1) if (bins[i] !== measured.bins[i]) return null;
   const probs = target.probs ?? [];
-  let carried = 0;
-  let distance = 0;
-  for (let i = 0; i < probs.length; i += 1) {
-    carried += (measured.probs[i] ?? 0) - probs[i];
-    distance += Math.abs(carried) * (bins[i + 1] - bins[i]);
+  const distance = rawWasserstein(probs, measured.probs, bins);
+  if (scoreMethod === SCORE_METHOD) {
+    const scale = targetScale(probs, bins);
+    return scale / (scale + distance);
   }
-  const support = bins[bins.length - 1] - bins[0];
-  if (!(support > 0)) return null;
-  return Math.max(0, Math.min(1, 1 - distance / support));
+  if (scoreMethod === LEGACY_SCORE_METHOD) {
+    const support = bins[bins.length - 1] - bins[0];
+    if (!(support > 0)) return null;
+    return Math.max(0, Math.min(1, 1 - distance / support));
+  }
+  return null;
 }
 
 function targetChoices(header, measuredNow) {
   const assigned = new Set((header.targets ?? []).map((target) => target.id));
+  const scoreMethod = header.score_method ?? LEGACY_SCORE_METHOD;
   return TARGET_CATALOG.map((target) => {
     const measured = measuredNow.get(target.variable);
     return {
@@ -5803,7 +5836,7 @@ function targetChoices(header, measuredNow) {
       targetProbs: target.probs ?? [],
       measuredProbs: measured?.probs ?? [],
       sampleCount: measured?.sample_count ?? 0,
-      score: scoreAgainst(target, measured),
+      score: scoreAgainst(target, measured, scoreMethod),
     };
   });
 }

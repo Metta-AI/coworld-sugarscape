@@ -76,9 +76,9 @@ def test_viewer_scoring_matches_the_engine() -> None:
 
     An episode is assigned one target but every variable is measured, so the
     viewer can score any target in the catalog — which means it carries its own
-    port of `1 - normalized_W1`. A port that drifts would quietly disagree with
-    the number the episode was actually judged on, so the two implementations are
-    compared here on the same inputs rather than each being trusted on its own.
+    port of target-scaled W1. A port that drifts would quietly disagree with the
+    number the episode was actually judged on, so its arithmetic is compared
+    across every target and every possible delta mass.
     """
 
     import json
@@ -87,22 +87,64 @@ def test_viewer_scoring_matches_the_engine() -> None:
 
     html = (VIEWER / "index.html").read_text(encoding="utf-8")
     assert "scoreAgainst" in html, "the viewer must carry the scorer it claims to"
+    assert 'const SCORE_METHOD = "w1-hyperbolic/1"' in html
+    assert 'const LEGACY_SCORE_METHOD = "w1-support/1"' in html
+    assert "return null;" in html  # Unknown methods fail closed.
 
-    # A histogram deliberately unlike its target, so a sloppy port cannot pass by
-    # returning something near 1.
-    target = json.loads((ROOT / "targets" / "wealth.skewed-gini-0.5.json").read_text())
-    measured = [0.0, 0.40, 0.56, 0.04] + [0.0] * (len(target["probs"]) - 4)
-    engine = score_histogram(
-        Histogram(bins=tuple(target["bins"]), probs=tuple(measured), sample_count=137),
-        tuple(target["probs"]),
-    ).score
+    def raw_w1(target_probs: list[float], measured: list[float], bins: list[float]) -> float:
+        cumulative_measured = 0.0
+        cumulative_target = 0.0
+        distance = 0.0
+        for index, probability in enumerate(target_probs):
+            cumulative_measured += measured[index]
+            cumulative_target += probability
+            distance += abs(cumulative_measured - cumulative_target) * (
+                bins[index + 1] - bins[index]
+            )
+        return distance
 
-    # The same arithmetic the viewer runs, kept in step with replay-viewer/src.
-    carried = 0.0
-    distance = 0.0
-    for index, probability in enumerate(target["probs"]):
-        carried += measured[index] - probability
-        distance += abs(carried) * (target["bins"][index + 1] - target["bins"][index])
-    ported = max(0.0, min(1.0, 1 - distance / (target["bins"][-1] - target["bins"][0])))
+    def ported_score(target: dict[str, object], measured: list[float]) -> float:
+        probs = target["probs"]
+        bins = target["bins"]
+        cumulative = 0.0
+        median_index = 0
+        for index, probability in enumerate(probs):
+            cumulative += probability
+            if cumulative >= 0.5:
+                median_index = index
+                break
+        point_mass = [float(index == median_index) for index in range(len(probs))]
+        scale = max(
+            raw_w1(probs, point_mass, bins),
+            bins[median_index + 1] - bins[median_index],
+        )
+        distance = raw_w1(probs, measured, bins)
+        return scale / (scale + distance)
 
-    assert ported == round(engine, 12) or abs(ported - engine) < 1e-12, (ported, engine)
+    for target_path in sorted((ROOT / "targets").glob("*.json")):
+        target = json.loads(target_path.read_text(encoding="utf-8"))
+        for measured_index in range(len(target["probs"])):
+            measured = [float(index == measured_index) for index in range(len(target["probs"]))]
+            engine = score_histogram(
+                Histogram(
+                    bins=tuple(target["bins"]),
+                    probs=tuple(measured),
+                    sample_count=137,
+                ),
+                tuple(target["probs"]),
+            ).score
+            assert ported_score(target, measured) == engine, (target["id"], measured_index)
+
+
+def test_v3_converter_keeps_empty_legacy_measurements_at_zero() -> None:
+    import importlib.util
+
+    converter_path = ROOT / "tools" / "v3_to_v1_replay.py"
+    spec = importlib.util.spec_from_file_location("v3_to_v1_replay", converter_path)
+    assert spec is not None and spec.loader is not None
+    converter = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(converter)
+
+    target = {"bins": [0, 1, 2], "probs": [0.5, 0.5]}
+    empty = {"bins": [0, 1, 2], "probs": [0.0, 0.0], "sample_count": 0}
+    assert converter.score_against(target, empty, converter.LEGACY_SCORE_METHOD) == 0

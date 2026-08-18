@@ -1,6 +1,8 @@
 # Solo-ladder scenario pool
 
-**Status:** implemented (2026-08-13); reachability gate and deploy pending
+**Status:** implemented and deployed. The original reachability gate below is
+historical; `docs/SCENARIOS.md` now defines calibration under
+`w1-hyperbolic/1`.
 **Date:** 2026-08-13
 **Owner:** James Boggs
 
@@ -89,7 +91,10 @@ guarantees they agree. A `--check` mode makes drift mechanically
 detectable in CI/tests. The generator is deterministic data, not random
 jitter — curation stays reviewable in the script's diff.
 
-### D5: Reachability gate before rotation
+### D5: Historical reachability gate before rotation
+
+This was the shipping rule under legacy support-normalized scoring. It is kept
+as the rationale for the original pool, not as the current release gate.
 
 `tools/probe_pool.py` runs the existing evolutionary probe
 (`tools/probe_reachability.py`, unchanged — it already accepts
