@@ -148,9 +148,17 @@ def _context_record(
 class RulesetStudioHandler(BaseHTTPRequestHandler):
     server_version = "RulesetStudio/1"
 
-    def __init__(self, *args: object, paths: StudioPaths, allowed_origin: str, **kwargs: object):
+    def __init__(
+        self,
+        *args: object,
+        paths: StudioPaths,
+        allowed_origin: str,
+        catalog: object,
+        **kwargs: object,
+    ):
         self.paths = paths
         self.allowed_origin = allowed_origin
+        self.catalog = catalog
         super().__init__(*args, **kwargs)
 
     def end_headers(self) -> None:
@@ -163,7 +171,7 @@ class RulesetStudioHandler(BaseHTTPRequestHandler):
         if not self._origin_allowed():
             return
         self.send_response(HTTPStatus.NO_CONTENT)
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.send_header("Access-Control-Max-Age", "600")
         self.end_headers()
@@ -176,6 +184,8 @@ class RulesetStudioHandler(BaseHTTPRequestHandler):
             return self._list_rulesets()
         if path == "/api/context":
             return self._json(HTTPStatus.OK, _effective_contexts(self.paths))
+        if path == "/api/scenarios":
+            return self._json(HTTPStatus.OK, self.catalog.public_dict())
         name = self._ruleset_name(path)
         if name is not None:
             destination = self.paths.rulesets / name
@@ -316,8 +326,18 @@ def create_server(
     *,
     paths: StudioPaths | None = None,
     allowed_origin: str = "http://localhost:4322",
+    catalog: object | None = None,
 ) -> ThreadingHTTPServer:
-    handler = partial(RulesetStudioHandler, paths=paths or StudioPaths.repository(), allowed_origin=allowed_origin)
+    if catalog is None:
+        from coworld.studio import StudioVariantCatalog
+
+        catalog = StudioVariantCatalog.load()
+    handler = partial(
+        RulesetStudioHandler,
+        paths=paths or StudioPaths.repository(),
+        allowed_origin=allowed_origin,
+        catalog=catalog,
+    )
     return ThreadingHTTPServer((host, port), handler)
 
 
