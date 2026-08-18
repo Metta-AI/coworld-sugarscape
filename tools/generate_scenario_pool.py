@@ -32,8 +32,21 @@ DUO_COMPANION_TARGETS = {
 }
 
 
-SCENARIOS: list[dict[str, object]] = [
+FAMILY_ORDER = [
+    "wealth-skewed",
+    "wealth-egalitarian",
+    "capacity",
+    "survivorship",
+    "price",
+    "tribe",
+]
+
+# Two hand-tuned worlds per family, carried verbatim from the retired
+# 24-scenario pool. config_overrides must not be edited here; packs layer
+# deltas on top.
+BASE_WORLDS: list[dict[str, object]] = [
     {
+        "family": "wealth-skewed",
         "id": "wealth-skewed.twin-peaks",
         "description": "Replacement economy on the classic offset twin-peak sugar landscape.",
         "config_overrides": {
@@ -70,78 +83,7 @@ SCENARIOS: list[dict[str, object]] = [
         "targets": ["wealth.skewed-gini-0.5"],
     },
     {
-        "id": "wealth-skewed.mega-peak",
-        "description": "Replacement economy concentrated around one high central sugar peak.",
-        "config_overrides": {
-            "startingAgents": 220,
-            "agentMaxAge": [60, 100],
-            "agentReplacements": 220,
-            "agentStartingSugar": [5, 25],
-            "agentSugarMetabolism": [1, 4],
-            "agentSpiceMetabolism": [0, 0],
-            "agentStartingSpice": [0, 0],
-            "agentMovement": [2, 7],
-            "agentVision": [1, 5],
-            "agentAggressionFactor": [0, 0],
-            "agentFertilityFactor": [0, 0],
-            "agentLendingFactor": [0, 0],
-            "agentTradeFactor": [0, 0],
-            "agentTagging": False,
-            "trait_ranges": {"aggression": [0, 0], "trade": [0, 0], "lending": [0, 0], "fertility": [0, 0]},
-            "environmentWidth": 44,
-            "environmentHeight": 44,
-            "environmentMaxSugar": 6,
-            "environmentSugarPeaks": [[22, 22, 6]],
-            "environmentSugarRegrowRate": 1,
-            "environmentMaxSpice": 0,
-            "environmentSpicePeaks": [],
-            "environmentSpiceRegrowRate": 0,
-            "environmentSeasonInterval": 0,
-            "environmentSeasonalGrowbackDelay": 0,
-            "environmentPollutionTimeframe": [0, 0],
-            "environmentPollutionDiffusionTimeframe": [0, 0],
-            "environmentSugarConsumptionPollutionFactor": 0,
-            "environmentSugarProductionPollutionFactor": 0,
-        },
-        "targets": ["wealth.skewed-gini-0.5"],
-    },
-    {
-        "id": "wealth-skewed.four-corners",
-        "description": "Large replacement economy spread across four corner sugar peaks.",
-        "config_overrides": {
-            "startingAgents": 360,
-            "agentMaxAge": [60, 100],
-            "agentReplacements": 360,
-            "agentStartingSugar": [6, 28],
-            "agentSugarMetabolism": [1, 5],
-            "agentSpiceMetabolism": [0, 0],
-            "agentStartingSpice": [0, 0],
-            "agentMovement": [1, 8],
-            "agentVision": [2, 7],
-            "agentAggressionFactor": [0, 0],
-            "agentFertilityFactor": [0, 0],
-            "agentLendingFactor": [0, 0],
-            "agentTradeFactor": [0, 0],
-            "agentTagging": False,
-            "trait_ranges": {"aggression": [0, 0], "trade": [0, 0], "lending": [0, 0], "fertility": [0, 0]},
-            "environmentWidth": 60,
-            "environmentHeight": 60,
-            "environmentMaxSugar": 4,
-            "environmentSugarPeaks": [[10, 10, 4], [10, 50, 4], [50, 10, 4], [50, 50, 4]],
-            "environmentSugarRegrowRate": 2,
-            "environmentMaxSpice": 0,
-            "environmentSpicePeaks": [],
-            "environmentSpiceRegrowRate": 0,
-            "environmentSeasonInterval": 0,
-            "environmentSeasonalGrowbackDelay": 0,
-            "environmentPollutionTimeframe": [0, 0],
-            "environmentPollutionDiffusionTimeframe": [0, 0],
-            "environmentSugarConsumptionPollutionFactor": 0,
-            "environmentSugarProductionPollutionFactor": 0,
-        },
-        "targets": ["wealth.skewed-gini-0.5"],
-    },
-    {
+        "family": "wealth-skewed",
         "id": "wealth-skewed.scarce-lowland",
         "description": "Dense replacement economy on scarce cap-two lowland terrain.",
         "config_overrides": {
@@ -178,46 +120,7 @@ SCENARIOS: list[dict[str, object]] = [
         "targets": ["wealth.skewed-gini-0.5"],
     },
     {
-        "id": "wealth-egalitarian.offset-twins",
-        "description": "Short-lived replacement economy with income on offset twin peaks.",
-        "config_overrides": {
-            "startingAgents": 240,
-            "agentMaxAge": [30, 45],
-            "agentReplacements": 240,
-            "agentStartingSugar": [20, 25],
-            "agentSugarMetabolism": [3, 3],
-            "agentSpiceMetabolism": [0, 0],
-            "agentStartingSpice": [0, 0],
-            "agentMovement": [2, 2],
-            "agentVision": [3, 3],
-            "agentUniversalSugar": [1, 1],
-            "agentUniversalSpice": [0, 0],
-            "agentAggressionFactor": [0, 0],
-            "agentFertilityFactor": [0, 0],
-            "agentLendingFactor": [0, 0],
-            "agentTradeFactor": [0, 0],
-            "agentTagging": False,
-            "trait_ranges": {"aggression": [0, 0], "trade": [0, 0], "lending": [0, 0], "fertility": [0, 0]},
-            "environmentWidth": 48,
-            "environmentHeight": 48,
-            "environmentMaxSugar": 4,
-            "environmentSugarPeaks": [[12, 34, 4], [34, 12, 4]],
-            "environmentSugarRegrowRate": 1,
-            "environmentMaxSpice": 0,
-            "environmentSpicePeaks": [],
-            "environmentSpiceRegrowRate": 0,
-            "environmentUniversalSugarIncomeInterval": 1,
-            "environmentUniversalSpiceIncomeInterval": 1,
-            "environmentSeasonInterval": 0,
-            "environmentSeasonalGrowbackDelay": 0,
-            "environmentPollutionTimeframe": [0, 0],
-            "environmentPollutionDiffusionTimeframe": [0, 0],
-            "environmentSugarConsumptionPollutionFactor": 0,
-            "environmentSugarProductionPollutionFactor": 0,
-        },
-        "targets": ["wealth.egalitarian"],
-    },
-    {
+        "family": "wealth-egalitarian",
         "id": "wealth-egalitarian.central-plateau",
         "description": "Income-supported replacement economy around a broad central sugar peak.",
         "config_overrides": {
@@ -258,46 +161,7 @@ SCENARIOS: list[dict[str, object]] = [
         "targets": ["wealth.egalitarian"],
     },
     {
-        "id": "wealth-egalitarian.four-basins",
-        "description": "Large income-supported economy distributed across four unequal basins.",
-        "config_overrides": {
-            "startingAgents": 400,
-            "agentMaxAge": [28, 42],
-            "agentReplacements": 400,
-            "agentStartingSugar": [20, 28],
-            "agentSugarMetabolism": [2, 3],
-            "agentSpiceMetabolism": [0, 0],
-            "agentStartingSpice": [0, 0],
-            "agentMovement": [1, 5],
-            "agentVision": [2, 6],
-            "agentUniversalSugar": [1, 1],
-            "agentUniversalSpice": [0, 0],
-            "agentAggressionFactor": [0, 0],
-            "agentFertilityFactor": [0, 0],
-            "agentLendingFactor": [0, 0],
-            "agentTradeFactor": [0, 0],
-            "agentTagging": False,
-            "trait_ranges": {"aggression": [0, 0], "trade": [0, 0], "lending": [0, 0], "fertility": [0, 0]},
-            "environmentWidth": 60,
-            "environmentHeight": 60,
-            "environmentMaxSugar": 5,
-            "environmentSugarPeaks": [[12, 12, 3], [12, 48, 4], [48, 12, 5], [48, 48, 3]],
-            "environmentSugarRegrowRate": 1,
-            "environmentMaxSpice": 0,
-            "environmentSpicePeaks": [],
-            "environmentSpiceRegrowRate": 0,
-            "environmentUniversalSugarIncomeInterval": 1,
-            "environmentUniversalSpiceIncomeInterval": 1,
-            "environmentSeasonInterval": 0,
-            "environmentSeasonalGrowbackDelay": 0,
-            "environmentPollutionTimeframe": [0, 0],
-            "environmentPollutionDiffusionTimeframe": [0, 0],
-            "environmentSugarConsumptionPollutionFactor": 0,
-            "environmentSugarProductionPollutionFactor": 0,
-        },
-        "targets": ["wealth.egalitarian"],
-    },
-    {
+        "family": "wealth-egalitarian",
         "id": "wealth-egalitarian.scarce-income",
         "description": "Universal income cushions a compact cap-two replacement economy.",
         "config_overrides": {
@@ -338,6 +202,7 @@ SCENARIOS: list[dict[str, object]] = [
         "targets": ["wealth.egalitarian"],
     },
     {
+        "family": "capacity",
         "id": "capacity.compact-regrow-1",
         "description": "Immortal population on a compact twin-peak world with unit growback.",
         "config_overrides": {
@@ -374,78 +239,7 @@ SCENARIOS: list[dict[str, object]] = [
         "targets": ["population.carrying-capacity"],
     },
     {
-        "id": "capacity.wide-regrow-1",
-        "description": "Immortal population on a wide separated-peak world with unit growback.",
-        "config_overrides": {
-            "startingAgents": 275,
-            "agentMaxAge": [-1, -1],
-            "agentReplacements": 0,
-            "agentStartingSugar": [3, 10],
-            "agentSugarMetabolism": [1, 4],
-            "agentSpiceMetabolism": [0, 0],
-            "agentStartingSpice": [0, 0],
-            "agentMovement": [1, 7],
-            "agentVision": [1, 5],
-            "agentAggressionFactor": [0, 0],
-            "agentFertilityFactor": [0, 0],
-            "agentLendingFactor": [0, 0],
-            "agentTradeFactor": [0, 0],
-            "agentTagging": False,
-            "trait_ranges": {"aggression": [0, 0], "trade": [0, 0], "lending": [0, 0], "fertility": [0, 0]},
-            "environmentWidth": 50,
-            "environmentHeight": 50,
-            "environmentMaxSugar": 4,
-            "environmentSugarPeaks": [[8, 42, 4], [42, 8, 4]],
-            "environmentSugarRegrowRate": 1,
-            "environmentMaxSpice": 0,
-            "environmentSpicePeaks": [],
-            "environmentSpiceRegrowRate": 0,
-            "environmentSeasonInterval": 0,
-            "environmentSeasonalGrowbackDelay": 0,
-            "environmentPollutionTimeframe": [0, 0],
-            "environmentPollutionDiffusionTimeframe": [0, 0],
-            "environmentSugarConsumptionPollutionFactor": 0,
-            "environmentSugarProductionPollutionFactor": 0,
-        },
-        "targets": ["population.carrying-capacity"],
-    },
-    {
-        "id": "capacity.dense-regrow-2",
-        "description": "Four-peak immortal population on the largest world with rapid growback.",
-        "config_overrides": {
-            "startingAgents": 400,
-            "agentMaxAge": [-1, -1],
-            "agentReplacements": 0,
-            "agentStartingSugar": [3, 10],
-            "agentSugarMetabolism": [1, 4],
-            "agentSpiceMetabolism": [0, 0],
-            "agentStartingSpice": [0, 0],
-            "agentMovement": [2, 8],
-            "agentVision": [2, 7],
-            "agentAggressionFactor": [0, 0],
-            "agentFertilityFactor": [0, 0],
-            "agentLendingFactor": [0, 0],
-            "agentTradeFactor": [0, 0],
-            "agentTagging": False,
-            "trait_ranges": {"aggression": [0, 0], "trade": [0, 0], "lending": [0, 0], "fertility": [0, 0]},
-            "environmentWidth": 60,
-            "environmentHeight": 60,
-            "environmentMaxSugar": 4,
-            "environmentSugarPeaks": [[12, 12, 4], [12, 48, 4], [48, 12, 4], [48, 48, 4]],
-            "environmentSugarRegrowRate": 2,
-            "environmentMaxSpice": 0,
-            "environmentSpicePeaks": [],
-            "environmentSpiceRegrowRate": 0,
-            "environmentSeasonInterval": 0,
-            "environmentSeasonalGrowbackDelay": 0,
-            "environmentPollutionTimeframe": [0, 0],
-            "environmentPollutionDiffusionTimeframe": [0, 0],
-            "environmentSugarConsumptionPollutionFactor": 0,
-            "environmentSugarProductionPollutionFactor": 0,
-        },
-        "targets": ["population.carrying-capacity"],
-    },
-    {
+        "family": "capacity",
         "id": "capacity.sparse-regrow-2",
         "description": "Immortal population between two meridian peaks with rapid growback.",
         "config_overrides": {
@@ -482,6 +276,7 @@ SCENARIOS: list[dict[str, object]] = [
         "targets": ["population.carrying-capacity"],
     },
     {
+        "family": "survivorship",
         "id": "survivorship.young-frontier",
         "description": "Younger replacement cohort crossing a medium frontier world.",
         "config_overrides": {
@@ -518,6 +313,7 @@ SCENARIOS: list[dict[str, object]] = [
         "targets": ["age-at-death.survivorship"],
     },
     {
+        "family": "survivorship",
         "id": "survivorship.long-lived",
         "description": "Long-lived replacement cohort on a broad three-peak landscape.",
         "config_overrides": {
@@ -554,78 +350,7 @@ SCENARIOS: list[dict[str, object]] = [
         "targets": ["age-at-death.survivorship"],
     },
     {
-        "id": "survivorship.scarce",
-        "description": "Replacement cohort faces mild scarcity around one modest peak.",
-        "config_overrides": {
-            "startingAgents": 200,
-            "agentMaxAge": [60, 100],
-            "agentReplacements": 200,
-            "agentStartingSugar": [5, 20],
-            "agentSugarMetabolism": [1, 3],
-            "agentSpiceMetabolism": [0, 0],
-            "agentStartingSpice": [0, 0],
-            "agentMovement": [1, 5],
-            "agentVision": [1, 4],
-            "agentAggressionFactor": [0, 0],
-            "agentFertilityFactor": [0, 0],
-            "agentLendingFactor": [0, 0],
-            "agentTradeFactor": [0, 0],
-            "agentTagging": False,
-            "trait_ranges": {"aggression": [0, 0], "trade": [0, 0], "lending": [0, 0], "fertility": [0, 0]},
-            "environmentWidth": 40,
-            "environmentHeight": 40,
-            "environmentMaxSugar": 4,
-            "environmentSugarPeaks": [[20, 20, 4]],
-            "environmentSugarRegrowRate": 1,
-            "environmentMaxSpice": 0,
-            "environmentSpicePeaks": [],
-            "environmentSpiceRegrowRate": 0,
-            "environmentSeasonInterval": 0,
-            "environmentSeasonalGrowbackDelay": 0,
-            "environmentPollutionTimeframe": [0, 0],
-            "environmentPollutionDiffusionTimeframe": [0, 0],
-            "environmentSugarConsumptionPollutionFactor": 0,
-            "environmentSugarProductionPollutionFactor": 0,
-        },
-        "targets": ["age-at-death.survivorship"],
-    },
-    {
-        "id": "survivorship.seasonal-migration",
-        "description": "Replacement cohort migrates through alternating wet and dry seasons.",
-        "config_overrides": {
-            "startingAgents": 360,
-            "agentMaxAge": [65, 105],
-            "agentReplacements": 360,
-            "agentStartingSugar": [6, 24],
-            "agentSugarMetabolism": [1, 4],
-            "agentSpiceMetabolism": [0, 0],
-            "agentStartingSpice": [0, 0],
-            "agentMovement": [2, 8],
-            "agentVision": [2, 7],
-            "agentAggressionFactor": [0, 0],
-            "agentFertilityFactor": [0, 0],
-            "agentLendingFactor": [0, 0],
-            "agentTradeFactor": [0, 0],
-            "agentTagging": False,
-            "trait_ranges": {"aggression": [0, 0], "trade": [0, 0], "lending": [0, 0], "fertility": [0, 0]},
-            "environmentWidth": 60,
-            "environmentHeight": 60,
-            "environmentMaxSugar": 4,
-            "environmentSugarPeaks": [[12, 45, 4], [45, 12, 4]],
-            "environmentSugarRegrowRate": 1,
-            "environmentMaxSpice": 0,
-            "environmentSpicePeaks": [],
-            "environmentSpiceRegrowRate": 0,
-            "environmentSeasonInterval": 50,
-            "environmentSeasonalGrowbackDelay": 8,
-            "environmentPollutionTimeframe": [0, 0],
-            "environmentPollutionDiffusionTimeframe": [0, 0],
-            "environmentSugarConsumptionPollutionFactor": 0,
-            "environmentSugarProductionPollutionFactor": 0,
-        },
-        "targets": ["age-at-death.survivorship"],
-    },
-    {
+        "family": "price",
         "id": "price.overlapping-peaks",
         "description": "Immortal traders share overlapping sugar and spice markets.",
         "config_overrides": {
@@ -664,44 +389,7 @@ SCENARIOS: list[dict[str, object]] = [
         "targets": ["price.equilibrium"],
     },
     {
-        "id": "price.scarce-markets",
-        "description": "Immortal traders negotiate scarce co-located sugar and spice markets.",
-        "config_overrides": {
-            "startingAgents": 260,
-            "agentMaxAge": [-1, -1],
-            "agentReplacements": 0,
-            "agentStartingSugar": [25, 50],
-            "agentStartingSpice": [25, 50],
-            "agentSugarMetabolism": [1, 5],
-            "agentSpiceMetabolism": [1, 5],
-            "agentMovement": [1, 6],
-            "agentVision": [1, 6],
-            "agentAggressionFactor": [0, 0],
-            "agentFertilityFactor": [0, 0],
-            "agentLendingFactor": [0, 0],
-            "agentTradeFactor": [1, 1],
-            "agentTagging": False,
-            "trait_ranges": {"aggression": [0, 0], "trade": [0, 1], "lending": [0, 0], "fertility": [0, 0]},
-            "environmentWidth": 52,
-            "environmentHeight": 52,
-            "environmentMaxSugar": 3,
-            "environmentSugarPeaks": [[14, 14, 3], [38, 38, 3]],
-            "environmentSugarRegrowRate": 1,
-            "environmentMaxSpice": 3,
-            "environmentSpicePeaks": [[14, 14, 3], [38, 38, 3]],
-            "environmentSpiceRegrowRate": 1,
-            "environmentSeasonInterval": 0,
-            "environmentSeasonalGrowbackDelay": 0,
-            "environmentPollutionTimeframe": [0, 0],
-            "environmentPollutionDiffusionTimeframe": [0, 0],
-            "environmentSugarConsumptionPollutionFactor": 0,
-            "environmentSugarProductionPollutionFactor": 0,
-            "environmentSpiceConsumptionPollutionFactor": 0,
-            "environmentSpiceProductionPollutionFactor": 0,
-        },
-        "targets": ["price.equilibrium"],
-    },
-    {
+        "family": "price",
         "id": "price.four-markets",
         "description": "Large immortal market with alternating sugar and spice centers.",
         "config_overrides": {
@@ -740,44 +428,7 @@ SCENARIOS: list[dict[str, object]] = [
         "targets": ["price.equilibrium"],
     },
     {
-        "id": "price.split-centers",
-        "description": "Compact immortal market split between two high resource centers.",
-        "config_overrides": {
-            "startingAgents": 220,
-            "agentMaxAge": [-1, -1],
-            "agentReplacements": 0,
-            "agentStartingSugar": [25, 50],
-            "agentStartingSpice": [25, 50],
-            "agentSugarMetabolism": [1, 6],
-            "agentSpiceMetabolism": [1, 6],
-            "agentMovement": [1, 5],
-            "agentVision": [1, 4],
-            "agentAggressionFactor": [0, 0],
-            "agentFertilityFactor": [0, 0],
-            "agentLendingFactor": [0, 0],
-            "agentTradeFactor": [1, 1],
-            "agentTagging": False,
-            "trait_ranges": {"aggression": [0, 0], "trade": [0, 1], "lending": [0, 0], "fertility": [0, 0]},
-            "environmentWidth": 44,
-            "environmentHeight": 44,
-            "environmentMaxSugar": 5,
-            "environmentSugarPeaks": [[12, 32, 5]],
-            "environmentSugarRegrowRate": 1,
-            "environmentMaxSpice": 5,
-            "environmentSpicePeaks": [[32, 12, 5]],
-            "environmentSpiceRegrowRate": 1,
-            "environmentSeasonInterval": 0,
-            "environmentSeasonalGrowbackDelay": 0,
-            "environmentPollutionTimeframe": [0, 0],
-            "environmentPollutionDiffusionTimeframe": [0, 0],
-            "environmentSugarConsumptionPollutionFactor": 0,
-            "environmentSugarProductionPollutionFactor": 0,
-            "environmentSpiceConsumptionPollutionFactor": 0,
-            "environmentSpiceProductionPollutionFactor": 0,
-        },
-        "targets": ["price.equilibrium"],
-    },
-    {
+        "family": "tribe",
         "id": "tribe-convergence.three-way-mixed",
         "description": "Three initially mixed tribes exchange cultural tags on twin peaks.",
         "config_overrides": {
@@ -819,47 +470,7 @@ SCENARIOS: list[dict[str, object]] = [
         "targets": ["tribe.convergence"],
     },
     {
-        "id": "tribe-convergence.two-way-mixed",
-        "description": "Two initially mixed tribes exchange cultural tags on a compact world.",
-        "config_overrides": {
-            "startingAgents": 240,
-            "agentMaxAge": [55, 90],
-            "agentReplacements": 0,
-            "agentStartingSugar": [45, 90],
-            "agentSugarMetabolism": [1, 5],
-            "agentSpiceMetabolism": [0, 0],
-            "agentStartingSpice": [0, 0],
-            "agentMovement": [2, 6],
-            "agentVision": [2, 5],
-            "agentAggressionFactor": [0, 0],
-            "agentFertilityFactor": [1, 1],
-            "agentLendingFactor": [0, 0],
-            "agentTradeFactor": [0, 0],
-            "agentTagging": True,
-            "agentTagStringLength": 11,
-            "trait_ranges": {"aggression": [0, 0], "trade": [0, 0], "lending": [0, 0], "fertility": [0, 1]},
-            "environmentWidth": 44,
-            "environmentHeight": 44,
-            "environmentMaxSugar": 5,
-            "environmentSugarPeaks": [[10, 34, 4], [22, 22, 5], [34, 10, 4]],
-            "environmentSugarRegrowRate": 2,
-            "environmentMaxSpice": 0,
-            "environmentSpicePeaks": [],
-            "environmentSpiceRegrowRate": 0,
-            "environmentMaxTribes": 2,
-            "environmentTribePerQuadrant": False,
-            "environmentStartingQuadrants": [1, 2, 3, 4],
-            "environmentQuadrantSizeFactor": 1,
-            "environmentSeasonInterval": 0,
-            "environmentSeasonalGrowbackDelay": 0,
-            "environmentPollutionTimeframe": [0, 0],
-            "environmentPollutionDiffusionTimeframe": [0, 0],
-            "environmentSugarConsumptionPollutionFactor": 0,
-            "environmentSugarProductionPollutionFactor": 0,
-        },
-        "targets": ["tribe.convergence"],
-    },
-    {
+        "family": "tribe",
         "id": "tribe-diversity.opposite-quadrants",
         "description": "Two tribes begin in opposite, separated quadrants on a large world.",
         "config_overrides": {
@@ -899,49 +510,192 @@ SCENARIOS: list[dict[str, object]] = [
             "environmentSugarProductionPollutionFactor": 0,
         },
         "targets": ["tribe.diversity"],
-    },
-    {
-        "id": "tribe-diversity.three-quadrants",
-        "description": "Three tribes begin in separated quadrants around asymmetric peaks.",
-        "config_overrides": {
-            "startingAgents": 360,
-            "agentMaxAge": [65, 105],
-            "agentReplacements": 0,
-            "agentStartingSugar": [45, 95],
-            "agentSugarMetabolism": [1, 4],
-            "agentSpiceMetabolism": [0, 0],
-            "agentStartingSpice": [0, 0],
-            "agentMovement": [1, 4],
-            "agentVision": [2, 6],
-            "agentAggressionFactor": [0, 0],
-            "agentFertilityFactor": [1, 1],
-            "agentLendingFactor": [0, 0],
-            "agentTradeFactor": [0, 0],
-            "agentTagging": True,
-            "agentTagStringLength": 11,
-            "trait_ranges": {"aggression": [0, 0], "trade": [0, 0], "lending": [0, 0], "fertility": [0, 1]},
-            "environmentWidth": 56,
-            "environmentHeight": 56,
-            "environmentMaxSugar": 5,
-            "environmentSugarPeaks": [[10, 10, 4], [10, 46, 5], [46, 10, 3]],
-            "environmentSugarRegrowRate": 1,
-            "environmentMaxSpice": 0,
-            "environmentSpicePeaks": [],
-            "environmentSpiceRegrowRate": 0,
-            "environmentMaxTribes": 3,
-            "environmentTribePerQuadrant": True,
-            "environmentStartingQuadrants": [1, 2, 4],
-            "environmentQuadrantSizeFactor": 0.8,
-            "environmentSeasonInterval": 0,
-            "environmentSeasonalGrowbackDelay": 0,
-            "environmentPollutionTimeframe": [0, 0],
-            "environmentPollutionDiffusionTimeframe": [0, 0],
-            "environmentSugarConsumptionPollutionFactor": 0,
-            "environmentSugarProductionPollutionFactor": 0,
-        },
-        "targets": ["tribe.diversity"],
-    },
+    }
 ]
+
+
+SITUATIONAL_PACKS: dict[str, list[str]] = {
+    "wealth-skewed": ["reproduction", "pollution"],
+    "wealth-egalitarian": ["disease", "seasons"],
+    "capacity": ["pollution", "seasons"],
+    "survivorship": ["disease", "seasons"],
+    "price": ["seasons", "disease"],
+    "tribe": ["disease", "seasons"],
+}
+
+PACK_DESCRIPTIONS = {
+    "spice": "Adds a spice resource and spice metabolism.",
+    "market": "Adds spice and bilateral sugar-spice trade.",
+    "combat": "Adds cultural tags and inter-tribe combat.",
+    "disease": "Adds transmissible diseases.",
+    "pollution": "Adds production and consumption pollution with diffusion.",
+    "seasons": "Adds alternating seasons with delayed growback.",
+    "reproduction": "Replaces automatic replacement with agent reproduction.",
+    "everything": "Adds spice, trade, tags, combat, disease, pollution, and seasons.",
+}
+
+
+def _spice_delta(base: dict[str, object]) -> dict[str, object]:
+    sugar_peaks = base["environmentSugarPeaks"]
+    return {
+        "agentSpiceMetabolism": [1, 4],
+        "agentStartingSpice": [10, 30],
+        "environmentMaxSpice": base["environmentMaxSugar"],
+        # sorted(): DTL's verifyConfiguration sorts lists in place, and the
+        # preservation test requires the manifest to hold canonical values.
+        "environmentSpicePeaks": sorted([y, x, height] for x, y, height in sugar_peaks),
+        "environmentSpiceRegrowRate": 1,
+    }
+
+
+def _market_delta(base: dict[str, object]) -> dict[str, object]:
+    delta = _spice_delta(base)
+    delta["agentTradeFactor"] = [1, 1]
+    delta["trait_ranges"] = {"trade": [0, 1]}
+    return delta
+
+
+def _combat_delta(base: dict[str, object]) -> dict[str, object]:
+    delta: dict[str, object] = {
+        "agentAggressionFactor": [0, 2],
+        "environmentMaxCombatLoot": 2,
+        "trait_ranges": {"aggression": [0, 2]},
+    }
+    if not base.get("agentTagging"):
+        # DTL combat needs tribes: prey must belong to a different tribe.
+        delta["agentTagging"] = True
+        delta["agentTagStringLength"] = 11
+        delta["environmentMaxTribes"] = 2
+    return delta
+
+
+def _disease_delta(has_spice: bool) -> dict[str, object]:
+    return {
+        "startingDiseases": 40,
+        "startingDiseasesPerAgent": [0, 3],
+        "agentImmuneSystemLength": 35,
+        "diseaseSugarMetabolismPenalty": [1, 3],
+        # A spice-metabolism penalty in a spiceless world is a death
+        # sentence, not a hazard: it creates metabolism with no supply.
+        "diseaseSpiceMetabolismPenalty": [1, 3] if has_spice else [0, 0],
+        "diseaseTransmissionChance": [1.0, 1.0],
+        # Pin the DTL default side effects off: metabolism is the intended
+        # disease pressure. The defaults' positive fertility modifier would
+        # otherwise switch reproduction ON in fertility-zero worlds.
+        "diseaseAggressionPenalty": [0, 0],
+        "diseaseFertilityPenalty": [0, 0],
+        "diseaseMovementPenalty": [0, 0],
+        "diseaseVisionPenalty": [0, 0],
+    }
+
+
+def _pollution_delta(has_spice: bool) -> dict[str, object]:
+    # Ranked episodes run 1000 timesteps; keep bounds explicit and
+    # non-negative so verifyConfiguration preserves them byte-for-byte
+    # (negative "whole episode" shorthand gets normalized and would fail
+    # the preservation test). Diffusion needs a positive delay to run.
+    delta: dict[str, object] = {
+        "environmentSugarProductionPollutionFactor": 1,
+        "environmentSugarConsumptionPollutionFactor": 1,
+        "environmentPollutionTimeframe": [0, 1000],
+        "environmentPollutionDiffusionTimeframe": [50, 1000],
+        "environmentPollutionDiffusionDelay": 10,
+    }
+    if has_spice:
+        delta["environmentSpiceProductionPollutionFactor"] = 1
+        delta["environmentSpiceConsumptionPollutionFactor"] = 1
+    return delta
+
+
+def _seasons_delta() -> dict[str, object]:
+    return {
+        "environmentSeasonInterval": 50,
+        "environmentSeasonalGrowbackDelay": 8,
+    }
+
+
+def _reproduction_delta() -> dict[str, object]:
+    return {
+        "agentFertilityFactor": [1, 1],
+        "agentReplacements": 0,
+        "trait_ranges": {"fertility": [0, 1]},
+    }
+
+
+def _merge_delta(overrides: dict[str, object], delta: dict[str, object]) -> None:
+    for key, value in delta.items():
+        if key == "trait_ranges":
+            merged = dict(overrides.get("trait_ranges", {}))
+            merged.update(value)
+            overrides["trait_ranges"] = merged
+        else:
+            overrides[key] = deepcopy(value)
+
+
+def _pack_delta(pack: str, base: dict[str, object]) -> dict[str, object]:
+    base_has_spice = base["environmentMaxSpice"] > 0
+    if pack == "spice":
+        return _spice_delta(base)
+    if pack == "market":
+        return _market_delta(base)
+    if pack == "combat":
+        return _combat_delta(base)
+    if pack == "disease":
+        return _disease_delta(base_has_spice)
+    if pack == "pollution":
+        return _pollution_delta(base_has_spice)
+    if pack == "seasons":
+        return _seasons_delta()
+    if pack == "reproduction":
+        return _reproduction_delta()
+    if pack == "everything":
+        delta: dict[str, object] = {}
+        if not base_has_spice:
+            # Bases that already run a market (price family) keep their own
+            # tuned spice endowments and trade knobs untouched.
+            _merge_delta(delta, _market_delta(base))
+        _merge_delta(delta, _combat_delta(base))
+        _merge_delta(delta, _disease_delta(True))
+        _merge_delta(delta, _pollution_delta(True))
+        _merge_delta(delta, _seasons_delta())
+        return delta
+    raise ValueError(f"unknown pack: {pack}")
+
+
+def _family_packs(family: str, base_overrides: dict[str, object]) -> list[str]:
+    packs = ["baseline", "spice", "market", "combat"]
+    if base_overrides["environmentMaxSpice"] > 0:
+        packs = ["baseline", "combat"]  # spice and market are already on
+    packs += SITUATIONAL_PACKS[family]
+    packs.append("everything")
+    return packs
+
+
+def build_scenarios() -> list[dict[str, object]]:
+    scenarios: list[dict[str, object]] = []
+    for family in FAMILY_ORDER:
+        for base in (world for world in BASE_WORLDS if world["family"] == family):
+            base_overrides = base["config_overrides"]
+            for pack in _family_packs(family, base_overrides):
+                overrides = deepcopy(base_overrides)
+                description = base["description"]
+                scenario_id = base["id"]
+                if pack != "baseline":
+                    _merge_delta(overrides, _pack_delta(pack, base_overrides))
+                    scenario_id = f"{base['id']}.{pack}"
+                    description = f"{description} {PACK_DESCRIPTIONS[pack]}"
+                scenarios.append(
+                    {
+                        "id": scenario_id,
+                        "description": description,
+                        "config_overrides": overrides,
+                        "targets": deepcopy(base["targets"]),
+                    }
+                )
+    return scenarios
+
+
+SCENARIOS: list[dict[str, object]] = build_scenarios()
 
 
 def duo_scenarios() -> list[dict[str, object]]:
