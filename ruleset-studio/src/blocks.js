@@ -263,6 +263,8 @@ function compileExpression(block, path, pathTargets, lints) {
 
 export function compileWorkspace(workspace, traitState = {}) {
   const pathTargets = new Map();
+  pathTargets.set("$", {kind: "document", id: "valid-chip"});
+  pathTargets.set("$.version", {kind: "document", id: "valid-chip"});
   const lints = [];
   const topBlocks = workspace.getTopBlocks(false);
   const roots = topBlocks.filter(block => block.type === "movement");
@@ -274,6 +276,7 @@ export function compileWorkspace(workspace, traitState = {}) {
   const traits = {};
   for (const name of TRAIT_NAMES) {
     const state = traitState[name];
+    pathTargets.set(`$.traits.${name}`, {kind: "trait", id: name});
     if (state?.enabled) traits[name] = Number(state.value);
   }
 
