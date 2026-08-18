@@ -47,7 +47,8 @@ shows the branch.
 
 ## Run it locally
 
-Everything scores locally, fast — a full 1,000-tick episode takes seconds:
+Everything scores locally, fast — a full 1,000-tick episode takes seconds
+on small worlds and under about a minute on the biggest ranked ones:
 
 ```sh
 git clone https://github.com/Metta-AI/coworld-sugarscape
