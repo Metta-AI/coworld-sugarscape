@@ -35,7 +35,9 @@ def test_replay_round_trip_and_deltas_reconstruct_final_grid(
     assert len(header["rulesets"]) == config["seats"]
     assert header["initial_agents"]
     assert document["frames"] == sink_frames
-    assert [frame["timestep"] for frame in document["frames"] if "running" in frame] == [2, 4]
+    assert [
+        frame["timestep"] for frame in document["frames"] if "running" in frame
+    ] == [2, 4]
     assert len(zlib.decompress(replay)) == results["result.replay_raw_bytes"]
 
     reconstructed = [cell[:3] for cell in header["initial_grid"]["cells"]]
@@ -98,8 +100,42 @@ def test_replay_round_trip_and_deltas_reconstruct_final_grid(
 
 def test_decode_replay_rejects_non_replay_bytes() -> None:
     try:
-        decode_replay(zlib.compress(b'{}'))
+        decode_replay(zlib.compress(b"{}"))
     except ValueError as error:
         assert "format" in str(error)
     else:
         raise AssertionError("invalid replay was accepted")
+
+
+def test_commonwealth_replay_carries_running_wellness_diagnostics(
+    tiny_episode_config: dict[str, object],
+) -> None:
+    config = dict(tiny_episode_config)
+    config.update(
+        {
+            "seats": 1,
+            "targets": ["wellness.max"],
+            "measurement_window": 3,
+            "replay_histogram_interval": 2,
+        }
+    )
+    results, replay, _ = run_episode(config, [None], emit_timing_logs=False)
+    document = decode_replay(replay)
+
+    assert document["header"]["targets"][0]["kind"] == "maximize"
+    assert (
+        document["header"]["seat_details"][0]["ruleset_sha256"]
+        == (results["details"][0]["ruleset_sha256"])
+    )
+    running = [
+        frame["running"][0] for frame in document["frames"] if "running" in frame
+    ]
+    assert running
+    assert all(reading["score_method"] == "wellness-sum/1" for reading in running)
+    assert all(reading["kind"] == "maximize" for reading in running)
+    assert all(
+        set(reading["component_means"])
+        == {"health", "conflict", "social", "family", "wealth"}
+        for reading in running
+    )
+    assert running[-1]["score"] == results["scores"][0]

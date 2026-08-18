@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Callable, Mapping, Sequence
 
 from .config import build_dtl_config, resolve_episode_config, ruleset_limits
 from .instrumentation import EpisodeInstrumentation
 from .measurement import RollingMeasurements
 from .replay import FrameSink, ReplayWriter
 from .ruleset import CompiledRuleset, compile_ruleset, validate_ruleset
-from .scoring import SCORE_METHOD, score_histogram
+from .scoring import SCORE_METHOD, WELLNESS_SCORE_METHOD, score_histogram
 from .seats import parse_trait_ranges
 from .simulation import CoworldSugarscape
 from .targets import DEFAULT_CATALOG_PATH, load_target_catalog, resolve_seat_targets
@@ -41,13 +42,30 @@ def run_episode(
             measurement_window=int(resolved["measurement_window"]),
             catalog=catalog,
         )
+        target_kinds = {target.kind for target in targets}
+        if len(target_kinds) != 1:
+            raise ValueError("all seats in an episode must use the same target kind")
+        target_kind = targets[0].kind
+        if target_kind == "minimize":
+            raise ValueError('target kind "minimize" has no supported scoring method')
+        if target_kind == "maximize" and any(
+            target.variable != "wellness" for target in targets
+        ):
+            raise ValueError(
+                'target kind "maximize" is supported only for variable "wellness"'
+            )
     if len(rulesets) != seat_count:
         raise ValueError("one ruleset submission is required for each seat")
-    submitted_flags = tuple(submitted) if submitted is not None else (True,) * seat_count
-    if len(submitted_flags) != seat_count or not all(isinstance(flag, bool) for flag in submitted_flags):
+    submitted_flags = (
+        tuple(submitted) if submitted is not None else (True,) * seat_count
+    )
+    if len(submitted_flags) != seat_count or not all(
+        isinstance(flag, bool) for flag in submitted_flags
+    ):
         raise ValueError("submitted must contain one boolean per seat")
 
     compiled: list[CompiledRuleset] = []
+    ruleset_hashes: list[str] = []
     for seat, raw_ruleset in enumerate(rulesets):
         with instrumentation.phase("ruleset_validation"):
             validation = validate_ruleset(raw_ruleset, limits=limits)
@@ -55,7 +73,9 @@ def run_episode(
             details = "; ".join(str(error) for error in validation.errors)
             raise ValueError(f"seat {seat} ruleset is invalid: {details}")
         with instrumentation.phase("ruleset_compilation"):
-            compiled.append(compile_ruleset(validation, limits=limits))
+            compiled_ruleset = compile_ruleset(validation, limits=limits)
+            compiled.append(compiled_ruleset)
+            ruleset_hashes.append(_ruleset_sha256(compiled_ruleset.normalized))
 
     with instrumentation.phase("world_build"):
         dtl_config = build_dtl_config(resolved)
@@ -99,41 +119,59 @@ def run_episode(
         scores: list[float] = []
         details: list[dict[str, object]] = []
         for seat, target in enumerate(targets):
-            histogram = measurements.histogram(
-                target.variable,
-                scope=target.scope,
-                seat=seat if target.scope == "seat" else None,
-            )
-            distribution_score = score_histogram(histogram, target.probs)
-            # Survival rule (decided 2026-08-11): a distribution only counts if
-            # its population survived to the final tick. Under global scope
-            # that is any living agent; under seat scope, the seat's own.
-            # Without this, a population that banks good window samples and
-            # then collapses would still score on per-agent variables.
-            scope_alive = (
-                len(world.agents) if target.scope == "global" else seat_population[seat]
-            )
-            died_before_end = scope_alive == 0
-            score = 0.0 if died_before_end else distribution_score.score
-            scores.append(score)
-            details.append(
-                {
-                    "seat": seat,
-                    "target_id": target.id,
+            common_detail = {
+                "seat": seat,
+                "target_id": target.id,
+                "target_kind": target.kind,
+                "target_variable": target.variable,
+                "submitted": submitted_flags[seat],
+                "ruleset_nodes": compiled[seat].node_count,
+                "ruleset_sha256": ruleset_hashes[seat],
+                "agents_final": seat_population[seat],
+            }
+            if target.kind == "distribution":
+                assert target.scope is not None and target.probs is not None
+                histogram = measurements.histogram(
+                    target.variable,
+                    scope=target.scope,
+                    seat=seat if target.scope == "seat" else None,
+                )
+                distribution_score = score_histogram(histogram, target.probs)
+                scope_alive = (
+                    len(world.agents)
+                    if target.scope == "global"
+                    else seat_population[seat]
+                )
+                died_before_end = scope_alive == 0
+                score = 0.0 if died_before_end else distribution_score.score
+                detail = {
+                    **common_detail,
                     "target_scope": target.scope,
-                    "target_variable": target.variable,
+                    "score_method": SCORE_METHOD,
                     "score": score,
                     "died_before_end": died_before_end,
                     "raw_w1": distribution_score.raw_w1,
                     "w1_scale": distribution_score.w1_scale,
                     "js_divergence": distribution_score.js_divergence,
-                    "submitted": submitted_flags[seat],
-                    "ruleset_nodes": compiled[seat].node_count,
-                    "agents_final": seat_population[seat],
                     "empty_measurement": distribution_score.empty_measurement,
                     "histogram": histogram.as_dict(),
                 }
-            )
+            else:
+                wellness = measurements.wellness_summary(world.agents, seat=seat)
+                score = wellness.score
+                detail = {
+                    **common_detail,
+                    "score_method": WELLNESS_SCORE_METHOD,
+                    "score": score,
+                    "survivor_count": wellness.survivor_count,
+                    "mean_wellness": wellness.mean_wellness,
+                    "component_means": wellness.component_dict(),
+                    "histogram": measurements.histogram(
+                        "wellness", scope="seat", seat=seat
+                    ).as_dict(),
+                }
+            scores.append(score)
+            details.append(detail)
 
     with instrumentation.phase("replay_serialization"):
         replay = replay_writer.finish(scores=scores, seat_details=details)
@@ -141,7 +179,9 @@ def run_episode(
     with instrumentation.phase("result_assembly"):
         stats = world.runtimeStats
         results: dict[str, object] = {
-            "score_method": SCORE_METHOD,
+            "score_method": (
+                WELLNESS_SCORE_METHOD if target_kind == "maximize" else SCORE_METHOD
+            ),
             "seed": resolved["seed"],
             "scenario_index": resolved["scenario_index"],
             "timesteps_completed": world.timestep,
@@ -177,3 +217,14 @@ def canonical_results_payload(results: Mapping[str, object]) -> bytes:
         separators=(",", ":"),
         sort_keys=True,
     ).encode("utf-8")
+
+
+def _ruleset_sha256(ruleset: object) -> str:
+    canonical = json.dumps(
+        ruleset,
+        allow_nan=False,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()

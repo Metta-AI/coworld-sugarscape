@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -51,6 +50,7 @@ def test_variants_and_certification_are_token_free_and_fixture_lengths_match() -
         "solo-ladder",
         "duo-ladder",
         "duel-4seat",
+        "commonwealth",
     }
     for variant in manifest["variants"]:
         assert "tokens" not in variant["game_config"]
@@ -60,10 +60,41 @@ def test_variants_and_certification_are_token_free_and_fixture_lengths_match() -
     assert certification["game_config"]["startingAgents"] == 30
     assert certification["game_config"]["timesteps"] == 50
 
+    commonwealth = next(
+        variant for variant in manifest["variants"] if variant["id"] == "commonwealth"
+    )["game_config"]
+    assert commonwealth["seed"] == -1
+    assert commonwealth["seats"] == 1
+    assert commonwealth["timesteps"] == 1000
+    assert commonwealth["measurement_window"] == 50
+    assert commonwealth["targets"] == ["wellness.max"]
+    assert commonwealth["agentDepressionPercentage"] == 0.1
+    assert commonwealth["agentReplacements"] == 0
+    for key in (
+        "environmentSeasonInterval",
+        "environmentSeasonalGrowbackDelay",
+        "environmentSugarConsumptionPollutionFactor",
+        "environmentSugarProductionPollutionFactor",
+        "environmentSpiceConsumptionPollutionFactor",
+        "environmentSpiceProductionPollutionFactor",
+    ):
+        assert commonwealth[key] == 0
+
+
+def test_results_schema_allows_unbounded_commonwealth_scores() -> None:
+    manifest = json.loads((ROOT / "coworld_manifest.json").read_text(encoding="utf-8"))
+    properties = manifest["game"]["results_schema"]["properties"]
+
+    assert "maximum" not in properties["scores"]["items"]
+    assert "maximum" not in properties["score.match_mean"]
+    assert "maximum" not in properties["score.match_min"]
+
 
 def test_container_files_pin_python_and_hash_seed() -> None:
     game_dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
-    player_dockerfile = (ROOT / "players" / "baseline" / "Dockerfile").read_text(encoding="utf-8")
+    player_dockerfile = (ROOT / "players" / "baseline" / "Dockerfile").read_text(
+        encoding="utf-8"
+    )
     compose = (ROOT / "compose.yaml").read_text(encoding="utf-8")
 
     for dockerfile in (game_dockerfile, player_dockerfile):

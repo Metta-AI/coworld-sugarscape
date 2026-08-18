@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
-from typing import Any, Callable, Mapping, Sequence
 import zlib
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
+from typing import Any
 
 from .measurement import RollingMeasurements
 from .ruleset import CompiledRuleset
-from .scoring import SCORE_METHOD, score_histogram
+from .scoring import SCORE_METHOD, WELLNESS_SCORE_METHOD, score_histogram
 from .targets import Target
-
 
 REPLAY_FORMAT = "sugarscape.replay.v3"
 REPLAY_VERSION = 2
@@ -69,7 +69,9 @@ class ReplayWriter:
         self.roster = [_agent_static(agent) for agent in _sorted_agents(world)]
         self.initial_agents = [_agent_dynamic(agent) for agent in _sorted_agents(world)]
         self._known_agents = {record[0] for record in self.roster}
-        self._last_agents = {record[0]: tuple(record[1:]) for record in self.initial_agents}
+        self._last_agents = {
+            record[0]: tuple(record[1:]) for record in self.initial_agents
+        }
         self.frames: list[dict[str, object]] = []
 
     def capture_frame(self, world: Any) -> dict[str, object]:
@@ -78,17 +80,23 @@ class ReplayWriter:
         current_cells = _cell_state(world)
         deltas = [
             [index, *current]
-            for index, (previous, current) in enumerate(zip(self._last_cells, current_cells))
+            for index, (previous, current) in enumerate(
+                zip(self._last_cells, current_cells)
+            )
             if previous != current
         ]
         self._last_cells = current_cells
         live_agents = _sorted_agents(world)
         births = [
-            _agent_static(agent) for agent in live_agents if agent.ID not in self._known_agents
+            _agent_static(agent)
+            for agent in live_agents
+            if agent.ID not in self._known_agents
         ]
         self._known_agents.update(record[0] for record in births)
         current_agent_records = [_agent_dynamic(agent) for agent in live_agents]
-        current_agents = {record[0]: tuple(record[1:]) for record in current_agent_records}
+        current_agents = {
+            record[0]: tuple(record[1:]) for record in current_agent_records
+        }
         upserted_agents = [
             record
             for record in current_agent_records
@@ -107,8 +115,11 @@ class ReplayWriter:
             },
             "runtimeStats": dict(world.runtimeStats),
         }
-        if world.timestep % self.histogram_interval == 0 or world.timestep == world.maxTimestep:
-            frame["running"] = self._running_scores()
+        if (
+            world.timestep % self.histogram_interval == 0
+            or world.timestep == world.maxTimestep
+        ):
+            frame["running"] = self._running_scores(world)
             frame["measured"] = self._measured_variables()
         self.frames.append(frame)
         if self.frame_sink is not None:
@@ -127,7 +138,11 @@ class ReplayWriter:
             "format": REPLAY_FORMAT,
             "version": REPLAY_VERSION,
             "header": {
-                "score_method": SCORE_METHOD,
+                "score_method": (
+                    WELLNESS_SCORE_METHOD
+                    if self.targets and self.targets[0].kind == "maximize"
+                    else SCORE_METHOD
+                ),
                 "config": self.config,
                 "seed": self.config["seed"],
                 "targets": [target.as_dict() for target in self.targets],
@@ -169,9 +184,28 @@ class ReplayWriter:
             ).as_dict()
         return measured
 
-    def _running_scores(self) -> list[dict[str, object]]:
+    def _running_scores(self, world: Any) -> list[dict[str, object]]:
         running: list[dict[str, object]] = []
         for seat, target in enumerate(self.targets):
+            if target.kind == "maximize":
+                wellness = self.measurements.wellness_summary(world.agents, seat=seat)
+                running.append(
+                    {
+                        "seat": seat,
+                        "kind": target.kind,
+                        "variable": target.variable,
+                        "score_method": WELLNESS_SCORE_METHOD,
+                        "score": wellness.score,
+                        "histogram": self.measurements.histogram(
+                            "wellness", scope="seat", seat=seat
+                        ).as_dict(),
+                        "survivor_count": wellness.survivor_count,
+                        "mean_wellness": wellness.mean_wellness,
+                        "component_means": wellness.component_dict(),
+                    }
+                )
+                continue
+            assert target.scope is not None and target.probs is not None
             histogram = self.measurements.histogram(
                 target.variable,
                 scope=target.scope,
@@ -181,7 +215,9 @@ class ReplayWriter:
             running.append(
                 {
                     "seat": seat,
+                    "kind": target.kind,
                     "variable": target.variable,
+                    "score_method": SCORE_METHOD,
                     "histogram": histogram.as_dict(),
                     "score": score.score,
                 }
@@ -198,7 +234,9 @@ def decode_replay(data: bytes) -> dict[str, object]:
         raise ValueError(f"invalid Sugarscape replay: {error}") from error
     if not isinstance(document, dict) or document.get("format") != REPLAY_FORMAT:
         raise ValueError("invalid Sugarscape replay format")
-    if document.get("version") != REPLAY_VERSION or not isinstance(document.get("frames"), list):
+    if document.get("version") != REPLAY_VERSION or not isinstance(
+        document.get("frames"), list
+    ):
         raise ValueError("unsupported Sugarscape replay version")
     return document
 
@@ -260,12 +298,14 @@ def _agent_dynamic(agent: Any) -> list[int]:
 def quantize_wealth(wealth: float) -> int:
     """Round replay-only wealth to its nearest presentation bucket."""
 
-    return int(round(wealth / WEALTH_QUANTUM)) * WEALTH_QUANTUM
+    return round(wealth / WEALTH_QUANTUM) * WEALTH_QUANTUM
 
 
 def _without_tokens(value: Any) -> Any:
     if isinstance(value, Mapping):
-        return {key: _without_tokens(item) for key, item in value.items() if key != "tokens"}
+        return {
+            key: _without_tokens(item) for key, item in value.items() if key != "tokens"
+        }
     if isinstance(value, list):
         return [_without_tokens(item) for item in value]
     if isinstance(value, tuple):

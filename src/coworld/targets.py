@@ -2,46 +2,65 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
 import json
 import math
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, replace
+from itertools import pairwise
 from pathlib import Path
-from typing import Mapping, Sequence
-
 
 DEFAULT_CATALOG_PATH = Path(__file__).resolve().parents[2] / "targets"
 DEFAULT_TARGET_ID = "wealth.skewed-gini-0.5"
 MEASUREMENT_BIN_ALIASES = {"age": "age_at_death"}
+TARGET_KINDS = {"distribution", "maximize", "minimize"}
 
 # Measurement-only variables with no shipped target keep fixed canonical bins
 # so results histograms stay complete. sick_fraction lost its catalog source
 # when the disease targets were shelved (2026-08-11) but remains measured.
 MEASUREMENT_ONLY_BINS: dict[str, tuple[tuple[float, ...], tuple[float, float]]] = {
     "sick_fraction": (tuple(i / 10 for i in range(11)), (0.0, 1.0)),
+    "wellness": (tuple(i / 10 for i in range(11)), (0.0, 1.0)),
 }
 
 
 @dataclass(frozen=True, slots=True)
 class Target:
-    """One validated target distribution."""
+    """One validated distribution or scalar-objective target."""
 
     id: str
+    kind: str
     variable: str
-    scope: str
-    support: tuple[float, float]
-    bins: tuple[float, ...]
-    probs: tuple[float, ...]
-    window: int
-    source: str
-    provisional: bool
-    generation: Mapping[str, object]
+    description: str | None = None
+    scope: str | None = None
+    support: tuple[float, float] | None = None
+    bins: tuple[float, ...] | None = None
+    probs: tuple[float, ...] | None = None
+    window: int | None = None
+    source: str | None = None
+    provisional: bool | None = None
+    generation: Mapping[str, object] | None = None
 
     def as_dict(self) -> dict[str, object]:
         """Return the pure-data representation sent to players and replays."""
 
-        return {
+        common = {
             "id": self.id,
+            "kind": self.kind,
             "variable": self.variable,
+        }
+        if self.kind != "distribution":
+            assert self.description is not None
+            return {**common, "description": self.description}
+        assert self.scope is not None
+        assert self.support is not None
+        assert self.bins is not None
+        assert self.probs is not None
+        assert self.window is not None
+        assert self.source is not None
+        assert self.provisional is not None
+        assert self.generation is not None
+        return {
+            **common,
             "scope": self.scope,
             "support": list(self.support),
             "bins": list(self.bins),
@@ -86,12 +105,16 @@ def load_target_catalog(path: Path | str = DEFAULT_CATALOG_PATH) -> TargetCatalo
         target = parse_target(raw, location=file.name)
         if target.id in targets:
             raise ValueError(f'duplicate target id "{target.id}"')
-        expected_bins = bins_by_variable.setdefault(target.variable, target.bins)
-        expected_support = support_by_variable.setdefault(target.variable, target.support)
-        if target.bins != expected_bins or target.support != expected_support:
-            raise ValueError(
-                f'target "{target.id}" uses inconsistent support/bins for variable "{target.variable}"'
+        if target.kind == "distribution":
+            assert target.bins is not None and target.support is not None
+            expected_bins = bins_by_variable.setdefault(target.variable, target.bins)
+            expected_support = support_by_variable.setdefault(
+                target.variable, target.support
             )
+            if target.bins != expected_bins or target.support != expected_support:
+                raise ValueError(
+                    f'target "{target.id}" uses inconsistent support/bins for variable "{target.variable}"'
+                )
         targets[target.id] = target
     for variable, source_variable in MEASUREMENT_BIN_ALIASES.items():
         try:
@@ -110,6 +133,11 @@ def load_target_catalog(path: Path | str = DEFAULT_CATALOG_PATH) -> TargetCatalo
             )
         bins_by_variable.setdefault(variable, bins)
         support_by_variable.setdefault(variable, support)
+    for target in targets.values():
+        if target.variable not in bins_by_variable:
+            raise ValueError(
+                f'target "{target.id}" uses unknown variable "{target.variable}"'
+            )
     return TargetCatalog(targets, bins_by_variable, support_by_variable)
 
 
@@ -117,7 +145,28 @@ def parse_target(raw: object, *, location: str = "target") -> Target:
     """Validate one decoded target object with actionable field errors."""
 
     if not isinstance(raw, Mapping):
-        raise ValueError(f"{location}: target must be an object")
+        raise TypeError(f"{location}: target must be an object")
+    kind = raw.get("kind", "distribution")
+    if not isinstance(kind, str) or kind not in TARGET_KINDS:
+        raise ValueError(
+            f'{location}.kind must be "distribution", "maximize", or "minimize"'
+        )
+    if kind != "distribution":
+        required = {"id", "kind", "variable", "description"}
+        missing = sorted(required - set(raw))
+        if missing:
+            raise ValueError(f"{location}: missing fields: {', '.join(missing)}")
+        unknown = sorted(set(raw) - required)
+        if unknown:
+            raise ValueError(
+                f"{location}: fields not allowed for {kind}: {', '.join(unknown)}"
+            )
+        return Target(
+            id=_nonempty_string(raw["id"], f"{location}.id"),
+            kind=kind,
+            variable=_nonempty_string(raw["variable"], f"{location}.variable"),
+            description=_nonempty_string(raw["description"], f"{location}.description"),
+        )
     required = {
         "id",
         "variable",
@@ -142,8 +191,10 @@ def parse_target(raw: object, *, location: str = "target") -> Target:
     if support[0] >= support[1]:
         raise ValueError(f"{location}.support must be strictly increasing")
     bins = tuple(_number_array(raw["bins"], f"{location}.bins"))
-    if len(bins) < 2 or any(left >= right for left, right in zip(bins, bins[1:])):
-        raise ValueError(f"{location}.bins must contain at least two strictly increasing edges")
+    if len(bins) < 2 or any(left >= right for left, right in pairwise(bins)):
+        raise ValueError(
+            f"{location}.bins must contain at least two strictly increasing edges"
+        )
     if bins[0] != support[0] or bins[-1] != support[1]:
         raise ValueError(f"{location}.bins must start and end at the declared support")
     probs = tuple(_number_array(raw["probs"], f"{location}.probs"))
@@ -159,21 +210,24 @@ def parse_target(raw: object, *, location: str = "target") -> Target:
     source = _nonempty_string(raw["source"], f"{location}.source")
     provisional = raw["provisional"]
     if not isinstance(provisional, bool):
-        raise ValueError(f"{location}.provisional must be a boolean")
+        raise TypeError(f"{location}.provisional must be a boolean")
     generation = raw["generation"]
     if not isinstance(generation, Mapping) or not generation.get("description"):
-        raise ValueError(f"{location}.generation must describe how the histogram was produced")
+        raise ValueError(
+            f"{location}.generation must describe how the histogram was produced"
+        )
     return Target(
-        target_id,
-        variable,
-        scope,
-        support,
-        bins,
-        probs,
-        window,
-        source,
-        provisional,
-        dict(generation),
+        id=target_id,
+        kind="distribution",
+        variable=variable,
+        scope=scope,
+        support=support,
+        bins=bins,
+        probs=probs,
+        window=window,
+        source=source,
+        provisional=provisional,
+        generation=dict(generation),
     )
 
 
@@ -188,7 +242,9 @@ def resolve_seat_targets(
 
     if assignments is None:
         entries: Sequence[object] = [DEFAULT_TARGET_ID] * seats
-    elif isinstance(assignments, Sequence) and not isinstance(assignments, (str, bytes)):
+    elif isinstance(assignments, Sequence) and not isinstance(
+        assignments, (str, bytes)
+    ):
         entries = assignments
     else:
         raise ValueError("targets must be an array with one assignment per seat")
@@ -203,10 +259,20 @@ def resolve_seat_targets(
             canonical_bins = catalog.bins_by_variable.get(target.variable)
             canonical_support = catalog.support_by_variable.get(target.variable)
             if canonical_bins is None:
-                raise ValueError(f'targets[{seat}] uses unknown variable "{target.variable}"')
-            if target.bins != canonical_bins or target.support != canonical_support:
-                raise ValueError(f"targets[{seat}] does not use the catalog's canonical support/bins")
-        resolved.append(replace(target, window=measurement_window))
+                raise ValueError(
+                    f'targets[{seat}] uses unknown variable "{target.variable}"'
+                )
+            if target.kind == "distribution" and (
+                target.bins != canonical_bins or target.support != canonical_support
+            ):
+                raise ValueError(
+                    f"targets[{seat}] does not use the catalog's canonical support/bins"
+                )
+        resolved.append(
+            replace(target, window=measurement_window)
+            if target.kind == "distribution"
+            else target
+        )
     return tuple(resolved)
 
 
@@ -216,13 +282,19 @@ def _nonempty_string(value: object, path: str) -> str:
     return value
 
 
-def _number_array(value: object, path: str, *, length: int | None = None) -> list[float]:
+def _number_array(
+    value: object, path: str, *, length: int | None = None
+) -> list[float]:
     if not isinstance(value, list) or (length is not None and len(value) != length):
         suffix = f" with {length} entries" if length is not None else ""
         raise ValueError(f"{path} must be an array{suffix}")
     numbers: list[float] = []
     for index, item in enumerate(value):
-        if isinstance(item, bool) or not isinstance(item, (int, float)) or not math.isfinite(item):
+        if (
+            isinstance(item, bool)
+            or not isinstance(item, (int, float))
+            or not math.isfinite(item)
+        ):
             raise ValueError(f"{path}[{index}] must be a finite number")
         numbers.append(float(item))
     return numbers

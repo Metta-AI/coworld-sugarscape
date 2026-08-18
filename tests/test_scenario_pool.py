@@ -128,7 +128,11 @@ def test_one_short_episode_per_family(scenario_index: int) -> None:
 
 def test_pool_invariants() -> None:
     pool = solo_ladder_config()["scenario_pool"]
-    catalog_ids = set(load_target_catalog().targets)
+    catalog_ids = {
+        target.id
+        for target in load_target_catalog().targets.values()
+        if target.kind == "distribution"
+    }
     scenario_ids = [scenario["id"] for scenario in pool]
     maps = [
         json.dumps(scenario["config_overrides"], sort_keys=True, separators=(",", ":"))

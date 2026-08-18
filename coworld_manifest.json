@@ -63,13 +63,13 @@
         "result.extinct"
       ],
       "properties": {
-        "score_method": {"const": "w1-hyperbolic/1"},
-        "scores": {"type": "array", "minItems": 1, "maxItems": 4, "items": {"type": "number", "minimum": 0, "maximum": 1}},
+        "score_method": {"enum": ["w1-hyperbolic/1", "wellness-sum/1"]},
+        "scores": {"type": "array", "minItems": 1, "maxItems": 4, "items": {"type": "number", "minimum": 0}},
         "details": {"type": "array", "minItems": 1, "maxItems": 4, "items": {"type": "object"}},
         "histograms": {"type": "object"},
         "timings": {"type": "object"},
-        "score.match_mean": {"type": "number", "minimum": 0, "maximum": 1},
-        "score.match_min": {"type": "number", "minimum": 0, "maximum": 1},
+        "score.match_mean": {"type": "number", "minimum": 0},
+        "score.match_min": {"type": "number", "minimum": 0},
         "result.population_final": {"type": "integer", "minimum": 0},
         "result.gini_final": {"type": "number", "minimum": 0, "maximum": 1},
         "result.extinct": {"type": "boolean"},
@@ -1983,6 +1983,29 @@
         "measurement_window": 100,
         "startingAgents": 252,
         "targets": ["wealth.skewed-gini-0.5", "wealth.egalitarian", "tribe.convergence", "tribe.diversity"]
+      }
+    },
+    {
+      "id": "commonwealth",
+      "name": "Commonwealth",
+      "description": "One fixed constitution is judged by the summed wellness of its surviving agents.",
+      "game_config": {
+        "seed": -1,
+        "seats": 1,
+        "players": [{"name": "Commonwealth"}],
+        "timesteps": 1000,
+        "measurement_window": 50,
+        "targets": ["wellness.max"],
+        "agentDepressionPercentage": 0.1,
+        "agentReplacements": 0,
+        "environmentSeasonInterval": 0,
+        "environmentSeasonalGrowbackDelay": 0,
+        "environmentPollutionTimeframe": [0, 0],
+        "environmentPollutionDiffusionTimeframe": [0, 0],
+        "environmentSugarConsumptionPollutionFactor": 0,
+        "environmentSugarProductionPollutionFactor": 0,
+        "environmentSpiceConsumptionPollutionFactor": 0,
+        "environmentSpiceProductionPollutionFactor": 0
       }
     }
   ],
