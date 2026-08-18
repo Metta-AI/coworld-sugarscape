@@ -20,6 +20,8 @@
 - `tools/generate_targets.py` stays as is.
 - Commit messages: short imperative sentences matching `git log` style (e.g. "Remove the scenario reachability probe"), no `feat:`/`fix:` prefixes. End every commit message with the `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>` trailer.
 - The working tree starts with pre-existing uncommitted work that Task 0 checkpoints verbatim. Do not include `tmp/` in any commit.
+- NEVER stage `.venv` (in a worktree it is an untracked symlink that `.gitignore`'s `.venv/` pattern does not match). Stage explicit paths; when a broad add is unavoidable, exclude it with `':!.venv'`.
+- Pack override values must be in DTL-canonical form so `verifyConfiguration` preserves them byte-for-byte: lists sorted, timeframe bounds non-negative and within `[0, timesteps]` (ranked episodes run `timesteps: 1000`). `test_all_scenarios_resolve_and_validate` asserts exact equality after `build_dtl_config`, which runs `verifyConfiguration`.
 
 ---
 
@@ -70,7 +72,7 @@ Expected: only `?? tmp/` (leave it).
 
 **Files:**
 - Delete: `tools/probe_pool.py`, `tools/probe_reachability.py`, `tests/test_probe.py`, `docs/probe-reports/` (whole directory)
-- Modify: `tools/generate_scenario_pool.py` (remove `--emit-configs`), `tests/test_packaging.py` (only if it references deleted files)
+- Modify: `tools/generate_scenario_pool.py` (remove `--emit-configs`), `tools/benchmark_replay_viewer.py` (imports and calls `emit_configs`, and hard-codes scenario `capacity.dense-regrow-2` which Task 2 drops), `tests/test_packaging.py` (only if it references deleted files)
 
 **Interfaces:**
 - Consumes: nothing.
@@ -91,21 +93,25 @@ In `tools/generate_scenario_pool.py`:
 - In `main()`: delete the `--emit-configs` `add_argument` call, change the no-args guard to `if not args.write and not args.check: parser.error("choose --write or --check")`, and delete the `if args.emit_configs is not None:` block.
 - Update the module docstring: drop "and probe configs" and the `--emit-configs` mention.
 
-- [ ] **Step 3: Sweep for dangling references**
+- [ ] **Step 3: Migrate `tools/benchmark_replay_viewer.py` off `emit_configs`**
+
+The benchmark imports `emit_configs` (line ~34) and calls it (line ~58) to obtain a standalone merged config, and hard-codes `capacity.dense-regrow-2` (line ~37), a scenario Task 2 drops. Replace the `emit_configs` call with in-memory construction — load the manifest, take the solo-ladder `game_config` minus `seed`/`scenario_pool`, `update()` it with the chosen scenario's `config_overrides` and `targets` (the exact merge `emit_configs` performed) — and switch the scenario id to `capacity.compact-regrow-1` (a kept base). Verify with a bare `.venv/bin/python tools/benchmark_replay_viewer.py --help` (arg parsing and imports must succeed).
+
+- [ ] **Step 4: Sweep for dangling references**
 
 Run: `grep -rn "probe_pool\|probe_reachability\|emit-configs\|emit_configs\|probe-reports" --exclude-dir=archived --exclude-dir=.git --exclude-dir=build --exclude-dir=tmp .`
 Expected leftovers to fix now: any hits in `tests/` or `tools/`. Hits in `docs/` are handled in Task 4 — leave them. Hits in `docs/designs/2026-08-18-w1-scoring-v2.md` and other dated design docs are historical — leave them.
 Check `tests/test_packaging.py` specifically: if it asserts the packaged file list contains the deleted tools, remove those entries.
 
-- [ ] **Step 4: Run the affected tests**
+- [ ] **Step 5: Run the affected tests**
 
 Run: `.venv/bin/python -m pytest tests/test_packaging.py tests/test_scenario_pool.py -x -q`
 Expected: PASS (test_probe.py no longer exists to fail).
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add -A -- ':!tmp'
+git add -A -- ':!tmp' ':!.venv'
 git commit -m "Remove the scenario reachability probe
 
 Reachability is no longer a gate on pool changes; a badly unreachable
@@ -186,12 +192,41 @@ def test_pack_invariants() -> None:
         pack = parts[2] if len(parts) == 3 else "baseline"
         packs.setdefault(pack, []).append(scenario_id)
 
-    assert set(packs) == {
-        "baseline", "spice", "market", "combat", "disease",
-        "pollution", "seasons", "reproduction", "everything",
+    assert {pack: len(ids) for pack, ids in packs.items()} == {
+        "baseline": 12,
+        "spice": 10,
+        "market": 10,
+        "combat": 12,
+        "disease": 8,
+        "pollution": 4,
+        "seasons": 10,
+        "reproduction": 2,
+        "everything": 12,
     }
-    assert len(packs["baseline"]) == 12
-    assert len(packs["everything"]) == 12
+
+    # The pool is ordered family -> base -> packs, with fixed pack order.
+    def base_and_pack(scenario_id: str) -> tuple[str, str]:
+        parts = scenario_id.split(".")
+        if len(parts) == 3:
+            return ".".join(parts[:2]), parts[2]
+        return scenario_id, "baseline"
+
+    expected_sequence = {
+        "wealth-skewed": ["baseline", "spice", "market", "combat", "reproduction", "pollution", "everything"],
+        "wealth-egalitarian": ["baseline", "spice", "market", "combat", "disease", "seasons", "everything"],
+        "capacity": ["baseline", "spice", "market", "combat", "pollution", "seasons", "everything"],
+        "survivorship": ["baseline", "spice", "market", "combat", "disease", "seasons", "everything"],
+        "price": ["baseline", "combat", "seasons", "disease", "everything"],
+        "tribe": ["baseline", "spice", "market", "combat", "disease", "seasons", "everything"],
+    }
+    sequence: dict[str, list[str]] = {}
+    for scenario in pool:
+        base_id, pack = base_and_pack(scenario["id"])
+        sequence.setdefault(base_id, []).append(pack)
+    for base_id, pack_sequence in sequence.items():
+        family = "tribe" if base_id.startswith("tribe-") else base_id.split(".")[0]
+        assert pack_sequence == expected_sequence[family], base_id
+    assert len(sequence) == 12
 
     for scenario_id, overrides in by_id.items():
         parts = scenario_id.split(".")
@@ -209,7 +244,8 @@ def test_pack_invariants() -> None:
             assert overrides["startingDiseases"] == 40, scenario_id
         if pack in ("pollution", "everything"):
             assert overrides["environmentSugarProductionPollutionFactor"] == 1, scenario_id
-            assert overrides["environmentPollutionTimeframe"] == [-1, -1], scenario_id
+            assert overrides["environmentPollutionTimeframe"] == [0, 1000], scenario_id
+            assert overrides["environmentPollutionDiffusionDelay"] == 10, scenario_id
         if pack in ("seasons", "everything"):
             assert overrides["environmentSeasonInterval"] == 50, scenario_id
         if pack == "reproduction":
@@ -221,6 +257,19 @@ def test_pack_invariants() -> None:
 
     # price never emits redundant spice/market packs
     assert not any(s.endswith((".spice", ".market")) for s in by_id if s.startswith("price."))
+```
+
+Also add a key-validity invariant (a typo'd DTL key would otherwise pass the
+preservation test while DTL silently uses its default):
+
+```python
+def test_every_override_key_is_a_known_config_key() -> None:
+    from coworld.config import load_dtl_defaults
+
+    known = set(load_dtl_defaults()) | {"trait_ranges"}
+    for scenario in solo_ladder_config()["scenario_pool"]:
+        unknown = set(scenario["config_overrides"]) - known
+        assert not unknown, f"{scenario['id']}: {sorted(unknown)}"
 ```
 
 - [ ] **Step 2: Run the pool tests to verify they fail against the old pool**
@@ -276,17 +325,15 @@ PACK_DESCRIPTIONS = {
     "everything": "Adds spice, trade, tags, combat, disease, pollution, and seasons.",
 }
 
-# DTL treats negative timeframe bounds as "the whole episode".
-EPISODE_TIMEFRAME = [-1, -1]
-
-
 def _spice_delta(base: dict[str, object]) -> dict[str, object]:
     sugar_peaks = base["environmentSugarPeaks"]
     return {
         "agentSpiceMetabolism": [1, 4],
         "agentStartingSpice": [10, 30],
         "environmentMaxSpice": base["environmentMaxSugar"],
-        "environmentSpicePeaks": [[y, x, height] for x, y, height in sugar_peaks],
+        # sorted(): DTL's verifyConfiguration sorts lists in place, and the
+        # preservation test requires the manifest to hold canonical values.
+        "environmentSpicePeaks": sorted([y, x, height] for x, y, height in sugar_peaks),
         "environmentSpiceRegrowRate": 1,
     }
 
@@ -322,15 +369,26 @@ def _disease_delta(has_spice: bool) -> dict[str, object]:
         # sentence, not a hazard: it creates metabolism with no supply.
         "diseaseSpiceMetabolismPenalty": [1, 3] if has_spice else [0, 0],
         "diseaseTransmissionChance": [1.0, 1.0],
+        # Pin the DTL default side effects off: metabolism is the intended
+        # disease pressure. The defaults' positive fertility modifier would
+        # otherwise switch reproduction ON in fertility-zero worlds.
+        "diseaseAggressionPenalty": [0, 0],
+        "diseaseFertilityPenalty": [0, 0],
+        "diseaseMovementPenalty": [0, 0],
+        "diseaseVisionPenalty": [0, 0],
     }
 
 
 def _pollution_delta(has_spice: bool) -> dict[str, object]:
+    # Ranked episodes run 1000 timesteps; keep bounds explicit and
+    # non-negative so verifyConfiguration preserves them byte-for-byte
+    # (negative "whole episode" shorthand gets normalized and would fail
+    # the preservation test). Diffusion needs a positive delay to run.
     delta: dict[str, object] = {
         "environmentSugarProductionPollutionFactor": 1,
         "environmentSugarConsumptionPollutionFactor": 1,
-        "environmentPollutionTimeframe": list(EPISODE_TIMEFRAME),
-        "environmentPollutionDiffusionTimeframe": list(EPISODE_TIMEFRAME),
+        "environmentPollutionTimeframe": [0, 1000],
+        "environmentPollutionDiffusionTimeframe": [50, 1000],
         "environmentPollutionDiffusionDelay": 10,
     }
     if has_spice:
@@ -381,17 +439,15 @@ def _pack_delta(pack: str, base: dict[str, object]) -> dict[str, object]:
     if pack == "reproduction":
         return _reproduction_delta()
     if pack == "everything":
-        overrides = deepcopy(base)
-        for layer in ("market", "combat"):
-            _merge_delta(overrides, _pack_delta(layer, overrides))
-        delta: dict[str, object] = {
-            key: overrides[key] for key in overrides if key not in base or overrides[key] != base[key]
-        }
+        delta: dict[str, object] = {}
+        if not base_has_spice:
+            # Bases that already run a market (price family) keep their own
+            # tuned spice endowments and trade knobs untouched.
+            _merge_delta(delta, _market_delta(base))
+        _merge_delta(delta, _combat_delta(base))
         _merge_delta(delta, _disease_delta(True))
         _merge_delta(delta, _pollution_delta(True))
         _merge_delta(delta, _seasons_delta())
-        # trait_ranges in the delta must carry the full merged mapping.
-        delta["trait_ranges"] = overrides["trait_ranges"]
         return delta
     raise ValueError(f"unknown pack: {pack}")
 
@@ -434,7 +490,7 @@ SCENARIOS: list[dict[str, object]] = build_scenarios()
 
 Everything downstream (`duo_scenarios`, `write_manifest`, `check_manifest`, `rendered_pool`) is unchanged and keeps consuming `SCENARIOS`.
 
-Note the `everything` construction: it layers market and combat onto a working copy so the combat delta sees tagging already applied where relevant, then computes the changed-key delta and merges disease/pollution/seasons on top. If this proves awkward in practice, an equivalent simpler implementation is acceptable as long as: spice+trade+tagging+combat+disease+pollution+seasons are all on, `trait_ranges` ends up with trade `[0, 1]` and aggression `[0, 2]` merged over the base mapping, tribe bases keep `environmentMaxTribes: 3`, and reproduction stays off.
+`everything` acceptance criteria: spice+trade+tagging+combat+disease+pollution+seasons all end up on; bases that already run a market (price) keep their own spice/trade values untouched; each base's pre-existing `environmentMaxTribes`, fertility factor, fertility trait range, and replacement setting are preserved (tribe convergence has 3 tribes, tribe diversity 2, and both tribe bases already reproduce — "everything excludes reproduction" means it does not ADD or ALTER reproduction, not that it turns it off); `trait_ranges` carries trade `[0, 1]` and aggression `[0, 2]` merged over the base mapping.
 
 - [ ] **Step 4: Regenerate the manifest and run the pool tests**
 
@@ -502,6 +558,70 @@ def test_every_scenario_runs_a_short_episode(scenario_index: int) -> None:
 ```
 
 The existing `test_one_short_episode_per_family` becomes redundant with this sweep — delete it (keep the duo variant, which still exercises two-seat episodes at the updated `FAMILY_REPRESENTATIVES`).
+
+A 3-tick sweep cannot reach late-activating mechanics (fertile ages 12-15, season flip at tick 50, pollution diffusion from tick ~60), so add one longer run per pack — crash detection over the activation horizon, not behavioral assertions:
+
+```python
+PACK_REPRESENTATIVES = [
+    "wealth-skewed.twin-peaks",
+    "wealth-skewed.twin-peaks.reproduction",
+    "wealth-skewed.twin-peaks.pollution",
+    "wealth-egalitarian.central-plateau.disease",
+    "capacity.compact-regrow-1.seasons",
+    "survivorship.young-frontier.market",
+    "tribe-convergence.three-way-mixed.combat",
+    "price.overlapping-peaks.everything",
+]
+
+
+@pytest.mark.parametrize("scenario_id", PACK_REPRESENTATIVES)
+def test_pack_representatives_survive_mechanic_activation(scenario_id: str) -> None:
+    config = solo_ladder_config()
+    pool_ids = [scenario["id"] for scenario in config["scenario_pool"]]
+    config.update(
+        {
+            "seed": pool_ids.index(scenario_id),
+            "timesteps": 70,
+            "measurement_window": 10,
+        }
+    )
+
+    results, replay, _timings = run_episode(config, [None], emit_timing_logs=False)
+
+    assert results["result.timesteps_completed"] == 70
+    assert replay
+```
+
+(70 ticks covers births from age ~12, the tick-50 season flip, and the first pollution diffusion at tick ~60.)
+
+Also cover the design's disclosure risk: the pack mechanics must reach players through the server's public-config filter (`public_config` in `src/coworld/server.py` — allow-by-default, strips `_PRIVATE_CONFIG_KEYS`):
+
+```python
+def test_pack_mechanics_are_disclosed_to_players() -> None:
+    from coworld.server import public_config
+
+    config = solo_ladder_config()
+    pool_ids = [scenario["id"] for scenario in config["scenario_pool"]]
+    config["seed"] = pool_ids.index("price.overlapping-peaks.everything")
+    resolved = resolve_episode_config(config)
+    disclosed = public_config(resolved)
+
+    for key in (
+        "agentSpiceMetabolism",
+        "agentTradeFactor",
+        "agentTagging",
+        "agentAggressionFactor",
+        "startingDiseases",
+        "environmentSugarProductionPollutionFactor",
+        "environmentSeasonInterval",
+        "trait_ranges",
+    ):
+        assert disclosed[key] == resolved[key], key
+    for hidden in ("seed", "scenario_pool", "targets", "tokens"):
+        assert hidden not in disclosed, hidden
+```
+
+If `targets`/`tokens` are not actually in `_PRIVATE_CONFIG_KEYS`, check what is and assert on the real private set — the point is: mechanics visible, seat assignments and seed hidden.
 
 - [ ] **Step 2: Run the sweep and time it**
 
@@ -581,6 +701,6 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 ## Self-review notes
 
-- Spec coverage: removal scope → Tasks 1 and 4; pool structure/packs → Task 2; testing section → Tasks 2 and 3; docs → Task 4. The spec's "verify new keys survive the config merge and disclosure" risk is covered by the pre-existing `test_all_scenarios_resolve_and_validate` (asserts `build_dtl_config` preserves every override key on all 80 scenarios).
+- Spec coverage: removal scope → Tasks 1 and 4; pool structure/packs → Task 2; testing section → Tasks 2 and 3; docs → Task 4. The spec's "verify new keys survive the config merge and disclosure" risk is covered three ways: `test_all_scenarios_resolve_and_validate` (value preservation through `build_dtl_config`), `test_every_override_key_is_a_known_config_key` (no typo'd keys silently falling back to DTL defaults), and `test_pack_mechanics_are_disclosed_to_players` (mechanics survive the server's `public_config` filter).
 - The duo evenness invariant (`startingAgents % 2 == 0`) holds for all 12 bases (all even) and no pack changes `startingAgents`; the existing `duo_scenarios()` +1 rule stays as a safety net.
 - Capacity keeps fertility `[0, 0]` everywhere because its situational packs are pollution/seasons and `everything` excludes reproduction — the pre-existing capacity assertions in `test_pool_invariants` stay valid.

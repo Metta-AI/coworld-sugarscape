@@ -41,7 +41,9 @@ Delete outright:
 - `tools/probe_pool.py`, `tools/probe_reachability.py`
 - `tests/test_probe.py`
 - `docs/probe-reports/`
-- `generate_scenario_pool.py --emit-configs` (existed only to feed the probe)
+- `generate_scenario_pool.py --emit-configs` (existed only to feed the probe;
+  `tools/benchmark_replay_viewer.py` currently imports it and must switch to
+  building its merged config in memory)
 
 Rewrite or scrub:
 
@@ -95,10 +97,11 @@ Core packs (every family):
 
 - **`baseline`** — no delta; today's world, bare id preserved.
 - **`spice`** — spice terrain mirroring the base's sugar peaks
-  (`environmentSpicePeaks` = sugar peaks at swapped coordinates,
-  `environmentMaxSpice` = base `environmentMaxSugar`,
-  `environmentSpiceRegrowRate` 1), `agentSpiceMetabolism [1, 4]`,
-  `agentStartingSpice [10, 30]`. Skipped for price (already on).
+  (`environmentSpicePeaks` = sugar peaks at swapped coordinates, sorted into
+  DTL's canonical list order, `environmentMaxSpice` = base
+  `environmentMaxSugar`, `environmentSpiceRegrowRate` 1),
+  `agentSpiceMetabolism [1, 4]`, `agentStartingSpice [10, 30]`. Skipped for
+  price (already on).
 - **`market`** — `spice` plus `agentTradeFactor [1, 1]` and trade trait
   `[0, 1]`. Skipped for price (already on).
 - **`combat`** — `agentTagging true`, `agentTagStringLength 11`,
@@ -107,20 +110,31 @@ Core packs (every family):
   combat only permits prey in a different tribe (`isNeighborValidPrey`).
   For tribes, the pack adds only the aggression/loot knobs.
 - **`everything`** — union of `market` + `combat` + `disease` + `pollution`
-  + `seasons`. Reproduction is deliberately excluded so replacement-driven
-  families keep their population regime; one chaos world per base.
+  + `seasons`, where each layer is skipped or reduced if the base already
+  runs it (price keeps its own tuned spice/trade values; tribe bases keep
+  their tribe counts and their existing reproduction). Reproduction is
+  deliberately never *added or altered* so each base keeps its population
+  regime; one chaos world per base.
 
 Situational packs (two per family, chosen for target relevance):
 
 - **`disease`** — `startingDiseases 40`, `startingDiseasesPerAgent [0, 3]`,
   pinned disease penalty/transmission knobs (sugar/spice metabolism penalty
   `[1, 3]`, `diseaseTransmissionChance [1.0, 1.0]`,
-  `agentImmuneSystemLength 35`).
+  `agentImmuneSystemLength 35`). The DTL default side-effect penalties
+  (aggression, fertility, movement, vision) are pinned to `[0, 0]`:
+  metabolism is the intended disease pressure, and the default positive
+  fertility modifier would silently enable reproduction in fertility-zero
+  worlds. In spiceless worlds the spice-metabolism penalty is also `[0, 0]`
+  (it would create metabolism with no supply).
 - **`pollution`** — `environmentSugarProductionPollutionFactor 1`,
   `environmentSugarConsumptionPollutionFactor 1`,
-  `environmentPollutionTimeframe [1, 1]`,
-  `environmentPollutionDiffusionTimeframe [50, 50]` (spice pollution factors
-  too when the family has spice).
+  `environmentPollutionTimeframe [0, 1000]`,
+  `environmentPollutionDiffusionTimeframe [50, 1000]`,
+  `environmentPollutionDiffusionDelay 10` (diffusion is inert without a
+  positive delay; bounds are explicit and non-negative because DTL
+  normalizes negative shorthand, which would break manifest/DTL value
+  equality). Spice pollution factors too when the family has spice.
 - **`seasons`** — `environmentSeasonInterval 50`,
   `environmentSeasonalGrowbackDelay 8` (values from the retired
   `seasonal-migration` world).
