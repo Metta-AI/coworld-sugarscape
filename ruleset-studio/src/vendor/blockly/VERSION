@@ -1,0 +1,10 @@
+blockly 13.2.0
+Source: https://www.npmjs.com/package/blockly/v/13.2.0
+Upstream tag: blockly-v13.2.0
+Tarball SHA-1: 392d9bcddc7e9dc6ed6d75c28bc6680651c14f2a
+Tarball integrity: sha512-n8o9UCHea5CYKi5gtPJszxqeRwWFkf2m/BZfHMPNDHvKhvUUlWiuYnF3Q1Ri6GqPA4f2a+DFzAJoCMZLJiFL3Q==
+blockly.min.js SHA-256: e482fd6d055148e679463485e541157819f609b8516acb5162f65756233a6431
+
+The npm tarball does not include its LICENSE file. LICENSE is copied from the
+same upstream tag:
+https://github.com/RaspberryPiFoundation/blockly/blob/blockly-v13.2.0/LICENSE
