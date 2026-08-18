@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the curated solo- and duo-ladder scenario pools and probe configs.
+"""Generate the curated solo- and duo-ladder scenario pools.
 
 Run from the repository root. The scenario definitions in this file are the
 source of truth; ``--write`` updates only the two ladder pool arrays in the
@@ -18,7 +18,6 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = REPO_ROOT / "coworld_manifest.json"
-DEFAULT_CONFIG_DIR = REPO_ROOT / "build" / "scenario-pool"
 VARIANT_ID = "solo-ladder"
 DUO_VARIANT_ID = "duo-ladder"
 
@@ -1171,37 +1170,13 @@ def _pool_diff(actual: list[object], expected: list[dict[str, object]]) -> list[
     return summary
 
 
-def emit_configs(output_dir: Path, manifest_path: Path = MANIFEST_PATH) -> list[Path]:
-    manifest = load_manifest(manifest_path)
-    base_config = deepcopy(solo_ladder_config(manifest))
-    base_config.pop("seed", None)
-    base_config.pop("scenario_pool", None)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    paths = []
-    for scenario in SCENARIOS:
-        config = deepcopy(base_config)
-        config.update(deepcopy(scenario["config_overrides"]))
-        config["targets"] = deepcopy(scenario["targets"])
-        path = output_dir / f"{scenario['id']}.json"
-        path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
-        paths.append(path)
-    return paths
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--write", action="store_true", help="update the manifest pools")
     parser.add_argument("--check", action="store_true", help="verify the manifest pools")
-    parser.add_argument(
-        "--emit-configs",
-        nargs="?",
-        const=str(DEFAULT_CONFIG_DIR),
-        metavar="DIR",
-        help="write merged standalone configs (default: build/scenario-pool)",
-    )
     args = parser.parse_args()
-    if not args.write and not args.check and args.emit_configs is None:
-        parser.error("choose --write, --check, or --emit-configs")
+    if not args.write and not args.check:
+        parser.error("choose --write or --check")
 
     try:
         if args.write:
@@ -1215,9 +1190,6 @@ def main() -> None:
                     print(f"  {difference}", file=sys.stderr)
                 raise SystemExit(1)
             print("scenario pool matches generator")
-        if args.emit_configs is not None:
-            paths = emit_configs(Path(args.emit_configs))
-            print(f"wrote {len(paths)} configs to {Path(args.emit_configs)}")
     except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
         raise SystemExit(f"error: {error}") from error
 
