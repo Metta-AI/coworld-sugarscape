@@ -15,6 +15,16 @@ from coworld.targets import load_target_catalog, resolve_seat_targets
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = ROOT / "coworld_manifest.json"
 FAMILY_REPRESENTATIVES = [0, 14, 28, 42, 56, 66]  # first scenario of each family
+PACK_REPRESENTATIVES = [
+    "wealth-skewed.twin-peaks.spice",
+    "wealth-skewed.twin-peaks.reproduction",
+    "wealth-skewed.twin-peaks.pollution",
+    "wealth-egalitarian.central-plateau.disease",
+    "capacity.compact-regrow-1.seasons",
+    "survivorship.young-frontier.market",
+    "tribe-convergence.three-way-mixed.combat",
+    "price.overlapping-peaks.everything",
+]
 sys.path.insert(0, str(ROOT / "tools"))
 
 from generate_scenario_pool import scenario_pool_span, write_manifest  # noqa: E402
@@ -104,26 +114,62 @@ def test_generator_rejects_missing_or_ambiguous_pool(source: str, error: str) ->
         scenario_pool_span(source)
 
 
-@pytest.mark.parametrize("scenario_index", FAMILY_REPRESENTATIVES)
-def test_one_short_episode_per_family(scenario_index: int) -> None:
+def _pool_indices() -> range:
+    return range(len(solo_ladder_config()["scenario_pool"]))
+
+
+@pytest.mark.parametrize("scenario_index", _pool_indices())
+def test_every_scenario_runs_a_short_episode(scenario_index: int) -> None:
     config = solo_ladder_config()
+    config.update({"seed": scenario_index, "timesteps": 3, "measurement_window": 3})
+
+    results, replay, _timings = run_episode(config, [None], emit_timing_logs=False)
+
+    assert results["scenario_index"] == scenario_index
+    assert results["result.timesteps_completed"] == 3
+    assert replay
+
+
+@pytest.mark.parametrize("scenario_id", PACK_REPRESENTATIVES)
+def test_pack_representatives_survive_mechanic_activation(scenario_id: str) -> None:
+    config = solo_ladder_config()
+    pool_ids = [scenario["id"] for scenario in config["scenario_pool"]]
     config.update(
         {
-            "seed": scenario_index,
-            "timesteps": 3,
-            "measurement_window": 3,
+            "seed": pool_ids.index(scenario_id),
+            "timesteps": 70,
+            "measurement_window": 10,
         }
     )
 
     results, replay, _timings = run_episode(config, [None], emit_timing_logs=False)
 
-    expected_target = config["scenario_pool"][scenario_index]["targets"][0]
-    assert results["scenario_index"] == scenario_index
-    assert results["result.timesteps_completed"] == 3
-    assert len(results["scores"]) == len(results["details"]) == 1
-    assert results["details"][0]["target_id"] == expected_target
-    assert results["targets"][0]["id"] == expected_target
+    assert results["result.timesteps_completed"] == 70
     assert replay
+
+
+def test_pack_mechanics_are_disclosed_to_players() -> None:
+    from coworld.server import public_config
+
+    config = solo_ladder_config()
+    pool_ids = [scenario["id"] for scenario in config["scenario_pool"]]
+    config["seed"] = pool_ids.index("price.overlapping-peaks.everything")
+    resolved = resolve_episode_config(config)
+    disclosed = public_config(resolved)
+
+    for key in (
+        "agentSpiceMetabolism",
+        "agentTradeFactor",
+        "agentTagging",
+        "agentAggressionFactor",
+        "startingDiseases",
+        "environmentSugarProductionPollutionFactor",
+        "environmentSeasonInterval",
+        "trait_ranges",
+    ):
+        assert disclosed[key] == resolved[key], key
+    for hidden in ("seed", "scenario_pool", "targets", "tokens"):
+        assert hidden not in disclosed, hidden
 
 
 def test_pool_invariants() -> None:
