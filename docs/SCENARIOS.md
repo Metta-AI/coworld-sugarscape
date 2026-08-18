@@ -1,12 +1,12 @@
 # Ladder scenarios
 
-The `solo-ladder` variant draws one of 24 curated world/target scenarios for
-each episode. A submission receives the resolved public configuration and its
-assigned target, then submits one SugarLang ruleset before the simulation runs.
-Competitive submissions therefore need to adapt to the observed world rather
-than memorize one map.
+The `solo-ladder` variant draws one of 80 scenarios (12 hand-tuned base worlds
+crossed with mechanic packs) for each episode. A submission receives the
+resolved public configuration and its assigned target, then submits one
+SugarLang ruleset before the simulation runs. Competitive submissions therefore
+need to adapt to the observed world rather than memorize one map.
 
-The `duo-ladder` variant reuses those 24 worlds with two seats and two distinct
+The `duo-ladder` variant reuses those 80 worlds with two seats and two distinct
 global targets. Both policies observe the same resolved world configuration,
 but each receives only its own assigned target and submits its own ruleset. The
 game measures one shared outcome and scores each seat independently against its
@@ -18,7 +18,7 @@ associated with the solo objective.
 ## Selection
 
 Scenario selection is deterministic: the game uses
-`scenario_pool[seed % 24]`. Selection consumes no simulation randomness. The
+`scenario_pool[seed % 80]`. Selection consumes no simulation randomness. The
 resolved result and replay include `scenario_index`; players do not receive the
 seed or the undisclosed pool.
 
@@ -40,28 +40,39 @@ same world can measure:
 
 These are global targets by design: the two policies compete to steer the same
 macro outcome, and their objectives may be compatible, orthogonal, or directly
-in tension. `capacity.wide-regrow-1` uses 276 starting agents in the duo copy
-instead of 275 so the initial population divides evenly between two seats.
+in tension. All current bases have even starting populations. The generator
+still increments an odd starting population by one in a duo copy so the initial
+population always divides evenly between two seats.
 
 ## Families
 
-Every family contains four distinct worlds. Grid dimensions stay between 40 and
-60 cells per side, and starting populations stay between 200 and 400 agents.
+Each family contributes two hand-tuned base worlds. Mechanic packs layer fixed
+override deltas over those bases without changing their targets.
 
-| Family | Scenarios | Target | Mechanical regime |
+| Family | Base worlds | Target | Base regime |
 |---|---|---|---|
-| Wealth, skewed | `twin-peaks`, `mega-peak`, `four-corners`, `scarce-lowland` | `wealth.skewed-gini-0.5` | Finite lives and replacement to the starting population |
-| Wealth, egalitarian | `offset-twins`, `central-plateau`, `four-basins`, `scarce-income` | `wealth.egalitarian` | Short finite lives, replacement, narrow endowments, and universal income |
-| Carrying capacity | `compact-regrow-1`, `wide-regrow-1`, `dense-regrow-2`, `sparse-regrow-2` | `population.carrying-capacity` | Immortal agents, no replacement, and no reproduction |
-| Survivorship | `young-frontier`, `long-lived`, `scarce`, `seasonal-migration` | `age-at-death.survivorship` | Finite varied lifespans and replacement; one seasonal world |
-| Price equilibrium | `overlapping-peaks`, `scarce-markets`, `four-markets`, `split-centers` | `price.equilibrium` | Immortal agents with sugar, spice, and bilateral trade |
-| Tribes | `three-way-mixed`, `two-way-mixed`, `opposite-quadrants`, `three-quadrants` | `tribe.convergence` twice and `tribe.diversity` twice | Cultural tagging; mixed starts for convergence and quadrant-separated starts for diversity |
+| Wealth, skewed | `wealth-skewed.twin-peaks`, `wealth-skewed.scarce-lowland` | `wealth.skewed-gini-0.5` | Finite lives with replacement to the starting population |
+| Wealth, egalitarian | `wealth-egalitarian.central-plateau`, `wealth-egalitarian.scarce-income` | `wealth.egalitarian` | Short finite lives, replacement, narrow endowments, and universal income |
+| Carrying capacity | `capacity.compact-regrow-1`, `capacity.sparse-regrow-2` | `population.carrying-capacity` | Immortal agents with no replacement or reproduction |
+| Survivorship | `survivorship.young-frontier`, `survivorship.long-lived` | `age-at-death.survivorship` | Replacement populations with distinct finite lifespan ranges |
+| Price equilibrium | `price.overlapping-peaks`, `price.four-markets` | `price.equilibrium` | Immortal agents with sugar, spice, and bilateral trade |
+| Tribes | `tribe-convergence.three-way-mixed`, `tribe-diversity.opposite-quadrants` | `tribe.convergence`, `tribe.diversity` | Reproducing tagged populations; mixed starts for convergence and separated quadrants for diversity |
 
-Scenarios explicitly pin the mechanics their targets require and disable
-unwanted hazards such as disease, pollution, combat, lending, and unrelated
-spice or seasonal behavior. The two egalitarian income intervals are both
-enabled because DTL's endowment machinery otherwise creates a zero-spice
-time-to-live edge case even when spice metabolism is disabled.
+| Pack | What it enables | Standalone pack families |
+|---|---|---|
+| `baseline` | No delta; preserves the bare base id and regime | All |
+| `spice` | Mirrors sugar peaks at swapped coordinates, sorted into DTL's canonical order; sets `environmentMaxSpice` from `environmentMaxSugar`, `environmentSpiceRegrowRate` to 1, `agentSpiceMetabolism` to `[1, 4]`, and `agentStartingSpice` to `[10, 30]` | All except price, where spice is already on |
+| `market` | Adds the `spice` delta, `agentTradeFactor [1, 1]`, and trade trait `[0, 1]` | All except price, where trade is already on |
+| `combat` | Sets `agentAggressionFactor` and the aggression trait to `[0, 2]` and `environmentMaxCombatLoot` to 2; non-tribe bases also gain `agentTagging true`, `agentTagStringLength 11`, and `environmentMaxTribes 2` because DTL permits combat prey only from another tribe | All |
+| `disease` | Sets `startingDiseases` to 40, `startingDiseasesPerAgent` to `[0, 3]`, `agentImmuneSystemLength` to 35, metabolism penalties to `[1, 3]`, and transmission chance to `[1.0, 1.0]`; aggression, fertility, movement, and vision side effects stay `[0, 0]`, and spiceless worlds use `diseaseSpiceMetabolismPenalty [0, 0]` so disease cannot create an unsupplied spice need | Wealth-egalitarian, survivorship, price, tribes |
+| `pollution` | Enables sugar production and consumption pollution with `environmentPollutionTimeframe [0, 1000]`, `environmentPollutionDiffusionTimeframe [50, 1000]`, and `environmentPollutionDiffusionDelay 10`; spice pollution is also enabled when spice is present | Wealth-skewed, carrying capacity |
+| `seasons` | Sets `environmentSeasonInterval` to 50 and `environmentSeasonalGrowbackDelay` to 8 | Wealth-egalitarian, carrying capacity, survivorship, price, tribes |
+| `reproduction` | Enables fertility factor `[1, 1]` and fertility trait `[0, 1]`, and disables automatic replacement | Wealth-skewed |
+| `everything` | Combines market, combat, disease, pollution, and seasons while preserving price bases' tuned spice/trade values, tribe counts, and every base's existing reproduction regime | All |
+
+The two egalitarian income intervals are both enabled because DTL's endowment
+machinery otherwise creates a zero-spice time-to-live edge case even when spice
+metabolism is disabled.
 
 ## Source of truth
 
@@ -72,60 +83,13 @@ output. From the repository root:
 ```console
 .venv/bin/python tools/generate_scenario_pool.py --write
 .venv/bin/python tools/generate_scenario_pool.py --check
-.venv/bin/python tools/generate_scenario_pool.py --emit-configs
 ```
 
 `--write` changes only the `solo-ladder` and `duo-ladder` scenario pools and
 preserves the rest of `coworld_manifest.json`. `--check` exits nonzero and
 summarizes drift.
-`--emit-configs [DIR]` writes one standalone merged config per scenario, by
-default under `build/scenario-pool/`; emitted configs contain neither `seed` nor
-`scenario_pool` because the probe supplies its own seeds.
 
-To add or replace a scenario, edit the generator first, run `--write`, update
-this catalog, and run the scenario-pool tests. Changing the pool size also
-changes the selection modulus and pool-cycle duration, so update both here and
-in the approved design before shipping.
-
-## Reachability calibration
-
-Use the full pool probe when calibrating a changed pool:
-
-```console
-.venv/bin/python tools/probe_pool.py
-```
-
-The default budget is 24 candidates, 12 generations, and episode seeds 11 and
-42 per scenario. `--only <scenario-id>` restricts a smoke or diagnostic run.
-Each scenario invokes `tools/probe_reachability.py` in its own subprocess and
-keeps that probe's detailed report and best ruleset under
-`build/probe-pool/<scenario-id>/`. The wrapper writes the combined
-`build/probe-pool/report.json` and prints a table containing the null floor,
-greedy baseline, evolved ceiling, skill gradient, and role.
-
-A scenario with an evolved ceiling of at least `0.50` is demonstrably within one
-characteristic target scale under `w1-hyperbolic/1`. The evolved score remains a
-lower bound on what is achievable, so finding a high score proves reachability;
-failing to find one does not prove the target is unreachable. Targets may be
-aspirational, so this report is calibration evidence rather than a release gate.
-Investigate empirically inert, trivial, or excessively noisy scenarios instead
-of retuning solely to cross a threshold inherited from an earlier score scale.
-
-The gradient (ceiling minus null floor) classifies rather than gates:
-
-- **`skill`** (gradient ≥ `0.05`): a competent ruleset visibly beats doing
-  nothing; these scenarios differentiate the ladder.
-- **`anchor`** (gradient < `0.05`): the null ruleset already matches the
-  target, typically because the world is close to the regime that generated
-  it. Anchors stay in the pool deliberately — they are regression guards. A
-  policy that matches them loses nothing, while a policy that *breaks* them
-  scores worse than the baseline and is punished for it. First observed
-  2026-08-13: the entire wealth-skewed family probed as anchors (null floors
-  0.96–0.99), because an engine-generated target paired with its native
-  regime is nearly self-fulfilling.
-
-The shipped pool's historical support-normalized probe table lives in
-[`docs/probe-reports/2026-08-14-solo-ladder-pool.md`](probe-reports/2026-08-14-solo-ladder-pool.md):
-18 anchors, 6 skill scenarios, all 24 above its old reference threshold. The
-target-scaled calibration evidence is recorded in
-[`docs/designs/2026-08-18-w1-scoring-v2.md`](designs/2026-08-18-w1-scoring-v2.md).
+To change the pool, edit the generator first, run `--write`, update this catalog,
+and run the scenario-pool tests. Changing the pool size also changes the
+selection modulus and pool-cycle duration, so update both here and in the
+approved design before shipping.

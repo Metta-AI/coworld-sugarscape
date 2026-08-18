@@ -32,16 +32,16 @@ without player I/O. Distribution leagues score how closely the measured outcome
 matches the target, while Commonwealth scores the wellness produced by a fixed
 constitution.
 
-Ranked distribution play uses a deterministic pool of 24 curated scenarios spanning all
-seven distribution targets and six mechanical families, forcing rulesets to adapt to the
-observed world. `solo-ladder` assigns one policy one target; `duo-ladder` seats
-two policies in the same world with different global targets and independent
-scores. `commonwealth` presents the same canonical world and `wellness.max`
-objective every episode: the submitted ruleset is the constitution, and its
-score is the summed final-window wellness of agents surviving to the final tick.
-See [`docs/SCENARIOS.md`](docs/SCENARIOS.md) for the distribution catalog,
-selection rule, regeneration workflow, and per-scenario reachability
-calibration, and
+Ranked distribution play uses a deterministic pool of 80 scenarios: 12
+hand-tuned base worlds spanning all seven distribution targets, crossed with
+mechanic packs that force rulesets to adapt to the observed world.
+`solo-ladder` assigns one policy one target; `duo-ladder` seats two policies in
+the same world with different global targets and independent scores.
+`commonwealth` presents the same canonical world and `wellness.max` objective
+every episode: the submitted ruleset is the constitution, and its score is the
+summed final-window wellness of agents surviving to the final tick. See
+[`docs/SCENARIOS.md`](docs/SCENARIOS.md) for the distribution catalog,
+selection rule, and regeneration workflow, and
 [`docs/designs/2026-08-18-commonwealth-league.md`](docs/designs/2026-08-18-commonwealth-league.md)
 for the Commonwealth contract.
 
