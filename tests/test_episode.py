@@ -354,6 +354,46 @@ def test_ruleset_hash_is_canonical_and_changes_with_ruleset(
     )
 
 
+def test_results_report_ruleset_hash_agreement(
+    tiny_episode_config: dict[str, object],
+) -> None:
+    ruleset = {"version": 1, "movement": [{"score": ["get", "cell.welfare"]}]}
+
+    same, _, _ = run_episode(tiny_episode_config, [None, None], emit_timing_logs=False)
+    different, _, _ = run_episode(
+        tiny_episode_config, [ruleset, None], emit_timing_logs=False
+    )
+    unsubmitted, _, _ = run_episode(
+        tiny_episode_config,
+        [None, None],
+        submitted=(True, False),
+        emit_timing_logs=False,
+    )
+
+    assert same["result.rulesets_identical"] is True
+    assert different["result.rulesets_identical"] is False
+    assert unsubmitted["result.rulesets_identical"] is False
+
+
+def test_two_seat_commonwealth_episode_broadcasts_the_single_target(
+    tiny_episode_config: dict[str, object],
+) -> None:
+    """The qualifier round shape: one wellness.max entry, two self-play seats."""
+
+    config = dict(tiny_episode_config)
+    config["targets"] = ["wellness.max"]
+    ruleset = {"version": 1, "movement": [{"score": ["get", "cell.welfare"]}]}
+
+    results, _, _ = run_episode(config, [ruleset, ruleset], emit_timing_logs=False)
+
+    assert results["score_method"] == "wellness-sum/1"
+    assert [detail["target_id"] for detail in results["details"]] == [
+        "wellness.max",
+        "wellness.max",
+    ]
+    assert results["result.rulesets_identical"] is True
+
+
 def test_episode_rejects_mixed_target_kinds(
     tiny_episode_config: dict[str, object],
 ) -> None:

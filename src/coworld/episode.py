@@ -195,6 +195,13 @@ def run_episode(
             "result.gini_final": stats["giniCoefficient"],
             "result.mean_wealth_final": stats["meanWealth"],
             "result.extinct": len(world.agents) == 0,
+            # True only when every seat submitted and all canonical ruleset
+            # hashes agree. Episode-level scalar because platform qualification
+            # gates cannot evaluate per-seat arrays; Commonwealth qualifier
+            # rounds gate on it to enforce constitution determinism.
+            "result.rulesets_identical": (
+                all(submitted_flags) and len(set(ruleset_hashes)) == 1
+            ),
             "result.timesteps_completed": world.timestep,
             "result.replay_raw_bytes": replay.raw_size_bytes,
             "result.replay_compressed_bytes": replay.compressed_size_bytes,
