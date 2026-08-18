@@ -1,0 +1,19 @@
+[project]
+name = "coworld-sugarscape"
+version = "3.0.0"
+description = "Sugarscape v3 coworld: declarative SugarLang rulesets over the pinned DTL simulation"
+requires-python = ">=3.13"
+# Runtime dependency of src/coworld/server.py and players/baseline/player.py.
+# Keep the pin in lockstep with both Dockerfiles.
+dependencies = ["websockets==17.0.1"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-xdist>=3",
+]
+
+[tool.uv]
+# The repo runs via PYTHONPATH=src (tests/conftest.py injects it); nothing is
+# built or installed as a package.
+package = false

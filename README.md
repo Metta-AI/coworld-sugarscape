@@ -45,7 +45,8 @@ selection rule, and regeneration workflow, and
 [`docs/designs/2026-08-18-commonwealth-league.md`](docs/designs/2026-08-18-commonwealth-league.md)
 for the Commonwealth contract.
 
-Run the offline suite with `.venv/bin/python -m pytest`. For local container
+Set up a fresh clone with [`uv`](https://docs.astral.sh/uv/): `uv sync`, then
+run the offline suite with `.venv/bin/python -m pytest`. For local container
 development, `docker compose up` starts the one-seat config in `config.json` and
 the bundled target-aware baseline. Protocol, language, and target references are
 in `docs/PROTOCOL.md`, `docs/RULES.md`, and `docs/TARGETS.md`.
