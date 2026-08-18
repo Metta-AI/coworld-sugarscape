@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Generate the curated solo-ladder scenario pool and probe configs.
+"""Generate the curated solo- and duo-ladder scenario pools and probe configs.
 
 Run from the repository root. The scenario definitions in this file are the
-source of truth; ``--write`` updates only the pool array in the manifest.
+source of truth; ``--write`` updates only the two ladder pool arrays in the
+manifest.
 """
 
 from __future__ import annotations
@@ -19,6 +20,17 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = REPO_ROOT / "coworld_manifest.json"
 DEFAULT_CONFIG_DIR = REPO_ROOT / "build" / "scenario-pool"
 VARIANT_ID = "solo-ladder"
+DUO_VARIANT_ID = "duo-ladder"
+
+DUO_COMPANION_TARGETS = {
+    "wealth.skewed-gini-0.5": "wealth.egalitarian",
+    "wealth.egalitarian": "wealth.skewed-gini-0.5",
+    "population.carrying-capacity": "wealth.skewed-gini-0.5",
+    "age-at-death.survivorship": "wealth.egalitarian",
+    "price.equilibrium": "wealth.skewed-gini-0.5",
+    "tribe.convergence": "tribe.diversity",
+    "tribe.diversity": "tribe.convergence",
+}
 
 
 SCENARIOS: list[dict[str, object]] = [
@@ -933,21 +945,43 @@ SCENARIOS: list[dict[str, object]] = [
 ]
 
 
+def duo_scenarios() -> list[dict[str, object]]:
+    """Derive two-target worlds while alternating which target owns seat zero."""
+
+    scenarios = deepcopy(SCENARIOS)
+    for index, scenario in enumerate(scenarios):
+        solo_target = scenario["targets"][0]
+        targets = [solo_target, DUO_COMPANION_TARGETS[solo_target]]
+        if index % 2:
+            targets.reverse()
+        scenario["targets"] = targets
+
+        overrides = scenario["config_overrides"]
+        if overrides["startingAgents"] % 2:
+            overrides["startingAgents"] += 1
+    return scenarios
+
+
 def load_manifest(path: Path = MANIFEST_PATH) -> dict[str, Any]:
-    """Load the manifest and require exactly one solo-ladder variant."""
+    """Load the manifest and require exactly one generated ladder variant of each size."""
 
     manifest = json.loads(path.read_text(encoding="utf-8"))
-    variants = [variant for variant in manifest["variants"] if variant.get("id") == VARIANT_ID]
-    if len(variants) != 1:
-        raise ValueError(f"expected exactly one {VARIANT_ID!r} variant, found {len(variants)}")
-    game_config = variants[0].get("game_config")
-    if not isinstance(game_config, dict) or "scenario_pool" not in game_config:
-        raise ValueError(f"variant {VARIANT_ID!r} has no game_config.scenario_pool")
+    for variant_id in (VARIANT_ID, DUO_VARIANT_ID):
+        variants = [variant for variant in manifest["variants"] if variant.get("id") == variant_id]
+        if len(variants) != 1:
+            raise ValueError(f"expected exactly one {variant_id!r} variant, found {len(variants)}")
+        game_config = variants[0].get("game_config")
+        if not isinstance(game_config, dict) or "scenario_pool" not in game_config:
+            raise ValueError(f"variant {variant_id!r} has no game_config.scenario_pool")
     return manifest
 
 
 def solo_ladder_config(manifest: dict[str, Any]) -> dict[str, Any]:
     return next(variant["game_config"] for variant in manifest["variants"] if variant.get("id") == VARIANT_ID)
+
+
+def duo_ladder_config(manifest: dict[str, Any]) -> dict[str, Any]:
+    return next(variant["game_config"] for variant in manifest["variants"] if variant.get("id") == DUO_VARIANT_ID)
 
 
 def _skip_whitespace(source: str, offset: int) -> int:
@@ -1013,16 +1047,16 @@ def _array_element_spans(source: str, array_start: int) -> list[tuple[int, int]]
         raise ValueError("malformed JSON array")
 
 
-def scenario_pool_span(source: str) -> tuple[int, int]:
-    """Locate solo-ladder's pool through parsed object and array boundaries."""
+def scenario_pool_span(source: str, variant_id: str = VARIANT_ID) -> tuple[int, int]:
+    """Locate one ladder variant's pool through parsed object and array boundaries."""
 
     manifest = json.loads(source)
     matching_indexes = [
         index for index, variant in enumerate(manifest.get("variants", []))
-        if isinstance(variant, dict) and variant.get("id") == VARIANT_ID
+        if isinstance(variant, dict) and variant.get("id") == variant_id
     ]
     if len(matching_indexes) != 1:
-        raise ValueError(f"expected exactly one {VARIANT_ID!r} variant, found {len(matching_indexes)}")
+        raise ValueError(f"expected exactly one {variant_id!r} variant, found {len(matching_indexes)}")
 
     variants_start, _ = _object_member_span(source, 0, "variants")
     variant_spans = _array_element_spans(source, variants_start)
@@ -1033,7 +1067,7 @@ def scenario_pool_span(source: str) -> tuple[int, int]:
     pool_start, pool_end = _object_member_span(source, game_config_start, "scenario_pool")
     pool, decoded_end = json.JSONDecoder().raw_decode(source, pool_start)
     if decoded_end != pool_end or not isinstance(pool, list):
-        raise ValueError(f"variant {VARIANT_ID!r} scenario_pool is not an array")
+        raise ValueError(f"variant {variant_id!r} scenario_pool is not an array")
     return pool_start, pool_end
 
 
@@ -1068,16 +1102,21 @@ def _render_json(value: object) -> str:
     return "\n".join(lines)
 
 
-def rendered_pool(indent: int = 8) -> str:
-    rendered = _render_json(SCENARIOS)
+def rendered_pool(scenarios: object = SCENARIOS, indent: int = 8) -> str:
+    rendered = _render_json(scenarios)
     lines = rendered.splitlines()
     return lines[0] + "\n" + "\n".join(" " * indent + line for line in lines[1:])
 
 
 def write_manifest(path: Path = MANIFEST_PATH) -> bool:
     source = path.read_text(encoding="utf-8")
-    start, end = scenario_pool_span(source)
-    updated = source[:start] + rendered_pool() + source[end:]
+    replacements = [
+        (*scenario_pool_span(source, VARIANT_ID), rendered_pool(SCENARIOS)),
+        (*scenario_pool_span(source, DUO_VARIANT_ID), rendered_pool(duo_scenarios())),
+    ]
+    updated = source
+    for start, end, replacement in sorted(replacements, reverse=True):
+        updated = updated[:start] + replacement + updated[end:]
     if updated == source:
         return False
     path.write_text(updated, encoding="utf-8")
@@ -1086,13 +1125,30 @@ def write_manifest(path: Path = MANIFEST_PATH) -> bool:
 
 def check_manifest(path: Path = MANIFEST_PATH) -> list[str]:
     manifest = load_manifest(path)
-    actual = solo_ladder_config(manifest)["scenario_pool"]
-    if actual == SCENARIOS:
+    expected_pools = {
+        VARIANT_ID: SCENARIOS,
+        DUO_VARIANT_ID: duo_scenarios(),
+    }
+    actual_pools = {
+        VARIANT_ID: solo_ladder_config(manifest)["scenario_pool"],
+        DUO_VARIANT_ID: duo_ladder_config(manifest)["scenario_pool"],
+    }
+    if actual_pools == expected_pools:
         return []
+    summary = []
+    for variant_id, expected in expected_pools.items():
+        actual = actual_pools[variant_id]
+        if actual == expected:
+            continue
+        summary.extend(f"{variant_id}: {item}" for item in _pool_diff(actual, expected))
+    return summary
+
+
+def _pool_diff(actual: list[object], expected: list[dict[str, object]]) -> list[str]:
     actual_by_id = {
         entry.get("id"): entry for entry in actual if isinstance(entry, dict) and isinstance(entry.get("id"), str)
     }
-    expected_by_id = {entry["id"]: entry for entry in SCENARIOS}
+    expected_by_id = {entry["id"]: entry for entry in expected}
     actual_ids = list(actual_by_id)
     expected_ids = list(expected_by_id)
     summary = []
@@ -1134,8 +1190,8 @@ def emit_configs(output_dir: Path, manifest_path: Path = MANIFEST_PATH) -> list[
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--write", action="store_true", help="update the manifest pool")
-    parser.add_argument("--check", action="store_true", help="verify the manifest pool")
+    parser.add_argument("--write", action="store_true", help="update the manifest pools")
+    parser.add_argument("--check", action="store_true", help="verify the manifest pools")
     parser.add_argument(
         "--emit-configs",
         nargs="?",

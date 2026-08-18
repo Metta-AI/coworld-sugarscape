@@ -21,11 +21,19 @@ from generate_scenario_pool import scenario_pool_span, write_manifest  # noqa: E
 
 
 def solo_ladder_config() -> dict[str, object]:
+    return variant_config("solo-ladder")
+
+
+def duo_ladder_config() -> dict[str, object]:
+    return variant_config("duo-ladder")
+
+
+def variant_config(variant_id: str) -> dict[str, object]:
     manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     return next(
         variant["game_config"]
         for variant in manifest["variants"]
-        if variant["id"] == "solo-ladder"
+        if variant["id"] == variant_id
     )
 
 
@@ -166,3 +174,41 @@ def test_pool_invariants() -> None:
     assert all(scenario["config_overrides"]["agentMaxAge"] == [-1, -1] for scenario in capacity)
     assert all(scenario["config_overrides"]["agentReplacements"] == 0 for scenario in capacity)
     assert all(scenario["config_overrides"]["agentFertilityFactor"] == [0, 0] for scenario in capacity)
+
+
+def test_duo_pool_reuses_every_solo_world_with_distinct_targets() -> None:
+    solo = solo_ladder_config()
+    duo = duo_ladder_config()
+    solo_pool = solo["scenario_pool"]
+    duo_pool = duo["scenario_pool"]
+
+    assert duo["seats"] == 2
+    assert len(duo["players"]) == 2
+    assert [scenario["id"] for scenario in duo_pool] == [scenario["id"] for scenario in solo_pool]
+    assert all(len(scenario["targets"]) == 2 for scenario in duo_pool)
+    assert all(len(set(scenario["targets"])) == 2 for scenario in duo_pool)
+    assert all(scenario["config_overrides"]["startingAgents"] % 2 == 0 for scenario in duo_pool)
+
+    for index, (solo_scenario, duo_scenario) in enumerate(zip(solo_pool, duo_pool)):
+        solo_target = solo_scenario["targets"][0]
+        assert solo_target in duo_scenario["targets"]
+        if index % 2 == 0:
+            assert duo_scenario["targets"][0] == solo_target
+        else:
+            assert duo_scenario["targets"][1] == solo_target
+
+
+@pytest.mark.parametrize("scenario_index", FAMILY_REPRESENTATIVES)
+def test_one_short_duo_episode_per_family(scenario_index: int) -> None:
+    config = duo_ladder_config()
+    config.update({"seed": scenario_index, "timesteps": 3, "measurement_window": 3})
+
+    results, replay, _timings = run_episode(config, [None, None], emit_timing_logs=False)
+
+    expected_targets = config["scenario_pool"][scenario_index]["targets"]
+    assert results["scenario_index"] == scenario_index
+    assert results["result.timesteps_completed"] == 3
+    assert len(results["scores"]) == len(results["details"]) == 2
+    assert [detail["target_id"] for detail in results["details"]] == expected_targets
+    assert [target["id"] for target in results["targets"]] == expected_targets
+    assert replay

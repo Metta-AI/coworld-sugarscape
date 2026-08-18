@@ -1,10 +1,17 @@
-# Solo-ladder scenarios
+# Ladder scenarios
 
 The `solo-ladder` variant draws one of 24 curated world/target scenarios for
 each episode. A submission receives the resolved public configuration and its
 assigned target, then submits one SugarLang ruleset before the simulation runs.
 Competitive submissions therefore need to adapt to the observed world rather
 than memorize one map.
+
+The `duo-ladder` variant reuses those 24 worlds with two seats and two distinct
+global targets. Both policies observe the same resolved world configuration,
+but each receives only its own assigned target and submits its own ruleset. The
+game measures one shared outcome and scores each seat independently against its
+target. Target order alternates between scenarios so one seat is not permanently
+associated with the solo objective.
 
 `solo-wealth` remains the fixed, single-target introductory variant.
 
@@ -15,8 +22,26 @@ Scenario selection is deterministic: the game uses
 resolved result and replay include `scenario_index`; players do not receive the
 seed or the undisclosed pool.
 
-The pool is fixed manifest data. It does not generate new parameters at episode
-time.
+Both pools are fixed manifest data. They do not generate new parameters at
+episode time.
+
+## Duo target pairs
+
+The duo pool keeps the solo target and adds a distinct catalog target that the
+same world can measure:
+
+| Solo family | Duo targets |
+|---|---|
+| Wealth | `wealth.skewed-gini-0.5` and `wealth.egalitarian` |
+| Carrying capacity | `population.carrying-capacity` and `wealth.skewed-gini-0.5` |
+| Survivorship | `age-at-death.survivorship` and `wealth.egalitarian` |
+| Price equilibrium | `price.equilibrium` and `wealth.skewed-gini-0.5` |
+| Tribes | `tribe.convergence` and `tribe.diversity` |
+
+These are global targets by design: the two policies compete to steer the same
+macro outcome, and their objectives may be compatible, orthogonal, or directly
+in tension. `capacity.wide-regrow-1` uses 276 starting agents in the duo copy
+instead of 275 so the initial population divides evenly between two seats.
 
 ## Families
 
@@ -40,8 +65,9 @@ time-to-live edge case even when spice metabolism is disabled.
 
 ## Source of truth
 
-`tools/generate_scenario_pool.py` owns the ordered scenario definitions. The
-manifest pool is generated output. From the repository root:
+`tools/generate_scenario_pool.py` owns the ordered scenario definitions and
+derives the duo target assignments from them. Both manifest pools are generated
+output. From the repository root:
 
 ```console
 .venv/bin/python tools/generate_scenario_pool.py --write
@@ -49,8 +75,9 @@ manifest pool is generated output. From the repository root:
 .venv/bin/python tools/generate_scenario_pool.py --emit-configs
 ```
 
-`--write` changes only `solo-ladder.game_config.scenario_pool` and preserves the
-rest of `coworld_manifest.json`. `--check` exits nonzero and summarizes drift.
+`--write` changes only the `solo-ladder` and `duo-ladder` scenario pools and
+preserves the rest of `coworld_manifest.json`. `--check` exits nonzero and
+summarizes drift.
 `--emit-configs [DIR]` writes one standalone merged config per scenario, by
 default under `build/scenario-pool/`; emitted configs contain neither `seed` nor
 `scenario_pool` because the probe supplies its own seeds.
