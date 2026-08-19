@@ -14,16 +14,18 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Compile study
-        run: python -m py_compile tools/replicate_action_field_observables.py
-      - name: Run canonical 30-seed replications
+      - name: Compile studies
+        run: |
+          python -m py_compile tools/replicate_action_field_observables.py
+          python -m py_compile tools/replicate_discrete_lagrangian.py
+      - name: Run canonical 30-seed Lagrangian replications
         env:
           PYTHONHASHSEED: '0'
-        run: python tools/replicate_action_field_observables.py --seeds 30 --jobs 6 --output build/action-field-replication-study.json
+        run: python tools/replicate_discrete_lagrangian.py --seeds 30 --jobs 6 --output build/discrete-lagrangian-study.json
       - name: Upload study
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: action-field-replication-study
-          path: build/action-field-replication-study.json
+          name: discrete-lagrangian-study
+          path: build/discrete-lagrangian-study.json
           if-no-files-found: warn
