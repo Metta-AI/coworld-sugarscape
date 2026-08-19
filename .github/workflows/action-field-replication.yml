@@ -5,6 +5,9 @@ on:
     branches: [observatory-replication-20260815]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   replicate:
     runs-on: ubuntu-latest
@@ -29,3 +32,13 @@ jobs:
           name: discrete-lagrangian-study
           path: build/discrete-lagrangian-study.json
           if-no-files-found: warn
+      - name: Persist study on experiment branch
+        if: success()
+        run: |
+          mkdir -p experiment-results
+          cp build/discrete-lagrangian-study.json experiment-results/discrete-lagrangian-study.json
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add experiment-results/discrete-lagrangian-study.json
+          git commit -m 'Record discrete Lagrangian replication results'
+          git push
