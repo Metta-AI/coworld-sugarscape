@@ -1,0 +1,1328 @@
+{
+  "by_replication": {
+    "population.carrying-capacity": {
+      "covariance_all": true,
+      "projective": {
+        "mean_abs_delta_logabs_chi_mean": 0.772164602043,
+        "mean_abs_logabs_chi_mean": 0.39500046802886835,
+        "median_abs_delta_logabs_chi_mean": 0.6657754889359947,
+        "median_logabs_chi_mean": 0.006642001565963589,
+        "positive_chi_fraction_mean": 0.8836033762180217,
+        "regular_fraction_weighted": 0.29411203446487594
+      },
+      "ratios": {
+        "mean_abs_delta_logabs_chi_mean_ratio_to_shuffle": 1.0310444013443214,
+        "mean_abs_logabs_chi_mean_ratio_to_shuffle": 1.0825578995989604,
+        "regular_fraction_weighted_ratio_to_shuffle": 0.8580908151514061
+      },
+      "runs": 3,
+      "shuffled": {
+        "mean_abs_delta_logabs_chi_mean": 0.749056661525198,
+        "mean_abs_logabs_chi_mean": 0.3650265171286413,
+        "median_abs_delta_logabs_chi_mean": 0.6525899243290769,
+        "median_logabs_chi_mean": 0.01554003173238024,
+        "positive_chi_fraction_mean": 0.8830084632184282,
+        "regular_fraction_weighted": 0.34275459661145097
+      }
+    },
+    "price.equilibrium": {
+      "covariance_all": true,
+      "projective": {
+        "mean_abs_delta_logabs_chi_mean": 0.7736447595522536,
+        "mean_abs_logabs_chi_mean": 0.36726682113014036,
+        "median_abs_delta_logabs_chi_mean": 0.6960758732282804,
+        "median_logabs_chi_mean": 0.022926366663118734,
+        "positive_chi_fraction_mean": 0.8815812253268728,
+        "regular_fraction_weighted": 0.25851360558442305
+      },
+      "ratios": {
+        "mean_abs_delta_logabs_chi_mean_ratio_to_shuffle": 1.0813941790639616,
+        "mean_abs_logabs_chi_mean_ratio_to_shuffle": 1.1130285472876118,
+        "regular_fraction_weighted_ratio_to_shuffle": 0.7792740152191859
+      },
+      "runs": 3,
+      "shuffled": {
+        "mean_abs_delta_logabs_chi_mean": 0.7181538350756513,
+        "mean_abs_logabs_chi_mean": 0.33072085353662334,
+        "median_abs_delta_logabs_chi_mean": 0.6325787446526558,
+        "median_logabs_chi_mean": 0.012391835150089589,
+        "positive_chi_fraction_mean": 0.8956103852948898,
+        "regular_fraction_weighted": 0.3317263846775929
+      }
+    },
+    "tribe.convergence": {
+      "covariance_all": true,
+      "projective": {
+        "mean_abs_delta_logabs_chi_mean": 0.6715531282761545,
+        "mean_abs_logabs_chi_mean": 0.3067542278530852,
+        "median_abs_delta_logabs_chi_mean": 0.5856204674316996,
+        "median_logabs_chi_mean": 0.0067790561333928535,
+        "positive_chi_fraction_mean": 0.899296329847736,
+        "regular_fraction_weighted": 0.3076602732319769
+      },
+      "ratios": {
+        "mean_abs_delta_logabs_chi_mean_ratio_to_shuffle": 0.921328465252591,
+        "mean_abs_logabs_chi_mean_ratio_to_shuffle": 0.8839236796182247,
+        "regular_fraction_weighted_ratio_to_shuffle": 1.0306104558522606
+      },
+      "runs": 3,
+      "shuffled": {
+        "mean_abs_delta_logabs_chi_mean": 0.7289054211885935,
+        "mean_abs_logabs_chi_mean": 0.34709466722220395,
+        "median_abs_delta_logabs_chi_mean": 0.6519746482050601,
+        "median_logabs_chi_mean": 0.00880821658904706,
+        "positive_chi_fraction_mean": 0.8850571374267999,
+        "regular_fraction_weighted": 0.2985555505429304
+      }
+    },
+    "tribe.diversity": {
+      "covariance_all": true,
+      "projective": {
+        "mean_abs_delta_logabs_chi_mean": 0.6755530542928296,
+        "mean_abs_logabs_chi_mean": 0.3083271599649922,
+        "median_abs_delta_logabs_chi_mean": 0.5906076252703155,
+        "median_logabs_chi_mean": 0.0062518190224896825,
+        "positive_chi_fraction_mean": 0.8995363715813985,
+        "regular_fraction_weighted": 0.31214503034047963
+      },
+      "ratios": {
+        "mean_abs_delta_logabs_chi_mean_ratio_to_shuffle": 0.9279548332329696,
+        "mean_abs_logabs_chi_mean_ratio_to_shuffle": 0.8818818650627737,
+        "regular_fraction_weighted_ratio_to_shuffle": 1.0304362955482278
+      },
+      "runs": 3,
+      "shuffled": {
+        "mean_abs_delta_logabs_chi_mean": 0.7280078856040028,
+        "mean_abs_logabs_chi_mean": 0.3496181889355045,
+        "median_abs_delta_logabs_chi_mean": 0.6525519892275481,
+        "median_logabs_chi_mean": 0.008400964258981401,
+        "positive_chi_fraction_mean": 0.8850625974091887,
+        "regular_fraction_weighted": 0.30292224653384997
+      }
+    },
+    "wealth.egalitarian": {
+      "covariance_all": true,
+      "projective": {
+        "mean_abs_delta_logabs_chi_mean": 0.6381151494743502,
+        "mean_abs_logabs_chi_mean": 0.31318634873917456,
+        "median_abs_delta_logabs_chi_mean": 0.6218909523950539,
+        "median_logabs_chi_mean": 0.015599540328137552,
+        "positive_chi_fraction_mean": 0.9260663097752233,
+        "regular_fraction_weighted": 0.19396258932446578
+      },
+      "ratios": {
+        "mean_abs_delta_logabs_chi_mean_ratio_to_shuffle": 1.045855026134472,
+        "mean_abs_logabs_chi_mean_ratio_to_shuffle": 1.098125761211604,
+        "regular_fraction_weighted_ratio_to_shuffle": 0.8205188913217301
+      },
+      "runs": 3,
+      "shuffled": {
+        "mean_abs_delta_logabs_chi_mean": 0.610264761557611,
+        "mean_abs_logabs_chi_mean": 0.2852687381270647,
+        "median_abs_delta_logabs_chi_mean": 0.59355021471605,
+        "median_logabs_chi_mean": 0.029552524305421112,
+        "positive_chi_fraction_mean": 0.9175598482373966,
+        "regular_fraction_weighted": 0.23640343411927067
+      }
+    },
+    "wealth.skewed-gini-0.5": {
+      "covariance_all": true,
+      "projective": {
+        "mean_abs_delta_logabs_chi_mean": 0.7531232870015815,
+        "mean_abs_logabs_chi_mean": 0.3673080582501648,
+        "median_abs_delta_logabs_chi_mean": 0.6834812172054076,
+        "median_logabs_chi_mean": 0.013379437266180204,
+        "positive_chi_fraction_mean": 0.8945566800203234,
+        "regular_fraction_weighted": 0.2983436306813954
+      },
+      "ratios": {
+        "mean_abs_delta_logabs_chi_mean_ratio_to_shuffle": 1.016054157906283,
+        "mean_abs_logabs_chi_mean_ratio_to_shuffle": 1.0574939910312022,
+        "regular_fraction_weighted_ratio_to_shuffle": 0.889028771231254
+      },
+      "runs": 3,
+      "shuffled": {
+        "mean_abs_delta_logabs_chi_mean": 0.7412894058295855,
+        "mean_abs_logabs_chi_mean": 0.3473035320310236,
+        "median_abs_delta_logabs_chi_mean": 0.6662631120228609,
+        "median_logabs_chi_mean": 0.024532531330299798,
+        "positive_chi_fraction_mean": 0.890362922797098,
+        "regular_fraction_weighted": 0.33558811802738475
+      }
+    }
+  },
+  "definition": "chi=[phi0,phi2][phi1,phi3]/([phi0,phi3][phi1,phi2])",
+  "runs": [
+    {
+      "covariance_checked": true,
+      "final_gini": 0.476,
+      "final_population": 250,
+      "projective": {
+        "degeneracy": {
+          "degenerate:0001": 4842,
+          "degenerate:0010": 3844,
+          "degenerate:0011": 1860,
+          "degenerate:0100": 1599,
+          "degenerate:0101": 2990,
+          "degenerate:0110": 577,
+          "degenerate:1000": 1615,
+          "degenerate:1001": 2952,
+          "degenerate:1010": 549,
+          "degenerate:1100": 725,
+          "degenerate:1111": 1873,
+          "regular": 34468,
+          "zero_phase": 57454
+        },
+        "mean_abs_delta_logabs_chi_mean": 0.7564128742643584,
+        "mean_abs_logabs_chi_mean": 0.35852538476339874,
+        "median_abs_delta_logabs_chi_mean": 0.6810019065175228,
+        "median_logabs_chi_mean": 0.013998180191416626,
+        "positive_chi_fraction_mean": 0.8976516190393786,
+        "regular_fraction_mean": 0.277951341746313,
+        "regular_fraction_weighted": 0.2988174914172764,
+        "regular_windows": 34468,
+        "windows": 115348
+      },
+      "ratios": {
+        "mean_abs_delta_logabs_chi_mean_ratio_to_shuffle": 1.0304263985871935,
+        "mean_abs_logabs_chi_mean_ratio_to_shuffle": 1.0450043313399684,
+        "regular_fraction_weighted_ratio_to_shuffle": 0.8910834776763786
+      },
+      "seed": 1,
+      "shuffled": {
+        "degeneracy": {
+          "degenerate:0001": 5722,
+          "degenerate:0010": 4478,
+          "degenerate:0011": 1872,
+          "degenerate:0100": 1688,
+          "degenerate:0101": 3853,
+          "degenerate:0110": 535,
+          "degenerate:1000": 1696,
+          "degenerate:1001": 3877,
+          "degenerate:1010": 522,
+          "degenerate:1100": 244,
+          "degenerate:1111": 2545,
+          "regular": 38681,
+          "zero_phase": 49635
+        },
+        "mean_abs_delta_logabs_chi_mean": 0.7340775384845225,
+        "mean_abs_logabs_chi_mean": 0.34308507056968424,
+        "median_abs_delta_logabs_chi_mean": 0.6536048956359306,
+        "median_logabs_chi_mean": 0.02691448286086878,
+        "positive_chi_fraction_mean": 0.893235134511533,
+        "regular_fraction_mean": 0.3055992244880388,
+        "regular_fraction_weighted": 0.3353417484481742,
+        "regular_windows": 38681,
+        "windows": 115348
+      },
+      "spec": "wealth.skewed-gini-0.5",
+      "target_window_mean": 0.46747999999999995
+    },
+    {
+      "covariance_checked": true,
+      "final_gini": 0.474,
+      "final_population": 250,
+      "projective": {
+        "degeneracy": {
+          "degenerate:0001": 4778,
+          "degenerate:0010": 3915,
+          "degenerate:0011": 1866,
+          "degenerate:0100": 1612,
+          "degenerate:0101": 3010,
+          "degenerate:0110": 598,
+          "degenerate:1000": 1611,
+          "degenerate:1001": 3015,
+          "degenerate:1010": 603,
+          "degenerate:1100": 740,
+          "degenerate:1111": 1937,
+          "regular": 34167,
+          "zero_phase": 57450
+        },
+        "mean_abs_delta_logabs_chi_mean": 0.757154859225136,
+        "mean_abs_logabs_chi_mean": 0.3764960315204073,
+        "median_abs_delta_logabs_chi_mean": 0.6889879275436175,
+        "median_logabs_chi_mean": 0.01473581016044403,
+        "positive_chi_fraction_mean": 0.8954816515126048,
+        "regular_fraction_mean": 0.27322741260098893,
+        "regular_fraction_weighted": 0.2963261695373888,
+        "regular_windows": 34167,
+        "windows": 115302
+      },
+      "ratios": {
+        "mean_abs_delta_logabs_chi_mean_ratio_to_shuffle": 1.0059599972572721,
+        "mean_abs_logabs_chi_mean_ratio_to_shuffle": 1.0705601626530339,
+        "regular_fraction_weighted_ratio_to_shuffle": 0.8807289787080477
+      },
+      "seed": 2,
+      "shuffled": {
+        "degeneracy": {
+          "degenerate:0001": 5653,
+          "degenerate:0010": 4497,
+          "degenerate:0011": 1782,
+          "degenerate:0100": 1748,
+          "degenerate:0101": 3786,
+          "degenerate:0110": 559,
+          "degenerate:1000": 1718,
+          "degenerate:1001": 3765,
+          "degenerate:1010": 579,
+          "degenerate:1100": 236,
+          "degenerate:1111": 2546,
+          "regular": 38794,
+          "zero_phase": 49639
+        },
+        "mean_abs_delta_logabs_chi_mean": 0.7526689543217445,
+        "mean_abs_logabs_chi_mean": 0.351681339035991,
+        "median_abs_delta_logabs_chi_mean": 0.6809520163245981,
+        "median_logabs_chi_mean": 0.021523817166133507,
+        "positive_chi_fraction_mean": 0.8875130981748832,
+        "regular_fraction_mean": 0.305163494377815,
+        "regular_fraction_weighted": 0.3364555688539661,
+        "regular_windows": 38794,
+        "windows": 115302
+      },
+      "spec": "wealth.skewed-gini-0.5",
+      "target_window_mean": 0.46941000000000005
+    },
+    {
+      "covariance_checked": true,
+      "final_gini": 0.477,
+      "final_population": 250,
+      "projective": {
+        "degeneracy": {
+          "degenerate:0001": 4932,
+          "degenerate:0010": 3828,
+          "degenerate:0011": 1857,
+          "degenerate:0100": 1660,
+          "degenerate:0101": 3009,
+          "degenerate:0110": 566,
+          "degenerate:1000": 1678,
+          "degenerate:1001": 2957,
+          "degenerate:1010": 560,
+          "degenerate:1100": 735,
+          "degenerate:1111": 1920,
+          "regular": 34571,
+          "zero_phase": 57007
+        },
+        "mean_abs_delta_logabs_chi_mean": 0.7458021275152499,
+        "mean_abs_logabs_chi_mean": 0.3669027584666883,
+        "median_abs_delta_logabs_chi_mean": 0.6804538175550825,
+        "median_logabs_chi_mean": 0.011404321446679955,
+        "positive_chi_fraction_mean": 0.8905367695089869,
+        "regular_fraction_mean": 0.27889241092932804,
+        "regular_fraction_weighted": 0.29988723108952114,
+        "regular_windows": 34571,
+        "windows": 115280
+      },
+      "ratios": {
+        "mean_abs_delta_logabs_chi_mean_ratio_to_shuffle": 1.011776077874383,
+        "mean_abs_logabs_chi_mean_ratio_to_shuffle": 1.0569174791006046,
+        "regular_fraction_weighted_ratio_to_shuffle": 0.8952738573093357
+      },
+      "seed": 3,
+      "shuffled": {
+        "degeneracy": {
+          "degenerate:0001": 5514,
+          "degenerate:0010": 4495,
+          "degenerate:0011": 1812,
+          "degenerate:0100": 1743,
+          "degenerate:0101": 3786,
+          "degenerate:0110": 522,
+          "degenerate:1000": 1733,
+          "degenerate:1001": 3780,
+          "degenerate:1010": 535,
+          "degenerate:1100": 245,
+          "degenerate:1111": 2370,
+          "regular": 38615,
+          "zero_phase": 50130
+        },
+        "mean_abs_delta_logabs_chi_mean": 0.7371217246824894,
+        "mean_abs_logabs_chi_mean": 0.3471441864873956,
+        "median_abs_delta_logabs_chi_mean": 0.6642324241080538,
+        "median_logabs_chi_mean": 0.025159293963897107,
+        "positive_chi_fraction_mean": 0.8903405357048779,
+        "regular_fraction_mean": 0.30901694570791,
+        "regular_fraction_weighted": 0.3349670367800139,
+        "regular_windows": 38615,
+        "windows": 115280
+      },
+      "spec": "wealth.skewed-gini-0.5",
+      "target_window_mean": 0.45972999999999997
+    },
+    {
+      "covariance_checked": true,
+      "final_gini": 0.324,
+      "final_population": 223,
+      "projective": {
+        "degeneracy": {
+          "degenerate:0001": 4663,
+          "degenerate:0010": 3684,
+          "degenerate:0011": 1744,
+          "degenerate:0100": 1449,
+          "degenerate:0101": 2877,
+          "degenerate:0110": 612,
+          "degenerate:1000": 1472,
+          "degenerate:1001": 2877,
+          "degenerate:1010": 589,
+          "degenerate:1100": 898,
+          "degenerate:1111": 1810,
+          "regular": 32813,
+          "zero_phase": 55607
+        },
+        "mean_abs_delta_logabs_chi_mean": 0.7713087489639052,
+        "mean_abs_logabs_chi_mean": 0.40494476134115176,
+        "median_abs_delta_logabs_chi_mean": 0.6543941743772351,
+        "median_logabs_chi_mean": -0.0030579898429106164,
+        "positive_chi_fraction_mean": 0.8777874162100363,
+        "regular_fraction_mean": 0.2836691168755113,
+        "regular_fraction_weighted": 0.29535982717494036,
+        "regular_windows": 32813,
+        "windows": 111095
+      },
+      "ratios": {
+        "mean_abs_delta_logabs_chi_mean_ratio_to_shuffle": 1.0214930492165373,
+        "mean_abs_logabs_chi_mean_ratio_to_shuffle": 1.127766468450579,
+        "regular_fraction_weighted_ratio_to_shuffle": 0.8618669888632065
+      },
+      "seed": 1,
+      "shuffled": {
+        "degeneracy": {
+          "degenerate:0001": 5658,
+          "degenerate:0010": 4398,
+          "degenerate:0011": 1654,
+          "degenerate:0100": 1600,
+          "degenerate:0101": 3699,
+          "degenerate:0110": 482,
+          "degenerate:1000": 1651,
+          "degenerate:1001": 3698,
+          "degenerate:1010": 434,
+          "degenerate:1100": 219,
+          "degenerate:1111": 2692,
+          "regular": 38072,
+          "zero_phase": 46838
+        },
+        "mean_abs_delta_logabs_chi_mean": 0.7550797820459787,
+        "mean_abs_logabs_chi_mean": 0.3590679211251059,
+        "median_abs_delta_logabs_chi_mean": 0.666637658927101,
+        "median_logabs_chi_mean": 0.015132868877418456,
+        "positive_chi_fraction_mean": 0.8819020800009487,
+        "regular_fraction_mean": 0.32124421823075666,
+        "regular_fraction_weighted": 0.342697691165219,
+        "regular_windows": 38072,
+        "windows": 111095
+      },
+      "spec": "population.carrying-capacity",
+      "target_window_mean": 223.0
+    },
+    {
+      "covariance_checked": true,
+      "final_gini": 0.322,
+      "final_population": 222,
+      "projective": {
+        "degeneracy": {
+          "degenerate:0001": 4574,
+          "degenerate:0010": 3631,
+          "degenerate:0011": 1725,
+          "degenerate:0100": 1575,
+          "degenerate:0101": 2892,
+          "degenerate:0110": 680,
+          "degenerate:1000": 1576,
+          "degenerate:1001": 2875,
+          "degenerate:1010": 633,
+          "degenerate:1100": 1003,
+          "degenerate:1111": 1738,
+          "regular": 32635,
+          "zero_phase": 56526
+        },
+        "mean_abs_delta_logabs_chi_mean": 0.7743618261398157,
+        "mean_abs_logabs_chi_mean": 0.3802434135307664,
+        "median_abs_delta_logabs_chi_mean": 0.6721329754762088,
+        "median_logabs_chi_mean": 0.0121283833059689,
+        "positive_chi_fraction_mean": 0.8862021232117074,
+        "regular_fraction_mean": 0.2761090098821992,
+        "regular_fraction_weighted": 0.29122011725547237,
+        "regular_windows": 32635,
+        "windows": 112063
+      },
+      "ratios": {
+        "mean_abs_delta_logabs_chi_mean_ratio_to_shuffle": 1.0526813151496002,
+        "mean_abs_logabs_chi_mean_ratio_to_shuffle": 1.0295074339511012,
+        "regular_fraction_weighted_ratio_to_shuffle": 0.8573717948717948
+      },
+      "seed": 2,
+      "shuffled": {
+        "degeneracy": {
+          "degenerate:0001": 5642,
+          "degenerate:0010": 4341,
+          "degenerate:0011": 1853,
+          "degenerate:0100": 1673,
+          "degenerate:0101": 3654,
+          "degenerate:0110": 474,
+          "degenerate:1000": 1660,
+          "degenerate:1001": 3679,
+          "degenerate:1010": 470,
+          "degenerate:1100": 178,
+          "degenerate:1111": 2583,
+          "regular": 38064,
+          "zero_phase": 47792
+        },
+        "mean_abs_delta_logabs_chi_mean": 0.7356089777557879,
+        "mean_abs_logabs_chi_mean": 0.3693449906150235,
+        "median_abs_delta_logabs_chi_mean": 0.6446867956040231,
+        "median_logabs_chi_mean": 0.02811424716492586,
+        "positive_chi_fraction_mean": 0.8836236240859472,
+        "regular_fraction_mean": 0.31933441277425084,
+        "regular_fraction_weighted": 0.3396660806867566,
+        "regular_windows": 38064,
+        "windows": 112063
+      },
+      "spec": "population.carrying-capacity",
+      "target_window_mean": 222.0
+    },
+    {
+      "covariance_checked": true,
+      "final_gini": 0.311,
+      "final_population": 221,
+      "projective": {
+        "degeneracy": {
+          "degenerate:0001": 4629,
+          "degenerate:0010": 3516,
+          "degenerate:0011": 1655,
+          "degenerate:0100": 1475,
+          "degenerate:0101": 2898,
+          "degenerate:0110": 604,
+          "degenerate:1000": 1467,
+          "degenerate:1001": 2867,
+          "degenerate:1010": 595,
+          "degenerate:1100": 906,
+          "degenerate:1111": 1801,
+          "regular": 32894,
+          "zero_phase": 55913
+        },
+        "mean_abs_delta_logabs_chi_mean": 0.7708232310252789,
+        "mean_abs_logabs_chi_mean": 0.3998132292146869,
+        "median_abs_delta_logabs_chi_mean": 0.67079931695454,
+        "median_logabs_chi_mean": 0.010855611234832483,
+        "positive_chi_fraction_mean": 0.8868205892323211,
+        "regular_fraction_mean": 0.29038978587741054,
+        "regular_fraction_weighted": 0.2957561589642151,
+        "regular_windows": 32894,
+        "windows": 111220
+      },
+      "ratios": {
+        "mean_abs_delta_logabs_chi_mean_ratio_to_shuffle": 1.0189588396668268,
+        "mean_abs_logabs_chi_mean_ratio_to_shuffle": 1.0903997963952012,
+        "regular_fraction_weighted_ratio_to_shuffle": 0.855033661719217
+      },
+      "seed": 3,
+      "shuffled": {
+        "degeneracy": {
+          "degenerate:0001": 5742,
+          "degenerate:0010": 4439,
+          "degenerate:0011": 1768,
+          "degenerate:0100": 1657,
+          "degenerate:0101": 3614,
+          "degenerate:0110": 483,
+          "degenerate:1000": 1683,
+          "degenerate:1001": 3667,
+          "degenerate:1010": 502,
+          "degenerate:1100": 215,
+          "degenerate:1111": 2530,
+          "regular": 38471,
+          "zero_phase": 46449
+        },
+        "mean_abs_delta_logabs_chi_mean": 0.7564812247738273,
+        "mean_abs_logabs_chi_mean": 0.3666666396457945,
+        "median_abs_delta_logabs_chi_mean": 0.6464453184561066,
+        "median_logabs_chi_mean": 0.003372979154796403,
+        "positive_chi_fraction_mean": 0.8834996855683885,
+        "regular_fraction_mean": 0.3393840665881188,
+        "regular_fraction_weighted": 0.3459000179823773,
+        "regular_windows": 38471,
+        "windows": 111220
+      },
+      "spec": "population.carrying-capacity",
+      "target_window_mean": 221.17
+    },
+    {
+      "covariance_checked": true,
+      "final_gini": 0.308,
+      "final_population": 64,
+      "projective": {
+        "degeneracy": {
+          "degenerate:0001": 2319,
+          "degenerate:0010": 1930,
+          "degenerate:0011": 1030,
+          "degenerate:0100": 952,
+          "degenerate:0101": 1993,
+          "degenerate:0110": 786,
+          "degenerate:1000": 1032,
+          "degenerate:1001": 2015,
+          "degenerate:1010": 742,
+          "degenerate:1100": 2412,
+          "degenerate:1111": 1891,
+          "regular": 17743,
+          "zero_phase": 34842
+        },
+        "mean_abs_delta_logabs_chi_mean": 0.7850884174966692,
+        "mean_abs_logabs_chi_mean": 0.3638823588541172,
+        "median_abs_delta_logabs_chi_mean": 0.7202431346315535,
+        "median_logabs_chi_mean": 0.037813395559599776,
+        "positive_chi_fraction_mean": 0.8852796973813971,
+        "regular_fraction_mean": 0.2379373912980675,
+        "regular_fraction_weighted": 0.2546098985463573,
+        "regular_windows": 17743,
+        "windows": 69687
+      },
+      "ratios": {
+        "mean_abs_delta_logabs_chi_mean_ratio_to_shuffle": 1.1022115093406009,
+        "mean_abs_logabs_chi_mean_ratio_to_shuffle": 1.085962092052375,
+        "regular_fraction_weighted_ratio_to_shuffle": 0.7677960967588385
+      },
+      "seed": 1,
+      "shuffled": {
+        "degeneracy": {
+          "degenerate:0001": 3430,
+          "degenerate:0010": 2677,
+          "degenerate:0011": 1135,
+          "degenerate:0100": 1086,
+          "degenerate:0101": 2250,
+          "degenerate:0110": 338,
+          "degenerate:1000": 1041,
+          "degenerate:1001": 2252,
+          "degenerate:1010": 340,
+          "degenerate:1100": 156,
+          "degenerate:1111": 1576,
+          "regular": 23109,
+          "zero_phase": 30297
+        },
+        "mean_abs_delta_logabs_chi_mean": 0.7122847210753126,
+        "mean_abs_logabs_chi_mean": 0.3350783250328847,
+        "median_abs_delta_logabs_chi_mean": 0.6318796901806873,
+        "median_logabs_chi_mean": 0.013113829879996146,
+        "positive_chi_fraction_mean": 0.88661799627919,
+        "regular_fraction_mean": 0.29018150878913535,
+        "regular_fraction_weighted": 0.3316113478841104,
+        "regular_windows": 23109,
+        "windows": 69687
+      },
+      "spec": "price.equilibrium",
+      "target_window_mean": 1.1
+    },
+    {
+      "covariance_checked": true,
+      "final_gini": 0.312,
+      "final_population": 66,
+      "projective": {
+        "degeneracy": {
+          "degenerate:0001": 2504,
+          "degenerate:0010": 1972,
+          "degenerate:0011": 1040,
+          "degenerate:0100": 1027,
+          "degenerate:0101": 2169,
+          "degenerate:0110": 799,
+          "degenerate:1000": 1069,
+          "degenerate:1001": 2148,
+          "degenerate:1010": 723,
+          "degenerate:1100": 2416,
+          "degenerate:1111": 1968,
+          "regular": 18593,
+          "zero_phase": 35928
+        },
+        "mean_abs_delta_logabs_chi_mean": 0.7493434944310242,
+        "mean_abs_logabs_chi_mean": 0.37193289870511237,
+        "median_abs_delta_logabs_chi_mean": 0.6602471900557537,
+        "median_logabs_chi_mean": 0.007803054315150703,
+        "positive_chi_fraction_mean": 0.8863570826396481,
+        "regular_fraction_mean": 0.2465299697672772,
+        "regular_fraction_weighted": 0.25696555917961195,
+        "regular_windows": 18593,
+        "windows": 72356
+      },
+      "ratios": {
+        "mean_abs_delta_logabs_chi_mean_ratio_to_shuffle": 1.1395282983417059,
+        "mean_abs_logabs_chi_mean_ratio_to_shuffle": 1.1944247723317192,
+        "regular_fraction_weighted_ratio_to_shuffle": 0.7812513130803816
+      },
+      "seed": 2,
+      "shuffled": {
+        "degeneracy": {
+          "degenerate:0001": 3497,
+          "degenerate:0010": 2795,
+          "degenerate:0011": 1180,
+          "degenerate:0100": 1056,
+          "degenerate:0101": 2411,
+          "degenerate:0110": 361,
+          "degenerate:1000": 1042,
+          "degenerate:1001": 2406,
+          "degenerate:1010": 369,
+          "degenerate:1100": 152,
+          "degenerate:1111": 1672,
+          "regular": 23799,
+          "zero_phase": 31616
+        },
+        "mean_abs_delta_logabs_chi_mean": 0.6575909483963701,
+        "mean_abs_logabs_chi_mean": 0.31139081114253553,
+        "median_abs_delta_logabs_chi_mean": 0.5651750107716844,
+        "median_logabs_chi_mean": 0.011303916378902887,
+        "positive_chi_fraction_mean": 0.8981160956742484,
+        "regular_fraction_mean": 0.3126070222329659,
+        "regular_fraction_weighted": 0.32891536292774615,
+        "regular_windows": 23799,
+        "windows": 72356
+      },
+      "spec": "price.equilibrium",
+      "target_window_mean": 1.0965
+    },
+    {
+      "covariance_checked": true,
+      "final_gini": 0.335,
+      "final_population": 64,
+      "projective": {
+        "degeneracy": {
+          "degenerate:0001": 2534,
+          "degenerate:0010": 2006,
+          "degenerate:0011": 978,
+          "degenerate:0100": 1095,
+          "degenerate:0101": 1983,
+          "degenerate:0110": 764,
+          "degenerate:1000": 1172,
+          "degenerate:1001": 1960,
+          "degenerate:1010": 716,
+          "degenerate:1100": 2540,
+          "degenerate:1111": 1898,
+          "regular": 18410,
+          "zero_phase": 33688
+        },
+        "mean_abs_delta_logabs_chi_mean": 0.7865023667290677,
+        "mean_abs_logabs_chi_mean": 0.3659852058311916,
+        "median_abs_delta_logabs_chi_mean": 0.7077372949975338,
+        "median_logabs_chi_mean": 0.02316265011460572,
+        "positive_chi_fraction_mean": 0.8731068959595729,
+        "regular_fraction_mean": 0.2388255086477813,
+        "regular_fraction_weighted": 0.26396535902729984,
+        "regular_windows": 18410,
+        "windows": 69744
+      },
+      "ratios": {
+        "mean_abs_delta_logabs_chi_mean_ratio_to_shuffle": 1.002442729509578,
+        "mean_abs_logabs_chi_mean_ratio_to_shuffle": 1.0586987774787413,
+        "regular_fraction_weighted_ratio_to_shuffle": 0.7887746358183376
+      },
+      "seed": 3,
+      "shuffled": {
+        "degeneracy": {
+          "degenerate:0001": 3517,
+          "degenerate:0010": 2684,
+          "degenerate:0011": 1071,
+          "degenerate:0100": 979,
+          "degenerate:0101": 2329,
+          "degenerate:0110": 329,
+          "degenerate:1000": 1036,
+          "degenerate:1001": 2292,
+          "degenerate:1010": 330,
+          "degenerate:1100": 141,
+          "degenerate:1111": 1557,
+          "regular": 23340,
+          "zero_phase": 30139
+        },
+        "mean_abs_delta_logabs_chi_mean": 0.7845858357552714,
+        "mean_abs_logabs_chi_mean": 0.3456934244344497,
+        "median_abs_delta_logabs_chi_mean": 0.7006815330055958,
+        "median_logabs_chi_mean": 0.012757759191369731,
+        "positive_chi_fraction_mean": 0.9020970639312311,
+        "regular_fraction_mean": 0.2925706961162934,
+        "regular_fraction_weighted": 0.33465244322092225,
+        "regular_windows": 23340,
+        "windows": 69744
+      },
+      "spec": "price.equilibrium",
+      "target_window_mean": 1.1101
+    },
+    {
+      "covariance_checked": true,
+      "final_gini": 0.141,
+      "final_population": 559,
+      "projective": {
+        "degeneracy": {
+          "degenerate:0001": 9801,
+          "degenerate:0010": 7608,
+          "degenerate:0011": 3705,
+          "degenerate:0100": 3632,
+          "degenerate:0101": 9319,
+          "degenerate:0110": 959,
+          "degenerate:1000": 3647,
+          "degenerate:1001": 9201,
+          "degenerate:1010": 950,
+          "degenerate:1100": 501,
+          "degenerate:1111": 10160,
+          "regular": 67187,
+          "zero_phase": 91540
+        },
+        "mean_abs_delta_logabs_chi_mean": 0.6849400156812483,
+        "mean_abs_logabs_chi_mean": 0.3105777415215792,
+        "median_abs_delta_logabs_chi_mean": 0.5984619489127466,
+        "median_logabs_chi_mean": 0.00698950335898165,
+        "positive_chi_fraction_mean": 0.897572125759162,
+        "regular_fraction_mean": 0.3038310967023106,
+        "regular_fraction_weighted": 0.30790064616653684,
+        "regular_windows": 67187,
+        "windows": 218210
+      },
+      "ratios": {
+        "mean_abs_delta_logabs_chi_mean_ratio_to_shuffle": 0.944997654950964,
+        "mean_abs_logabs_chi_mean_ratio_to_shuffle": 0.9027708929188503,
+        "regular_fraction_weighted_ratio_to_shuffle": 1.0378775005792849
+      },
+      "seed": 1,
+      "shuffled": {
+        "degeneracy": {
+          "degenerate:0001": 10400,
+          "degenerate:0010": 7745,
+          "degenerate:0011": 3703,
+          "degenerate:0100": 3302,
+          "degenerate:0101": 6521,
+          "degenerate:0110": 1184,
+          "degenerate:1000": 3257,
+          "degenerate:1001": 6533,
+          "degenerate:1010": 1163,
+          "degenerate:1100": 558,
+          "degenerate:1111": 4281,
+          "regular": 64735,
+          "zero_phase": 104828
+        },
+        "mean_abs_delta_logabs_chi_mean": 0.7248060480285423,
+        "mean_abs_logabs_chi_mean": 0.34402719888034416,
+        "median_abs_delta_logabs_chi_mean": 0.6487253173288596,
+        "median_logabs_chi_mean": 0.00667194500412484,
+        "positive_chi_fraction_mean": 0.887303089394375,
+        "regular_fraction_mean": 0.2925637251957592,
+        "regular_fraction_weighted": 0.2966637642637826,
+        "regular_windows": 64735,
+        "windows": 218210
+      },
+      "spec": "tribe.convergence",
+      "target_window_mean": 0.8013161411405488
+    },
+    {
+      "covariance_checked": true,
+      "final_gini": 0.137,
+      "final_population": 474,
+      "projective": {
+        "degeneracy": {
+          "degenerate:0001": 9576,
+          "degenerate:0010": 7402,
+          "degenerate:0011": 3407,
+          "degenerate:0100": 3011,
+          "degenerate:0101": 8880,
+          "degenerate:0110": 773,
+          "degenerate:1000": 2968,
+          "degenerate:1001": 8896,
+          "degenerate:1010": 809,
+          "degenerate:1100": 392,
+          "degenerate:1111": 9321,
+          "regular": 65455,
+          "zero_phase": 87079
+        },
+        "mean_abs_delta_logabs_chi_mean": 0.6817089663384789,
+        "mean_abs_logabs_chi_mean": 0.31270352782949346,
+        "median_abs_delta_logabs_chi_mean": 0.5939710942812831,
+        "median_logabs_chi_mean": 0.005795150910295722,
+        "positive_chi_fraction_mean": 0.8966116144994933,
+        "regular_fraction_mean": 0.3141333749965453,
+        "regular_fraction_weighted": 0.31473440753189175,
+        "regular_windows": 65455,
+        "windows": 207969
+      },
+      "ratios": {
+        "mean_abs_delta_logabs_chi_mean_ratio_to_shuffle": 0.9134320921370959,
+        "mean_abs_logabs_chi_mean_ratio_to_shuffle": 0.8712789703799817,
+        "regular_fraction_weighted_ratio_to_shuffle": 1.0221115257889724
+      },
+      "seed": 2,
+      "shuffled": {
+        "degeneracy": {
+          "degenerate:0001": 9882,
+          "degenerate:0010": 7502,
+          "degenerate:0011": 3387,
+          "degenerate:0100": 3063,
+          "degenerate:0101": 6434,
+          "degenerate:0110": 998,
+          "degenerate:1000": 3100,
+          "degenerate:1001": 6404,
+          "degenerate:1010": 1005,
+          "degenerate:1100": 444,
+          "degenerate:1111": 4132,
+          "regular": 64039,
+          "zero_phase": 97579
+        },
+        "mean_abs_delta_logabs_chi_mean": 0.7463159792683987,
+        "mean_abs_logabs_chi_mean": 0.35890172775904067,
+        "median_abs_delta_logabs_chi_mean": 0.6650095980094387,
+        "median_logabs_chi_mean": 0.00811805099951979,
+        "positive_chi_fraction_mean": 0.8809530055724986,
+        "regular_fraction_mean": 0.3072880030389382,
+        "regular_fraction_weighted": 0.30792570046497314,
+        "regular_windows": 64039,
+        "windows": 207969
+      },
+      "spec": "tribe.convergence",
+      "target_window_mean": 0.7864493264085969
+    },
+    {
+      "covariance_checked": true,
+      "final_gini": 0.151,
+      "final_population": 538,
+      "projective": {
+        "degeneracy": {
+          "degenerate:0001": 9451,
+          "degenerate:0010": 7538,
+          "degenerate:0011": 3861,
+          "degenerate:0100": 3618,
+          "degenerate:0101": 9096,
+          "degenerate:0110": 938,
+          "degenerate:1000": 3572,
+          "degenerate:1001": 8928,
+          "degenerate:1010": 980,
+          "degenerate:1100": 522,
+          "degenerate:1111": 9354,
+          "regular": 64453,
+          "zero_phase": 92285
+        },
+        "mean_abs_delta_logabs_chi_mean": 0.6480104028087367,
+        "mean_abs_logabs_chi_mean": 0.29698141420818286,
+        "median_abs_delta_logabs_chi_mean": 0.5644283591010689,
+        "median_logabs_chi_mean": 0.007552514130901186,
+        "positive_chi_fraction_mean": 0.9037052492845529,
+        "regular_fraction_mean": 0.298457414610027,
+        "regular_fraction_weighted": 0.3003457659975023,
+        "regular_windows": 64453,
+        "windows": 214596
+      },
+      "ratios": {
+        "mean_abs_delta_logabs_chi_mean_ratio_to_shuffle": 0.9055556486697132,
+        "mean_abs_logabs_chi_mean_ratio_to_shuffle": 0.8777211755558423,
+        "regular_fraction_weighted_ratio_to_shuffle": 1.0318423411885247
+      },
+      "seed": 3,
+      "shuffled": {
+        "degeneracy": {
+          "degenerate:0001": 9999,
+          "degenerate:0010": 7458,
+          "degenerate:0011": 3628,
+          "degenerate:0100": 3409,
+          "degenerate:0101": 6443,
+          "degenerate:0110": 1209,
+          "degenerate:1000": 3358,
+          "degenerate:1001": 6391,
+          "degenerate:1010": 1219,
+          "degenerate:1100": 595,
+          "degenerate:1111": 4055,
+          "regular": 62464,
+          "zero_phase": 104368
+        },
+        "mean_abs_delta_logabs_chi_mean": 0.7155942362688392,
+        "mean_abs_logabs_chi_mean": 0.33835507502722695,
+        "median_abs_delta_logabs_chi_mean": 0.642189029276882,
+        "median_logabs_chi_mean": 0.011634653763496552,
+        "positive_chi_fraction_mean": 0.8869153173135261,
+        "regular_fraction_mean": 0.28858708345930184,
+        "regular_fraction_weighted": 0.2910771869000354,
+        "regular_windows": 62464,
+        "windows": 214596
+      },
+      "spec": "tribe.convergence",
+      "target_window_mean": 0.7283732105663545
+    },
+    {
+      "covariance_checked": true,
+      "final_gini": 0.29,
+      "final_population": 250,
+      "projective": {
+        "degeneracy": {
+          "degenerate:0001": 3609,
+          "degenerate:0010": 2952,
+          "degenerate:0011": 2244,
+          "degenerate:0100": 2175,
+          "degenerate:0101": 2388,
+          "degenerate:0110": 1139,
+          "degenerate:1000": 2428,
+          "degenerate:1001": 2399,
+          "degenerate:1010": 1122,
+          "degenerate:1100": 1803,
+          "degenerate:1111": 1391,
+          "regular": 21409,
+          "zero_phase": 64901
+        },
+        "mean_abs_delta_logabs_chi_mean": 0.6453304618225887,
+        "mean_abs_logabs_chi_mean": 0.3160852106381609,
+        "median_abs_delta_logabs_chi_mean": 0.6308314576366303,
+        "median_logabs_chi_mean": 0.011718041336088607,
+        "positive_chi_fraction_mean": 0.9257402222051012,
+        "regular_fraction_mean": 0.18683358644959594,
+        "regular_fraction_weighted": 0.19469807202619135,
+        "regular_windows": 21409,
+        "windows": 109960
+      },
+      "ratios": {
+        "mean_abs_delta_logabs_chi_mean_ratio_to_shuffle": 1.0652835482718899,
+        "mean_abs_logabs_chi_mean_ratio_to_shuffle": 1.1273765200119021,
+        "regular_fraction_weighted_ratio_to_shuffle": 0.831385188924702
+      },
+      "seed": 1,
+      "shuffled": {
+        "degeneracy": {
+          "degenerate:0001": 4434,
+          "degenerate:0010": 3647,
+          "degenerate:0011": 2132,
+          "degenerate:0100": 1972,
+          "degenerate:0101": 2985,
+          "degenerate:0110": 726,
+          "degenerate:1000": 1984,
+          "degenerate:1001": 2977,
+          "degenerate:1010": 753,
+          "degenerate:1100": 312,
+          "degenerate:1111": 1625,
+          "regular": 25751,
+          "zero_phase": 60662
+        },
+        "mean_abs_delta_logabs_chi_mean": 0.6057828104728061,
+        "mean_abs_logabs_chi_mean": 0.28037235566589935,
+        "median_abs_delta_logabs_chi_mean": 0.588812970400622,
+        "median_logabs_chi_mean": 0.028879088430963325,
+        "positive_chi_fraction_mean": 0.9187056089529111,
+        "regular_fraction_mean": 0.22283115372227327,
+        "regular_fraction_weighted": 0.23418515823935976,
+        "regular_windows": 25751,
+        "windows": 109960
+      },
+      "spec": "wealth.egalitarian",
+      "target_window_mean": 0.29941
+    },
+    {
+      "covariance_checked": true,
+      "final_gini": 0.301,
+      "final_population": 250,
+      "projective": {
+        "degeneracy": {
+          "degenerate:0001": 3573,
+          "degenerate:0010": 2892,
+          "degenerate:0011": 2265,
+          "degenerate:0100": 2253,
+          "degenerate:0101": 2477,
+          "degenerate:0110": 1180,
+          "degenerate:1000": 2398,
+          "degenerate:1001": 2429,
+          "degenerate:1010": 1142,
+          "degenerate:1100": 1815,
+          "degenerate:1111": 1410,
+          "regular": 21086,
+          "zero_phase": 65007
+        },
+        "mean_abs_delta_logabs_chi_mean": 0.6331152908760916,
+        "mean_abs_logabs_chi_mean": 0.3056747685613683,
+        "median_abs_delta_logabs_chi_mean": 0.6141086155845531,
+        "median_logabs_chi_mean": 0.013771512682586475,
+        "positive_chi_fraction_mean": 0.9274969359290571,
+        "regular_fraction_mean": 0.18507982505675705,
+        "regular_fraction_weighted": 0.19181820662803498,
+        "regular_windows": 21086,
+        "windows": 109927
+      },
+      "ratios": {
+        "mean_abs_delta_logabs_chi_mean_ratio_to_shuffle": 1.0198680802826998,
+        "mean_abs_logabs_chi_mean_ratio_to_shuffle": 1.0616573030547167,
+        "regular_fraction_weighted_ratio_to_shuffle": 0.8085122699386503
+      },
+      "seed": 2,
+      "shuffled": {
+        "degeneracy": {
+          "degenerate:0001": 4512,
+          "degenerate:0010": 3618,
+          "degenerate:0011": 2283,
+          "degenerate:0100": 2079,
+          "degenerate:0101": 2955,
+          "degenerate:0110": 724,
+          "degenerate:1000": 2061,
+          "degenerate:1001": 2951,
+          "degenerate:1010": 718,
+          "degenerate:1100": 338,
+          "degenerate:1111": 1698,
+          "regular": 26080,
+          "zero_phase": 59910
+        },
+        "mean_abs_delta_logabs_chi_mean": 0.6207815531402815,
+        "mean_abs_logabs_chi_mean": 0.2879222586062823,
+        "median_abs_delta_logabs_chi_mean": 0.6056876566228576,
+        "median_logabs_chi_mean": 0.024341279775758624,
+        "positive_chi_fraction_mean": 0.9153141298031278,
+        "regular_fraction_mean": 0.22453514128536164,
+        "regular_fraction_weighted": 0.23724835572698244,
+        "regular_windows": 26080,
+        "windows": 109927
+      },
+      "spec": "wealth.egalitarian",
+      "target_window_mean": 0.298
+    },
+    {
+      "covariance_checked": true,
+      "final_gini": 0.306,
+      "final_population": 250,
+      "projective": {
+        "degeneracy": {
+          "degenerate:0001": 3726,
+          "degenerate:0010": 2881,
+          "degenerate:0011": 2245,
+          "degenerate:0100": 2226,
+          "degenerate:0101": 2400,
+          "degenerate:0110": 1142,
+          "degenerate:1000": 2418,
+          "degenerate:1001": 2368,
+          "degenerate:1010": 1164,
+          "degenerate:1100": 1796,
+          "degenerate:1111": 1409,
+          "regular": 21502,
+          "zero_phase": 64780
+        },
+        "mean_abs_delta_logabs_chi_mean": 0.6358996957243704,
+        "mean_abs_logabs_chi_mean": 0.3177990670179945,
+        "median_abs_delta_logabs_chi_mean": 0.620732783963978,
+        "median_logabs_chi_mean": 0.02130906696573757,
+        "positive_chi_fraction_mean": 0.9249617711915115,
+        "regular_fraction_mean": 0.18863626634803035,
+        "regular_fraction_weighted": 0.19537148931917098,
+        "regular_windows": 21502,
+        "windows": 110057
+      },
+      "ratios": {
+        "mean_abs_delta_logabs_chi_mean_ratio_to_shuffle": 1.0524134498488258,
+        "mean_abs_logabs_chi_mean_ratio_to_shuffle": 1.105343460568193,
+        "regular_fraction_weighted_ratio_to_shuffle": 0.821659215101838
+      },
+      "seed": 3,
+      "shuffled": {
+        "degeneracy": {
+          "degenerate:0001": 4382,
+          "degenerate:0010": 3603,
+          "degenerate:0011": 2225,
+          "degenerate:0100": 2104,
+          "degenerate:0101": 3060,
+          "degenerate:0110": 741,
+          "degenerate:1000": 2086,
+          "degenerate:1001": 3070,
+          "degenerate:1010": 752,
+          "degenerate:1100": 323,
+          "degenerate:1111": 1660,
+          "regular": 26169,
+          "zero_phase": 59882
+        },
+        "mean_abs_delta_logabs_chi_mean": 0.6042299210597455,
+        "mean_abs_logabs_chi_mean": 0.2875116001090126,
+        "median_abs_delta_logabs_chi_mean": 0.5861500171246705,
+        "median_logabs_chi_mean": 0.035437204709541384,
+        "positive_chi_fraction_mean": 0.9186598059561506,
+        "regular_fraction_mean": 0.22605577602646248,
+        "regular_fraction_weighted": 0.23777678839146987,
+        "regular_windows": 26169,
+        "windows": 110057
+      },
+      "spec": "wealth.egalitarian",
+      "target_window_mean": 0.29752
+    },
+    {
+      "covariance_checked": true,
+      "final_gini": 0.144,
+      "final_population": 503,
+      "projective": {
+        "degeneracy": {
+          "degenerate:0001": 9577,
+          "degenerate:0010": 7429,
+          "degenerate:0011": 3514,
+          "degenerate:0100": 3154,
+          "degenerate:0101": 8930,
+          "degenerate:0110": 876,
+          "degenerate:1000": 3166,
+          "degenerate:1001": 8853,
+          "degenerate:1010": 867,
+          "degenerate:1100": 396,
+          "degenerate:1111": 9205,
+          "regular": 65257,
+          "zero_phase": 87871
+        },
+        "mean_abs_delta_logabs_chi_mean": 0.6673073615399774,
+        "mean_abs_logabs_chi_mean": 0.3093270901481184,
+        "median_abs_delta_logabs_chi_mean": 0.5861030197767144,
+        "median_logabs_chi_mean": 0.004220832476963782,
+        "positive_chi_fraction_mean": 0.900394273599494,
+        "regular_fraction_mean": 0.31121200606006705,
+        "regular_fraction_weighted": 0.31209258949281427,
+        "regular_windows": 65257,
+        "windows": 209095
+      },
+      "ratios": {
+        "mean_abs_delta_logabs_chi_mean_ratio_to_shuffle": 0.9138738144748515,
+        "mean_abs_logabs_chi_mean_ratio_to_shuffle": 0.8820996806073509,
+        "regular_fraction_weighted_ratio_to_shuffle": 1.027361891717439
+      },
+      "seed": 1,
+      "shuffled": {
+        "degeneracy": {
+          "degenerate:0001": 9799,
+          "degenerate:0010": 7584,
+          "degenerate:0011": 3486,
+          "degenerate:0100": 3141,
+          "degenerate:0101": 6363,
+          "degenerate:0110": 1050,
+          "degenerate:1000": 3198,
+          "degenerate:1001": 6386,
+          "degenerate:1010": 1026,
+          "degenerate:1100": 502,
+          "degenerate:1111": 4192,
+          "regular": 63519,
+          "zero_phase": 98849
+        },
+        "mean_abs_delta_logabs_chi_mean": 0.7301963914169474,
+        "mean_abs_logabs_chi_mean": 0.3506713548917032,
+        "median_abs_delta_logabs_chi_mean": 0.6539131546948996,
+        "median_logabs_chi_mean": 0.011091456638248164,
+        "positive_chi_fraction_mean": 0.8847200440464493,
+        "regular_fraction_mean": 0.30229935039402056,
+        "regular_fraction_weighted": 0.30378057820607857,
+        "regular_windows": 63519,
+        "windows": 209095
+      },
+      "spec": "tribe.diversity",
+      "target_window_mean": 0.6751376965686541
+    },
+    {
+      "covariance_checked": true,
+      "final_gini": 0.14,
+      "final_population": 512,
+      "projective": {
+        "degeneracy": {
+          "degenerate:0001": 9723,
+          "degenerate:0010": 7448,
+          "degenerate:0011": 3613,
+          "degenerate:0100": 3405,
+          "degenerate:0101": 9221,
+          "degenerate:0110": 866,
+          "degenerate:1000": 3367,
+          "degenerate:1001": 9171,
+          "degenerate:1010": 899,
+          "degenerate:1100": 462,
+          "degenerate:1111": 9621,
+          "regular": 65823,
+          "zero_phase": 89254
+        },
+        "mean_abs_delta_logabs_chi_mean": 0.6717420777852392,
+        "mean_abs_logabs_chi_mean": 0.30360322809243023,
+        "median_abs_delta_logabs_chi_mean": 0.5843103705286856,
+        "median_logabs_chi_mean": 0.007097924003479562,
+        "positive_chi_fraction_mean": 0.9000347497355748,
+        "regular_fraction_mean": 0.3056992097169499,
+        "regular_fraction_weighted": 0.3092125351735542,
+        "regular_windows": 65823,
+        "windows": 212873
+      },
+      "ratios": {
+        "mean_abs_delta_logabs_chi_mean_ratio_to_shuffle": 0.9327686627571402,
+        "mean_abs_logabs_chi_mean_ratio_to_shuffle": 0.8798776043862269,
+        "regular_fraction_weighted_ratio_to_shuffle": 1.0285165161411294
+      },
+      "seed": 2,
+      "shuffled": {
+        "degeneracy": {
+          "degenerate:0001": 10195,
+          "degenerate:0010": 7672,
+          "degenerate:0011": 3571,
+          "degenerate:0100": 3270,
+          "degenerate:0101": 6428,
+          "degenerate:0110": 1125,
+          "degenerate:1000": 3258,
+          "degenerate:1001": 6307,
+          "degenerate:1010": 1156,
+          "degenerate:1100": 557,
+          "degenerate:1111": 4210,
+          "regular": 63998,
+          "zero_phase": 101126
+        },
+        "mean_abs_delta_logabs_chi_mean": 0.7201593541957755,
+        "mean_abs_logabs_chi_mean": 0.3450516601160836,
+        "median_abs_delta_logabs_chi_mean": 0.6468231984738625,
+        "median_logabs_chi_mean": 0.007629706934564006,
+        "positive_chi_fraction_mean": 0.8879988770417292,
+        "regular_fraction_mean": 0.297613977659768,
+        "regular_fraction_weighted": 0.3006393483438482,
+        "regular_windows": 63998,
+        "windows": 212873
+      },
+      "spec": "tribe.diversity",
+      "target_window_mean": 0.5452034785482405
+    },
+    {
+      "covariance_checked": true,
+      "final_gini": 0.159,
+      "final_population": 492,
+      "projective": {
+        "degeneracy": {
+          "degenerate:0001": 9833,
+          "degenerate:0010": 7576,
+          "degenerate:0011": 3567,
+          "degenerate:0100": 3437,
+          "degenerate:0101": 9332,
+          "degenerate:0110": 885,
+          "degenerate:1000": 3387,
+          "degenerate:1001": 9211,
+          "degenerate:1010": 912,
+          "degenerate:1100": 468,
+          "degenerate:1111": 9688,
+          "regular": 67625,
+          "zero_phase": 88673
+        },
+        "mean_abs_delta_logabs_chi_mean": 0.6876097235532725,
+        "mean_abs_logabs_chi_mean": 0.31205116165442814,
+        "median_abs_delta_logabs_chi_mean": 0.6014094855055465,
+        "median_logabs_chi_mean": 0.007436700587025702,
+        "positive_chi_fraction_mean": 0.8981800914091271,
+        "regular_fraction_mean": 0.3118669171567386,
+        "regular_fraction_weighted": 0.3151299663550705,
+        "regular_windows": 67625,
+        "windows": 214594
+      },
+      "ratios": {
+        "mean_abs_delta_logabs_chi_mean_ratio_to_shuffle": 0.937222022466917,
+        "mean_abs_logabs_chi_mean_ratio_to_shuffle": 0.8836683101947432,
+        "regular_fraction_weighted_ratio_to_shuffle": 1.0354304787861155
+      },
+      "seed": 3,
+      "shuffled": {
+        "degeneracy": {
+          "degenerate:0001": 10188,
+          "degenerate:0010": 7908,
+          "degenerate:0011": 3600,
+          "degenerate:0100": 3155,
+          "degenerate:0101": 6555,
+          "degenerate:0110": 1086,
+          "degenerate:1000": 3225,
+          "degenerate:1001": 6524,
+          "degenerate:1010": 1043,
+          "degenerate:1100": 468,
+          "degenerate:1111": 4023,
+          "regular": 65311,
+          "zero_phase": 101508
+        },
+        "mean_abs_delta_logabs_chi_mean": 0.7336679111992852,
+        "mean_abs_logabs_chi_mean": 0.3531315517987266,
+        "median_abs_delta_logabs_chi_mean": 0.656919614513882,
+        "median_logabs_chi_mean": 0.006481729204132032,
+        "positive_chi_fraction_mean": 0.8824688711393877,
+        "regular_fraction_mean": 0.3022422280136139,
+        "regular_fraction_weighted": 0.3043468130516231,
+        "regular_windows": 65311,
+        "windows": 214594
+      },
+      "spec": "tribe.diversity",
+      "target_window_mean": 0.522982814989033
+    }
+  ],
+  "schema": "sugarscape.projective-lagrangian.pilot.v1"
+}
