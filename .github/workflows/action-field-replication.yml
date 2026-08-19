@@ -21,24 +21,24 @@ jobs:
         run: |
           python -m py_compile tools/replicate_action_field_observables.py
           python -m py_compile tools/replicate_event_markov_closure.py
-      - name: Run 5-seed-per-regime event Markov closure study
+      - name: Run corrected 4-seed-per-regime Markov closure study
         env:
           PYTHONHASHSEED: '0'
-        run: python tools/replicate_event_markov_closure.py --seeds 5 --jobs 6 --output build/event-markov-closure.json
+        run: python tools/replicate_event_markov_closure.py --seeds 4 --jobs 6 --output build/event-markov-closure-v2.json
       - name: Upload study
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: event-markov-closure
-          path: build/event-markov-closure.json
+          name: event-markov-closure-v2
+          path: build/event-markov-closure-v2.json
           if-no-files-found: warn
       - name: Persist study on experiment branch
         if: success()
         run: |
           mkdir -p experiment-results
-          cp build/event-markov-closure.json experiment-results/event-markov-closure.json
+          cp build/event-markov-closure-v2.json experiment-results/event-markov-closure-v2.json
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add experiment-results/event-markov-closure.json
-          git commit -m 'Record event Markov closure results'
+          git add experiment-results/event-markov-closure-v2.json
+          git commit -m 'Record corrected event Markov closure results'
           git push
