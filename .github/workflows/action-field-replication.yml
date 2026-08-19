@@ -21,24 +21,25 @@ jobs:
         run: |
           python -m py_compile tools/replicate_action_field_observables.py
           python -m py_compile tools/replicate_discrete_lagrangian.py
-      - name: Run 3-seed-per-regime Lagrangian pilot
+          python -m py_compile tools/replicate_projective_lagrangian.py
+      - name: Run 3-seed-per-regime projective Lagrangian pilot
         env:
           PYTHONHASHSEED: '0'
-        run: python tools/replicate_discrete_lagrangian.py --seeds 3 --jobs 6 --output build/discrete-lagrangian-pilot.json
+        run: python tools/replicate_projective_lagrangian.py --seeds 3 --jobs 6 --output build/projective-lagrangian-pilot.json
       - name: Upload pilot
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: discrete-lagrangian-pilot
-          path: build/discrete-lagrangian-pilot.json
+          name: projective-lagrangian-pilot
+          path: build/projective-lagrangian-pilot.json
           if-no-files-found: warn
       - name: Persist pilot on experiment branch
         if: success()
         run: |
           mkdir -p experiment-results
-          cp build/discrete-lagrangian-pilot.json experiment-results/discrete-lagrangian-pilot.json
+          cp build/projective-lagrangian-pilot.json experiment-results/projective-lagrangian-pilot.json
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add experiment-results/discrete-lagrangian-pilot.json
-          git commit -m 'Record discrete Lagrangian pilot results'
+          git add experiment-results/projective-lagrangian-pilot.json
+          git commit -m 'Record projective Lagrangian pilot results'
           git push
