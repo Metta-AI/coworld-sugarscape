@@ -1,0 +1,1334 @@
+{
+  "base_commit": "7b610e077a2e6cfa74cb938423dff9e7edc26107",
+  "by_replication": {
+    "population.carrying-capacity": {
+      "covariance_checks": {
+        "axis_swap_all": true,
+        "field_QM_all": true,
+        "global_sign_all": true,
+        "max_abs_time_reverse_projective_phase_delta": 0.0,
+        "max_abs_time_reverse_strict_delta": 0.0
+      },
+      "field_reconciliation_fraction_mean": 0.0,
+      "lagrangian_mean": {
+        "agent_channel_density": 1.5927066234946687,
+        "agent_opportunities": 112125.33333333333,
+        "agent_projective_action_density": 0.7286157237259298,
+        "agent_projective_phase_density": 0.9449126915484078,
+        "agent_projective_shift_density": 0.9554083386602429,
+        "agent_shift_l1_density": 4.273706938986646,
+        "agent_shift_sq_density": 18.781220075075037,
+        "agent_strict_density": 0.9642964550953378,
+        "field_opportunities": 498.0,
+        "field_projective_action_density": 0.9370816599732263,
+        "field_projective_phase_density": 0.5923694779116465,
+        "field_projective_shift_density": 0.677376171352075,
+        "field_shift_l1_density": 8.54417670682731,
+        "field_strict_density": 0.9605087014725568,
+        "total_projective_phase_action": 106243.33333333333,
+        "total_strict_action": 108600.0
+      },
+      "null_mean": {
+        "projective_action_ratio_to_shuffle": 0.9708297149979908,
+        "projective_phase_ratio_to_shuffle": 0.9999701232625403,
+        "shuffled_projective_action_density": 0.7505082809081696,
+        "shuffled_projective_phase_density": 0.9449407818382497,
+        "shuffled_strict_density": 0.9710333985298293,
+        "strict_ratio_to_shuffle": 0.9930620126921396
+      },
+      "outcome_correlations": {
+        "agent_projective_phase_density": {
+          "final_gini": null,
+          "final_population": null,
+          "target_window_mean": null
+        },
+        "agent_projective_shift_density": {
+          "final_gini": null,
+          "final_population": null,
+          "target_window_mean": null
+        },
+        "agent_strict_density": {
+          "final_gini": null,
+          "final_population": null,
+          "target_window_mean": null
+        },
+        "field_strict_density": {
+          "final_gini": null,
+          "final_population": null,
+          "target_window_mean": null
+        },
+        "total_strict_action": {
+          "final_gini": null,
+          "final_population": null,
+          "target_window_mean": null
+        }
+      },
+      "runs": 3
+    },
+    "price.equilibrium": {
+      "covariance_checks": {
+        "axis_swap_all": true,
+        "field_QM_all": true,
+        "global_sign_all": true,
+        "max_abs_time_reverse_projective_phase_delta": 0.0,
+        "max_abs_time_reverse_strict_delta": 0.0
+      },
+      "field_reconciliation_fraction_mean": 0.0031330563607952374,
+      "lagrangian_mean": {
+        "agent_channel_density": 1.5523655410191897,
+        "agent_opportunities": 70995.66666666667,
+        "agent_projective_action_density": 0.7364147209724249,
+        "agent_projective_phase_density": 0.9340120701036358,
+        "agent_projective_shift_density": 0.9426847579195391,
+        "agent_shift_l1_density": 4.243622360390891,
+        "agent_shift_sq_density": 19.531708406400753,
+        "agent_strict_density": 0.9602807071276098,
+        "field_opportunities": 998.0,
+        "field_projective_action_density": 0.8997995991983968,
+        "field_projective_phase_density": 0.6910487641950568,
+        "field_projective_shift_density": 0.7481629926519706,
+        "field_shift_l1_density": 8.585182047193372,
+        "field_strict_density": 0.9418837675350701,
+        "total_projective_phase_action": 66998.33333333333,
+        "total_strict_action": 69114.66666666667
+      },
+      "null_mean": {
+        "projective_action_ratio_to_shuffle": 0.9822940368929246,
+        "projective_phase_ratio_to_shuffle": 0.9897789352713975,
+        "shuffled_projective_action_density": 0.7496941818146144,
+        "shuffled_projective_phase_density": 0.9436585028823047,
+        "shuffled_strict_density": 0.9683562676492716,
+        "strict_ratio_to_shuffle": 0.9916609258845054
+      },
+      "outcome_correlations": {
+        "agent_projective_phase_density": {
+          "final_gini": null,
+          "final_population": null,
+          "target_window_mean": null
+        },
+        "agent_projective_shift_density": {
+          "final_gini": null,
+          "final_population": null,
+          "target_window_mean": null
+        },
+        "agent_strict_density": {
+          "final_gini": null,
+          "final_population": null,
+          "target_window_mean": null
+        },
+        "field_strict_density": {
+          "final_gini": null,
+          "final_population": null,
+          "target_window_mean": null
+        },
+        "total_strict_action": {
+          "final_gini": null,
+          "final_population": null,
+          "target_window_mean": null
+        }
+      },
+      "runs": 3
+    },
+    "tribe.convergence": {
+      "covariance_checks": {
+        "axis_swap_all": true,
+        "field_QM_all": true,
+        "global_sign_all": true,
+        "max_abs_time_reverse_projective_phase_delta": 0.0,
+        "max_abs_time_reverse_strict_delta": 0.0
+      },
+      "field_reconciliation_fraction_mean": 0.30100275925305003,
+      "lagrangian_mean": {
+        "agent_channel_density": 1.561584117684811,
+        "agent_opportunities": 219802.33333333334,
+        "agent_projective_action_density": 0.7848921716365217,
+        "agent_projective_phase_density": 0.9444594841931934,
+        "agent_projective_shift_density": 0.9414197506725547,
+        "agent_shift_l1_density": 4.343860402948212,
+        "agent_shift_sq_density": 19.065725109397007,
+        "agent_strict_density": 0.971333141181967,
+        "field_opportunities": 498.0,
+        "field_projective_action_density": 1.0,
+        "field_projective_phase_density": 0.9852744310575635,
+        "field_projective_shift_density": 0.9872824631860776,
+        "field_shift_l1_density": 406.83183193240694,
+        "field_strict_density": 1.0,
+        "total_projective_phase_action": 208089.0,
+        "total_strict_action": 214000.0
+      },
+      "null_mean": {
+        "projective_action_ratio_to_shuffle": 1.0454274944418671,
+        "projective_phase_ratio_to_shuffle": 1.0002514922243189,
+        "shuffled_projective_action_density": 0.7507892243233315,
+        "shuffled_projective_phase_density": 0.9442226548320288,
+        "shuffled_strict_density": 0.9641293736526193,
+        "strict_ratio_to_shuffle": 1.007473080832842
+      },
+      "outcome_correlations": {
+        "agent_projective_phase_density": {
+          "final_gini": null,
+          "final_population": null,
+          "target_window_mean": null
+        },
+        "agent_projective_shift_density": {
+          "final_gini": null,
+          "final_population": null,
+          "target_window_mean": null
+        },
+        "agent_strict_density": {
+          "final_gini": null,
+          "final_population": null,
+          "target_window_mean": null
+        },
+        "field_strict_density": {
+          "final_gini": null,
+          "final_population": null,
+          "target_window_mean": null
+        },
+        "total_strict_action": {
+          "final_gini": null,
+          "final_population": null,
+          "target_window_mean": null
+        }
+      },
+      "runs": 3
+    },
+    "tribe.diversity": {
+      "covariance_checks": {
+        "axis_swap_all": true,
+        "field_QM_all": true,
+        "global_sign_all": true,
+        "max_abs_time_reverse_projective_phase_delta": 0.0,
+        "max_abs_time_reverse_strict_delta": 0.0
+      },
+      "field_reconciliation_fraction_mean": 0.3047618422287928,
+      "lagrangian_mean": {
+        "agent_channel_density": 1.5649846316548126,
+        "agent_opportunities": 218383.33333333334,
+        "agent_projective_action_density": 0.784074460221551,
+        "agent_projective_phase_density": 0.9440095093108551,
+        "agent_projective_shift_density": 0.9412242782434209,
+        "agent_shift_l1_density": 4.391335667432215,
+        "agent_shift_sq_density": 19.484661038953703,
+        "agent_strict_density": 0.9717693941884497,
+        "field_opportunities": 498.0,
+        "field_projective_action_density": 1.0,
+        "field_projective_phase_density": 0.9819277108433736,
+        "field_projective_shift_density": 0.9859437751004018,
+        "field_shift_l1_density": 434.6748013371175,
+        "field_strict_density": 0.998661311914324,
+        "total_projective_phase_action": 206646.33333333334,
+        "total_strict_action": 212715.66666666666
+      },
+      "null_mean": {
+        "projective_action_ratio_to_shuffle": 1.0456015205599354,
+        "projective_phase_ratio_to_shuffle": 1.0004339900434005,
+        "shuffled_projective_action_density": 0.7498785173134674,
+        "shuffled_projective_phase_density": 0.9436001849501371,
+        "shuffled_strict_density": 0.964415941356675,
+        "strict_ratio_to_shuffle": 1.0076251012491344
+      },
+      "outcome_correlations": {
+        "agent_projective_phase_density": {
+          "final_gini": null,
+          "final_population": null,
+          "target_window_mean": null
+        },
+        "agent_projective_shift_density": {
+          "final_gini": null,
+          "final_population": null,
+          "target_window_mean": null
+        },
+        "agent_strict_density": {
+          "final_gini": null,
+          "final_population": null,
+          "target_window_mean": null
+        },
+        "field_strict_density": {
+          "final_gini": null,
+          "final_population": null,
+          "target_window_mean": null
+        },
+        "total_strict_action": {
+          "final_gini": null,
+          "final_population": null,
+          "target_window_mean": null
+        }
+      },
+      "runs": 3
+    },
+    "wealth.egalitarian": {
+      "covariance_checks": {
+        "axis_swap_all": true,
+        "field_QM_all": true,
+        "global_sign_all": true,
+        "max_abs_time_reverse_projective_phase_delta": 0.0,
+        "max_abs_time_reverse_strict_delta": 0.0
+      },
+      "field_reconciliation_fraction_mean": 0.11870923046354526,
+      "lagrangian_mean": {
+        "agent_channel_density": 1.554164594847232,
+        "agent_opportunities": 117469.33333333333,
+        "agent_projective_action_density": 0.7167088375488895,
+        "agent_projective_phase_density": 0.9436873899042673,
+        "agent_projective_shift_density": 0.9211480807024052,
+        "agent_shift_l1_density": 3.0761902416997984,
+        "agent_shift_sq_density": 8.060613326083477,
+        "agent_strict_density": 0.954739959846587,
+        "field_opportunities": 498.0,
+        "field_projective_action_density": 0.999330655957162,
+        "field_projective_phase_density": 0.9825970548862116,
+        "field_projective_shift_density": 0.9886211512717537,
+        "field_shift_l1_density": 217.15194109772423,
+        "field_strict_density": 1.0,
+        "total_projective_phase_action": 111343.66666666667,
+        "total_strict_action": 112650.66666666667
+      },
+      "null_mean": {
+        "projective_action_ratio_to_shuffle": 0.9670977206305374,
+        "projective_phase_ratio_to_shuffle": 0.998813943653654,
+        "shuffled_projective_action_density": 0.7410926323027217,
+        "shuffled_projective_phase_density": 0.9448081626414501,
+        "shuffled_strict_density": 0.9619303497399229,
+        "strict_ratio_to_shuffle": 0.9925253754485116
+      },
+      "outcome_correlations": {
+        "agent_projective_phase_density": {
+          "final_gini": null,
+          "final_population": null,
+          "target_window_mean": null
+        },
+        "agent_projective_shift_density": {
+          "final_gini": null,
+          "final_population": null,
+          "target_window_mean": null
+        },
+        "agent_strict_density": {
+          "final_gini": null,
+          "final_population": null,
+          "target_window_mean": null
+        },
+        "field_strict_density": {
+          "final_gini": null,
+          "final_population": null,
+          "target_window_mean": null
+        },
+        "total_strict_action": {
+          "final_gini": null,
+          "final_population": null,
+          "target_window_mean": null
+        }
+      },
+      "runs": 3
+    },
+    "wealth.skewed-gini-0.5": {
+      "covariance_checks": {
+        "axis_swap_all": true,
+        "field_QM_all": true,
+        "global_sign_all": true,
+        "max_abs_time_reverse_projective_phase_delta": 0.0,
+        "max_abs_time_reverse_strict_delta": 0.0
+      },
+      "field_reconciliation_fraction_mean": 0.17554795149997013,
+      "lagrangian_mean": {
+        "agent_channel_density": 1.591376810218164,
+        "agent_opportunities": 120063.33333333333,
+        "agent_projective_action_density": 0.7294844105168149,
+        "agent_projective_phase_density": 0.9454176357723697,
+        "agent_projective_shift_density": 0.93904052488495,
+        "agent_shift_l1_density": 4.2506374719833095,
+        "agent_shift_sq_density": 18.363606332910802,
+        "agent_strict_density": 0.9650794913771401,
+        "field_opportunities": 498.0,
+        "field_projective_action_density": 0.998661311914324,
+        "field_projective_phase_density": 1.0,
+        "field_projective_shift_density": 0.9979919678714859,
+        "field_shift_l1_density": 339.0381526104418,
+        "field_strict_density": 1.0,
+        "total_projective_phase_action": 114008.0,
+        "total_strict_action": 116368.66666666667
+      },
+      "null_mean": {
+        "projective_action_ratio_to_shuffle": 0.976442531624965,
+        "projective_phase_ratio_to_shuffle": 1.002411282230429,
+        "shuffled_projective_action_density": 0.7470864322395587,
+        "shuffled_projective_phase_density": 0.9431439869158392,
+        "shuffled_strict_density": 0.9682751939189974,
+        "strict_ratio_to_shuffle": 0.9967003416941344
+      },
+      "outcome_correlations": {
+        "agent_projective_phase_density": {
+          "final_gini": null,
+          "final_population": null,
+          "target_window_mean": null
+        },
+        "agent_projective_shift_density": {
+          "final_gini": null,
+          "final_population": null,
+          "target_window_mean": null
+        },
+        "agent_strict_density": {
+          "final_gini": null,
+          "final_population": null,
+          "target_window_mean": null
+        },
+        "field_strict_density": {
+          "final_gini": null,
+          "final_population": null,
+          "target_window_mean": null
+        },
+        "total_strict_action": {
+          "final_gini": null,
+          "final_population": null,
+          "target_window_mean": null
+        }
+      },
+      "runs": 3
+    }
+  },
+  "definitions": {
+    "agent_projective_phase": "sum_i 1[[Delta a_i(t)] != [Delta a_i(t-1)]]",
+    "agent_strict": "sum_i 1[Delta^2 a_i(t) != 0]",
+    "field_projective_phase": "1[[Delta F(t)] != [Delta F(t-1)]]",
+    "field_strict": "1[Delta^2 F(t) != 0]"
+  },
+  "runs": [
+    {
+      "completed_ticks": 500,
+      "covariance": {
+        "axis_swap_exact": true,
+        "field_QM_basis_exact": true,
+        "global_sign_exact": true,
+        "time_reverse_projective_phase_delta": 0.0,
+        "time_reverse_strict_delta": 0.0
+      },
+      "field_accounting": {
+        "raw_gross": 623277.0,
+        "reconciliation_abs": 108356.0,
+        "reconciliation_fraction_of_raw_gross": 0.1738488665553197
+      },
+      "final_gini": 0.476,
+      "final_population": 250,
+      "lagrangian": {
+        "agent_channel_density": 1.5924951283289752,
+        "agent_opportunities": 120082,
+        "agent_projective_action_density": 0.7300927699405406,
+        "agent_projective_phase_density": 0.9454622674505755,
+        "agent_projective_shift_density": 0.9388417914425142,
+        "agent_shift_l1_density": 4.251045119168568,
+        "agent_shift_sq_density": 18.339767825319367,
+        "agent_strict_density": 0.9649406239069969,
+        "field_opportunities": 498,
+        "field_projective_action_density": 1.0,
+        "field_projective_phase_density": 1.0,
+        "field_projective_shift_density": 0.9979919678714859,
+        "field_shift_l1_density": 338.12048192771084,
+        "field_strict_density": 1.0,
+        "total_projective_phase_action": 114031.0,
+        "total_strict_action": 116370.0
+      },
+      "null": {
+        "projective_action_ratio_to_shuffle": 0.9794329251943874,
+        "projective_phase_ratio_to_shuffle": 1.0034026231130908,
+        "shuffled_projective_action_density": 0.7454239602937992,
+        "shuffled_projective_phase_density": 0.9422561249812628,
+        "shuffled_strict_density": 0.9671391216002398,
+        "strict_ratio_to_shuffle": 0.9977268030584832
+      },
+      "seed": 1,
+      "spec": "wealth.skewed-gini-0.5",
+      "target_window_mean": 53.17532,
+      "tick_summary": {
+        "projective_phase_mean": 0.9392051720194948,
+        "projective_phase_sd": 0.0018184373258434334,
+        "strict_mean": 0.9565374051551173,
+        "strict_sd": 0.0016375855570643623
+      }
+    },
+    {
+      "completed_ticks": 500,
+      "covariance": {
+        "axis_swap_exact": true,
+        "field_QM_basis_exact": true,
+        "global_sign_exact": true,
+        "time_reverse_projective_phase_delta": 0.0,
+        "time_reverse_strict_delta": 0.0
+      },
+      "field_accounting": {
+        "raw_gross": 622647.0,
+        "reconciliation_abs": 109256.0,
+        "reconciliation_fraction_of_raw_gross": 0.17547021024753995
+      },
+      "final_gini": 0.474,
+      "final_population": 250,
+      "lagrangian": {
+        "agent_channel_density": 1.589703016473175,
+        "agent_opportunities": 120074,
+        "agent_projective_action_density": 0.7290087779202825,
+        "agent_projective_phase_density": 0.9459083565134834,
+        "agent_projective_shift_density": 0.9391125472625215,
+        "agent_shift_l1_density": 4.24737245365358,
+        "agent_shift_sq_density": 18.33308626347086,
+        "agent_strict_density": 0.965696154038343,
+        "field_opportunities": 498,
+        "field_projective_action_density": 0.9979919678714859,
+        "field_projective_phase_density": 1.0,
+        "field_projective_shift_density": 0.9979919678714859,
+        "field_shift_l1_density": 353.43172690763055,
+        "field_strict_density": 1.0,
+        "total_projective_phase_action": 114077.0,
+        "total_strict_action": 116453.0
+      },
+      "null": {
+        "projective_action_ratio_to_shuffle": 0.97522254035807,
+        "projective_phase_ratio_to_shuffle": 1.0026660310566133,
+        "shuffled_projective_action_density": 0.7475306894081982,
+        "shuffled_projective_phase_density": 0.9433932408348186,
+        "shuffled_strict_density": 0.9685860386095241,
+        "strict_ratio_to_shuffle": 0.9970163883682138
+      },
+      "seed": 2,
+      "spec": "wealth.skewed-gini-0.5",
+      "target_window_mean": 53.53244,
+      "tick_summary": {
+        "projective_phase_mean": 0.9497404911532749,
+        "projective_phase_sd": 0.0016365776453005582,
+        "strict_mean": 0.9674306929631125,
+        "strict_sd": 0.001341375730750786
+      }
+    },
+    {
+      "completed_ticks": 500,
+      "covariance": {
+        "axis_swap_exact": true,
+        "field_QM_basis_exact": true,
+        "global_sign_exact": true,
+        "time_reverse_projective_phase_delta": 0.0,
+        "time_reverse_strict_delta": 0.0
+      },
+      "field_accounting": {
+        "raw_gross": 622124.0,
+        "reconciliation_abs": 110318.0,
+        "reconciliation_fraction_of_raw_gross": 0.17732477769705074
+      },
+      "final_gini": 0.477,
+      "final_population": 250,
+      "lagrangian": {
+        "agent_channel_density": 1.591932285852342,
+        "agent_opportunities": 120034,
+        "agent_projective_action_density": 0.7293516836896212,
+        "agent_projective_phase_density": 0.94488228335305,
+        "agent_projective_shift_density": 0.9391672359498142,
+        "agent_shift_l1_density": 4.253494843127781,
+        "agent_shift_sq_density": 18.41796490994218,
+        "agent_strict_density": 0.9646016961860806,
+        "field_opportunities": 498,
+        "field_projective_action_density": 0.9979919678714859,
+        "field_projective_phase_density": 1.0,
+        "field_projective_shift_density": 0.9979919678714859,
+        "field_shift_l1_density": 325.56224899598396,
+        "field_strict_density": 1.0,
+        "total_projective_phase_action": 113916.0,
+        "total_strict_action": 116283.0
+      },
+      "null": {
+        "projective_action_ratio_to_shuffle": 0.9746721293224376,
+        "projective_phase_ratio_to_shuffle": 1.0011651925215825,
+        "shuffled_projective_action_density": 0.7483046470166786,
+        "shuffled_projective_phase_density": 0.9437825949314361,
+        "shuffled_strict_density": 0.9691004215472283,
+        "strict_ratio_to_shuffle": 0.995357833655706
+      },
+      "seed": 3,
+      "spec": "wealth.skewed-gini-0.5",
+      "target_window_mean": 54.83436,
+      "tick_summary": {
+        "projective_phase_mean": 0.9388769267625433,
+        "projective_phase_sd": 0.002089102929341311,
+        "strict_mean": 0.9586937328629972,
+        "strict_sd": 0.0014543063587279374
+      }
+    },
+    {
+      "completed_ticks": 500,
+      "covariance": {
+        "axis_swap_exact": true,
+        "field_QM_basis_exact": true,
+        "global_sign_exact": true,
+        "time_reverse_projective_phase_delta": 0.0,
+        "time_reverse_strict_delta": 0.0
+      },
+      "field_accounting": {
+        "raw_gross": 550856.0,
+        "reconciliation_abs": 0.0,
+        "reconciliation_fraction_of_raw_gross": 0.0
+      },
+      "final_gini": 0.324,
+      "final_population": 223,
+      "lagrangian": {
+        "agent_channel_density": 1.5944671599459599,
+        "agent_opportunities": 111769,
+        "agent_projective_action_density": 0.7293256627508522,
+        "agent_projective_phase_density": 0.9454857787042918,
+        "agent_projective_shift_density": 0.9557211749232792,
+        "agent_shift_l1_density": 4.281902853206167,
+        "agent_shift_sq_density": 18.815861285329564,
+        "agent_strict_density": 0.9649992395029033,
+        "field_opportunities": 498,
+        "field_projective_action_density": 0.9317269076305221,
+        "field_projective_phase_density": 0.5823293172690763,
+        "field_projective_shift_density": 0.6445783132530121,
+        "field_shift_l1_density": 8.65863453815261,
+        "field_strict_density": 0.9618473895582329,
+        "total_projective_phase_action": 105966.0,
+        "total_strict_action": 108336.0
+      },
+      "null": {
+        "projective_action_ratio_to_shuffle": 0.9717821251028218,
+        "projective_phase_ratio_to_shuffle": 1.000293435562497,
+        "shuffled_projective_action_density": 0.7505032701375157,
+        "shuffled_projective_phase_density": 0.9452084209396165,
+        "shuffled_strict_density": 0.9708505936350866,
+        "strict_ratio_to_shuffle": 0.9939729612665997
+      },
+      "seed": 1,
+      "spec": "population.carrying-capacity",
+      "target_window_mean": 223.0,
+      "tick_summary": {
+        "projective_phase_mean": 0.9420994475138121,
+        "projective_phase_sd": 0.009464460907415782,
+        "strict_mean": 0.9624309392265193,
+        "strict_sd": 0.007635511028223891
+      }
+    },
+    {
+      "completed_ticks": 500,
+      "covariance": {
+        "axis_swap_exact": true,
+        "field_QM_basis_exact": true,
+        "global_sign_exact": true,
+        "time_reverse_projective_phase_delta": 0.0,
+        "time_reverse_strict_delta": 0.0
+      },
+      "field_accounting": {
+        "raw_gross": 554610.0,
+        "reconciliation_abs": 0.0,
+        "reconciliation_fraction_of_raw_gross": 0.0
+      },
+      "final_gini": 0.322,
+      "final_population": 222,
+      "lagrangian": {
+        "agent_channel_density": 1.587880454549487,
+        "agent_opportunities": 112727,
+        "agent_projective_action_density": 0.7277138573722356,
+        "agent_projective_phase_density": 0.9438643803170491,
+        "agent_projective_shift_density": 0.9549353748436488,
+        "agent_shift_l1_density": 4.248281245841723,
+        "agent_shift_sq_density": 18.64917898994917,
+        "agent_strict_density": 0.9629902330408864,
+        "field_opportunities": 498,
+        "field_projective_action_density": 0.9377510040160643,
+        "field_projective_phase_density": 0.6244979919678715,
+        "field_projective_shift_density": 0.6907630522088354,
+        "field_shift_l1_density": 9.02008032128514,
+        "field_strict_density": 0.9738955823293173,
+        "total_projective_phase_action": 106710.0,
+        "total_strict_action": 109040.0
+      },
+      "null": {
+        "projective_action_ratio_to_shuffle": 0.9695884452639293,
+        "projective_phase_ratio_to_shuffle": 0.999323759521372,
+        "shuffled_projective_action_density": 0.7505389125941434,
+        "shuffled_projective_phase_density": 0.9445030915397375,
+        "shuffled_strict_density": 0.9706192837563317,
+        "strict_ratio_to_shuffle": 0.992140017365078
+      },
+      "seed": 2,
+      "spec": "population.carrying-capacity",
+      "target_window_mean": 222.0,
+      "tick_summary": {
+        "projective_phase_mean": 0.9425069637883009,
+        "projective_phase_sd": 0.010039609329045686,
+        "strict_mean": 0.9650139275766016,
+        "strict_sd": 0.008497602443638784
+      }
+    },
+    {
+      "completed_ticks": 500,
+      "covariance": {
+        "axis_swap_exact": true,
+        "field_QM_basis_exact": true,
+        "global_sign_exact": true,
+        "time_reverse_projective_phase_delta": 0.0,
+        "time_reverse_strict_delta": 0.0
+      },
+      "field_accounting": {
+        "raw_gross": 549950.0,
+        "reconciliation_abs": 0.0,
+        "reconciliation_fraction_of_raw_gross": 0.0
+      },
+      "final_gini": 0.311,
+      "final_population": 221,
+      "lagrangian": {
+        "agent_channel_density": 1.5957722559885592,
+        "agent_opportunities": 111880,
+        "agent_projective_action_density": 0.7288076510547015,
+        "agent_projective_phase_density": 0.9453879156238827,
+        "agent_projective_shift_density": 0.9555684662138005,
+        "agent_shift_l1_density": 4.290936717912048,
+        "agent_shift_sq_density": 18.878619949946373,
+        "agent_strict_density": 0.9648998927422238,
+        "field_opportunities": 498,
+        "field_projective_action_density": 0.9417670682730924,
+        "field_projective_phase_density": 0.570281124497992,
+        "field_projective_shift_density": 0.6967871485943775,
+        "field_shift_l1_density": 7.953815261044177,
+        "field_strict_density": 0.9457831325301205,
+        "total_projective_phase_action": 106054.0,
+        "total_strict_action": 108424.0
+      },
+      "null": {
+        "projective_action_ratio_to_shuffle": 0.9711185746272212,
+        "projective_phase_ratio_to_shuffle": 1.0002931747037516,
+        "shuffled_projective_action_density": 0.7504826599928495,
+        "shuffled_projective_phase_density": 0.9451108330353951,
+        "shuffled_strict_density": 0.9716303181980693,
+        "strict_ratio_to_shuffle": 0.9930730594447409
+      },
+      "seed": 3,
+      "spec": "population.carrying-capacity",
+      "target_window_mean": 221.17,
+      "tick_summary": {
+        "projective_phase_mean": 0.952967032967033,
+        "projective_phase_sd": 0.008946769282491386,
+        "strict_mean": 0.9679395604395604,
+        "strict_sd": 0.007175064749542361
+      }
+    },
+    {
+      "completed_ticks": 1000,
+      "covariance": {
+        "axis_swap_exact": true,
+        "field_QM_basis_exact": true,
+        "global_sign_exact": true,
+        "time_reverse_projective_phase_delta": 0.0,
+        "time_reverse_strict_delta": 0.0
+      },
+      "field_accounting": {
+        "raw_gross": 342080.17232446955,
+        "reconciliation_abs": 1143.008899202213,
+        "reconciliation_fraction_of_raw_gross": 0.0033413479987318504
+      },
+      "final_gini": 0.308,
+      "final_population": 64,
+      "lagrangian": {
+        "agent_channel_density": 1.5457360138114058,
+        "agent_opportunities": 70087,
+        "agent_projective_action_density": 0.7360851513119409,
+        "agent_projective_phase_density": 0.9340676587669611,
+        "agent_projective_shift_density": 0.9421290681581463,
+        "agent_shift_l1_density": 4.226361522108237,
+        "agent_shift_sq_density": 19.44162255482472,
+        "agent_strict_density": 0.9596073451567337,
+        "field_opportunities": 998,
+        "field_projective_action_density": 0.9018036072144289,
+        "field_projective_phase_density": 0.6833667334669339,
+        "field_projective_shift_density": 0.748496993987976,
+        "field_shift_l1_density": 8.159132918628293,
+        "field_strict_density": 0.9378757515030061,
+        "total_projective_phase_action": 66148.0,
+        "total_strict_action": 68192.0
+      },
+      "null": {
+        "projective_action_ratio_to_shuffle": 0.9841851237146836,
+        "projective_phase_ratio_to_shuffle": 0.9903035987111805,
+        "shuffled_projective_action_density": 0.747913307746087,
+        "shuffled_projective_phase_density": 0.9432134347311198,
+        "shuffled_strict_density": 0.9676116826230257,
+        "strict_ratio_to_shuffle": 0.9917277378828318
+      },
+      "seed": 1,
+      "spec": "price.equilibrium",
+      "target_window_mean": 1.1,
+      "tick_summary": {
+        "projective_phase_mean": 0.915,
+        "projective_phase_sd": 0.009874208829065758,
+        "strict_mean": 0.9423999999999999,
+        "strict_sd": 0.008230431337420869
+      }
+    },
+    {
+      "completed_ticks": 1000,
+      "covariance": {
+        "axis_swap_exact": true,
+        "field_QM_basis_exact": true,
+        "global_sign_exact": true,
+        "time_reverse_projective_phase_delta": 0.0,
+        "time_reverse_strict_delta": 0.0
+      },
+      "field_accounting": {
+        "raw_gross": 352468.44885174546,
+        "reconciliation_abs": 1032.5114991918447,
+        "reconciliation_fraction_of_raw_gross": 0.002929372834804109
+      },
+      "final_gini": 0.312,
+      "final_population": 66,
+      "lagrangian": {
+        "agent_channel_density": 1.555789213260762,
+        "agent_opportunities": 72756,
+        "agent_projective_action_density": 0.7330529440870857,
+        "agent_projective_phase_density": 0.9315520369454066,
+        "agent_projective_shift_density": 0.9409120897245588,
+        "agent_shift_l1_density": 4.220888998845456,
+        "agent_shift_sq_density": 19.339092308538127,
+        "agent_strict_density": 0.9589999450217164,
+        "field_opportunities": 998,
+        "field_projective_action_density": 0.8847695390781564,
+        "field_projective_phase_density": 0.6973947895791583,
+        "field_projective_shift_density": 0.7595190380761523,
+        "field_shift_l1_density": 8.790826642141935,
+        "field_strict_density": 0.9378757515030061,
+        "total_projective_phase_action": 68472.0,
+        "total_strict_action": 70709.0
+      },
+      "null": {
+        "projective_action_ratio_to_shuffle": 0.975419730055964,
+        "projective_phase_ratio_to_shuffle": 0.9863779252532309,
+        "shuffled_projective_action_density": 0.7515256473692892,
+        "shuffled_projective_phase_density": 0.9444169553026555,
+        "shuffled_strict_density": 0.9689922480620154,
+        "strict_ratio_to_shuffle": 0.9896879432624114
+      },
+      "seed": 2,
+      "spec": "price.equilibrium",
+      "target_window_mean": 1.0965,
+      "tick_summary": {
+        "projective_phase_mean": 0.9227500000000001,
+        "projective_phase_sd": 0.009148087231765996,
+        "strict_mean": 0.9455,
+        "strict_sd": 0.008261355820929133
+      }
+    },
+    {
+      "completed_ticks": 1000,
+      "covariance": {
+        "axis_swap_exact": true,
+        "field_QM_basis_exact": true,
+        "global_sign_exact": true,
+        "time_reverse_projective_phase_delta": 0.0,
+        "time_reverse_strict_delta": 0.0
+      },
+      "field_accounting": {
+        "raw_gross": 345411.8066072475,
+        "reconciliation_abs": 1080.6029615124726,
+        "reconciliation_fraction_of_raw_gross": 0.003128448248849752
+      },
+      "final_gini": 0.335,
+      "final_population": 64,
+      "lagrangian": {
+        "agent_channel_density": 1.5555713959854014,
+        "agent_opportunities": 70144,
+        "agent_projective_action_density": 0.7401060675182481,
+        "agent_projective_phase_density": 0.9364165145985401,
+        "agent_projective_shift_density": 0.9450131158759124,
+        "agent_shift_l1_density": 4.283616560218978,
+        "agent_shift_sq_density": 19.814410355839417,
+        "agent_strict_density": 0.9622348312043796,
+        "field_opportunities": 998,
+        "field_projective_action_density": 0.9128256513026052,
+        "field_projective_phase_density": 0.6923847695390781,
+        "field_projective_shift_density": 0.7364729458917836,
+        "field_shift_l1_density": 8.80558658080989,
+        "field_strict_density": 0.9498997995991983,
+        "total_projective_phase_action": 66375.0,
+        "total_strict_action": 68443.0
+      },
+      "null": {
+        "projective_action_ratio_to_shuffle": 0.9872772569081262,
+        "projective_phase_ratio_to_shuffle": 0.9926552818497809,
+        "shuffled_projective_action_density": 0.7496435903284672,
+        "shuffled_projective_phase_density": 0.9433451186131386,
+        "shuffled_strict_density": 0.9684648722627737,
+        "strict_ratio_to_shuffle": 0.993567096508273
+      },
+      "seed": 3,
+      "spec": "price.equilibrium",
+      "target_window_mean": 1.1101,
+      "tick_summary": {
+        "projective_phase_mean": 0.9188500000000001,
+        "projective_phase_sd": 0.008742282310701255,
+        "strict_mean": 0.95195,
+        "strict_sd": 0.007742577090349175
+      }
+    },
+    {
+      "completed_ticks": 500,
+      "covariance": {
+        "axis_swap_exact": true,
+        "field_QM_basis_exact": true,
+        "global_sign_exact": true,
+        "time_reverse_projective_phase_delta": 0.0,
+        "time_reverse_strict_delta": 0.0
+      },
+      "field_accounting": {
+        "raw_gross": 790849.5,
+        "reconciliation_abs": 236842.76855903864,
+        "reconciliation_fraction_of_raw_gross": 0.29947893822913035
+      },
+      "final_gini": 0.141,
+      "final_population": 559,
+      "lagrangian": {
+        "agent_channel_density": 1.5613781922806267,
+        "agent_opportunities": 224526,
+        "agent_projective_action_density": 0.7861717573911262,
+        "agent_projective_phase_density": 0.944839350453845,
+        "agent_projective_shift_density": 0.9416949484692196,
+        "agent_shift_l1_density": 4.3606174785993606,
+        "agent_shift_sq_density": 19.261475285713015,
+        "agent_strict_density": 0.9715801288046818,
+        "field_opportunities": 498,
+        "field_projective_action_density": 1.0,
+        "field_projective_phase_density": 0.9879518072289156,
+        "field_projective_shift_density": 0.9859437751004017,
+        "field_shift_l1_density": 397.0896465595228,
+        "field_strict_density": 1.0,
+        "total_projective_phase_action": 212633.0,
+        "total_strict_action": 218643.0
+      },
+      "null": {
+        "projective_action_ratio_to_shuffle": 1.0494099461966053,
+        "projective_phase_ratio_to_shuffle": 1.000712297749894,
+        "shuffled_projective_action_density": 0.7491559997505857,
+        "shuffled_projective_phase_density": 0.9441668225506178,
+        "shuffled_strict_density": 0.9639462690289766,
+        "strict_ratio_to_shuffle": 1.00791938308283
+      },
+      "seed": 1,
+      "spec": "tribe.convergence",
+      "target_window_mean": 0.8013161411405488,
+      "tick_summary": {
+        "projective_phase_mean": 0.9420903561065315,
+        "projective_phase_sd": 0.0020678470510105836,
+        "strict_mean": 0.9683612262294248,
+        "strict_sd": 0.0017149001834932498
+      }
+    },
+    {
+      "completed_ticks": 500,
+      "covariance": {
+        "axis_swap_exact": true,
+        "field_QM_basis_exact": true,
+        "global_sign_exact": true,
+        "time_reverse_projective_phase_delta": 0.0,
+        "time_reverse_strict_delta": 0.0
+      },
+      "field_accounting": {
+        "raw_gross": 763730.5,
+        "reconciliation_abs": 231404.52961707115,
+        "reconciliation_fraction_of_raw_gross": 0.30299239013902307
+      },
+      "final_gini": 0.137,
+      "final_population": 474,
+      "lagrangian": {
+        "agent_channel_density": 1.5648662173728,
+        "agent_opportunities": 213817,
+        "agent_projective_action_density": 0.7834877488693602,
+        "agent_projective_phase_density": 0.9430120149473615,
+        "agent_projective_shift_density": 0.9423478956303755,
+        "agent_shift_l1_density": 4.432168630183755,
+        "agent_shift_sq_density": 19.966274898628267,
+        "agent_strict_density": 0.9711575786770931,
+        "field_opportunities": 498,
+        "field_projective_action_density": 1.0,
+        "field_projective_phase_density": 0.9839357429718876,
+        "field_projective_shift_density": 0.9859437751004017,
+        "field_shift_l1_density": 423.2620050537299,
+        "field_strict_density": 1.0,
+        "total_projective_phase_action": 202122.0,
+        "total_strict_action": 208148.0
+      },
+      "null": {
+        "projective_action_ratio_to_shuffle": 1.0420170680732486,
+        "projective_phase_ratio_to_shuffle": 0.998158452307875,
+        "shuffled_projective_action_density": 0.7518953123465393,
+        "shuffled_projective_phase_density": 0.944751820482001,
+        "shuffled_strict_density": 0.9655125644827118,
+        "strict_ratio_to_shuffle": 1.0058466501649366
+      },
+      "seed": 2,
+      "spec": "tribe.convergence",
+      "target_window_mean": 0.7864493264085969,
+      "tick_summary": {
+        "projective_phase_mean": 0.9442886635279194,
+        "projective_phase_sd": 0.002183929722684064,
+        "strict_mean": 0.9722719391520552,
+        "strict_sd": 0.0014156501163804015
+      }
+    },
+    {
+      "completed_ticks": 500,
+      "covariance": {
+        "axis_swap_exact": true,
+        "field_QM_basis_exact": true,
+        "global_sign_exact": true,
+        "time_reverse_projective_phase_delta": 0.0,
+        "time_reverse_strict_delta": 0.0
+      },
+      "field_accounting": {
+        "raw_gross": 785575.0,
+        "reconciliation_abs": 236094.31401783228,
+        "reconciliation_fraction_of_raw_gross": 0.30053694939099673
+      },
+      "final_gini": 0.151,
+      "final_population": 538,
+      "lagrangian": {
+        "agent_channel_density": 1.558507943401006,
+        "agent_opportunities": 221064,
+        "agent_projective_action_density": 0.785017008649079,
+        "agent_projective_phase_density": 0.9455270871783736,
+        "agent_projective_shift_density": 0.9402164079180689,
+        "agent_shift_l1_density": 4.2387951000615205,
+        "agent_shift_sq_density": 17.969425143849744,
+        "agent_strict_density": 0.9712617160641263,
+        "field_opportunities": 498,
+        "field_projective_action_density": 1.0,
+        "field_projective_phase_density": 0.9839357429718876,
+        "field_projective_shift_density": 0.9899598393574297,
+        "field_shift_l1_density": 400.14384418396827,
+        "field_strict_density": 1.0,
+        "total_projective_phase_action": 209512.0,
+        "total_strict_action": 215209.0
+      },
+      "null": {
+        "projective_action_ratio_to_shuffle": 1.0448554690557472,
+        "projective_phase_ratio_to_shuffle": 1.0018837266151877,
+        "shuffled_projective_action_density": 0.7513163608728693,
+        "shuffled_projective_phase_density": 0.9437493214634676,
+        "shuffled_strict_density": 0.9629292874461695,
+        "strict_ratio_to_shuffle": 1.0086532092507599
+      },
+      "seed": 3,
+      "spec": "tribe.convergence",
+      "target_window_mean": 0.7283732105663545,
+      "tick_summary": {
+        "projective_phase_mean": 0.9454665958033156,
+        "projective_phase_sd": 0.0018722322726265918,
+        "strict_mean": 0.9741094659960126,
+        "strict_sd": 0.0014658328557465917
+      }
+    },
+    {
+      "completed_ticks": 500,
+      "covariance": {
+        "axis_swap_exact": true,
+        "field_QM_basis_exact": true,
+        "global_sign_exact": true,
+        "time_reverse_projective_phase_delta": 0.0,
+        "time_reverse_strict_delta": 0.0
+      },
+      "field_accounting": {
+        "raw_gross": 850024.0,
+        "reconciliation_abs": 100503.0,
+        "reconciliation_fraction_of_raw_gross": 0.11823548511571438
+      },
+      "final_gini": 0.29,
+      "final_population": 250,
+      "lagrangian": {
+        "agent_channel_density": 1.5557579988761558,
+        "agent_opportunities": 117454,
+        "agent_projective_action_density": 0.7156333543344628,
+        "agent_projective_phase_density": 0.9433906039811331,
+        "agent_projective_shift_density": 0.9205987024707545,
+        "agent_shift_l1_density": 3.0728540535017963,
+        "agent_shift_sq_density": 8.032497828937286,
+        "agent_strict_density": 0.954416196979243,
+        "field_opportunities": 498,
+        "field_projective_action_density": 1.0,
+        "field_projective_phase_density": 0.9839357429718876,
+        "field_projective_shift_density": 0.9879518072289156,
+        "field_shift_l1_density": 222.67469879518072,
+        "field_strict_density": 1.0,
+        "total_projective_phase_action": 111295.0,
+        "total_strict_action": 112598.0
+      },
+      "null": {
+        "projective_action_ratio_to_shuffle": 0.9652835995727919,
+        "projective_phase_ratio_to_shuffle": 0.9989361989848814,
+        "shuffled_projective_action_density": 0.7413710899586221,
+        "shuffled_projective_phase_density": 0.9443952526095323,
+        "shuffled_strict_density": 0.9612784579494951,
+        "strict_ratio_to_shuffle": 0.9928613182647513
+      },
+      "seed": 1,
+      "spec": "wealth.egalitarian",
+      "target_window_mean": 44.65884,
+      "tick_summary": {
+        "projective_phase_mean": 0.9432134638733689,
+        "projective_phase_sd": 0.0012508378942933157,
+        "strict_mean": 0.9554523168598966,
+        "strict_sd": 0.0009822006435405808
+      }
+    },
+    {
+      "completed_ticks": 500,
+      "covariance": {
+        "axis_swap_exact": true,
+        "field_QM_basis_exact": true,
+        "global_sign_exact": true,
+        "time_reverse_projective_phase_delta": 0.0,
+        "time_reverse_strict_delta": 0.0
+      },
+      "field_accounting": {
+        "raw_gross": 850312.0,
+        "reconciliation_abs": 101124.0,
+        "reconciliation_fraction_of_raw_gross": 0.1189257590155143
+      },
+      "final_gini": 0.301,
+      "final_population": 250,
+      "lagrangian": {
+        "agent_channel_density": 1.55336631387141,
+        "agent_opportunities": 117443,
+        "agent_projective_action_density": 0.716551859199782,
+        "agent_projective_phase_density": 0.9437258925606464,
+        "agent_projective_shift_density": 0.9209148267670274,
+        "agent_shift_l1_density": 3.079732295666834,
+        "agent_shift_sq_density": 8.09331335200906,
+        "agent_strict_density": 0.9550079613088903,
+        "field_opportunities": 498,
+        "field_projective_action_density": 1.0,
+        "field_projective_phase_density": 0.9799196787148594,
+        "field_projective_shift_density": 0.9879518072289156,
+        "field_shift_l1_density": 214.36345381526104,
+        "field_strict_density": 1.0,
+        "total_projective_phase_action": 111322.0,
+        "total_strict_action": 112657.0
+      },
+      "null": {
+        "projective_action_ratio_to_shuffle": 0.9677211623601385,
+        "projective_phase_ratio_to_shuffle": 0.999188633659082,
+        "shuffled_projective_action_density": 0.7404528154083257,
+        "shuffled_projective_phase_density": 0.9444922217586403,
+        "shuffled_strict_density": 0.9617516582512368,
+        "strict_ratio_to_shuffle": 0.9929881098883587
+      },
+      "seed": 2,
+      "spec": "wealth.egalitarian",
+      "target_window_mean": 44.44864,
+      "tick_summary": {
+        "projective_phase_mean": 0.9463741396105818,
+        "projective_phase_sd": 0.001521245000176334,
+        "strict_mean": 0.9598265034435782,
+        "strict_sd": 0.0015228329755504004
+      }
+    },
+    {
+      "completed_ticks": 500,
+      "covariance": {
+        "axis_swap_exact": true,
+        "field_QM_basis_exact": true,
+        "global_sign_exact": true,
+        "time_reverse_projective_phase_delta": 0.0,
+        "time_reverse_strict_delta": 0.0
+      },
+      "field_accounting": {
+        "raw_gross": 850929.0,
+        "reconciliation_abs": 101232.0,
+        "reconciliation_fraction_of_raw_gross": 0.11896644725940707
+      },
+      "final_gini": 0.306,
+      "final_population": 250,
+      "lagrangian": {
+        "agent_channel_density": 1.55336947179413,
+        "agent_opportunities": 117511,
+        "agent_projective_action_density": 0.7179412991124235,
+        "agent_projective_phase_density": 0.9439456731710223,
+        "agent_projective_shift_density": 0.9219307128694335,
+        "agent_shift_l1_density": 3.075984375930764,
+        "agent_shift_sq_density": 8.056028797304082,
+        "agent_strict_density": 0.9547957212516275,
+        "field_opportunities": 498,
+        "field_projective_action_density": 0.9979919678714859,
+        "field_projective_phase_density": 0.9839357429718876,
+        "field_projective_shift_density": 0.9899598393574297,
+        "field_shift_l1_density": 214.41767068273091,
+        "field_strict_density": 1.0,
+        "total_projective_phase_action": 111414.0,
+        "total_strict_action": 112697.0
+      },
+      "null": {
+        "projective_action_ratio_to_shuffle": 0.968288399958682,
+        "projective_phase_ratio_to_shuffle": 0.9983169983169984,
+        "shuffled_projective_action_density": 0.7414539915412174,
+        "shuffled_projective_phase_density": 0.9455370135561777,
+        "shuffled_strict_density": 0.9627609330190365,
+        "strict_ratio_to_shuffle": 0.991726698192425
+      },
+      "seed": 3,
+      "spec": "wealth.egalitarian",
+      "target_window_mean": 44.58156,
+      "tick_summary": {
+        "projective_phase_mean": 0.9433551380342672,
+        "projective_phase_sd": 0.0011135041371675102,
+        "strict_mean": 0.9573547429256426,
+        "strict_sd": 0.001169987595087542
+      }
+    },
+    {
+      "completed_ticks": 500,
+      "covariance": {
+        "axis_swap_exact": true,
+        "field_QM_basis_exact": true,
+        "global_sign_exact": true,
+        "time_reverse_projective_phase_delta": 0.0,
+        "time_reverse_strict_delta": 0.0
+      },
+      "field_accounting": {
+        "raw_gross": 765829.0,
+        "reconciliation_abs": 234069.58733092248,
+        "reconciliation_fraction_of_raw_gross": 0.30564210460941343
+      },
+      "final_gini": 0.144,
+      "final_population": 503,
+      "lagrangian": {
+        "agent_channel_density": 1.5650994617038767,
+        "agent_opportunities": 215309,
+        "agent_projective_action_density": 0.7822617726151717,
+        "agent_projective_phase_density": 0.9430121360463334,
+        "agent_projective_shift_density": 0.9405134016692289,
+        "agent_shift_l1_density": 4.373440032697193,
+        "agent_shift_sq_density": 19.23053379097019,
+        "agent_strict_density": 0.9717243589445866,
+        "field_opportunities": 498,
+        "field_projective_action_density": 1.0,
+        "field_projective_phase_density": 0.9819277108433735,
+        "field_projective_shift_density": 0.9859437751004017,
+        "field_shift_l1_density": 418.93197409540835,
+        "field_strict_density": 1.0,
+        "total_projective_phase_action": 203528.0,
+        "total_strict_action": 209719.0
+      },
+      "null": {
+        "projective_action_ratio_to_shuffle": 1.0439255985769271,
+        "projective_phase_ratio_to_shuffle": 0.9995323284137564,
+        "shuffled_projective_action_density": 0.7493462883576627,
+        "shuffled_projective_phase_density": 0.9434533623768631,
+        "shuffled_strict_density": 0.9642142223502037,
+        "strict_ratio_to_shuffle": 1.0077888672665267
+      },
+      "seed": 1,
+      "spec": "tribe.diversity",
+      "target_window_mean": 0.6751376965686541,
+      "tick_summary": {
+        "projective_phase_mean": 0.9442277305245542,
+        "projective_phase_sd": 0.001882803266655525,
+        "strict_mean": 0.972261953559703,
+        "strict_sd": 0.0014110357067805863
+      }
+    },
+    {
+      "completed_ticks": 500,
+      "covariance": {
+        "axis_swap_exact": true,
+        "field_QM_basis_exact": true,
+        "global_sign_exact": true,
+        "time_reverse_projective_phase_delta": 0.0,
+        "time_reverse_strict_delta": 0.0
+      },
+      "field_accounting": {
+        "raw_gross": 775128.5,
+        "reconciliation_abs": 235347.48261082172,
+        "reconciliation_fraction_of_raw_gross": 0.30362382832113866
+      },
+      "final_gini": 0.14,
+      "final_population": 512,
+      "lagrangian": {
+        "agent_channel_density": 1.5643278455201106,
+        "agent_opportunities": 219213,
+        "agent_projective_action_density": 0.7847983468133733,
+        "agent_projective_phase_density": 0.9448116671912706,
+        "agent_projective_shift_density": 0.9411303161765041,
+        "agent_shift_l1_density": 4.355822875468152,
+        "agent_shift_sq_density": 19.103305917076085,
+        "agent_strict_density": 0.9717398147007705,
+        "field_opportunities": 498,
+        "field_projective_action_density": 1.0,
+        "field_projective_phase_density": 0.9819277108433735,
+        "field_projective_shift_density": 0.9859437751004017,
+        "field_shift_l1_density": 426.0432332193995,
+        "field_strict_density": 0.9979919678714859,
+        "total_projective_phase_action": 207604.0,
+        "total_strict_action": 213515.0
+      },
+      "null": {
+        "projective_action_ratio_to_shuffle": 1.0458364235431434,
+        "projective_phase_ratio_to_shuffle": 1.001702432253353,
+        "shuffled_projective_action_density": 0.750402576489533,
+        "shuffled_projective_phase_density": 0.9432059230063911,
+        "shuffled_strict_density": 0.9638342616541902,
+        "strict_ratio_to_shuffle": 1.008202191352912
+      },
+      "seed": 2,
+      "spec": "tribe.diversity",
+      "target_window_mean": 0.5452034785482405,
+      "tick_summary": {
+        "projective_phase_mean": 0.946894848699374,
+        "projective_phase_sd": 0.0022202423074750457,
+        "strict_mean": 0.9709268033916462,
+        "strict_sd": 0.0014158880752101531
+      }
+    },
+    {
+      "completed_ticks": 500,
+      "covariance": {
+        "axis_swap_exact": true,
+        "field_QM_basis_exact": true,
+        "global_sign_exact": true,
+        "time_reverse_projective_phase_delta": 0.0,
+        "time_reverse_strict_delta": 0.0
+      },
+      "field_accounting": {
+        "raw_gross": 777714.25,
+        "reconciliation_abs": 237218.08459311724,
+        "reconciliation_fraction_of_raw_gross": 0.30501959375582643
+      },
+      "final_gini": 0.159,
+      "final_population": 492,
+      "lagrangian": {
+        "agent_channel_density": 1.56552658774045,
+        "agent_opportunities": 220628,
+        "agent_projective_action_density": 0.7851632612361078,
+        "agent_projective_phase_density": 0.9442047246949616,
+        "agent_projective_shift_density": 0.9420291168845296,
+        "agent_shift_l1_density": 4.444744094131298,
+        "agent_shift_sq_density": 20.120143408814837,
+        "agent_strict_density": 0.971844008919992,
+        "field_opportunities": 498,
+        "field_projective_action_density": 1.0,
+        "field_projective_phase_density": 0.9819277108433735,
+        "field_projective_shift_density": 0.9859437751004017,
+        "field_shift_l1_density": 459.04919669654475,
+        "field_strict_density": 0.9979919678714859,
+        "total_projective_phase_action": 208807.0,
+        "total_strict_action": 214913.0
+      },
+      "null": {
+        "projective_action_ratio_to_shuffle": 1.0470425395597354,
+        "projective_phase_ratio_to_shuffle": 1.0000672094630925,
+        "shuffled_projective_action_density": 0.7498866870932067,
+        "shuffled_projective_phase_density": 0.9441412694671574,
+        "shuffled_strict_density": 0.9651993400656308,
+        "strict_ratio_to_shuffle": 1.0068842451279643
+      },
+      "seed": 3,
+      "spec": "tribe.diversity",
+      "target_window_mean": 0.522982814989033,
+      "tick_summary": {
+        "projective_phase_mean": 0.9486136033960264,
+        "projective_phase_sd": 0.0024403764783875095,
+        "strict_mean": 0.9744621266236716,
+        "strict_sd": 0.0017585340912176345
+      }
+    }
+  ],
+  "schema": "sugarscape.discrete-lagrangian.replication.v1"
+}
