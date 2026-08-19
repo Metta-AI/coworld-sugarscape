@@ -1,4 +1,4 @@
-name: Event Markov closure study
+name: Event Markov closure diagnostic
 
 on:
   push:
@@ -11,34 +11,36 @@ permissions:
 jobs:
   replicate:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Compile study
-        run: |
-          python -m py_compile tools/replicate_action_field_observables.py
-          python -m py_compile tools/replicate_event_markov_closure.py
-      - name: Run corrected 4-seed-per-regime Markov closure study
+      - name: Run diagnostic
+        id: run
+        continue-on-error: true
         env:
           PYTHONHASHSEED: '0'
-        run: python tools/replicate_event_markov_closure.py --seeds 4 --jobs 6 --output build/event-markov-closure-v2.json
-      - name: Upload study
+        run: |
+          mkdir -p build
+          set +e
+          python -m py_compile tools/replicate_action_field_observables.py tools/replicate_event_markov_closure.py > build/event-markov-debug.log 2>&1
+          code=$?
+          if [ $code -eq 0 ]; then
+            python tools/replicate_event_markov_closure.py --seeds 1 --jobs 6 --output build/event-markov-debug.json >> build/event-markov-debug.log 2>&1
+            code=$?
+          fi
+          echo "exit_code=$code" >> build/event-markov-debug.log
+          exit 0
+      - name: Persist diagnostic
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: event-markov-closure-v2
-          path: build/event-markov-closure-v2.json
-          if-no-files-found: warn
-      - name: Persist study on experiment branch
-        if: success()
         run: |
           mkdir -p experiment-results
-          cp build/event-markov-closure-v2.json experiment-results/event-markov-closure-v2.json
+          cp build/event-markov-debug.log experiment-results/event-markov-debug.log
+          if [ -f build/event-markov-debug.json ]; then cp build/event-markov-debug.json experiment-results/event-markov-debug.json; fi
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add experiment-results/event-markov-closure-v2.json
-          git commit -m 'Record corrected event Markov closure results'
+          git add experiment-results/event-markov-debug.*
+          git commit -m 'Record event Markov closure diagnostic' || true
           git push
