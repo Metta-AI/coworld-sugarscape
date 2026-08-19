@@ -5,6 +5,9 @@ on:
     branches: [classic-event-observatory-20260819]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   export:
     runs-on: ubuntu-latest
@@ -18,3 +21,12 @@ jobs:
             !.git/**
           include-hidden-files: true
           retention-days: 1
+      - name: Publish artifact locator
+        run: |
+          mkdir -p experiment-results
+          printf '{"run_id":%s,"sha":"%s"}\n' "$GITHUB_RUN_ID" "$GITHUB_SHA" > experiment-results/source-export-run.json
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add experiment-results/source-export-run.json
+          git commit -m 'Record source export run id' || true
+          git push
