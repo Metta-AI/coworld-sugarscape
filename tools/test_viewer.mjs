@@ -156,7 +156,7 @@ const viewerContext = vm.createContext({
     close() {}
   },
   DOMMatrix: class { translate() { return this; } scale() { return this; } },
-  location: { host: "localhost", protocol: "http:", pathname: "/client/global", search: "" },
+  location: { host: "localhost", protocol: "http:", pathname: "/client/global", search: "", hash: "" },
   performance: { now: () => nowValue },
   URLSearchParams,
   sessionStorage: sessionStorageStub,
@@ -191,6 +191,9 @@ const viewerContext = vm.createContext({
   clearTimeout: (id) => { if (id) viewerTimers.pending[id - 1] = null; },
 });
 viewerContext.window = viewerContext;
+// A top-level browser window is its own parent: the sandbox is not embedded,
+// so the host readiness bridge stays quiet here.
+viewerContext.parent = viewerContext;
 viewerContext.addEventListener = (name, fn) => windowListeners.set(name, fn);
 viewerContext.devicePixelRatio = 1;
 viewerContext.ResizeObserver = class { observe() {} };

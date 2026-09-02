@@ -446,9 +446,27 @@ html, body {
  * carrying the full sugar/spice/pollution lattice, every living agent, the
  * policy slots and the canonical aggregate statistics. Frames arrive either
  * over the spectator WebSocket (the container-backed path this ships on) or by
- * fetching an artifact named in `?replay=` (which is all a static bundle would
- * need). Nothing here mutates simulation state.
+ * fetching an artifact named in `#replay=` (or the legacy `?replay=`), which
+ * is all a static bundle needs. Nothing here mutates simulation state.
  */
+
+// ---------------------------------------------------------------------------
+// Viewer -> host readiness. The Observatory embeds this page in an iframe and
+// holds a "Loading replay..." overlay over it, and the iframe's `load` event
+// only says index.html arrived. So the page posts `loading` as soon as this
+// script evaluates, `phase` marks around the fetch and the parse, `ready` one
+// painted frame after the first draw, and `error` when nothing can be shown.
+// The host stamps each message with its own clock on receipt, so none carries
+// a timestamp; the payload is timings only, so the target origin is "*".
+// ---------------------------------------------------------------------------
+
+const EMBEDDED = window.parent !== window;
+
+function tellHost(message) {
+  if (!EMBEDDED) return;
+  window.parent.postMessage({ src: "coworld-replay", ...message }, "*");
+}
+tellHost({ type: "loading" });
 
 // ---------------------------------------------------------------------------
 // Theme — the Phase-0c art-direction lock, as tokens. Every colour the viewer
@@ -5833,6 +5851,8 @@ function fail(message, detail = "") {
   // longer watchable. A failure with frames in hand is a failure of the STREAM,
   // not of the recording.
   if (frameCount() > 0) return;
+  // Nothing to play: the embedder is holding its overlay for `ready`.
+  tellHost({ type: "error", message });
   // Nothing to play. Take the transport away and MOVE THE FOCUS with it. A
   // keyboard user standing on the play button when the stream died was left
   // focused on an element that had just been hidden: the focus ring vanished,
@@ -5844,11 +5864,18 @@ function fail(message, detail = "") {
   if (hadFocus || document.activeElement === document.body) notice.focus();
 }
 
+let readyTold = false;
+
 function ready() {
   notice.textContent = "";
   controls.container.hidden = false;
   if (state.playing) startPaintLoop();
   else renderOnce();
+  // `ready` means a PICTURE: posted one painted frame after the first draw,
+  // once. Nothing is scheduled when there is no embedder to tell.
+  if (readyTold || !EMBEDDED) return;
+  readyTold = true;
+  requestAnimationFrame(() => requestAnimationFrame(() => tellHost({ type: "ready" })));
 }
 
 /** Derive the spectator socket from the page's OWN path. The Observatory serves
@@ -6074,25 +6101,34 @@ function targetChoices(header, measuredNow) {
     });
 }
 
-/** Parse a deflate-compressed recording without retaining a decoded-string
- *  copy beside JSON.parse's object graph. */
-async function parseCompressedReplay(bytes) {
+/** The compression a recording's first bytes declare: "gzip" (0x1f 0x8b: the
+ *  platform's public replay copy, opted into with the manifest's
+ *  replay_compression), "deflate" (0x78: a v3 recording's own zlib stream) or
+ *  null for the plain JSON of a v1 recording. Sniffed from CONTENT, never from
+ *  the URL suffix or a response header: the public copy is served with no
+ *  Content-Encoding and an unchanged URL. */
+function replayEncoding(bytes) {
+  if (bytes[0] === 0x1f && bytes[1] === 0x8b) return "gzip";
+  if (bytes[0] === 0x78) return "deflate";
+  return null;
+}
+
+/** Parse a compressed recording without retaining a decoded-string copy
+ *  beside JSON.parse's object graph. */
+async function parseCompressedReplay(bytes, encoding) {
   if (!("DecompressionStream" in window)) {
     throw new Error("This browser cannot decompress replays (DecompressionStream).");
   }
-  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate"));
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream(encoding));
   return new Response(stream).json();
 }
 
 /** Bytes in, playable replay out, whichever generation recorded them. */
 async function replayFromBytes(bytes) {
-  let parsed;
-  try {
-    parsed = await parseCompressedReplay(bytes);
-  } catch (error) {
-    // Not compressed: a v1 recording is plain JSON on disk.
-    parsed = JSON.parse(new TextDecoder().decode(bytes));
-  }
+  const encoding = replayEncoding(bytes);
+  const parsed = encoding
+    ? await parseCompressedReplay(bytes, encoding)
+    : JSON.parse(new TextDecoder().decode(bytes));
   if (parsed.format === "sugarscape.replay.v3") {
     if (parsed.version !== 2) {
       throw new Error(
@@ -6120,9 +6156,16 @@ async function loadReplayBytes(bytes) {
 async function loadArtifact(url) {
   let payload;
   try {
+    tellHost({ type: "phase", phase: "replay_fetch_start" });
     const response = await fetch(url, { mode: "cors" });
     if (!response.ok) throw new Error(String(response.status));
-    payload = await replayFromBytes(new Uint8Array(await response.arrayBuffer()));
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    tellHost({
+      type: "phase", phase: "replay_fetch_end",
+      bytes: bytes.byteLength, compressed: replayEncoding(bytes) !== null,
+    });
+    payload = await replayFromBytes(bytes);
+    tellHost({ type: "phase", phase: "replay_parsed" });
   } catch (error) {
     fail("Could not load this replay.", url);
     return;
@@ -6258,7 +6301,11 @@ async function boot() {
     else { fail("postMessage replay bytes must be an ArrayBuffer or typed array."); return; }
     loadReplayBytes(bytes).catch(() => fail("Could not read the posted replay."));
   });
-  const replay = params.get("replay");
+  // `#replay=` first (the fragment is not sent in the HTTP request, so the
+  // hosted index.html cache key does not vary per episode), then the legacy
+  // `?replay=` query that local viewers still open with.
+  const replay = new URLSearchParams(location.hash.slice(1)).get("replay") || params.get("replay");
+  tellHost({ type: "phase", phase: "bundle_ready" });
   if (replay) await loadArtifact(replay);
   else if (typeof connect === "function" && socketUrl()) connect();
   if (frameCount() > 0) ready();

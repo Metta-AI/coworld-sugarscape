@@ -15,6 +15,8 @@ def test_manifest_has_v1_contract_and_no_engine_runtime() -> None:
     assert "version" not in game  # coworld build stamps template versions.
     assert "engine_runtime" not in game["protocols"]
     assert game["replay_viewer"]["bundle"] == "build/replay-viewer"
+    # The public replay copy is gzip; the viewer sniffs and inflates it.
+    assert game["replay_viewer"]["replay_compression"] == "gzip"
     assert game["runnable"]["image"] == "{{GAME_IMAGE}}"
     assert manifest["player"][0]["image"] == "{{BASELINE_IMAGE}}"
 
