@@ -27,7 +27,17 @@ def test_viewer_supports_all_static_bundle_inputs_and_controls() -> None:
     assert 'params.get("replay")' in html
     assert 'params.get("chrome") === "off"' in html
     assert 'event.data.type !== "coworld-replay"' in html
-    assert 'new DecompressionStream("deflate")' in html
+    # The decode SNIFFS the recording: gzip (the platform's public copy),
+    # deflate (a v3 recording's own stream) or plain JSON.
+    assert "new DecompressionStream(encoding)" in html
+    assert 'if (bytes[0] === 0x1f && bytes[1] === 0x8b) return "gzip";' in html
+    assert "(bytes[0] & 0x0f) === 8" in html
+    assert "((bytes[0] << 8) | bytes[1]) % 31" in html
+    # The host readiness bridge and its phase marks.
+    assert 'src: "coworld-replay"' in html
+    for phase in ("bundle_ready", "replay_fetch_start", "replay_fetch_end", "replay_parsed"):
+        assert f'phase: "{phase}"' in html, phase
+    assert 'new URLSearchParams(location.hash.slice(1)).get("replay")' in html
     # It reads a v3 recording directly: deltas forward into whole frames.
     assert "agent_deltas" in html
     assert 'sugarscape.replay.v3' in html
