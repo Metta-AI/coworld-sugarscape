@@ -31,7 +31,8 @@ def test_viewer_supports_all_static_bundle_inputs_and_controls() -> None:
     # deflate (a v3 recording's own stream) or plain JSON.
     assert "new DecompressionStream(encoding)" in html
     assert 'if (bytes[0] === 0x1f && bytes[1] === 0x8b) return "gzip";' in html
-    assert 'if (bytes[0] === 0x78) return "deflate";' in html
+    assert "(bytes[0] & 0x0f) === 8" in html
+    assert "((bytes[0] << 8) | bytes[1]) % 31" in html
     # The host readiness bridge and its phase marks.
     assert 'src: "coworld-replay"' in html
     for phase in ("bundle_ready", "replay_fetch_start", "replay_fetch_end", "replay_parsed"):

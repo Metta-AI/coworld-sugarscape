@@ -235,6 +235,15 @@ const viewerScript = viewerHtml.match(/<script>([\s\S]*)<\/script>/)?.[1];
 assert.ok(viewerScript, "viewer script must be embedded");
 vm.runInContext(viewerScript, viewerContext);
 
+assert.equal(
+  vm.runInContext("replayEncoding(new Uint8Array([0x18, 0x95]))", viewerContext),
+  "deflate",
+);
+assert.equal(
+  vm.runInContext("replayEncoding(new Uint8Array([0x78, 0x00]))", viewerContext),
+  null,
+);
+
 // The socket must be derived from the page's OWN path. Under the Observatory
 // proxy the document is served at <prefix>/client/replay and the socket lives
 // at the sibling <prefix>/replay; an absolute path resolves off the prefix and

@@ -5437,11 +5437,11 @@ function ready() {
   controls.container.hidden = false;
   if (state.playing) startPaintLoop();
   else renderOnce();
-  // `ready` means a PICTURE: posted one painted frame after the first draw,
-  // once. Nothing is scheduled when there is no embedder to tell.
+  // `ready` means a picture. Yield once after drawing without relying on
+  // animation frames, which may be throttled in lazy offscreen iframes.
   if (readyTold || !EMBEDDED) return;
   readyTold = true;
-  requestAnimationFrame(() => requestAnimationFrame(() => tellHost({ type: "ready" })));
+  setTimeout(() => tellHost({ type: "ready" }), 0);
 }
 
 /** Derive the spectator socket from the page's OWN path. The Observatory serves
@@ -5669,13 +5669,16 @@ function targetChoices(header, measuredNow) {
 
 /** The compression a recording's first bytes declare: "gzip" (0x1f 0x8b: the
  *  platform's public replay copy, opted into with the manifest's
- *  replay_compression), "deflate" (0x78: a v3 recording's own zlib stream) or
+ *  replay_compression), "deflate" (a v3 recording's own zlib stream) or
  *  null for the plain JSON of a v1 recording. Sniffed from CONTENT, never from
  *  the URL suffix or a response header: the public copy is served with no
  *  Content-Encoding and an unchanged URL. */
 function replayEncoding(bytes) {
   if (bytes[0] === 0x1f && bytes[1] === 0x8b) return "gzip";
-  if (bytes[0] === 0x78) return "deflate";
+  if (bytes.length >= 2
+      && (bytes[0] & 0x0f) === 8
+      && (bytes[0] >> 4) <= 7
+      && (((bytes[0] << 8) | bytes[1]) % 31) === 0) return "deflate";
   return null;
 }
 
