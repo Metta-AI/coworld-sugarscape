@@ -1,1 +1,0 @@
-"""Bundled Sugarscape players."""
