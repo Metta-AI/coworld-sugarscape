@@ -29,8 +29,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-# v3 keeps src/sugarscape/ as the PINNED DTL vendor, so nothing about this
-# viewer lives there. Sources and assets sit under replay-viewer/, and the
+# src/sugarscape/ is the unmodified upstream DTL submodule, so nothing about
+# this viewer lives there. Sources and assets sit under replay-viewer/, and the
 # build writes the single self-contained document the Observatory serves.
 FONTS = ROOT / "replay-viewer/assets/fonts"
 SOURCE = ROOT / "replay-viewer/src"

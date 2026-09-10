@@ -5,7 +5,7 @@ are normalized distributions; scalar objective kinds support leagues such as
 Commonwealth. The shipped catalog lives in `targets/`, one JSON object per file.
 Four distribution targets are **engine-generated** (2026-08-11): no tabulated data for
 the classic Sugarscape results was ever published, so the honest primary source
-is the vendored DTL engine itself — `tools/generate_targets.py` runs the
+is the DTL engine submodule itself — `tools/generate_targets.py` runs the
 GAS-referenced example configs under DTL's internal defaults (greedy `"none"`
 decision model) for 30 seeds, pools the variable over the final 100 ticks, and
 bins canonically. Those files carry `"provisional": false` and full engine-run

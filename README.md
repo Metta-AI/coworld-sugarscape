@@ -25,8 +25,9 @@ touching platform-facing code.
 
 ## Sugarscape v3
 
-The current implementation is a Python coworld in `src/coworld/` backed by a
-minimally patched, pinned DTL simulation in `src/sugarscape/`. Each seat receives
+The current implementation is a Python coworld in `src/coworld/` backed by the
+unmodified upstream DTL simulation, pulled in as a git submodule at
+`src/sugarscape/` and pinned by commit. Each seat receives
 one target and submits one declarative SugarLang ruleset; the world then runs
 without player I/O. Distribution leagues score how closely the measured outcome
 matches the target, while Commonwealth scores the wellness produced by a fixed
@@ -49,7 +50,9 @@ selection rule, and regeneration workflow, and
 [`docs/designs/2026-08-18-commonwealth-league.md`](docs/designs/2026-08-18-commonwealth-league.md)
 for the Commonwealth contract.
 
-Set up a fresh clone with [`uv`](https://docs.astral.sh/uv/): `uv sync`, then
+Clone with `--recurse-submodules` (or run `git submodule update --init` in an
+existing clone) so the DTL engine is present, then set up with
+[`uv`](https://docs.astral.sh/uv/): `uv sync`, then
 run the offline suite with `.venv/bin/python -m pytest`. For local container
 development, `docker compose up` starts the one-seat config in `config.json` and
 the bundled target-aware baseline. Protocol, language, and target references are
@@ -68,7 +71,9 @@ replay seed reproduces an episode on the pinned interpreter.
 This project is based on the **Digital Terraria Lab (DTL) Sugarscape**
 implementation — [`nkremerh/sugarscape`](https://github.com/nkremerh/sugarscape),
 maintained by Nate Kremer-Herman and contributors, released into the public
-domain under the Unlicense. The archived v1 is a native Nim port of the DTL
+domain under the Unlicense. v3 runs that code as-is from the `src/sugarscape/`
+submodule; `src/coworld/dtl.py` is the only place the wrapper touches its import
+mechanics. The archived v1 is a native Nim port of the DTL
 model, with the pinned upstream source preserved as its behavioral oracle at
 [`archived/v1/reference/dtl-python/`](archived/v1/reference/dtl-python/)
 (full contributor list in its `CREDITS` file). The DTL model itself builds on

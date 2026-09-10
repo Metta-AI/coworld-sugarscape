@@ -8,7 +8,7 @@ from coworld.ruleset import compile_ruleset
 from coworld.ruleset_agent import RulesetAgent
 from coworld.seats import parse_trait_ranges
 from coworld.simulation import CoworldSugarscape
-from sugarscape.sugarscape import Sugarscape
+from coworld.dtl import Sugarscape
 
 
 def _world(config: dict[str, object], rulesets: list[object]) -> CoworldSugarscape:

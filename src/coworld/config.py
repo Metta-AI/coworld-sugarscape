@@ -8,8 +8,7 @@ from pathlib import Path
 import secrets
 from typing import Callable, Mapping
 
-from sugarscape.sugarscape import verifyConfiguration
-
+from .dtl import verifyConfiguration
 from .ruleset import RulesetLimits
 from .seats import parse_trait_ranges
 

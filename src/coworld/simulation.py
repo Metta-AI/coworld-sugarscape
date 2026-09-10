@@ -6,8 +6,7 @@ from dataclasses import dataclass
 import random
 from typing import Sequence
 
-from sugarscape.sugarscape import Sugarscape
-
+from . import dtl
 from .instrumentation import EpisodeInstrumentation, timed_subphase
 from .measurement import RollingMeasurements
 from .ruleset import CompiledRuleset
@@ -25,8 +24,14 @@ class WorldFeatureCache:
     mean_wealth: float = 0.0
 
 
-class CoworldSugarscape(Sugarscape):
-    """DTL Sugarscape with seat-aware agents and non-invasive timings."""
+class CoworldSugarscape(dtl.Sugarscape):
+    """DTL Sugarscape with seat-aware agents and non-invasive timings.
+
+    Every path that lets DTL construct an agent (initial placement, dead-agent
+    replacement, and the tick that runs reproduction) is wrapped in
+    ``dtl.agent_class(RulesetAgent)`` so the unmodified upstream code builds
+    seat-aware agents without a patched constructor.
+    """
 
     def __init__(
         self,
@@ -44,7 +49,8 @@ class CoworldSugarscape(Sugarscape):
         self.seat_manager = SeatManager(len(compiled_rulesets), compiled_rulesets, trait_ranges)
         # This is the single seed point for the process-global DTL RNG stream.
         random.seed(configuration["seed"])
-        super().__init__(configuration, agent_factory=RulesetAgent)
+        with dtl.agent_class(RulesetAgent):
+            super().__init__(configuration)
         self._environment_timestep = self.environment.doTimestep
         self.environment.doTimestep = self._timed_environment_timestep
 
@@ -58,7 +64,8 @@ class CoworldSugarscape(Sugarscape):
         self.world_features.mean_wealth = self.runtimeStats["meanWealth"]
         started = self.instrumentation.begin_tick(next_tick)
         try:
-            super().doTimestep()
+            with dtl.agent_class(RulesetAgent):
+                super().doTimestep()
             if self.measurements is not None:
                 with timed_subphase(self.instrumentation, "measurement"):
                     self.measurements.record_tick(self)
@@ -81,7 +88,8 @@ class CoworldSugarscape(Sugarscape):
         replacement_count = max(0, self.configuration["agentReplacements"] - len(self.agents))
         if replacement_count:
             self.seat_manager.queue_replacements(self.deadAgents, replacement_count)
-        super().replaceDeadAgents()
+        with dtl.agent_class(RulesetAgent):
+            super().replaceDeadAgents()
 
     def updateRuntimeStats(self) -> None:
         with timed_subphase(self.instrumentation, "statistics"):
