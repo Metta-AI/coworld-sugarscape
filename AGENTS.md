@@ -40,3 +40,17 @@ implementation.
 Deterministic comparisons use `canonical_results_payload()`, which excludes
 wall-clock timings. Cross-process replay assumes `PYTHONHASHSEED=0`. Never put
 tokens or the drawn seed in player observations.
+
+## CI checks
+
+CI uses Python 3.13.5 and uv 0.12.13. Run `uv sync`, then
+`PYTHONHASHSEED=0 .venv/bin/python -m pytest -q -n auto`. PyYAML is dev-only
+and supports `tests/test_dtl_sync_workflows.py`; quote workflow `'on'` keys.
+After workflow edits, run `build/tools/actionlint` (installation and checksums
+are in [docs/dtl-sync.md](docs/dtl-sync.md)). Keep action references pinned to
+full commit SHAs and checkouts configured with `persist-credentials: false`.
+Do not commit generated `uv.lock` during the sync implementation.
+
+The current automation is CI only: `tests`, `workflow-lint`, and the PR-only
+`image-smoke` jobs in `.github/workflows/ci.yml`. The upstream sync workflow
+will arrive in a later phase; do not describe it as operational yet.
