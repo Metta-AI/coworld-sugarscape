@@ -156,7 +156,7 @@ The publication state is JSON between `<!-- dtl-sync-state` followed
 by a newline and the closing newline plus `-->`. Its closed version-1 fields
 are `schema_version`, `last_publication`, `deliveries`, `open_questions`,
 `outcome`, `classification`, `cause`, `recent_runs`, `previous_report_artifact`,
-`telemetry`, `resolved_questions`, and `accepted_resumes`.
+`telemetry`, `resolved_questions`, `accepted_resumes`, `summary`, and `reasoning`.
 Questions contain a unique stable lowercase slug `id` and nonempty `question`.
 Publication
 identity contains main/target/prompt SHAs and the outgoing `published_head_sha`.
@@ -589,7 +589,10 @@ red label after a positively green evaluation.
 `recent_runs` retains the last ten distinct run-ID/attempt pairs and outcomes.
 `previous_report_artifact` is a nullable positive decimal artifact ID; omission
 on delivery preserves the prior pointer. Full reports belong in retained
-artifacts, not state. `resolved_questions` and `accepted_resumes` hold the
+artifacts. State keeps only the latest `summary` (first 500 characters) and
+`reasoning` (first 1500 characters), so alert retries need no report artifact.
+Both are required bounded strings in the closed schema, empty before any
+publication. `resolved_questions` and `accepted_resumes` hold the
 authorization receipts above. `telemetry` has exactly:
 
 - `requested_model`, `actual_model`, `codex_version`: nullable strings.
@@ -647,7 +650,14 @@ between a remote side effect and receipt persistence may repeat it. Asana
 lists project tasks in pages of 100 and reuses a task whose notes contain the
 exact line `dtl-sync:FULL_TARGET_SHA`; it follows only the returned offset,
 never a returned URL, and refuses pagination cycles or more than 100 pages.
-New tasks carry the marker, PR link, and run link. Assignment is naturally
+Both alert channels carry classification/cause, a summary excerpt (up to 500
+characters), and up to five open question IDs with text (up to 300 characters
+each), plus PR and run links. Asana notes also contain a reasoning excerpt (up
+to 1500 characters) and the marker. Excerpts use the PR body's HTML/mention
+escaping. Question clipping is marked; Discord messages are kept below 2000
+characters with an explicit truncation notice. Retry-only delivery uses the
+latest persisted excerpts and questions, including when retrying an older
+target's failed channel. Assignment is naturally
 repeatable; an uncertain Discord send can produce a duplicate DM. Receipts are
 per target, per channel, rather than per evaluation run.
 

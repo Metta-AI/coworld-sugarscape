@@ -439,3 +439,68 @@ def test_bot_resolution_comment_cannot_interrupt_human_resolution(sync):
     resolved = sync.resolve_questions(gh, meta, state, [], james_login='james')
     assert resolved.open_questions == []
     assert resolved.resolved_questions[0]['comment_id'] == 2
+
+
+def test_alerts_include_review_context_and_retry_from_state(sync, world):
+    values, publication, gh, runner = delivery_setup(sync, world)
+    http = Alerts()
+    http.fail_asana = False
+    state = deliver(sync, world, values, publication, runner, http)
+    discord = next(call[3]['content'] for call in http.calls if call[0] == 'discord' and '/messages' in call[2])
+    notes = next(call[3]['data']['notes'] for call in http.calls if call[0] == 'asana' and call[1] == 'POST')
+    for text in (discord, notes):
+        assert 'needs-design' in text and 'new-feature' in text
+        assert values[3]['summary'] in text
+        assert 'expose' in text and 'Expose the mechanic?' in text
+        assert 'https://github.com/owner/game/pull/7' in text
+    assert values[3]['reasoning'] in notes
+    assert state.summary == values[3]['summary']
+    assert state.reasoning == values[3]['reasoning']
+    state.deliveries[values[0].target_sha]['discord'] = sync.Delivery('failed', None, 1, 'failed')
+    state.deliveries[values[0].target_sha]['asana'] = sync.Delivery('failed', None, 1, 'failed')
+    gh.pr['body'] = sync.state_block(state)
+    http.calls.clear()
+    meta = sync.replace(values[0], pr_number=7, pr_head_sha=publication['published_head_sha'], mode='retry-alerts')
+    sync.retry_deliveries(meta=meta, runner=gh, http=http, app_login='dtl-sync[bot]',
+                         james_login='james', discord_user_id='99', asana_project_gid='88')
+    assert next(call[3]['content'] for call in http.calls if '/messages' in call[2]) == discord
+    assert next(call[3]['data']['notes'] for call in http.calls if call[0] == 'asana' and call[1] == 'POST') == notes
+
+
+def test_alert_excerpts_are_bounded_sanitized_and_explicitly_truncated(sync):
+    from types import SimpleNamespace
+    meta = SimpleNamespace(repository='owner/game', pr_number=7, run_id='1', run_attempt='1')
+    state = sync.replace(sync.new_state(), classification='needs-design', cause='new-feature',
+                         summary='<summary> @everyone ' + 's' * 480,
+                         reasoning='<reason> @everyone ' + 'r' * 1480)
+    state.open_questions.extend({'id': f'question-{i}', 'question': '<question> @everyone ' + 'q' * 400}
+                                for i in range(6))
+    state.deliveries['a' * 40] = {name: sync.Delivery('pending', None, 0, None) for name in ('discord', 'asana')}
+    http = Alerts()
+    http.fail_asana = False
+    sync.deliver_channels(None, http, meta, state, lambda updated: None, james_login='james',
+                          discord_user_id='99', asana_project_gid='88')
+    message = next(call[3]['content'] for call in http.calls if '/messages' in call[2])
+    notes = next(call[3]['data']['notes'] for call in http.calls if call[0] == 'asana' and call[1] == 'POST')
+    assert len(message) < 2000
+    assert 'Truncated' in message
+    for text in (message, notes):
+        assert '<summary>' not in text and '@everyone' not in text
+        assert '&lt;summary&gt;' in text and '&#64;everyone' in text
+        assert 'question-5' not in text
+        assert 'q' * 301 not in text
+        assert 'https://github.com/owner/game/pull/7' in text
+    assert '&lt;reason&gt;' in notes
+    assert 'question-4' in notes
+    assert 'r' * 1501 not in notes
+
+
+@pytest.mark.parametrize('field,limit', [('summary', 500), ('reasoning', 1500)])
+def test_alert_state_excerpts_are_closed_and_bounded(sync, field, limit):
+    state = sync.replace(sync.new_state(), **{field: 'x' * limit})
+    assert sync.read_state(sync.state_block(state)) == state
+    for value in ('x' * (limit + 1), None, 1):
+        data = asdict(state)
+        data[field] = value
+        with pytest.raises(sync.SyncError):
+            sync.read_state(sync.STATE_START + json.dumps(data) + sync.STATE_END)

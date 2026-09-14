@@ -106,3 +106,7 @@ Keep the initial state in the first PR create request, preserve the successful
 publication tuple on failures, and save each channel receipt before continuing.
 Use the shared head-bound resume permission helper; public comments alone do
 not authorize resolution. See `tests/test_dtl_sync_alerts.py` and the runbook.
+
+Alert retries read bounded summary/reasoning excerpts and open questions from
+publication state. Keep the closed schema and sanitized, bounded Discord/Asana
+payloads in sync; Discord truncation must be visible to the reader.

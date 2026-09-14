@@ -149,6 +149,8 @@ class PublicationState:
     telemetry: dict
     resolved_questions: list[dict]
     accepted_resumes: list[dict]
+    summary: str
+    reasoning: str
 
 
 @dataclass(frozen=True)
@@ -1196,10 +1198,13 @@ TELEMETRY_FIELDS = {"requested_model", "actual_model", "codex_version", "action_
 def new_state() -> PublicationState:
     telemetry = dict.fromkeys(TELEMETRY_FIELDS)
     telemetry["unavailable_reason"] = "workflow telemetry was not supplied"
-    return PublicationState(1, None, {}, [], "noop", None, None, [], None, telemetry, [], [])
+    return PublicationState(1, None, {}, [], "noop", None, None, [], None, telemetry, [], [], "", "")
 
 
 def validate_publication_state_fields(data: dict) -> None:
+    for field, limit in (("summary", 500), ("reasoning", 1500)):
+        if not isinstance(data[field], str) or len(data[field]) > limit:
+            raise SyncError(f"invalid state {field} excerpt")
     if not isinstance(data["outcome"], str) or data["outcome"] not in OUTCOMES:
         raise SyncError("invalid state outcome")
     for key, allowed in (("classification", CLASSIFICATIONS), ("cause", CAUSES)):
@@ -1400,7 +1405,7 @@ def send_discord(http: AlertHTTP, recipient: str, message: str) -> str:
     channel = http.request("discord", "POST", "/users/@me/channels", {"recipient_id": recipient})
     channel_id = _identifier(channel.get("id") if isinstance(channel, dict) else None)
     response = http.request("discord", "POST", f"/channels/{channel_id}/messages",
-                            {"content": message[:1800], "allowed_mentions": {"parse": []}})
+                            {"content": truncate_alert(message), "allowed_mentions": {"parse": []}})
     return _identifier(response.get("id") if isinstance(response, dict) else None)
 
 
@@ -1502,11 +1507,30 @@ def replace_state_block(body: str, state: PublicationState) -> str:
     return result
 
 
+def truncate_alert(message: str) -> str:
+    notice = "\n[Truncated; see PR for full details.]"
+    return message if len(message) < 2000 else message[:1999 - len(notice)] + notice
+
+
+def alert_content(meta: Meta, target: str, state: PublicationState, *, asana: bool) -> str:
+    lines = [f"DTL sync review: {meta.repository} at {target}",
+             f"https://github.com/{meta.repository}/pull/{meta.pr_number}",
+             run_link(meta.repository, meta.run_id, meta.run_attempt),
+             f"Classification: {state.classification or 'unavailable'}; cause: {state.cause or 'unavailable'}.",
+             "Summary (up to 500 characters): " + public_text(state.summary, 500),
+             "Open design questions:"]
+    lines += [f"- {public_text(question['id'],100)}: {public_text(question['question'],300)}"
+              for question in state.open_questions[:5]] or ["None."]
+    if len(state.open_questions) > 5 or any(len(question["question"]) > 300 for question in state.open_questions[:5]):
+        lines.append("[Truncated questions; see PR for full details.]")
+    if asana:
+        lines += ["Reasoning (up to 1500 characters): " + public_text(state.reasoning, 1500)]
+    return "\n".join(lines)
+
+
 def deliver_channels(runner: CommandRunner, http: AlertHTTP, meta: Meta, state: PublicationState,
                      save, *, james_login: str, discord_user_id: str, asana_project_gid: str) -> None:
-    link = run_link(meta.repository, meta.run_id, meta.run_attempt)
     for target, channels in state.deliveries.items():
-        message = f"DTL sync review: {meta.repository} at {target}\nhttps://github.com/{meta.repository}/pull/{meta.pr_number}\n{link}"
         for channel, receipt in list(channels.items()):
             if receipt.status == "delivered":
                 continue
@@ -1514,9 +1538,10 @@ def deliver_channels(runner: CommandRunner, http: AlertHTTP, meta: Meta, state: 
             save(state)
             try:
                 if channel == "discord":
-                    remote_id = send_discord(http, discord_user_id, message)
+                    remote_id = send_discord(http, discord_user_id, alert_content(meta, target, state, asana=False))
                 elif channel == "asana":
-                    remote_id = send_asana(http, asana_project_gid, target, f"DTL sync review: {meta.repository}", message)
+                    remote_id = send_asana(http, asana_project_gid, target, f"DTL sync review: {meta.repository}",
+                                           alert_content(meta, target, state, asana=True))
                 else:
                     response = github(runner, "POST", f"repos/{meta.repository}/issues/{meta.pr_number}/assignees", {"assignees": [james_login]})
                     if not isinstance(response, dict) or not any(user.get("login") == james_login for user in response.get("assignees", [])):
@@ -1578,6 +1603,7 @@ def deliver_publication(*, meta: Meta, candidate: Candidate, report: object, ver
     classification, cause = classify(replace(report, design_questions=state.open_questions), candidate, verification, state.open_questions)
     state = replace(remember_run(state, meta, "published"), last_publication=identity,
                     classification=classification, cause=cause,
+                    summary=report.summary[:500], reasoning=report.reasoning[:1500],
                     telemetry=telemetry if telemetry is not None else new_state().telemetry,
                     previous_report_artifact=report_artifact_id or state.previous_report_artifact)
     if classification == "needs-design":
