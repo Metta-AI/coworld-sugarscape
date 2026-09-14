@@ -1,0 +1,1096 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DTL Upstream Sync</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700;900&family=Merriweather+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  /* ============ Ink & Print tokens ============ */
+  :root {
+    --bg: #fffdf4;            /* cream paper */
+    --surface: #fffaf0;
+    --surface-alt: #f8f6ef;
+    --fg: #111827;            /* warm near-black — never pure #000 */
+    --fg-subtle: #555555;
+    --fg-muted: #999999;
+    --ink-navy: #1a3875;
+    --ink-sage: #6e8050;
+    --ink-terracotta: #b36e4e;
+    --ink-gold: #d4a853;
+    --accent: #859ebe;
+    --accent-soft: #eef2f7;
+    --cta: #0e2758;
+    --cta-foreground: #fffdf4;
+    --border: #e4dac8;
+    --border-strong: #d4c9b5;
+    --border-subtle: #f0ebe1;
+    --serif: 'Merriweather', Georgia, serif;
+    --sans: 'Merriweather Sans', 'Helvetica Neue', sans-serif;
+    --mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.7;
+  }
+
+  /* ============ Page grid: reading column + comment rail ============ */
+  .dc-page {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 0;
+    max-width: 1240px;
+    margin: 0 auto;
+  }
+  article#doc {
+    max-width: 72ch;
+    margin: 0 auto;
+    padding: 56px 40px 120px;
+    min-width: 0;
+  }
+
+  /* ============ Typography ============ */
+  .eyebrow {
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--fg-subtle);
+  }
+  header.masthead { border-bottom: 2px solid var(--border-strong); padding-bottom: 20px; margin-bottom: 32px; }
+  header.masthead h1 {
+    font-family: var(--serif);
+    font-weight: 900;
+    font-size: 34px;
+    line-height: 1.2;
+    margin: 8px 0 10px;
+  }
+  header.masthead .context { color: var(--fg-subtle); font-size: 13.5px; margin: 0; }
+  h2 {
+    font-family: var(--serif);
+    font-weight: 700;
+    font-size: 15px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-navy);
+    margin: 48px 0 12px;
+  }
+  h3 { font-family: var(--serif); font-weight: 700; font-size: 16.5px; margin: 32px 0 8px; }
+  p { margin: 0 0 14px; }
+  a { color: var(--ink-navy); text-decoration-color: var(--accent); text-underline-offset: 3px; }
+  a:hover { color: var(--cta); }
+  strong { font-weight: 700; }
+  ul, ol { padding-left: 24px; margin: 0 0 14px; }
+  li { margin-bottom: 4px; }
+  hr { border: 0; border-top: 1px solid var(--border); margin: 40px 0; }
+
+  /* Key-points opener: every section starts with scannable bullets */
+  .key-points {
+    list-style: none;
+    padding: 0 0 0 2px;
+    margin: 0 0 18px;
+  }
+  .key-points li { padding-left: 18px; position: relative; margin-bottom: 6px; }
+  .key-points li::before { content: '—'; position: absolute; left: 0; color: var(--ink-gold); font-weight: 700; }
+
+  /* ============ TOC ============ */
+  nav.toc { margin: 28px 0 8px; }
+  nav.toc ol { list-style: none; padding: 0; column-count: 2; column-gap: 40px; margin: 10px 0 0; }
+  nav.toc li { margin-bottom: 5px; break-inside: avoid; }
+  nav.toc a { text-decoration: none; border-bottom: 1px dotted var(--border-strong); }
+  nav.toc .toc-num { font-family: var(--mono); font-size: 12px; color: var(--fg-muted); margin-right: 8px; }
+
+  /* ============ Tables ============ */
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 18px 0 22px;
+    font-size: 13.5px;
+  }
+  th {
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--fg-subtle);
+    text-align: left;
+    padding: 6px 12px 6px 0;
+    border-bottom: 2px solid var(--border-strong);
+  }
+  td { padding: 7px 12px 7px 0; border-bottom: 1px solid var(--border-subtle); vertical-align: top; }
+  td.num, th.num { text-align: right; font-family: var(--mono); font-size: 12.5px; font-feature-settings: 'tnum' 1; }
+
+  /* ============ Figures ============ */
+  figure { margin: 24px 0 28px; }
+  figure svg { max-width: 100%; height: auto; display: block; }
+  figcaption {
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--fg-subtle);
+  }
+  figcaption .fig-label {
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-size: 10.5px;
+    color: var(--ink-navy);
+    margin-right: 8px;
+  }
+
+  /* ============ Code & citations ============ */
+  code {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    background: var(--surface-alt);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+  pre {
+    background: var(--surface-alt);
+    border: 1px solid var(--border-subtle);
+    border-radius: 3px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    margin: 16px 0 20px;
+  }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.6; }
+  .cite {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--fg-subtle);
+    background: var(--surface-alt);
+    padding: 1px 6px;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+  /* Superscript source references — body prose never carries raw file paths.
+     Full citation lives in the title (hover) and in the numbered Sources list. */
+  sup.ref { line-height: 0; }
+  sup.ref a {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--ink-navy);
+    text-decoration: none;
+    padding: 0 1px;
+  }
+  sup.ref a:hover { text-decoration: underline; }
+  ol.sources { margin: 12px 0; padding-left: 30px; }
+  ol.sources li {
+    font-size: 13px;
+    padding: 2px 0;
+  }
+  ol.sources li::marker {
+    font-family: var(--mono);
+    font-weight: 700;
+    color: var(--ink-navy);
+  }
+  ol.sources li:target { background: var(--accent-soft); }
+
+  /* ============ Callouts ============ */
+  .callout { padding: 12px 16px; margin: 18px 0; font-size: 13.5px; border-radius: 3px; }
+  .callout .callout-label {
+    display: block;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 4px;
+  }
+  .callout-info { background: var(--accent-soft); }
+  .callout-info .callout-label { color: var(--ink-navy); }
+  .callout-warn { background: rgba(179, 110, 78, 0.08); border-left: 3px solid var(--ink-terracotta); }
+  .callout-warn .callout-label { color: var(--ink-terracotta); }
+  .callout-open { background: rgba(212, 168, 83, 0.10); }
+  .callout-open .callout-label { color: #8a6a1f; }
+
+  /* Decision record */
+  .decision { border-top: 1px solid var(--border); padding: 14px 0 4px; margin: 14px 0; }
+  .decision .decision-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-sage); }
+  .decision p { margin-top: 6px; }
+
+  @media (max-width: 1100px) {
+    .dc-page { grid-template-columns: 1fr; }
+  }
+  @media print {
+    #dc-sidebar, #dc-fab, #dc-toggle { display: none !important; }
+    .dc-page { grid-template-columns: 1fr; }
+  }
+
+  /* Phone-width fixes (outside the DC-COMMENTS blocks): the article is a grid
+     item with auto margins, so it sizes to fit-content and a <pre> would widen
+     it past the viewport; filling the track lets <pre> scroll internally. */
+  article#doc { width: 100%; }
+  .table-scroll { overflow-x: auto; }
+  ol.sources .cite { white-space: normal; overflow-wrap: anywhere; }
+
+  /* replies rendered under a comment (from the comment's `replies` array) */
+  .dc-replies { margin-top: 8px; padding-left: 10px; border-left: 2px solid var(--border-strong); }
+  .dc-reply-author { font-family: var(--sans); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-navy); }
+  .dc-reply-text { font-size: 12.5px; line-height: 1.5; color: var(--fg); white-space: pre-wrap; margin-top: 2px; }
+  .dc-reply-text a { color: var(--ink-navy); word-break: break-all; }
+
+  /* ================================================================
+     DC-COMMENTS BEGIN — styles (copy verbatim; do not modify)
+     ================================================================ */
+  ::highlight(dc-hl) { background: rgba(212, 168, 83, 0.28); }
+  ::highlight(dc-hl-active) { background: rgba(212, 168, 83, 0.6); }
+
+  #dc-fab {
+    position: absolute;
+    z-index: 40;
+    display: none;
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--cta-foreground);
+    background: var(--cta);
+    border: 1px solid #0a1c42;
+    border-radius: 3px;
+    padding: 5px 10px;
+    cursor: pointer;
+  }
+  #dc-fab:hover { background: var(--ink-navy); }
+
+  #dc-sidebar {
+    border-left: 1px solid var(--border);
+    background: var(--surface);
+    padding: 24px 20px 60px;
+    font-size: 13px;
+    position: sticky;
+    top: 0;
+    height: 100dvh;
+    overflow-y: auto;
+  }
+  #dc-sidebar h2.dc-title {
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--fg-subtle);
+    margin: 0 0 4px;
+  }
+  .dc-actions { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0 18px; }
+  .dc-btn {
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--fg);
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 3px;
+    padding: 4px 9px;
+    cursor: pointer;
+  }
+  .dc-btn:hover { background: var(--surface-alt); }
+  .dc-btn:focus-visible, #dc-fab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .dc-empty { color: var(--fg-muted); font-style: italic; }
+  .dc-item { border-top: 1px solid var(--border-subtle); padding: 12px 0; cursor: pointer; }
+  .dc-item.dc-resolved { opacity: 0.5; }
+  .dc-quote {
+    border-left: 2px solid var(--ink-gold);
+    padding-left: 8px;
+    color: var(--fg-subtle);
+    font-style: italic;
+    font-size: 12px;
+    margin-bottom: 6px;
+    overflow-wrap: break-word;
+  }
+  .dc-orphan-tag {
+    font-size: 9.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-terracotta);
+    background: rgba(179, 110, 78, 0.12);
+    border-radius: 999px;
+    padding: 1px 7px;
+    margin-left: 6px;
+  }
+  .dc-text { white-space: pre-wrap; overflow-wrap: break-word; }
+  .dc-item textarea {
+    width: 100%;
+    min-height: 64px;
+    font-family: var(--sans);
+    font-size: 13px;
+    color: var(--fg);
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    border-radius: 3px;
+    padding: 6px 8px;
+    resize: vertical;
+  }
+  .dc-item textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .dc-meta { display: flex; align-items: center; gap: 10px; margin-top: 6px; font-size: 11px; color: var(--fg-muted); }
+  .dc-meta label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+  .dc-meta .dc-del { margin-left: auto; color: var(--ink-terracotta); background: none; border: none; font-size: 11px; cursor: pointer; padding: 0; }
+  .dc-meta .dc-del:hover { text-decoration: underline; }
+  #dc-status { font-size: 11px; color: var(--ink-sage); min-height: 16px; margin-top: 8px; }
+
+  #dc-toggle { display: none; }
+  @media (max-width: 1100px) {
+    #dc-sidebar {
+      position: fixed;
+      right: 0;
+      top: 0;
+      width: 320px;
+      max-width: 90vw;
+      transform: translateX(100%);
+      transition: transform 200ms ease-out;
+      z-index: 50;
+      box-shadow: -4px 0 16px rgba(0, 0, 0, 0.08);
+    }
+    #dc-sidebar.dc-open { transform: translateX(0); }
+    #dc-toggle {
+      display: block;
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      z-index: 51;
+      font-family: var(--sans);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--cta-foreground);
+      background: var(--cta);
+      border: 1px solid #0a1c42;
+      border-radius: 999px;
+      padding: 9px 15px;
+      cursor: pointer;
+    }
+  }
+  /* ============ DC-COMMENTS END — styles ============ */
+</style>
+</head>
+<body>
+<div class="dc-page">
+<article id="doc">
+
+  <header class="masthead">
+    <span class="eyebrow">Design doc · 2026-09-10 · Approved, not yet implemented</span>
+    <h1>DTL upstream sync</h1>
+    <p class="context">A daily GitHub Actions workflow finds new upstream DTL Sugarscape commits. Codex bumps the submodule and adapts the v3 coworld wrapper. The workflow opens a PR for review, and it alerts James when a change needs a design decision and not a mechanical repair.</p>
+  </header>
+
+  <section id="summary">
+    <h2>Executive Summary</h2>
+    <p>The v3 coworld wraps the unmodified upstream DTL Sugarscape engine as a git submodule<sup class="ref"><a href="#src-1" title="src/sugarscape gitlink (branch dtl-submodule, commit &quot;Replace the vendored DTL copy with a pristine upstream submodule&quot;)">1</a></sup>, and upstream<sup class="ref"><a href="#src-2" title="https://github.com/nkremerh/sugarscape — upstream repository; tracks master, no tags or releases">2</a></sup> moves without us. On 2026-09-10 upstream is three commits ahead of our pin, and nobody knows until a person bumps the pin by hand. This document proposes two thin GitHub Actions workflows and one unit-tested script. Each day a <code>detect</code> step gets the upstream commits and bumps the submodule. Then a Codex step adapts the wrapper, the tests, and the docs, and writes a structured report. Then a <code>publish</code> step turns that report into a commit, a PR, labels, and alerts.</p>
+    <p>The most important decision is the classification of each upstream change into one of three classes: <code>no-impact</code>, <code>mechanical</code>, or <code>needs-design</code>. The script, not the agent, forces <code>needs-design</code> when the trajectory hash changes or a test fails. This rule prevents a quiet update of the hash constant when the engine semantics change. The cost is a GitHub App token, three broker-sourced secrets, and branch protection on <code>main</code>, which does not exist today. A human merges each PR.</p>
+  </section>
+
+  <nav class="toc">
+    <span class="eyebrow">Contents</span>
+    <ol>
+      <li><span class="toc-num">1</span><a href="#problem">Problem</a></li>
+      <li><span class="toc-num">2</span><a href="#goals">Goals and Non-goals</a></li>
+      <li><span class="toc-num">3</span><a href="#architecture">Architecture</a></li>
+      <li><span class="toc-num">4</span><a href="#detect">The Detect Step</a></li>
+      <li><span class="toc-num">5</span><a href="#codex">The Codex Task</a></li>
+      <li><span class="toc-num">6</span><a href="#classification">Classification</a></li>
+      <li><span class="toc-num">7</span><a href="#publish">The Publish Step</a></li>
+      <li><span class="toc-num">8</span><a href="#credentials">Credentials</a></li>
+      <li><span class="toc-num">9</span><a href="#security">Security</a></li>
+      <li><span class="toc-num">10</span><a href="#testing">Testing and Acceptance</a></li>
+      <li><span class="toc-num">11</span><a href="#rollout">Rollout</a></li>
+      <li><span class="toc-num">12</span><a href="#alternatives">Alternatives Considered</a></li>
+      <li><span class="toc-num">13</span><a href="#open-questions">Open Questions</a></li>
+      <li><span class="toc-num">14</span><a href="#sources">Sources</a></li>
+    </ol>
+  </nav>
+
+  <section id="problem">
+    <h2>1 · Problem</h2>
+    <ul class="key-points">
+      <li>The wrapper depends on an upstream engine that changes without us. On 2026-09-10, upstream is three commits ahead of our pin.</li>
+      <li>Each upstream change goes into one of three classes, and only one class is fully mechanical.</li>
+      <li>Today the only detection method is a person who bumps the pin by hand.</li>
+    </ul>
+    <p>Since the submodule change<sup class="ref"><a href="#src-1" title="src/sugarscape gitlink (branch dtl-submodule, commit &quot;Replace the vendored DTL copy with a pristine upstream submodule&quot;)">1</a></sup>, the v3 coworld imports the upstream DTL Sugarscape engine exactly as published, with no local patches. That is the correct shape for a wrapper, but the engine authors set the speed of change. Each upstream commit can have one of three effects on us. It is possible that nothing we import changed, for example GUI or plot work. It is possible that something we import changed, and the wrapper and its documentation can absorb the change mechanically. Or the engine got a new feature, and a design decision is necessary on how SugarLang, seats, targets, or scoring show it to players.</p>
+    <p>Now, no part of the system finds these cases automatically. The pin drifts until a person bumps it, and then the three cases arrive together in one manual diff. The three commits that wait on 2026-09-10<sup class="ref"><a href="#src-3" title="Upstream commits 2c77f4e (dark-mode GUI), 22b7350 (exit() in simulation shutdown), 585282e (bar-chart plotting)">3</a></sup> are a small example. They touch the GUI, the simulation shutdown, and the plots. A person must read all three to know that none of them has an effect on the wrapper.</p>
+  </section>
+
+  <section id="goals">
+    <h2>2 · Goals and Non-goals</h2>
+    <ul class="key-points">
+      <li>Find upstream changes each day and on demand. Let a coding agent make a PR for review, with a written rationale.</li>
+      <li>Alert James, with the reasoning of the agent attached, when a change needs design work.</li>
+      <li>Do not auto-merge. Do not regenerate the target catalog. Track only upstream <code>master</code>. Do not depend on a persistent machine.</li>
+    </ul>
+    <h3>Goals</h3>
+    <p>The system must find upstream changes on a daily schedule and when a person starts it by hand. When it finds one, a coding agent must bump the submodule, adapt the wrapper and the docs, and operate the test suite. The agent must then make a PR that a reviewer can evaluate from its body alone, because the body has a written rationale. When the agent decides that a change needs design work, not mechanical adaptation, the system must alert James with that reasoning attached.</p>
+    <p>The full process must leave an audit trail. The classification and reasoning of each run are in the PR body. Each credential that the workflow uses is a repository secret that came from the token broker.</p>
+    <h3>Non-goals</h3>
+    <p>The system will not auto-merge, and a human merges each sync PR. The system will not regenerate the target catalog. When the engine semantics change, it is possible that the catalog is stale. The decision on that is the design work that this system escalates. The system will not track upstream branches other than <code>master</code>, and it will not track upstream tags, of which there are none<sup class="ref"><a href="#src-2" title="https://github.com/nkremerh/sugarscape — upstream repository; tracks master, no tags or releases">2</a></sup>. The system will not operate on a persistent machine, and all steps operate on GitHub-hosted runners.</p>
+  </section>
+
+  <section id="architecture">
+    <h2>3 · Architecture</h2>
+    <ul class="key-points">
+      <li>Two workflows and one script. The workflows are thin. The script holds each decision, thus you can unit-test it and operate it from a laptop.</li>
+      <li><code>ci.yml</code> is new. The repository has no CI today.</li>
+      <li>The sync workflow has five steps: checkout, detect, Codex, publish, and the CI run that the push starts.</li>
+    </ul>
+    <p>The design adds the files that follow. The prompt and the report schema are in version control with the repository, and we review them as code.</p>
+<pre><code>.github/workflows/ci.yml          pytest on every PR and push to main (new; the repo has no CI today)
+.github/workflows/dtl-sync.yml    schedule (daily) + workflow_dispatch
+tools/dtl_sync.py                 detect | publish subcommands
+tools/dtl_sync/PROMPT.md          the Codex task prompt, versioned with the repo
+tools/dtl_sync/REPORT_SCHEMA.json the structured report Codex must write
+tests/test_dtl_sync.py            unit tests for the script against a throwaway git repo</code></pre>
+
+    <figure>
+      <svg viewBox="0 0 640 352" width="100%" role="img" aria-label="Pipeline: detect, Codex step, publish, then ci.yml on the pushed branch; publish classifies the run as no-impact, mechanical, or needs-design, and needs-design fans out to assigning James, a Discord DM, and an Asana task." font-family="Merriweather Sans, Helvetica Neue, sans-serif">
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8" fill="none" stroke="#859ebe" stroke-width="1.2"/>
+          </marker>
+        </defs>
+
+        <!-- Row 1: the three pipeline steps -->
+        <rect x="8" y="8" width="196" height="120" rx="3" fill="#fffaf0" stroke="#d4c9b5"/>
+        <text x="106" y="30" text-anchor="middle" font-size="13" font-weight="700" fill="#111827">1 · detect</text>
+        <text x="20" y="52" font-size="10.5" fill="#555555">fetch upstream ref</text>
+        <text x="20" y="68" font-size="10.5" fill="#555555">compare gitlink with main pin</text>
+        <text x="20" y="84" font-size="10.5" fill="#555555">find open dtl-sync PR, or branch</text>
+        <text x="20" y="100" font-size="10.5" fill="#555555">bump the submodule</text>
+        <text x="20" y="116" font-size="10.5" fill="#555555">run pytest → pytest-before.txt</text>
+
+        <line x1="204" y1="68" x2="220" y2="68" stroke="#859ebe" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+        <rect x="222" y="8" width="196" height="120" rx="3" fill="#eef2f7" stroke="#859ebe"/>
+        <text x="320" y="30" text-anchor="middle" font-size="13" font-weight="700" fill="#1a3875">2 · Codex step</text>
+        <text x="234" y="52" font-size="10.5" fill="#555555">prompt file: PROMPT.md</text>
+        <text x="234" y="68" font-size="10.5" fill="#555555">sandbox: workspace-write</text>
+        <text x="234" y="84" font-size="10.5" fill="#555555">effort: high, default model</text>
+        <text x="234" y="100" font-size="10.5" fill="#555555">edits wrapper, tests, docs</text>
+        <text x="234" y="116" font-size="10.5" fill="#555555">writes report.json</text>
+
+        <line x1="418" y1="68" x2="434" y2="68" stroke="#859ebe" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+        <rect x="436" y="8" width="196" height="120" rx="3" fill="#fffaf0" stroke="#d4c9b5"/>
+        <text x="534" y="30" text-anchor="middle" font-size="13" font-weight="700" fill="#111827">3 · publish</text>
+        <text x="448" y="52" font-size="10.5" fill="#555555">validate report.json</text>
+        <text x="448" y="68" font-size="10.5" fill="#555555">commit; push with app token</text>
+        <text x="448" y="84" font-size="10.5" fill="#555555">create or update the PR</text>
+        <text x="448" y="100" font-size="10.5" fill="#555555">apply labels</text>
+        <text x="448" y="116" font-size="10.5" fill="#555555">fire alerts (needs-design only)</text>
+
+        <!-- Push triggers ci.yml -->
+        <line x1="584" y1="128" x2="584" y2="188" stroke="#859ebe" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <text x="592" y="160" font-size="9.5" fill="#999999">push</text>
+        <rect x="488" y="190" width="144" height="44" rx="3" fill="#fffaf0" stroke="#d4c9b5"/>
+        <text x="560" y="209" text-anchor="middle" font-size="11.5" font-weight="700" fill="#111827">4 · ci.yml</text>
+        <text x="560" y="224" text-anchor="middle" font-size="10" fill="#555555">runs on the pushed branch</text>
+
+        <!-- Classification bus -->
+        <line x1="484" y1="128" x2="484" y2="158" stroke="#859ebe" stroke-width="1.5"/>
+        <line x1="484" y1="158" x2="78" y2="158" stroke="#859ebe" stroke-width="1.5"/>
+        <text x="210" y="152" font-size="9.5" fill="#999999">classification — exactly one</text>
+        <line x1="78" y1="158" x2="78" y2="188" stroke="#859ebe" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <line x1="238" y1="158" x2="238" y2="188" stroke="#859ebe" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <line x1="398" y1="158" x2="398" y2="188" stroke="#859ebe" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+        <!-- Row 2: classifications -->
+        <rect x="8" y="190" width="140" height="44" rx="3" fill="#fffaf0" stroke="#d4c9b5"/>
+        <text x="78" y="209" text-anchor="middle" font-size="11.5" font-weight="700" fill="#111827">no-impact</text>
+        <text x="78" y="224" text-anchor="middle" font-size="10" fill="#555555">no wrapper edits, green</text>
+
+        <rect x="168" y="190" width="140" height="44" rx="3" fill="#fffaf0" stroke="#d4c9b5"/>
+        <text x="238" y="209" text-anchor="middle" font-size="11.5" font-weight="700" fill="#111827">mechanical</text>
+        <text x="238" y="224" text-anchor="middle" font-size="10" fill="#555555">edits needed, green</text>
+
+        <rect x="328" y="190" width="140" height="44" rx="3" fill="#fffaf0" stroke="#b36e4e"/>
+        <text x="398" y="209" text-anchor="middle" font-size="11.5" font-weight="700" fill="#b36e4e">needs-design</text>
+        <text x="398" y="224" text-anchor="middle" font-size="10" fill="#555555">forced: hash change or failure</text>
+
+        <!-- needs-design fan-out -->
+        <line x1="398" y1="234" x2="398" y2="264" stroke="#b36e4e" stroke-width="1.5"/>
+        <line x1="245" y1="264" x2="545" y2="264" stroke="#b36e4e" stroke-width="1.5"/>
+        <text x="398" y="258" text-anchor="middle" font-size="9.5" fill="#999999">alerts, once per distinct upstream commit</text>
+        <line x1="245" y1="264" x2="245" y2="294" stroke="#b36e4e" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <line x1="395" y1="264" x2="395" y2="294" stroke="#b36e4e" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <line x1="545" y1="264" x2="545" y2="294" stroke="#b36e4e" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+        <!-- Row 3: alerts -->
+        <rect x="180" y="296" width="130" height="44" rx="3" fill="#fffaf0" stroke="#d4c9b5"/>
+        <text x="245" y="315" text-anchor="middle" font-size="11.5" font-weight="700" fill="#111827">assign James</text>
+        <text x="245" y="330" text-anchor="middle" font-size="10" fill="#555555">on the PR</text>
+
+        <rect x="330" y="296" width="130" height="44" rx="3" fill="#fffaf0" stroke="#d4c9b5"/>
+        <text x="395" y="315" text-anchor="middle" font-size="11.5" font-weight="700" fill="#111827">Discord DM</text>
+        <text x="395" y="330" text-anchor="middle" font-size="10" fill="#555555">via the agent bot</text>
+
+        <rect x="480" y="296" width="130" height="44" rx="3" fill="#fffaf0" stroke="#d4c9b5"/>
+        <text x="545" y="315" text-anchor="middle" font-size="11.5" font-weight="700" fill="#111827">Asana task</text>
+        <text x="545" y="330" text-anchor="middle" font-size="10" fill="#555555">in the configured project</text>
+      </svg>
+      <figcaption><span class="fig-label">Figure 1</span>The <code>dtl-sync.yml</code> pipeline. Detect and publish are subcommands of one script. Only the Codex step has an LLM. Publish records exactly one classification for each run, and only <code>needs-design</code> makes alerts. The push in step 3 uses the app token, thus <code>ci.yml</code> operates on the branch.</figcaption>
+    </figure>
+
+    <h3>Step order in the sync workflow</h3>
+    <p>The workflow does five steps in sequence. First, <code>actions/checkout</code> gets the repository with <code>submodules: true</code> and uses the app token from §8, thus later pushes start <code>ci.yml</code>. Second, <code>tools/dtl_sync.py detect</code> operates (§4). It gives <code>changed=true|false</code>, <code>branch</code>, and <code>pr_number</code> when an open sync PR exists. It writes a work directory at <code>build/dtl-sync/</code> that has <code>upstream.log</code>, <code>upstream.diff</code>, and <code>pytest-before.txt</code>. It stops early when nothing changed, unless a person started the run with <code>force=true</code>.</p>
+    <p>Third, <code>openai/codex-action</code><sup class="ref"><a href="#src-4" title="https://github.com/openai/codex-action — README: openai-api-key input, sandbox, safety-strategy, output-file; the action performs no git operations">4</a></sup> operates with <code>prompt-file: tools/dtl_sync/PROMPT.md</code>, <code>sandbox: workspace-write</code>, <code>effort: high</code>, the default model, and <code>output-file: build/dtl-sync/report.json</code>. The prompt refers to the work directory files by path. Fourth, <code>tools/dtl_sync.py publish</code> (§7) validates <code>report.json</code> against the schema. It commits the changes of Codex with a message from the report, pushes the branch, makes or updates the PR, applies labels, and sends alerts. Fifth, <code>ci.yml</code> operates on the pushed branch, because the push used the app token and not the default workflow token.</p>
+    <h3>Manual dispatch inputs</h3>
+    <p>A manual dispatch accepts two inputs. <code>upstream_ref</code> has the default value <code>master</code> and also accepts a commit. Thus you can target a specified upstream state or do a past run again. <code>force</code> has the default value false. When <code>force</code> is true, the run continues when the gitlink already matches upstream.</p>
+  </section>
+
+  <section id="detect">
+    <h2>4 · The Detect Step</h2>
+    <ul class="key-points">
+      <li>Get the upstream commits, compare with the pin on <code>main</code>, and stop if they match (unless forced).</li>
+      <li>One cumulative PR. If an open <code>dtl-sync</code> PR exists, bump on its branch, thus the PR always tracks the upstream head.</li>
+      <li>Write the log, the diff, and a pytest run before the change as input for the agent. Test failures here are input, not a workflow failure.</li>
+    </ul>
+    <p>Detect first gets <code>upstream_ref</code> from the upstream repository<sup class="ref"><a href="#src-2" title="https://github.com/nkremerh/sugarscape — upstream repository; tracks master, no tags or releases">2</a></sup> into the submodule. Then it reads the current pin from the gitlink on <code>main</code> with <code>git ls-files --stage</code><sup class="ref"><a href="#src-1" title="src/sugarscape gitlink (branch dtl-submodule, commit &quot;Replace the vendored DTL copy with a pristine upstream submodule&quot;)">1</a></sup>. If the pin is equal to the new commit and <code>force</code> is false, the run does nothing.</p>
+    <p>If not, detect looks for an open PR with the label <code>dtl-sync</code>. If one exists, detect checks out the branch of that PR and bumps on it, thus the PR always tracks the upstream head. This was the choice of James: one cumulative PR, not a queue of small PRs. If no such PR is open, detect makes a branch with the name <code>dtl-sync/&lt;YYYY-MM-DD&gt;-&lt;short-sha&gt;</code> from <code>main</code>. Then detect checks out the target commit in the submodule and stages the gitlink.</p>
+    <p>Next, detect writes the inputs for the agent. <code>upstream.log</code> is <code>git log --stat</code> from the <code>main</code> pin to the target, thus a cumulative PR always shows the full range and not only the last increment. <code>upstream.diff</code> is the full diff without <code>plots/</code>, <code>data/</code>, <code>examples/</code>, and <code>README</code>. This keeps the context of the agent on code that can have an effect. The log lists those files, thus nothing is hidden.</p>
+    <p>Last, detect operates <code>.venv/bin/python -m pytest -q -p no:cacheprovider</code> and saves the output as <code>pytest-before.txt</code>. Failures at this point are the expected input for Codex, not a workflow failure. A red suite is the signal that the wrapper needs adaptation.</p>
+  </section>
+
+  <section id="codex">
+    <h2>5 · The Codex Task</h2>
+    <ul class="key-points">
+      <li>The prompt is the load-bearing artifact, and we review it as code.</li>
+      <li>The agent never edits the submodule. It makes the smallest change to the wrapper and the docs, and it operates the suite again.</li>
+      <li>The agent never repairs a changed trajectory hash with an update of the constant. It escalates the change.</li>
+      <li>The output is a structured <code>report.json</code> that the script validates.</li>
+    </ul>
+    <p>The contract of the prompt has five parts. First, the agent reads the agent guide of the repository<sup class="ref"><a href="#src-5" title="AGENTS.md — repository agent guide, including the documentation rules the agent must follow">5</a></sup>, the wrapper module<sup class="ref"><a href="#src-6" title="src/coworld/dtl.py — the coworld wrapper over the upstream DTL engine">6</a></sup>, <code>upstream.log</code>, <code>upstream.diff</code>, and <code>pytest-before.txt</code>. The agent must never edit a file in the submodule. The workflow also enforces this rule: it rejects the run if the submodule tree is dirty after Codex stops.</p>
+    <p>Second, the agent makes the smallest change to <code>src/coworld/</code>, <code>tools/</code>, <code>tests/</code>, and the docs that keeps the wrapper correct against the new upstream. Third, it updates the documentation in the same pass and obeys the documentation rules of the repository<sup class="ref"><a href="#src-5" title="AGENTS.md — repository agent guide, including the documentation rules the agent must follow">5</a></sup>. Fourth, it operates the suite again. If <code>EXPECTED_TRAJECTORY_HASH</code><sup class="ref"><a href="#src-7" title="tests/test_dtl.py — EXPECTED_TRAJECTORY_HASH, the pinned simulation trajectory hash">7</a></sup> no longer matches, the agent must not update the constant. A changed hash shows that the engine semantics changed, and the classification in §6 must escalate that. The agent records the old hash and the new hash in the report.</p>
+    <p>Fifth, the agent writes <code>report.json</code>, which must match <code>REPORT_SCHEMA.json</code>. The report has the field <code>classification</code>. The field <code>summary</code> has two or three sentences that become the PR title and the alert text. The field <code>upstream_range</code> gives the commit range. The field <code>files_changed</code> lists the edited files.</p>
+    <p>The field <code>tests</code> has <code>passed</code>, <code>failed</code>, and <code>trajectory_hash_changed</code>. The field <code>design_questions</code> is a list, and it is mandatory when the classification is <code>needs-design</code>. The field <code>reasoning</code> has the full argument for the classification, written for James.</p>
+  </section>
+
+  <section id="classification">
+    <h2>6 · Classification</h2>
+    <ul class="key-points">
+      <li>Exactly one of <code>needs-design</code>, <code>mechanical</code>, or <code>no-impact</code>.</li>
+      <li>The script forces <code>needs-design</code> on a changed trajectory hash or a failed test, whatever the choice of the agent.</li>
+      <li>The test for the agent: must a maintainer decide <em>whether</em> and <em>how</em> players see this, and not only <em>that</em> the code still operates?</li>
+    </ul>
+    <p>The agent must select exactly one classification. The script enforces the first rule mechanically, thus an argument cannot bypass it.</p>
+    <p><strong><code>needs-design</code></strong>: the script forces this class, whatever the agent reported, when <code>trajectory_hash_changed</code> is true or <code>tests.failed</code> is not zero. The agent must also select this class for some upstream additions or changes. These are a configuration key, an agent trait, a decision model, an ethics model, a statistic, or a mechanic. This applies when SugarLang, the seats layer, the targets, the scoring, or the replay format can show the change or must account for it. The prompt gives the agent this test: must a maintainer decide <em>whether</em> and <em>how</em> players see this, and not only <em>that</em> the code still operates?</p>
+    <p><strong><code>mechanical</code></strong>: the wrapper, the tools, the tests, or the docs needed edits, the suite is green, and the trajectory hash is unchanged.</p>
+    <p><strong><code>no-impact</code></strong>: upstream touched only files that the wrapper never imports (GUI, plots, README, examples, data scripts), the suite is green, and no wrapper edits were necessary.</p>
+    <div class="callout callout-info">
+      <span class="callout-label">Why the script overrides the agent</span>
+      The trajectory hash is the one signal that an argument cannot remove. If the hash moved, the simulation gives different results than before. Then a person must decide whether the targets and the catalog still have the same meaning. A mechanical override makes sure that a persuasive but wrong argument from the agent still reaches James with the <code>needs-design</code> label.
+    </div>
+  </section>
+
+  <section id="publish">
+    <h2>7 · The Publish Step</h2>
+    <ul class="key-points">
+      <li>A missing or invalid report becomes <code>needs-design</code> with the raw Codex output attached, thus a confused run still reaches James.</li>
+      <li>Refuse to publish if the submodule tree is dirty.</li>
+      <li>Each run makes the PR body again from the report, and the body keeps a run log, thus a cumulative PR keeps its history.</li>
+      <li>Alerts go out only on <code>needs-design</code>, and only one time for each distinct upstream commit.</li>
+    </ul>
+    <p>Publish first validates <code>report.json</code>. A missing or invalid report is not a silent failure. Publish treats it as <code>needs-design</code> with the raw Codex output attached, thus a confused agent run reaches James and does not disappear. Then publish refuses to continue if <code>git status --porcelain</code> in the submodule shows a change. This is the second line of defense behind the prompt instruction to never touch upstream code.</p>
+    <p>The commit subject is <code>dtl-sync: &lt;classification&gt;: &lt;summary first sentence&gt;</code>. The commit body comes from the report and includes the upstream range. The push uses the app token. If no PR exists, publish makes one. If a PR exists, publish updates its body.</p>
+    <p>Publish makes that body again from the report on each run. The body has the classification, the summary, the test results, the reasoning, and the design questions. It also has the upstream range with a link to the upstream compare view. It also has a run log with one line for each run. Thus a cumulative PR keeps its full history when publish writes the body again.</p>
+    <p>Each sync PR has the label <code>dtl-sync</code>, and publish adds <code>needs-design</code> when applicable. Publish removes the <code>needs-design</code> label only when a later run on the same PR reports a different classification <em>and</em> the trajectory hash matches <code>main</code> again.</p>
+    <p>Alerts go out only on <code>needs-design</code>, and only one time for each distinct upstream commit. The run log records the commits that caused an alert, thus a daily run against an unchanged upstream does not send the alert again. When an alert goes out, three things occur.</p>
+    <p>Publish assigns James on the PR. Publish sends a Discord DM through the agent bot with the summary, the design questions, and the PR link. The recipient snowflake is in the repository variable <code>DTL_SYNC_DISCORD_USER_ID</code>. Publish makes an Asana task in the project that the repository variable <code>DTL_SYNC_ASANA_PROJECT_GID</code> identifies (James must give the GID). The task title comes from the summary, and the task notes have the reasoning and the PR link.</p>
+  </section>
+
+  <section id="credentials">
+    <h2>8 · Credentials</h2>
+    <ul class="key-points">
+      <li>The workflow gets three secrets one time through the metta token broker, which logs who asked and why. It stores them as repository secrets.</li>
+      <li>A fourth secret, the GitHub token, must not be the default <code>GITHUB_TOKEN</code>. If it is, the sync PR has no CI.</li>
+      <li>Each secret is available only to the steps that need it.</li>
+    </ul>
+    <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>Secret</th><th>Broker scope</th><th>Used by</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>OPENAI_API_KEY</code></td><td><code>openai.inference</code></td><td><code>openai/codex-action</code>, via its <code>openai-api-key</code> input<sup class="ref"><a href="#src-4" title="https://github.com/openai/codex-action — README: openai-api-key input, sandbox, safety-strategy, output-file; the action performs no git operations">4</a></sup></td></tr>
+        <tr><td><code>DISCORD_BOT_TOKEN</code></td><td><code>discord.post</code> (approval tier)</td><td><code>publish</code> alert step</td></tr>
+        <tr><td><code>ASANA_PAT</code></td><td><code>asana.rw</code></td><td><code>publish</code> alert step</td></tr>
+        <tr><td><code>DTL_SYNC_GITHUB_TOKEN</code></td><td>Not a broker scope. A GitHub App installation token (preferred) or a fine-grained PAT with <code>contents: write</code> and <code>pull-requests: write</code> on this repository only</td><td><code>actions/checkout</code>, and the <code>publish</code> push and PR steps</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p>The push cannot use the default <code>GITHUB_TOKEN</code>, because events that this token makes do not start other workflow runs<sup class="ref"><a href="#src-8" title="https://docs.github.com/en/actions/security-for-github-actions/security-guides/automatic-token-authentication — events created by GITHUB_TOKEN do not trigger new workflow runs">8</a></sup>. A sync PR pushed with that token has no CI result, and that defeats the purpose of the review. Each secret is available only to the steps that need it. The Codex step receives the OpenAI key through the proxy of the action<sup class="ref"><a href="#src-4" title="https://github.com/openai/codex-action — README: openai-api-key input, sandbox, safety-strategy, output-file; the action performs no git operations">4</a></sup> and nothing else: no git credential, no Discord token, no Asana token.</p>
+  </section>
+
+  <section id="security">
+    <h2>9 · Security</h2>
+    <ul class="key-points">
+      <li>The repository is public. The sync workflow never operates on <code>pull_request</code>, thus fork PRs cannot reach the secrets.</li>
+      <li>The agent reads third-party code and commit messages, which is a prompt-injection surface. Five mitigations apply.</li>
+      <li>Branch protection on <code>main</code> is part of the rollout. It does not exist today.</li>
+    </ul>
+    <p>Because the repository is public, the trigger list is important. <code>dtl-sync.yml</code> operates only on <code>schedule</code> and <code>workflow_dispatch</code>, never on <code>pull_request</code>. Thus a PR from a fork cannot start the workflow with access to the repository secrets.</p>
+    <div class="callout callout-warn">
+      <span class="callout-label">Risk: prompt injection through upstream</span>
+      The agent reads upstream commit messages and diffs verbatim. A malicious or strange upstream commit can try to steer it. The mitigations are in layers:
+      <ul>
+        <li>The sandbox of the action<sup class="ref"><a href="#src-4" title="https://github.com/openai/codex-action — README: openai-api-key input, sandbox, safety-strategy, output-file; the action performs no git operations">4</a></sup></li>
+        <li>No git credential in the Codex step, thus the agent cannot push</li>
+        <li>The hard refusal of the script to publish a dirty submodule tree</li>
+        <li>A human merge on each PR</li>
+        <li>Branch protection on <code>main</code> with one approved review and a green <code>ci.yml</code>.</li>
+      </ul>
+      The rollout (§11) sets up the branch protection, which does not exist today.
+    </div>
+    <p>The app token of the workflow has a scope of this repository only. Thus a compromised publish step cannot reach other Metta-AI repositories.</p>
+  </section>
+
+  <section id="testing">
+    <h2>10 · Testing and Acceptance</h2>
+    <ul class="key-points">
+      <li>Unit tests operate <code>detect</code> and <code>publish</code> against a temporary git repository with a false upstream and a stubbed GitHub client.</li>
+      <li><code>actionlint</code> operates on the two workflows in <code>ci.yml</code>.</li>
+      <li>Acceptance is a manual dispatch against the three upstream commits that wait on 2026-09-10.</li>
+    </ul>
+    <p>The unit tests in <code>tests/test_dtl_sync.py</code> operate the script against a temporary git repository with a false upstream bare repository and a stubbed GitHub client. They cover these cases:</p>
+    <ul>
+      <li>No operation when the pin is already at the head</li>
+      <li>A new branch when no sync PR is open</li>
+      <li>A bump on an open PR</li>
+      <li>The forced <code>needs-design</code> on a changed trajectory hash</li>
+      <li>The forced <code>needs-design</code> on failed tests</li>
+      <li>One alert for each upstream commit and no second alert</li>
+      <li>The refusal to publish a dirty submodule.</li>
+    </ul>
+    <p><code>ci.yml</code> checks the two workflow files with <code>actionlint</code>.</p>
+    <p>Acceptance is a manual dispatch against the three upstream commits that wait on 2026-09-10<sup class="ref"><a href="#src-3" title="Upstream commits 2c77f4e (dark-mode GUI), 22b7350 (exit() in simulation shutdown), 585282e (bar-chart plotting)">3</a></sup>: a dark-mode GUI change, an <code>exit()</code> in the simulation shutdown, and bar-chart plots. The expected result is a classification of <code>no-impact</code> or <code>mechanical</code>, a green suite, an unchanged trajectory hash, and no alert. If the run escalates one of these three commits, the prompt or the classification rules need work before we make the schedule active.</p>
+  </section>
+
+  <section id="rollout">
+    <h2>11 · Rollout</h2>
+    <ul class="key-points">
+      <li>Six steps, in sequence. The schedule becomes active last, behind a repository variable.</li>
+      <li>The workflow file can land before the secrets exist, because the schedule ships disabled.</li>
+    </ul>
+    <ol>
+      <li>Merge the submodule PR<sup class="ref"><a href="#src-1" title="src/sugarscape gitlink (branch dtl-submodule, commit &quot;Replace the vendored DTL copy with a pristine upstream submodule&quot;)">1</a></sup>.</li>
+      <li>Land <code>ci.yml</code> and set branch protection on <code>main</code>.</li>
+      <li>Make the GitHub App (or PAT) and the four secrets. Set the two repository variables (the Discord user id and the Asana project GID).</li>
+      <li>Land <code>dtl-sync.yml</code>, the script, the prompt, the schema, and the tests.</li>
+      <li>Do the acceptance dispatch from §10 and review the PR that it opens.</li>
+      <li>Make the schedule active. The committed workflow keeps the schedule disabled behind the repository variable <code>DTL_SYNC_ENABLED=true</code>, thus the workflow file can land before the secrets exist.</li>
+    </ol>
+  </section>
+
+  <section id="alternatives">
+    <h2>12 · Alternatives Considered</h2>
+    <ul class="key-points">
+      <li>We rejected a persistent EC2 box. It is a machine to keep alive for a few minutes of work each day.</li>
+      <li>We rejected Dependabot submodule bumps. Workflows that Dependabot starts cannot see the OpenAI key.</li>
+      <li>We rejected a Metta-AI fork with a patch branch, together with the submodule change. There are no patches to carry.</li>
+    </ul>
+
+    <div class="decision">
+      <span class="decision-label">Decision: hosted runners, not a persistent EC2 box with cron calling Codex</span>
+      <p>A long-lived box with cron was plausible because it is the simplest picture: a machine that wakes, operates Codex, and pushes. We rejected it because it adds a machine to keep alive, patched, and authenticated, for a job of a few minutes each day. The job needs nothing that a hosted runner lacks. If the agent needs a long-lived environment in the future, <code>metta box new</code> can make one at that time.</p>
+    </div>
+
+    <div class="decision">
+      <span class="decision-label">Decision: the workflow bumps the submodule itself, not Dependabot</span>
+      <p>The <code>gitsubmodule</code> ecosystem of Dependabot can open bump PRs on its own, and a workflow on that PR can then operate Codex. We rejected it because workflows that Dependabot starts get a read-only token and see only Dependabot secrets, not Actions secrets<sup class="ref"><a href="#src-9" title="https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-on-actions — Dependabot-triggered runs get a read-only token and only Dependabot secrets">9</a></sup>. Thus the Codex step has no API key. The bump is one git command, and the workflow does it.</p>
+    </div>
+
+    <div class="decision">
+      <span class="decision-label">Decision: a pristine submodule, not a Metta-AI fork carrying a patch branch</span>
+      <p>A fork gives a place to hold local patches on top of upstream. We rejected it together with the submodule change<sup class="ref"><a href="#src-1" title="src/sugarscape gitlink (branch dtl-submodule, commit &quot;Replace the vendored DTL copy with a pristine upstream submodule&quot;)">1</a></sup>. The wrapper needs no upstream patches, thus a fork only adds a rebase step to each sync and gives nothing.</p>
+    </div>
+  </section>
+
+  <section id="open-questions">
+    <h2>13 · Open Questions</h2>
+    <div class="callout callout-open">
+      <span class="callout-label">Open · blocking rollout step 3</span>
+      Asana project GID for <code>DTL_SYNC_ASANA_PROJECT_GID</code>: James must give it.
+    </div>
+    <div class="callout callout-open">
+      <span class="callout-label">Open · not blocking</span>
+      Daily schedule time. We propose 06:00 Pacific, thus a PR waits at the start of the work day.
+    </div>
+    <div class="callout callout-open">
+      <span class="callout-label">Open · not blocking</span>
+      Must <code>ci.yml</code> also do the Docker image build? It is the hosted deployment path, and the submodule makes the check worthwhile, but it approximately doubles the CI time. We propose: yes, on PRs only.
+    </div>
+  </section>
+
+  <section id="sources">
+    <h2>14 · Sources</h2>
+    <p>One entry for each cited source, in the sequence of first citation. Claims that cite the same source share one number. This page comes from the approved design brief<sup class="ref"><a href="#src-10" title="docs/designs/2026-09-10-dtl-upstream-sync.md — the source brief for this document">10</a></sup>. Content that is not in that brief is not in this page.</p>
+    <ol class="sources">
+      <li id="src-1"><span class="cite">src/sugarscape</span> — the gitlink pinning the upstream engine, introduced on branch <code>dtl-submodule</code> by the commit "Replace the vendored DTL copy with a pristine upstream submodule". The design depends on this change being merged.</li>
+      <li id="src-2"><a href="https://github.com/nkremerh/sugarscape">github.com/nkremerh/sugarscape</a> — the upstream DTL Sugarscape repository. Only <code>master</code> is tracked; upstream publishes no tags or releases.</li>
+      <li id="src-3">Upstream commits <span class="cite">2c77f4e</span> (dark-mode GUI), <span class="cite">22b7350</span> (an <code>exit()</code> in simulation shutdown), and <span class="cite">585282e</span> (bar-chart plotting) — the three commits pending on 2026-09-10, used as the acceptance dispatch target.</li>
+      <li id="src-4"><a href="https://github.com/openai/codex-action">github.com/openai/codex-action</a> — README: the <code>openai-api-key</code> input, the <code>sandbox</code> and <code>safety-strategy</code> settings, the <code>output-file</code> option, and the note that the action performs no git operations itself.</li>
+      <li id="src-5"><span class="cite">AGENTS.md</span> — the repository's agent guide, including the documentation rules the Codex task must follow when it updates docs.</li>
+      <li id="src-6"><span class="cite">src/coworld/dtl.py</span> — the coworld wrapper over the upstream engine; the module the agent must read and the primary place mechanical adaptations land.</li>
+      <li id="src-7"><span class="cite">tests/test_dtl.py</span> — <code>EXPECTED_TRAJECTORY_HASH</code>, the pinned simulation trajectory hash. A mismatch after an upstream bump forces <code>needs-design</code>.</li>
+      <li id="src-8"><a href="https://docs.github.com/en/actions/security-for-github-actions/security-guides/automatic-token-authentication">docs.github.com — Automatic token authentication</a> — events created by the default <code>GITHUB_TOKEN</code> do not trigger new workflow runs, which is why the push needs an app token.</li>
+      <li id="src-9"><a href="https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-on-actions">docs.github.com — Dependabot on GitHub Actions</a> — workflow runs triggered by Dependabot receive a read-only token and can access only Dependabot secrets, not Actions secrets.</li>
+      <li id="src-10"><span class="cite">docs/designs/2026-09-10-dtl-upstream-sync.md</span> — the approved design brief this document renders (status: approved in conversation 2026-09-10, not yet implemented).</li>
+    </ol>
+  </section>
+
+</article>
+
+<!-- ================================================================
+     DC-COMMENTS BEGIN — markup + script (copy verbatim; do not modify)
+     ================================================================ -->
+<aside id="dc-sidebar" aria-label="Comments">
+  <h2 class="dc-title">Comments <span id="dc-count"></span></h2>
+  <div class="dc-actions">
+    <button class="dc-btn" id="dc-export">Export JSON</button>
+    <button class="dc-btn" id="dc-copy">Copy JSON</button>
+    <button class="dc-btn" id="dc-import">Import…</button>
+    <input type="file" id="dc-file" accept=".json,application/json" hidden>
+  </div>
+  <div id="dc-status" role="status"></div>
+  <div id="dc-list"><p class="dc-empty">No comments yet. Select text in the document to add one.</p></div>
+</aside>
+<button id="dc-fab" type="button">+ Comment</button>
+<button id="dc-toggle" type="button">Comments</button>
+<!-- Preload slot: a renderer may put a dc-comments/1 `comments` array here (each comment optionally carrying `replies`). Merged by id into the stored comments on load. Leave empty otherwise. -->
+<script id="dc-preload" type="application/json"></script>
+
+<script>
+(() => {
+  'use strict';
+  const FORMAT = 'dc-comments/1';
+  const CTX = 32; // prefix/suffix context length, chars
+  const doc = document.getElementById('doc');
+  const fab = document.getElementById('dc-fab');
+  const listEl = document.getElementById('dc-list');
+  const countEl = document.getElementById('dc-count');
+  const statusEl = document.getElementById('dc-status');
+  const sidebar = document.getElementById('dc-sidebar');
+  const storeKey = 'dc:' + document.title;
+
+  let comments = []; // {id, exact, prefix, suffix, text, created, resolved}
+  let ranges = new Map(); // id -> Range (null if orphaned)
+  let seq = 0;
+
+  // ---- text indexing: one global string over #doc's text nodes ----
+  function docText() {
+    const r = document.createRange();
+    r.selectNodeContents(doc);
+    return r.toString();
+  }
+  function globalOffset(container, offset) {
+    const r = document.createRange();
+    r.setStart(doc, 0);
+    r.setEnd(container, offset);
+    return r.toString().length;
+  }
+  function offsetsToRange(start, end) {
+    const walker = document.createTreeWalker(doc, NodeFilter.SHOW_TEXT);
+    let pos = 0, range = document.createRange(), haveStart = false;
+    while (walker.nextNode()) {
+      const node = walker.currentNode, len = node.data.length;
+      if (!haveStart && pos + len >= start) {
+        range.setStart(node, start - pos);
+        haveStart = true;
+      }
+      if (haveStart && pos + len >= end) {
+        range.setEnd(node, end - pos);
+        return range;
+      }
+      pos += len;
+    }
+    return null;
+  }
+
+  // ---- anchoring: TextQuoteSelector-style exact + prefix/suffix ----
+  function selectorFromRange(range) {
+    const text = docText();
+    const start = globalOffset(range.startContainer, range.startOffset);
+    const end = globalOffset(range.endContainer, range.endOffset);
+    return {
+      exact: text.slice(start, end),
+      prefix: text.slice(Math.max(0, start - CTX), start),
+      suffix: text.slice(end, end + CTX),
+    };
+  }
+  function locate(c) {
+    const text = docText();
+    let i = text.indexOf(c.prefix + c.exact + c.suffix);
+    if (i >= 0) return offsetsToRange(i + c.prefix.length, i + c.prefix.length + c.exact.length);
+    i = text.indexOf(c.exact);
+    if (i >= 0) return offsetsToRange(i, i + c.exact.length);
+    return null;
+  }
+  function reanchorAll() {
+    ranges = new Map(comments.map(c => [c.id, locate(c)]));
+    paint();
+  }
+
+  // ---- painting via CSS Custom Highlight API ----
+  const hl = typeof Highlight !== 'undefined' ? new Highlight() : null;
+  const hlActive = typeof Highlight !== 'undefined' ? new Highlight() : null;
+  if (hl) { CSS.highlights.set('dc-hl', hl); CSS.highlights.set('dc-hl-active', hlActive); }
+  function paint(activeId) {
+    if (!hl) return;
+    hl.clear(); hlActive.clear();
+    for (const [id, r] of ranges) {
+      if (!r) continue;
+      (id === activeId ? hlActive : hl).add(r);
+    }
+  }
+
+  // ---- persistence (best-effort; file:// storage varies by browser) ----
+  function save() {
+    try { localStorage.setItem(storeKey, JSON.stringify(comments)); } catch (e) { /* unavailable on some file:// setups */ }
+  }
+  function load() {
+    try {
+      const raw = localStorage.getItem(storeKey);
+      if (raw) comments = JSON.parse(raw);
+    } catch (e) { /* ignore */ }
+  }
+
+  // ---- sidebar rendering ----
+  function flash(msg) {
+    statusEl.textContent = msg;
+    setTimeout(() => { if (statusEl.textContent === msg) statusEl.textContent = ''; }, 2500);
+  }
+  function sortedComments() {
+    const pos = c => {
+      const r = ranges.get(c.id);
+      return r ? globalOffset(r.startContainer, r.startOffset) : Infinity; // orphans last
+    };
+    return [...comments].sort((a, b) => pos(a) - pos(b));
+  }
+  function render(editingId) {
+    countEl.textContent = comments.length ? '(' + comments.length + ')' : '';
+    listEl.textContent = '';
+    if (!comments.length) {
+      const p = document.createElement('p');
+      p.className = 'dc-empty';
+      p.textContent = 'No comments yet. Select text in the document to add one.';
+      listEl.appendChild(p);
+      return;
+    }
+    for (const c of sortedComments()) {
+      const item = document.createElement('div');
+      item.className = 'dc-item' + (c.resolved ? ' dc-resolved' : '');
+      item.dataset.id = c.id;
+
+      const quote = document.createElement('div');
+      quote.className = 'dc-quote';
+      quote.textContent = c.exact.length > 90 ? c.exact.slice(0, 90) + '…' : c.exact;
+      if (!ranges.get(c.id)) {
+        const tag = document.createElement('span');
+        tag.className = 'dc-orphan-tag';
+        tag.textContent = 'orphaned';
+        quote.appendChild(tag);
+      }
+      item.appendChild(quote);
+
+      if (c.id === editingId) {
+        const ta = document.createElement('textarea');
+        ta.value = c.text;
+        ta.placeholder = 'Write a comment… (⌘/Ctrl+Enter to save, Esc to cancel)';
+        ta.addEventListener('keydown', e => {
+          if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') commit();
+          if (e.key === 'Escape') cancel();
+        });
+        ta.addEventListener('click', e => e.stopPropagation());
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'dc-btn';
+        saveBtn.textContent = 'Save';
+        saveBtn.style.marginTop = '6px';
+        saveBtn.addEventListener('click', e => { e.stopPropagation(); commit(); });
+        function commit() {
+          c.text = ta.value.trim();
+          if (!c.text) return cancel();
+          save(); render();
+        }
+        function cancel() {
+          if (!c.text) { comments = comments.filter(x => x.id !== c.id); ranges.delete(c.id); paint(); }
+          save(); render();
+        }
+        item.appendChild(ta);
+        item.appendChild(saveBtn);
+        listEl.appendChild(item);
+        requestAnimationFrame(() => ta.focus());
+        continue;
+      }
+
+      const text = document.createElement('div');
+      text.className = 'dc-text';
+      text.textContent = c.text;
+      item.appendChild(text);
+
+      if (Array.isArray(c.replies) && c.replies.length) {
+        const box = document.createElement('div');
+        box.className = 'dc-replies';
+        for (const r of c.replies) {
+          const who = document.createElement('div');
+          who.className = 'dc-reply-author';
+          who.textContent = 'Reply from ' + (r.author || 'agent') + (r.created ? ' · ' + String(r.created).slice(0, 10) : '');
+          const body = document.createElement('div');
+          body.className = 'dc-reply-text';
+          for (const part of String(r.text || '').split(/(https?:\/\/[^\s)]+)/g)) {
+            if (/^https?:\/\//.test(part)) {
+              const a = document.createElement('a');
+              a.href = part; a.target = '_blank'; a.rel = 'noopener';
+              a.textContent = part;
+              a.addEventListener('click', e => e.stopPropagation());
+              body.appendChild(a);
+            } else body.appendChild(document.createTextNode(part));
+          }
+          box.append(who, body);
+        }
+        item.appendChild(box);
+      }
+
+      const meta = document.createElement('div');
+      meta.className = 'dc-meta';
+      const when = document.createElement('span');
+      when.textContent = c.created.slice(0, 10);
+      const resolved = document.createElement('label');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = !!c.resolved;
+      cb.addEventListener('click', e => e.stopPropagation());
+      cb.addEventListener('change', () => { c.resolved = cb.checked; save(); render(); });
+      resolved.append(cb, 'resolved');
+      const del = document.createElement('button');
+      del.className = 'dc-del';
+      del.textContent = 'delete';
+      del.addEventListener('click', e => {
+        e.stopPropagation();
+        comments = comments.filter(x => x.id !== c.id);
+        ranges.delete(c.id);
+        paint(); save(); render();
+      });
+      meta.append(when, resolved, del);
+      item.appendChild(meta);
+
+      item.addEventListener('click', () => {
+        const r = ranges.get(c.id);
+        if (!r) return flash('Anchor not found in this version of the document.');
+        const rect = r.getBoundingClientRect();
+        window.scrollTo({ top: window.scrollY + rect.top - 160, behavior: 'smooth' });
+        paint(c.id);
+        setTimeout(() => paint(), 2000);
+      });
+      // double-click text to edit
+      text.addEventListener('dblclick', e => { e.stopPropagation(); render(c.id); });
+      listEl.appendChild(item);
+    }
+  }
+
+  // ---- selection -> floating Comment button ----
+  document.addEventListener('mouseup', e => {
+    if (fab.contains(e.target)) return;
+    setTimeout(() => {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !sel.rangeCount) { fab.style.display = 'none'; return; }
+      const range = sel.getRangeAt(0);
+      if (!doc.contains(range.commonAncestorContainer) || !range.toString().trim()) {
+        fab.style.display = 'none';
+        return;
+      }
+      const rect = range.getBoundingClientRect();
+      fab.style.display = 'block';
+      fab.style.left = Math.min(rect.right + 8 + window.scrollX, window.scrollX + document.documentElement.clientWidth - 120) + 'px';
+      fab.style.top = (rect.top + window.scrollY - 4) + 'px';
+      fab.dataset.pending = '1';
+    }, 0);
+  });
+  fab.addEventListener('click', () => {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed) return;
+    const range = sel.getRangeAt(0);
+    const c = Object.assign({ id: 'c' + Date.now().toString(36) + (seq++), text: '', created: new Date().toISOString(), resolved: false }, selectorFromRange(range));
+    comments.push(c);
+    ranges.set(c.id, range.cloneRange());
+    paint(c.id);
+    sel.removeAllRanges();
+    fab.style.display = 'none';
+    sidebar.classList.add('dc-open');
+    render(c.id);
+  });
+
+  // ---- export / import ----
+  function payload() {
+    return JSON.stringify({
+      format: FORMAT,
+      doc: document.title,
+      exported: new Date().toISOString(),
+      comments: comments,
+    }, null, 2);
+  }
+  document.getElementById('dc-export').addEventListener('click', () => {
+    const blob = new Blob([payload()], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = (document.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'doc') + '.comments.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    flash('Downloaded.');
+  });
+  document.getElementById('dc-copy').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(payload()); flash('Copied to clipboard.'); }
+    catch (e) { flash('Clipboard blocked — use Export instead.'); }
+  });
+  document.getElementById('dc-import').addEventListener('click', () => document.getElementById('dc-file').click());
+  document.getElementById('dc-file').addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    file.text().then(raw => {
+      const data = JSON.parse(raw);
+      if (data.format !== FORMAT || !Array.isArray(data.comments)) { flash('Not a dc-comments file.'); return; }
+      const byId = new Map(comments.map(c => [c.id, c]));
+      for (const c of data.comments) byId.set(c.id, c);
+      comments = [...byId.values()];
+      reanchorAll(); save(); render();
+      flash('Imported ' + data.comments.length + ' comment(s).');
+    }).catch(() => flash('Could not parse that file.'));
+    e.target.value = '';
+  });
+
+  document.getElementById('dc-toggle').addEventListener('click', () => sidebar.classList.toggle('dc-open'));
+
+  // ---- init ----
+  load();
+  // Merge the renderer's preloaded comments (with replies) by id: a stored
+  // comment keeps its own text/resolved state and takes the preloaded replies.
+  try {
+    const pre = document.getElementById('dc-preload');
+    const preloaded = pre && pre.textContent.trim() ? JSON.parse(pre.textContent) : [];
+    if (Array.isArray(preloaded) && preloaded.length) {
+      const byId = new Map(comments.map(c => [c.id, c]));
+      for (const c of preloaded) {
+        const existing = byId.get(c.id);
+        if (existing) { if (c.replies) existing.replies = c.replies; }
+        else byId.set(c.id, c);
+      }
+      comments = [...byId.values()];
+      save();
+    }
+  } catch (e) { /* malformed preload: ignore */ }
+  reanchorAll();
+  render();
+})();
+</script>
+<!-- ============ DC-COMMENTS END ============ -->
+</div>
+</body>
+</html>
