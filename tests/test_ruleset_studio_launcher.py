@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import shutil
 import signal
 import socket
 import subprocess
@@ -51,6 +52,8 @@ def fetch_json(request: Request | str) -> tuple[int, dict[str, object]]:
 
 
 def launch_once(tmp_path: Path, link_server: Path, suffix: str) -> bytes:
+    if shutil.which("node") is None:
+        pytest.skip("Studio launcher integration requires node on PATH")
     link_port, api_port, run_port = unused_port(), unused_port(), unused_port()
     runs = tmp_path / f"runs-{suffix}"
     process = subprocess.Popen(

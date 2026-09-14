@@ -670,6 +670,7 @@ class Verification:
     baseline_tests: TestResult
     reason: str | None
     image_id: str | None
+    excluded_markers: list[str]
 
 
 def validate_candidate(value: object) -> Candidate:
@@ -880,7 +881,7 @@ def verify(*, meta: Meta, candidate: Candidate, patch: Path, checkout: Path,
                   patch_sha256=candidate.patch_sha256, candidate_tree=None,
                   pin_matches_target=None, patch_applied=None, hash_changed=None,
                   hash_old=None, hash_new=None, candidate_tests=unknown, baseline_tests=unknown,
-                  reason=None, image_id=None)
+                  reason=None, image_id=None, excluded_markers=["perf"])
     try:
         fields["image_id"] = verifier_image(runner, image)
         candidate_dir = reconstruct_candidate(meta=meta, candidate=candidate, patch=patch,

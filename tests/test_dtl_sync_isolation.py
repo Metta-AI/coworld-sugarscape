@@ -100,6 +100,8 @@ def test_suite_has_project_python_imports_and_executable_scratch(tmp_path, docke
     workspace = tmp_path / 'workspace'
     workspace.mkdir()
     (workspace / 'tests').mkdir()
+    (workspace / 'pytest.ini').write_text('[pytest]\nmarkers = perf: timing checks\n')
+    (workspace / 'tests/test_perf.py').write_text('import pytest\n@pytest.mark.perf\ndef test_excluded():\n    assert False, "perf must not run under CPU quota"\n')
     (workspace / 'support.py').write_text('VALUE = 42\n')
     (workspace / 'tests/test_environment.py').write_text('''from pathlib import Path
 import os, subprocess, sys

@@ -328,8 +328,12 @@ patches fail; they are never filtered into publishable evidence.
 
 The stock measurement uses only main's wrapper, trajectory test, and conftest
 with the target upstream. The controller parses the old hash constant without
-importing Python code. A second container runs the complete candidate suite;
-a third runs main's suite with main's original pin. Each suite records JUnit
+importing Python code. A second container runs the candidate functional suite;
+a third runs main's suite with main's original pin. Both container suites exclude
+the registered `perf` marker (`-m "not perf"`), because timing ratios are not
+meaningful under a CPU quota. This deliberately differs from the full host/CI
+suite, which still runs performance assertions. `verify.json` records
+`excluded_markers: ["perf"]`. Each suite records JUnit
 XML and collection count. Completed failing tests and changed hashes remain
 valid negative evidence. Empty collection, malformed/missing/truncated XML,
 invalid counts, inconsistent exits, timeout, or missing probe output produce
@@ -365,13 +369,9 @@ measurements. It does not prove that arbitrary malicious code cannot falsify
 its own process output. Publication and workflow artifact provenance checks
 arrive in later phases; verification alone does not publish anything.
 
-Current local qualification found a baseline limitation: the Studio discovery
-and launcher tests assume Node and a separate Metta bridge checkout exist.
-Those resources are absent from this Python verifier image and must not be
-supplied by mounting the operator's home or Metta checkout. These tests can
-therefore produce complete red baseline evidence even without an upstream
-change. The ranking timing assertion can also fail under the container's CPU
-quota while pytest runs workers in parallel. The verifier retains these
-failures; a green automated sync requires a separate review of these test
-environment assumptions. Host test success alone does not establish a green
-container baseline.
+Studio integration tests skip with explicit reasons when their external
+prerequisites are absent: discovery requires the Metta link app files and Node,
+and launcher subprocess tests require Node on PATH. They retain their original
+assertions and run on hosts with those prerequisites. Container logs list these
+skips separately from the nested Docker acceptance skips. Neither a Metta
+checkout nor a host home is mounted into verification containers.

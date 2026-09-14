@@ -80,3 +80,9 @@ Docker/image setup is missing. Keep the controller and final evidence outside
 all mounted paths; only the current measurement and trusted harness are mounted,
 read-only. The verifier harness and image files under `tools/dtl_sync/` must
 come from captured main, never candidate patches.
+
+The verifier runs the functional suite with `-m "not perf"` under its CPU quota
+and records `excluded_markers: ["perf"]` in `verify.json`. Host/CI commands above
+still run the registered `perf` tests. Studio integration tests explicitly skip
+when external Metta link app files or Node are missing; do not remove assertions
+or mount a host checkout to satisfy those prerequisites.

@@ -4,9 +4,12 @@ from contextlib import contextmanager
 from http.client import HTTPConnection
 import json
 from pathlib import Path
+import shutil
 import threading
 from typing import Iterator
 from urllib.parse import quote
+
+import pytest
 
 from ruleset_studio_import import load_studio_server
 from tools import ruleset_studio as launcher
@@ -206,6 +209,11 @@ def test_vendored_blockly_and_starter_are_offline_and_pinned() -> None:
 
 
 def test_launcher_discovers_the_read_only_metta_bridge_and_prints_watch_command() -> None:
+    link_app = launcher.DEFAULT_METTA_ROOT / launcher.LINK_APP
+    if not all((link_app / name).is_file() for name in ("link-server.mjs", "link-bridge.mjs")):
+        pytest.skip("Studio discovery integration requires the external Metta link app files")
+    if shutil.which("node") is None:
+        pytest.skip("Studio discovery integration requires node on PATH")
     node, link_server, link_bridge = launcher.discover(launcher.DEFAULT_METTA_ROOT)
     assert Path(node).is_file()
     assert link_server.name == "link-server.mjs"

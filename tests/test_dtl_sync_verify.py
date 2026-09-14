@@ -187,6 +187,7 @@ def test_verify_records_main_baseline_separately(sync, world, changed, failed):
         runner=Runner(), upstream_url=str(world.upstream_remote))
     assert measured == ['stock','candidate','baseline']
     assert result.reason is None
+    assert result.excluded_markers == ["perf"]
     assert result.hash_changed is changed
     assert result.candidate_tests.completed
     assert result.candidate_tests.failed == int(failed)

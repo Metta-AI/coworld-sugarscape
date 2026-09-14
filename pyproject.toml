@@ -18,3 +18,6 @@ dev = [
 # The repo runs via PYTHONPATH=src (tests/conftest.py injects it); nothing is
 # built or installed as a package.
 package = false
+
+[tool.pytest.ini_options]
+markers = ["perf: timing assertions that require an unconstrained host CPU"]

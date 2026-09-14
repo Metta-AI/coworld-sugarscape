@@ -4,6 +4,8 @@ from statistics import median
 from time import perf_counter_ns
 import random
 
+import pytest
+
 from coworld.config import build_dtl_config, resolve_episode_config
 from coworld.instrumentation import EpisodeInstrumentation
 from coworld.ruleset import compile_ruleset
@@ -66,6 +68,7 @@ def measure_ranking_overhead() -> tuple[int, int, float]:
     return stock_ns, ruleset_ns, ratio
 
 
+@pytest.mark.perf
 def test_sugarlang_ranking_overhead_is_at_most_twice_stock() -> None:
     _, _, ratio = measure_ranking_overhead()
 

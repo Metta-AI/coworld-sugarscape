@@ -441,6 +441,17 @@ into shell text.
 
 ## Testing
 
+P4 review approved a deliberate exception to the full-suite measurements above:
+inside the CPU-limited verifier containers, the trusted pytest harness runs
+`-m "not perf"`. The ranking ratio test carries the registered `perf` marker;
+CPU quota and parallel scheduling make that timing assertion unreliable there.
+`verify.json` explicitly records `excluded_markers: ["perf"]`. Host and CI runs
+retain the performance assertion. Studio integration tests skip with an explicit
+reason when the external Metta link app files or Node executable they require
+are absent; their assertions remain unchanged where those prerequisites exist.
+Nested Docker acceptance still runs separately on the host, with visible skips
+inside measurement containers.
+
 `tests/test_dtl_sync.py` runs offline against temporary repositories (a fake
 upstream bare repo with a real submodule relationship), a fake `gh` executable
 on `PATH` whose accepted invocations mirror the real CLI's documented forms,

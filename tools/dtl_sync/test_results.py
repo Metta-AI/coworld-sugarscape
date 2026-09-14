@@ -1,4 +1,4 @@
-"""Collect full-suite evidence inside the isolated measurement container."""
+"""Collect functional-suite evidence inside the isolated measurement container."""
 import json
 from pathlib import Path
 import sys
@@ -17,7 +17,7 @@ if __name__ == '__main__':
     sys.path.insert(0, '/workspace')
     sys.path.insert(0, '/workspace/tests')
     results = Results()
-    status = pytest.main(['-q', '-n', 'auto', '-ra', '-p', 'no:cacheprovider',
+    status = pytest.main(['-q', '-n', 'auto', '-ra', '-m', 'not perf', '-p', 'no:cacheprovider',
                           '--junitxml=/tmp/results.xml', '/workspace/tests'], plugins=[results])
     report = Path('/tmp/results.xml')
     payload = report.read_text() if report.exists() and report.stat().st_size <= 1024*1024 else ''

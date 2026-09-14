@@ -38,7 +38,8 @@ every PR also builds the game image and checks its headless import. See
 [`docs/dtl-sync.md`](docs/dtl-sync.md) for pinned tools, local checks, and the
 upstream sync implementation status, read-only detection, and disposable
 candidate preparation, and [Docker verification setup](docs/dtl-sync.md#independent-verification).
-Scheduled upstream sync is not enabled.
+Container verification excludes timing tests and records that exclusion; host/CI
+checks retain them. Scheduled upstream sync is not enabled.
 
 New here? Start with [`docs/getting-started.md`](docs/getting-started.md) —
 the game, the three leagues, local runs, the Ruleset Studio, and how to join
