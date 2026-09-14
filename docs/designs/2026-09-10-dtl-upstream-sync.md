@@ -133,7 +133,8 @@ Detect reads the machine-owned state block from the PR and compares
 `(main_sha, target_sha, published_head_sha, prompt_version)` with the last
 successful publication. If equal and not `force`, the mode is `noop` (alert
 retries still run if the state block has pending channels). If `main_pin`
-already equals `target_sha` and no PR is open, the mode is `noop`. Detect
+already equals `target_sha` and no PR is open, the mode is `noop`. Both
+shortcuts are bypassed by `force=true`. Detect
 emits `meta.json` with all of the above plus `mode`
 (`new-pr`, `update-pr`, `noop`, `retry-alerts`) and the upstream compare URL.
 
@@ -331,8 +332,10 @@ artifacts, and everything else takes the notification path.
     bindings match, the patch applied, and the verifier measured a changed
     hash or completed test failures. This is the system's main product:
     publish the exact verified candidate as a `needs-design` PR with red CI
-    and cause `semantic-change` or `compat-defect`, and deliver the full
-    escalation (label, assignment, Discord, Asana). Human review and the
+    and deliver the full escalation (label, assignment, Discord, Asana). The
+    cause is `semantic-change` for a measured hash change; otherwise failures
+    are attributed with the verifier's baseline evidence, `compat-defect` when
+    the baseline was green and `baseline-failure` when it was already red. Human review and the
     ordinary required checks govern merge; the expected hash is never changed
     automatically. A completed red result is not incomplete verification.
 - **PR body**: a human section (regenerated summary, reachability table,
