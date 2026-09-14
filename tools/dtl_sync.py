@@ -1,13 +1,17 @@
-"""Detect DTL updates using captured Git identities and read-only GitHub queries."""
+"""Detect and prepare DTL updates without publishing or executing upstream code."""
 from __future__ import annotations
 
 import argparse
 from dataclasses import asdict, dataclass
 import json
-from pathlib import Path
+import hashlib
+import os
+from pathlib import Path, PurePosixPath
 import re
+import stat
 import subprocess
 import sys
+import tempfile
 
 
 UPSTREAM_URL = "https://github.com/nkremerh/sugarscape"
@@ -15,6 +19,12 @@ GITLINK_PATH = "src/sugarscape"
 PROMPT_PATH = "tools/dtl_sync/PROMPT.md"
 MAX_REPORT_BYTES = 64 * 1024
 MAX_PR_BODY_BYTES = 48 * 1024
+MAX_PATCH_BYTES = 2 * 1024 * 1024
+MAX_LOG_BYTES = 1024 * 1024
+ALLOWED_DIRECTORIES = ("src/coworld/", "tests/", "tools/", "docs/")
+ALLOWED_FILES = frozenset({"README.md", "AGENTS.md"})
+PROTECTED_FILES = frozenset({"tests/test_dtl.py", "tests/conftest.py"})
+PROTECTED_PREFIXES = ("src/sugarscape/", "tools/dtl_sync", ".github/")
 STATE_START = "<!-- dtl-sync-state\n"
 STATE_END = "\n-->"
 SHA_PATTERN = re.compile(r"[0-9a-f]{40}")
@@ -33,10 +43,12 @@ class CommandRunner:
     def run(
         self, args: list[str], *, cwd: Path | None = None,
         input_text: str | None = None, timeout: float = 60, check: bool = True,
+        env: dict[str, str] | None = None,
     ) -> subprocess.CompletedProcess[str]:
         try:
             result = subprocess.run(
-                args, cwd=cwd, env=self.env, input=input_text, timeout=timeout,
+                args, cwd=cwd, env={**(self.env if self.env is not None else os.environ), **(env or {})},
+                input=input_text, timeout=timeout,
                 capture_output=True, text=True, check=False,
             )
         except subprocess.TimeoutExpired:
@@ -91,6 +103,19 @@ class DetectionState:
     schema_version: int
     last_publication: PublicationIdentity | None
     deliveries: dict[str, dict[str, Delivery]]
+    open_questions: list[dict[str, str]]
+
+
+@dataclass(frozen=True)
+class Candidate:
+    schema_version: int
+    main_sha: str
+    target_sha: str
+    patch_sha256: str
+    candidate_tree: str
+    files_changed: list[str]
+    protected_edits: list[str]
+    dropped_edits: list[str]
 
 
 def _object(value: object, keys: set[str], context: str) -> dict:
@@ -218,11 +243,22 @@ def read_state(body: str) -> DetectionState:
             if receipt["status"] == "delivered" and not receipt["remote_id"]:
                 raise SyncError("delivered state requires a receipt")
             parsed[target][channel] = Delivery(**receipt)
-    return DetectionState(1, identity, parsed)
+    questions = data["open_questions"]
+    if not isinstance(questions, list):
+        raise SyncError("invalid state questions")
+    seen = set()
+    for question in questions:
+        _object(question, {"id", "question"}, "state question")
+        slug = question["id"]
+        if (not isinstance(slug, str) or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", slug)
+                or slug in seen or not isinstance(question["question"], str) or not question["question"].strip()):
+            raise SyncError("invalid state question")
+        seen.add(slug)
+    return DetectionState(1, identity, parsed, questions)
 
 
-def _git(runner: CommandRunner, directory: Path, *args: str, check: bool = True):
-    return runner.run(["git", "-C", str(directory), *args], check=check)
+def _git(runner: CommandRunner, directory: Path, *args: str, check: bool = True, env=None):
+    return runner.run(["git", "-C", str(directory), *args], check=check, env=env)
 
 
 def _bare_fetch(runner: CommandRunner, directory: Path, url: str, branch: str) -> None:
@@ -341,6 +377,239 @@ def detect(
     )))
 
 
+def path_is_protected(path: str) -> bool:
+    return path in PROTECTED_FILES or path in {GITLINK_PATH, ".github"} or path.startswith(PROTECTED_PREFIXES)
+
+
+def path_is_allowed(path: str) -> bool:
+    parts = path.split("/")
+    if (not path or path.startswith("/") or "\\" in path
+            or any(part in {"", ".", ".."} or part.lower() == ".git" for part in parts)
+            or any(ord(character) < 32 for character in path)):
+        raise SyncError("unsafe or noncanonical patch path")
+    return not path_is_protected(path) and (path in ALLOWED_FILES or path.startswith(ALLOWED_DIRECTORIES))
+
+
+def _write_json(path: Path, value: object) -> None:
+    text = json.dumps(value, indent=2) + "\n"
+    if len(text.encode()) > MAX_REPORT_BYTES:
+        raise SyncError("artifact exceeds size limit")
+    path.write_text(text, encoding="utf-8")
+
+
+def _write_log(path: Path, text: str) -> None:
+    if len(text.encode()) > MAX_LOG_BYTES:
+        raise SyncError("input log/diff exceeds size limit; manual review required")
+    path.write_text(text, encoding="utf-8")
+
+
+def _tree_entries(runner: CommandRunner, directory: Path, tree: str) -> dict[str, tuple[str, str]]:
+    entries = {}
+    for entry in _git(runner, directory, "ls-tree", "-r", "-z", tree).stdout.split("\0"):
+        if entry:
+            header, path = entry.split("\t", 1)
+            mode, _, sha = header.split()
+            path_is_allowed(path)
+            entries[path] = (mode, sha)
+    return entries
+
+
+def _allowed_pathspecs() -> list[str]:
+    return [*ALLOWED_DIRECTORIES, *sorted(ALLOWED_FILES),
+            *[f":(exclude){path}" for path in sorted(PROTECTED_FILES)],
+            ":(exclude)tools/dtl_sync*"]
+
+
+def _resume_authorized(runner: CommandRunner, meta: Meta, comment_id: int | None) -> bool:
+    if comment_id is None:
+        return False
+    if type(comment_id) is not int or comment_id <= 0:
+        raise SyncError("invalid resume comment id")
+    def get(endpoint):
+        response = runner.run(["gh", "api", "--method", "GET", endpoint])
+        return _json(response.stdout, MAX_REPORT_BYTES, "GitHub comment/permission")
+    comment = get(f"repos/{meta.repository}/issues/comments/{comment_id}")
+    if (not isinstance(comment, dict)
+            or not isinstance(comment.get("body"), str)
+            or comment["body"].strip() != f"resume-sync {meta.pr_head_sha}"
+            or comment.get("issue_url") != f"https://api.github.com/repos/{meta.repository}/issues/{meta.pr_number}"):
+        return False
+    user = comment.get("user")
+    login = user.get("login") if isinstance(user, dict) else None
+    if not isinstance(login, str) or not re.fullmatch(r"[A-Za-z0-9-]+", login):
+        raise SyncError("invalid resume author")
+    permission = get(f"repos/{meta.repository}/collaborators/{login}/permission")
+    return isinstance(permission, dict) and permission.get("permission") in ("write", "maintain", "admin")
+
+
+def prepare_inputs(
+    *, meta: Meta, checkout: Path, directory: Path, output: Path,
+    app_login: str, runner: CommandRunner, upstream_url: str = UPSTREAM_URL,
+    previous_report: Path | None = None, resume_comment_id: int | None = None,
+) -> dict:
+    validate_meta(asdict(meta))
+    if meta.mode not in {"new-pr", "update-pr"}:
+        raise SyncError("prepare requires an evaluation mode")
+    output.mkdir(parents=True)
+    result = {"main_sha": meta.main_sha, "target_sha": meta.target_sha,
+              "pr_head_sha": meta.pr_head_sha, "outcome": "ready", "reason": None}
+    def pause(reason):
+        result.update(outcome="needs-human", reason=reason)
+        _write_json(output / "prepare.json", result)
+        return result
+    state = None
+    if meta.pr_number is not None:
+        pr = find_sync_pr(runner, meta.repository, app_login)
+        if pr is None or pr["number"] != meta.pr_number or pr["head"]["sha"] != meta.pr_head_sha:
+            raise SyncError("PR identity moved since detection")
+        state = read_state(pr["body"])
+        published_head = state.last_publication.published_head_sha if state.last_publication else None
+        if published_head != meta.pr_head_sha and not _resume_authorized(runner, meta, resume_comment_id):
+            return pause("PR head changed outside the recorded publication; authorized resume required")
+    origin = _git(runner, checkout, "remote", "get-url", "origin").stdout.strip()
+    directory.mkdir(parents=True)
+    _git(runner, directory, "init")
+    _git(runner, directory, "config", "user.name", "DTL sync")
+    _git(runner, directory, "config", "user.email", "dtl-sync@users.noreply.github.com")
+    _git(runner, directory, "config", "core.hooksPath", "/dev/null")
+    _git(runner, directory, "remote", "add", "origin", origin)
+    _git(runner, directory, "fetch", "--no-tags", "origin", meta.main_sha)
+    start = meta.pr_head_sha or meta.main_sha
+    if start != meta.main_sha:
+        _git(runner, directory, "fetch", "--no-tags", "origin", start)
+        common = _git(runner, directory, "merge-base", meta.main_sha, start).stdout.strip()
+        changed = _git(runner, directory, "diff", "--name-only", "-z", common, start).stdout.split("\0")
+        if any(path and path != GITLINK_PATH and not path_is_allowed(path) for path in changed):
+            return pause("PR changes protected or unsupported paths; automation stays paused until merge")
+    _git(runner, directory, "checkout", "--detach", start)
+    previous_pin = _tree_entries(runner, directory, start)[GITLINK_PATH][1]
+    ancestor = _git(runner, directory, "merge-base", "--is-ancestor", meta.main_sha, start, check=False)
+    if ancestor.returncode == 1:
+        merged = _git(runner, directory, "merge", "--no-commit", "--no-ff", meta.main_sha, check=False)
+        if merged.returncode:
+            return pause("main merge has conflicts; review the disposable candidate checkout")
+    elif ancestor.returncode:
+        raise SyncError("could not determine main ancestry")
+    upstream = directory / GITLINK_PATH
+    upstream.mkdir(parents=True, exist_ok=True)
+    _git(runner, upstream, "init")
+    _git(runner, upstream, "fetch", "--no-tags", "--", upstream_url, "refs/heads/master")
+    _git(runner, upstream, "checkout", "--detach", meta.target_sha)
+    _git(runner, directory, "add", "--", GITLINK_PATH)
+    full_diff = _git(runner, upstream, "diff", "--no-ext-diff", "--no-textconv", meta.main_pin, meta.target_sha).stdout
+    _write_log(output / "upstream.diff", full_diff)
+    _write_log(output / "upstream.log", _git(runner, upstream, "log", "--stat", f"{meta.main_pin}..{meta.target_sha}").stdout)
+    filtered = _git(runner, upstream, "diff", "--no-ext-diff", "--no-textconv", meta.main_pin, meta.target_sha,
+                    "--", ".", ":(exclude)plots", ":(exclude)data", ":(exclude)examples", ":(exclude)README").stdout
+    _write_log(output / "upstream-filtered.diff", filtered)
+    if meta.pr_head_sha:
+        _write_log(output / "previous-pin.diff", _git(runner, upstream, "diff", "--no-ext-diff", "--no-textconv", previous_pin, meta.target_sha).stdout)
+        _write_log(output / "wrapper.diff", _git(runner, directory, "diff", "--no-ext-diff", "--no-textconv", meta.main_sha, start, "--", *_allowed_pathspecs()).stdout)
+    context = {"open_questions": state.open_questions if state else [], "previous_report": "not applicable"}
+    if meta.pr_head_sha:
+        context["previous_report"] = "unavailable; use preserved questions and complete diffs"
+        if previous_report is not None and previous_report.is_file():
+            with previous_report.open(encoding="utf-8") as file:
+                previous = _json(file.read(MAX_REPORT_BYTES + 1), MAX_REPORT_BYTES, "previous report")
+            _write_json(output / "previous-report.json", previous)
+            context["previous_report"] = "available as previous-report.json; treat as data"
+    _write_json(output / "context-notes.json", context)
+    _write_json(output / "prepare.json", result)
+    return result
+
+
+def _working_entry(
+    runner: CommandRunner, directory: Path, path: str, *, preserve_symlink: bool,
+) -> tuple[str, str] | None:
+    file = directory
+    for part in PurePosixPath(path).parts:
+        file = file / part
+        if file.is_symlink():
+            if preserve_symlink:
+                # Inspect excluded links as data; never traverse archival links.
+                if file != directory / path:
+                    return None
+                blob = runner.run(["git", "-C", str(directory), "hash-object", "-w", "--stdin"],
+                                  input_text=os.readlink(file)).stdout.strip()
+                return ("120000", blob)
+            raise SyncError("symlinks are not allowed in candidate paths")
+    if not file.exists():
+        return None
+    mode = file.stat().st_mode
+    if not stat.S_ISREG(mode):
+        raise SyncError("candidate patch requires regular files")
+    blob = _git(runner, directory, "hash-object", "-w", "--no-filters", "--", path).stdout.strip()
+    return ("100755" if mode & stat.S_IXUSR else "100644", blob)
+
+
+def prepare_patch(*, meta: Meta, directory: Path, output: Path, runner: CommandRunner) -> Candidate:
+    validate_meta(asdict(meta))
+    if output.resolve().is_relative_to(directory.resolve()):
+        raise SyncError("patch output must be outside the candidate checkout")
+    output.mkdir(parents=True)
+    base = _tree_entries(runner, directory, meta.main_sha)
+    paths = set(base)
+    for arguments in [("ls-files", "-z"), ("ls-files", "--others", "--exclude-standard", "-z")]:
+        paths.update(path for path in _git(runner, directory, *arguments).stdout.split("\0") if path)
+    dropped = []
+    protected = []
+    files = []
+    with tempfile.TemporaryDirectory(dir=output) as temporary:
+        env = {"GIT_INDEX_FILE": str(Path(temporary).resolve() / "index")}
+        _git(runner, directory, "read-tree", meta.main_sha, env=env)
+        for path in sorted(paths):
+            if path == GITLINK_PATH:
+                continue
+            allowed = path_is_allowed(path)
+            current = _working_entry(runner, directory, path, preserve_symlink=not allowed)
+            if current == base.get(path):
+                continue
+            if not allowed:
+                dropped.append(path)
+                if path_is_protected(path):
+                    protected.append(path)
+                continue
+            if current is not None:
+                # Candidate attributes can override Git's binary detection.
+                data = (directory / path).read_bytes()
+                try:
+                    data.decode("utf-8")
+                except UnicodeDecodeError:
+                    raise SyncError("binary candidate files are not allowed") from None
+                if b"\0" in data:
+                    raise SyncError("binary candidate files are not allowed")
+            files.append(path)
+            if current is None:
+                _git(runner, directory, "update-index", "--force-remove", "--", path, env=env)
+            else:
+                mode, blob = current
+                _git(runner, directory, "update-index", "--add", "--cacheinfo", f"{mode},{blob},{path}", env=env)
+        numbers = _git(runner, directory, "diff", "--cached", "--numstat", "--no-ext-diff", "--no-textconv", "--no-renames", meta.main_sha, env=env).stdout
+        if any(line.startswith("-\t-\t") for line in numbers.splitlines()):
+            raise SyncError("binary candidate patches are not allowed")
+        payload = _git(runner, directory, "diff", "--cached", "--binary", "--full-index", "--no-ext-diff", "--no-textconv", "--no-renames", meta.main_sha, env=env).stdout.encode()
+        if len(payload) > MAX_PATCH_BYTES:
+            raise SyncError("candidate patch exceeds size limit")
+        _git(runner, directory, "update-index", "--add", "--cacheinfo", f"160000,{meta.target_sha},{GITLINK_PATH}", env=env)
+        tree = _git(runner, directory, "write-tree", env=env).stdout.strip()
+    upstream = directory / GITLINK_PATH
+    if (_git(runner, upstream, "rev-parse", "HEAD").stdout.strip() != meta.target_sha
+            or _git(runner, upstream, "status", "--porcelain", "--untracked-files=all").stdout.strip()):
+        protected.append(GITLINK_PATH)
+        dropped.append(GITLINK_PATH)
+    result = Candidate(1, meta.main_sha, meta.target_sha, hashlib.sha256(payload).hexdigest(), tree,
+                       files, sorted(protected), sorted(dropped))
+    (output / "candidate.patch").write_bytes(payload)
+    _write_json(output / "candidate.json", asdict(result))
+    _write_json(output / "report-notes.json", {
+        "main_sha": meta.main_sha, "target_sha": meta.target_sha, "patch_sha256": result.patch_sha256,
+        "dropped_edits": result.dropped_edits, "protected_edits": result.protected_edits,
+        "forced_classification": "needs-design" if protected else None,
+        "cause": "protected-path-edit" if protected else None,
+    })
+    return result
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -355,20 +624,45 @@ def main() -> int:
     command.add_argument("--upstream-ref", default="master")
     command.add_argument("--force", action="store_true")
     command.add_argument("--replay", action="store_true")
+    prepare = commands.add_parser("prepare", help="prepare a disposable evaluation checkout or its patch")
+    stages = prepare.add_subparsers(dest="stage", required=True)
+    inputs = stages.add_parser("inputs")
+    patch = stages.add_parser("patch")
+    for stage in (inputs, patch):
+        stage.add_argument("--meta", type=Path, required=True)
+        stage.add_argument("--directory", type=Path, required=True)
+        stage.add_argument("--output", type=Path, required=True, help="new artifact directory")
+    inputs.add_argument("--checkout", type=Path, required=True, help="source of the parent origin URL")
+    inputs.add_argument("--app-login", required=True)
+    inputs.add_argument("--previous-report", type=Path)
+    inputs.add_argument("--resume-comment-id", type=int)
     args = parser.parse_args()
     try:
-        meta = detect(
-            checkout=args.checkout, scratch=args.scratch, repository=args.repository,
-            app_login=args.app_login, run_id=args.run_id, run_attempt=args.run_attempt,
-            upstream_ref=args.upstream_ref, force=args.force, replay=args.replay,
-            runner=CommandRunner(),
-        )
-        write_meta(args.output, meta)
+        runner = CommandRunner()
+        if args.command == "detect":
+            meta = detect(
+                checkout=args.checkout, scratch=args.scratch, repository=args.repository,
+                app_login=args.app_login, run_id=args.run_id, run_attempt=args.run_attempt,
+                upstream_ref=args.upstream_ref, force=args.force, replay=args.replay, runner=runner,
+            )
+            write_meta(args.output, meta)
+            print(meta.mode)
+        elif args.stage == "inputs":
+            result = prepare_inputs(
+                meta=read_meta(args.meta), checkout=args.checkout, directory=args.directory,
+                output=args.output, app_login=args.app_login, runner=runner,
+                previous_report=args.previous_report, resume_comment_id=args.resume_comment_id,
+            )
+            print(result["outcome"])
+            return 2 if result["outcome"] == "needs-human" else 0
+        else:
+            candidate = prepare_patch(meta=read_meta(args.meta), directory=args.directory,
+                                      output=args.output, runner=runner)
+            print(candidate.candidate_tree)
     except (SyncError, OSError) as error:
         message = str(error) if isinstance(error, SyncError) else "file operation failed; check scratch/output paths"
         print(f"dtl-sync: {message}", file=sys.stderr)
         return 1
-    print(meta.mode)
     return 0
 
 

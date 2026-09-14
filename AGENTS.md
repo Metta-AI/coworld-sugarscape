@@ -59,5 +59,12 @@ will arrive in a later phase; do not describe it as operational yet.
 bare repositories and read-only `gh api` calls. It does not modify the input
 checkout or execute upstream code. See the runbook for required main-branch
 files and CLI arguments. Keep GitHub/command transports injectable for offline
-tests (`tests/test_dtl_sync.py`, `tests/dtl_sync_support.py`). Later sync
-subcommands and publication are not implemented yet.
+tests (`tests/test_dtl_sync.py`, `tests/dtl_sync_support.py`).
+
+`prepare inputs` creates a new disposable checkout and stages the target
+gitlink there; it never alters the source checkout. `prepare patch` writes a
+complete main-to-candidate patch using a temporary index, preserving the
+candidate's existing index. Keep patch output outside the candidate checkout.
+See `tests/test_dtl_sync_prepare.py` for cumulative changes, main merges,
+authorized resume, protected paths, and binary/symlink rejection. Verification
+and publication are not implemented yet.

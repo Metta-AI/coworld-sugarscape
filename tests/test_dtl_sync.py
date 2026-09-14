@@ -23,6 +23,7 @@ def world(tmp_path):
 def state_body(sync, world, *, head=None, pending=False):
     state = {
         "schema_version": 1,
+        "open_questions": [],
         "last_publication": {
             "main_sha": world.main, "target_sha": world.second,
             "published_head_sha": head or world.main, "prompt_version": world.prompt,
@@ -177,7 +178,7 @@ def test_detect_validates_repository_before_api_access(sync, world):
 
 
 def test_detect_failed_publication_is_not_evaluated(sync, world):
-    body = sync.STATE_START + json.dumps({"schema_version": 1, "last_publication": None, "deliveries": {}}) + sync.STATE_END
+    body = sync.STATE_START + json.dumps({"schema_version": 1, "last_publication": None, "deliveries": {}, "open_questions": []}) + sync.STATE_END
     world.set_prs([world.pr(body=body)])
     assert world.detect(sync).mode == "update-pr"
 

@@ -36,8 +36,8 @@ constitution.
 CI runs the Python suite and workflow lint on PRs to `main` and main pushes;
 every PR also builds the game image and checks its headless import. See
 [`docs/dtl-sync.md`](docs/dtl-sync.md) for pinned tools, local checks, and the
-upstream sync implementation status and the read-only `detect` CLI. Scheduled
-upstream sync is not enabled.
+upstream sync implementation status, read-only detection, and disposable
+candidate preparation. Scheduled upstream sync is not enabled.
 
 New here? Start with [`docs/getting-started.md`](docs/getting-started.md) —
 the game, the three leagues, local runs, the Ruleset Studio, and how to join

@@ -68,12 +68,18 @@ class World:
         self.pages = path / "pages.json"
         self.pages.write_text("[[]]")
         self.calls = path / "gh-calls.jsonl"
+        self.responses = path / "responses.json"
+        self.responses.write_text("{}")
         binary = path / "bin"
         binary.mkdir()
         gh = binary / "gh"
         gh.write_text(f'''#!{sys.executable}
 import json, os, sys
 args = sys.argv[1:]
+responses = json.load(open(os.environ["FAKE_GH_RESPONSES"]))
+if len(args) == 4 and args[:3] == ["api", "--method", "GET"]:
+    print(json.dumps(responses[args[3]]))
+    sys.exit(0)
 assert args == ["api", "--method", "GET", "repos/owner/game/pulls?state=open&base=main&per_page=100", "--paginate", "--slurp"], args
 with open(os.environ["FAKE_GH_CALLS"], "a") as f:
     f.write(json.dumps(args) + "\\n")
@@ -81,7 +87,8 @@ print(open(os.environ["FAKE_GH_PAGES"]).read())
 ''')
         gh.chmod(0o755)
         self.env = {**os.environ, "PATH": f"{binary}{os.pathsep}{os.environ['PATH']}",
-                    "FAKE_GH_PAGES": str(self.pages), "FAKE_GH_CALLS": str(self.calls)}
+                    "FAKE_GH_PAGES": str(self.pages), "FAKE_GH_CALLS": str(self.calls),
+                    "FAKE_GH_RESPONSES": str(self.responses)}
         self.counter = 0
 
     def detect(self, sync, **options):
@@ -101,3 +108,6 @@ print(open(os.environ["FAKE_GH_PAGES"]).read())
 
     def set_prs(self, *pages: list[dict]) -> None:
         self.pages.write_text(json.dumps(pages))
+
+    def api_responses(self, responses: dict) -> None:
+        self.responses.write_text(json.dumps(responses))

@@ -1,7 +1,7 @@
 # DTL sync: CI and implementation status
 
 The upstream sync automation is being built in reviewed phases. Currently,
-CI and the read-only detection CLI are implemented. Codex evaluation,
+CI, read-only detection, and disposable candidate preparation are implemented. Codex evaluation,
 independent verification, PR publication, alerts, and scheduled dispatch are
 not implemented or enabled.
 The intended system is described in the
@@ -151,7 +151,9 @@ keys, and artifacts over 64 KiB are rejected.
 
 The initial detection state is JSON between `<!-- dtl-sync-state` followed
 by a newline and the closing newline plus `-->`. Its closed version-1 fields
-are `schema_version`, `last_publication`, and `deliveries`. Publication
+are `schema_version`, `last_publication`, `deliveries`, and `open_questions`.
+Questions contain a unique stable lowercase slug `id` and nonempty `question`.
+Publication
 identity contains main/target/prompt SHAs and the outgoing `published_head_sha`.
 Detection compares that stored identity with the **live** PR head, so human
 changes cannot take the unchanged-head shortcut. A null last publication
@@ -161,7 +163,7 @@ Deliveries are keyed by target SHA and channel (`assignment`, `discord`,
 `asana`), with `status`, nullable `remote_id`, `attempts`, and nullable
 `last_error`. A delivered receipt requires an ID. Any pending or failed
 receipt triggers retry-alerts when no new evaluation is needed. This initial
-state reader will be extended with the publication body, questions, and
+state reader will be extended with the publication body, question resolution, and
 telemetry in P5b; it is not a live external integration yet.
 
 External command errors report only tool name and exit status, or timeout,
@@ -169,6 +171,107 @@ without echoing arguments, stdin, or stderr that might contain credentials.
 Inspect the relevant tool installation/authentication and scratch repository
 when diagnosing an error; do not paste credentials into logs. Every command
 has a timeout, and GitHub response/state parsing has size limits.
+
+## Prepare a disposable candidate
+
+After detection returns `new-pr` or `update-pr`, preparation creates a new
+checkout from the captured identities. Both the candidate directory and the
+artifact output directory must be new. For example, after the detection
+prerequisites above are deployed:
+
+```sh
+.venv/bin/python tools/dtl_sync.py prepare inputs \
+  --meta build/dtl-sync/meta.json \
+  --checkout "$PWD" \
+  --directory build/dtl-sync/candidate \
+  --output build/dtl-sync/inputs \
+  --app-login 'YOUR-SYNC-APP[bot]'
+```
+
+This fetches main and the recorded PR head into the disposable checkout,
+rechecks the PR identity, and merges captured main when necessary. The merge
+is left uncommitted; it is input for the future publisher's tree construction.
+The target upstream commit is fetched into that checkout's `src/sugarscape`
+and its gitlink is staged before any later tests. The source checkout and its
+submodule remain untouched. No candidate Python or agent is executed by this
+command, and no branch is pushed.
+
+It prints `ready` and exits 0, or records/prints `needs-human` and exits 2
+when a merge conflict, an unapproved head change, or unsupported PR edits
+prevent preparation. Other errors exit 1. `prepare.json` contains captured
+identities, outcome, and reason. A needs-human checkout is diagnostic state;
+do not use it for evaluation or patch publication.
+
+Inputs include the complete `upstream.diff`, `upstream.log`, and a filtered
+diff excluding upstream `plots/`, `data/`, `examples/`, and `README`. For an
+existing PR, `previous-pin.diff` is the incremental upstream difference and
+`wrapper.diff` contains cumulative wrapper edits relative to captured main.
+Input logs/diffs exceeding 1 MiB fail instead of silently dropping context.
+
+Optional `--previous-report PATH` copies a bounded JSON report to
+`previous-report.json`. A missing/expired report does not block preparation:
+`context-notes.json` records its absence and preserves the open questions
+from PR state. The report and upstream text are data, not instructions.
+
+An unexpected PR head pauses automation even if its author string resembles
+the bot. To resume allowlisted human changes, a maintainer posts
+`resume-sync FULL_CURRENT_PR_HEAD_SHA` on that PR, then supplies
+`--resume-comment-id COMMENT_ID`. Preparation verifies the comment's PR URL,
+exact head binding, author, and current write/maintain/admin permission through
+GitHub. A stale or unauthorized comment cannot resume. PR changes outside
+the allowed paths (other than the upstream gitlink) stay paused until merge,
+even with an authorized resume. Main-only changes are excluded from that
+branch-specific check.
+
+## Build the complete candidate patch
+
+After editing/testing the disposable candidate in the future evaluation step:
+
+```sh
+.venv/bin/python tools/dtl_sync.py prepare patch \
+  --meta build/dtl-sync/meta.json \
+  --directory build/dtl-sync/candidate \
+  --output build/dtl-sync/patch
+```
+
+The new output directory must be outside the candidate checkout. The command
+does not run tests or Codex. It constructs a temporary index from main and
+the current working files, including previous PR commits, staged/unstaged
+changes, new nonignored files, and deletions. The candidate's real index is
+unchanged. The complete patch is relative to captured main, not merely to the
+last PR commit. Renames are represented as deletion and addition so both paths
+are validated.
+
+Allowed paths are `src/coworld/`, `tests/`, `tools/`, `docs/`, `README.md`,
+and `AGENTS.md`, except `tests/test_dtl.py`, `tests/conftest.py`, and all
+`tools/dtl_sync*` paths. Upstream files and `.github/` are also protected.
+Archive, target-catalog, dependency, lockfile, and Git-metadata changes are
+never included. Paths must be canonical relative names; symlinks (including
+parent-directory symlinks), nonregular files, binary changes, and patches over
+2 MiB are rejected. Changed file contents must be UTF-8 without NUL bytes;
+candidate Git attributes cannot override this binary check.
+Existing excluded archival symlinks are inspected as link text, never followed,
+and retained from main; they are not candidate patch entries.
+
+Other outside-allowlist edits are dropped and listed in `report-notes.json`.
+Protected edits force a `needs-design` note with cause `protected-path-edit`;
+the protected bytes are never shipped in the patch. A dirty upstream tree or
+clean upstream checkout at the wrong SHA is also recorded as a protected edit.
+This note is not independent verification; the later verifier must fetch and
+measure the intended upstream itself.
+
+Outputs:
+
+- `candidate.patch`: full allowlisted change, excluding the gitlink.
+- `candidate.json`: version, main/target identities, patch SHA-256, complete
+  candidate tree ID, changed paths, protected edits, and dropped edits.
+- `report-notes.json`: captured identities/digest, dropped/protected paths,
+  and any forced classification/cause.
+
+The tree ID includes the target gitlink and main's contents outside the
+allowlist, including main-only Dockerfile and protected tooling updates.
+The command prints that tree ID on success. Generated Git objects stay in the
+disposable candidate repository; this is not a commit or publication.
 
 ## Later phases
 
