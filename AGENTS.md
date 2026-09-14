@@ -66,8 +66,7 @@ gitlink there; it never alters the source checkout. `prepare patch` writes a
 complete main-to-candidate patch using a temporary index, preserving the
 candidate's existing index. Keep patch output outside the candidate checkout.
 See `tests/test_dtl_sync_prepare.py` for cumulative changes, main merges,
-authorized resume, protected paths, and binary/symlink rejection. Publication
-is not implemented yet.
+authorized resume, protected paths, and binary/symlink rejection.
 
 `verify` reconstructs from captured main and runs stock, candidate, and baseline
 measurements in separate nonroot Docker containers. Build the verifier from
@@ -86,3 +85,14 @@ and records `excluded_markers: ["perf"]` in `verify.json`. Host/CI commands abov
 still run the registered `perf` tests. Studio integration tests explicitly skip
 when external Metta link app files or Node are missing; do not remove assertions
 or mount a host checkout to satisfy those prerequisites.
+
+`publish tree` validates the closed report and verification contracts before
+reconstructing and pushing the complete measured tree. It uses only Git and
+read-only GitHub PR discovery; PR body/state updates and delivery are later
+work. Tests in `tests/test_dtl_sync_publish.py` push only to temporary local
+remotes. Never test this command against the real origin without authorization.
+Keep `excluded_markers: ["perf"]` in the verification contract and count skips
+separately. Preserve completed red results and reject incomplete artifacts
+regardless of patch size. Retry reconciliation requires the exact deterministic
+commit, not a branch name or author string. See the runbook for all CLI inputs,
+report fields, stale-write checks, and unchanged-tree evidence.

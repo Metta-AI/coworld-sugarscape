@@ -2,8 +2,9 @@
 
 The upstream sync automation is being built in reviewed phases. Currently,
 CI, read-only detection, disposable candidate preparation, and independent
-Docker verification are implemented. Codex evaluation, PR publication, alerts,
-and scheduled dispatch are not implemented or enabled.
+Docker verification and validated Git tree publication are implemented. Codex
+evaluation, PR creation/body updates, alerts, and scheduled dispatch are not
+implemented or enabled.
 The intended system is described in the
 [upstream sync design](designs/2026-09-10-dtl-upstream-sync.md).
 
@@ -366,8 +367,9 @@ fail before an artifact is created; its absence is also a failure.
 
 The write boundary protects trusted control files and independent baseline
 measurements. It does not prove that arbitrary malicious code cannot falsify
-its own process output. Publication and workflow artifact provenance checks
-arrive in later phases; verification alone does not publish anything.
+its own process output. Git tree publication is a separate command below. PR delivery and workflow
+artifact provenance checks arrive in later phases; verification alone does not
+publish anything.
 
 Studio integration tests skip with explicit reasons when their external
 prerequisites are absent: discovery requires the Metta link app files and Node,
@@ -375,3 +377,129 @@ and launcher subprocess tests require Node on PATH. They retain their original
 assertions and run on hosts with those prerequisites. Container logs list these
 skips separately from the nested Docker acceptance skips. Neither a Metta
 checkout nor a host home is mounted into verification containers.
+
+## Validated Git tree publication
+
+Phase 5A implements `publish tree`: this command can push a branch to the source
+checkout's origin. It does not create/update a PR, mutate its state block, mint
+credentials, assign anyone, or send alerts. Those delivery steps are Phase 5B;
+the hosted workflow and artifact provenance checks are Phase 6. Local tests use
+temporary remotes and fake read-only GitHub responses only.
+
+Run from the captured trusted controller checkout, with captured artifacts and
+an explicitly provisioned repository-scoped Git transport identity:
+
+```bash
+.venv/bin/python tools/dtl_sync.py publish tree \
+  --meta build/dtl-sync/meta.json \
+  --candidate build/dtl-sync/patch/candidate.json \
+  --patch build/dtl-sync/patch/candidate.patch \
+  --report build/dtl-sync/report.json \
+  --verification build/dtl-sync/verification/verify.json \
+  --checkout . \
+  --directory build/dtl-sync/publication-tree \
+  --output build/dtl-sync/publication \
+  --app-login 'dtl-sync[bot]' \
+  --app-email 'APP_USER_ID+dtl-sync[bot]@users.noreply.github.com'
+```
+
+Replace the App identity placeholders with the configured bot identity. Both
+output directories must be new. The source checkout and its index remain
+unchanged; the data checkout is disposable. The command returns 0 on a pushed,
+reconciled, or unchanged result and 1 on invalid evidence, stale inputs, failed
+reconstruction, or rejected push. It writes `publication.json` only after the
+operation succeeds. Missing publication output is never a success receipt.
+
+### Report contract
+
+`tools/dtl_sync/REPORT_SCHEMA.json` is the closed JSON schema for the agent's
+report. Trusted stdlib validation also checks identity bindings, duplicates,
+text limits/hygiene, and exact coverage against the independently fetched
+upstream diff. All fields are required:
+
+- `classification`: `mechanical`, `no-impact`, or `needs-design` (a proposal).
+- `cause`: `semantic-change`, `new-feature`, `compat-defect`, `baseline-failure`,
+  `protected-path-edit`, `incomplete-verification`, or `none` (a proposal).
+- `summary`: nonempty text, up to 1,000 characters.
+- `upstream_range`: exactly `{"from": MAIN_PIN, "to": TARGET_SHA}`, full SHAs.
+- `reachability`: up to 100 items, each exactly `path`, `symbol`, `reached`,
+  and `reason`. Paths are canonical upstream-relative paths; symbols identify
+  functions, configuration keys, or module-level changes. `reached` is a real
+  boolean. Reasons explain reachability, not just whether a file was imported.
+  Paths/symbols are limited to 500 characters, reasons to 2,000. Duplicate
+  path/symbol pairs are rejected.
+- `design_questions`: up to 100 unique stable slug `id`/`question` pairs;
+  IDs are at most 100 characters, questions at most 2,000.
+- `reasoning`: nonempty text up to 8,000 characters.
+
+The complete report is bounded to 64 KiB. Its inventory must cover exactly
+all changed upstream files, including both sides of renames. An empty inventory
+is valid only when the independently checked upstream diff has no changed
+files (for example a forced reevaluation of the same pin). File coverage does
+not mechanically prove per-function reachability or semantic judgement; those
+remain reviewable agent reasoning, alongside the independent measurements.
+
+### Verification and classification
+
+The publisher accepts only the closed version-1 `Verification` contract,
+including an immutable image ID and exactly `excluded_markers: ["perf"]`.
+Main/target/patch/tree bindings must match. Pin and patch facts must be exactly
+true; both hashes must be valid and agree with `hash_changed`. Both suites must
+be complete with positive collection, consistent exit codes, and nonnegative
+integer counts. Passed + failed + errors + skipped must equal collected; skips
+are never counted as passes or failures. All-skipped evidence does not establish
+an executed measurement. Missing, null, inconsistent, or unknown fields reject
+the publication, even with an empty patch. No bare-pin fallback exists.
+
+For complete evidence, the script computes the class/cause in this order:
+
+1. Changed stock hash: `needs-design` / `semantic-change`.
+2. Recorded protected edit: `needs-design` / `protected-path-edit`.
+3. Failing baseline: `needs-design` / `baseline-failure`.
+4. Failing candidate with a green baseline: `needs-design` / `compat-defect`.
+5. Agent-reported new feature: `needs-design` / `new-feature`.
+6. Open state questions, report questions, or an agent `needs-design` proposal:
+   `needs-design` / `none` when no measured cause above applies.
+7. Otherwise, a nonempty wrapper patch or a reached upstream change is
+   `mechanical` / `none`; an empty patch with only unreachable upstream changes
+   is `no-impact` / `none`.
+
+A red measured result is valid publication evidence. It pushes the exact
+verified tree for later human review; it never updates the trajectory constant.
+Resolving prior questions and delivering the resulting PR remain Phase 5B.
+
+### Git tree, races, retries, and unchanged results
+
+The publisher reconstructs the entire tree from captured main, reapplies the
+validated patch, independently fetches upstream, and sets the target gitlink.
+It requires the exact verifier tree. Thus prior new files survive cumulative
+patches, and main's Dockerfile/protected tooling updates cannot be replaced by
+stale PR content. The commit's first parent is the previous PR head, or main
+for a new PR; main is also a second parent when it is not already an ancestor
+of the existing PR head.
+
+It checks main, branch, PR identity/state, and PR head before reconstruction,
+then checks the observed Git/GitHub state again immediately before a normal
+fast-forward push. A concurrent divergent update rejects the push; no force
+push is used. The App is the author/committer. The subject starts
+`dtl-sync: CLASSIFICATION: SUMMARY_FIRST_SENTENCE`, and the body includes the
+captured metadata and full report as JSON.
+
+Commit dates are deterministically the first parent's commit time plus one
+second. Together with the full input identity in the body, this makes the
+expected commit reproducible after a push-success/delivery-failure split. A
+retry using the same captured artifacts accepts only that exact outgoing SHA;
+it never adopts a branch merely because its name or author looks right. This
+works before PR creation and after an existing PR's branch has advanced. Use
+new scratch/output paths when retrying. Detect still refuses an occupied new
+branch; delivery orchestration must resume from the retained captured metadata
+rather than inventing a new evaluation for that collision.
+
+When the validated candidate tree equals the captured parent tree, the command
+creates no commit or new branch. It still writes fresh evidence, so a forced
+reevaluation can update an existing PR's evidence in Phase 5B without an empty
+commit. `publication.json` records `outcome` (`pushed`, `reconciled`, or
+`unchanged`), main/target/prompt identities, outgoing head, tree and patch digest,
+computed classification/cause, the full verified measurements, and a SHA-256
+of the report serialized as sorted-key JSON. An unchanged new-PR evaluation
+records main as its outgoing head; it does not mean a PR should be created.

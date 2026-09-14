@@ -1,4 +1,4 @@
-"""Detect, prepare, and independently verify DTL updates without publishing."""
+"""Detect, prepare, verify, and publish validated DTL candidate trees."""
 from __future__ import annotations
 
 import argparse
@@ -931,6 +931,234 @@ def verify(*, meta: Meta, candidate: Candidate, patch: Path, checkout: Path,
     return result
 
 
+
+@dataclass(frozen=True)
+class Report:
+    classification: str
+    cause: str
+    summary: str
+    upstream_range: dict[str, str]
+    reachability: list[dict]
+    design_questions: list[dict[str, str]]
+    reasoning: str
+
+
+CLASSIFICATIONS = {"mechanical", "no-impact", "needs-design"}
+CAUSES = {"semantic-change", "new-feature", "compat-defect", "baseline-failure",
+          "protected-path-edit", "incomplete-verification", "none"}
+
+
+def _report_text(value: object, limit: int, field: str) -> str:
+    if not isinstance(value, str) or not value.strip() or len(value) > limit or any(ord(c) < 32 and c not in "\n\t" for c in value):
+        raise SyncError(f"invalid report {field}")
+    return value
+
+
+def validate_report(value: object, meta: Meta) -> Report:
+    data = _object(value, set(Report.__dataclass_fields__), "report")
+    if not isinstance(data["classification"], str) or data["classification"] not in CLASSIFICATIONS:
+        raise SyncError("invalid report classification")
+    if not isinstance(data["cause"], str) or data["cause"] not in CAUSES:
+        raise SyncError("invalid report cause")
+    _report_text(data["summary"], 1000, "summary")
+    _report_text(data["reasoning"], 8000, "reasoning")
+    interval = _object(data["upstream_range"], {"from", "to"}, "upstream range")
+    if interval != {"from": meta.main_pin, "to": meta.target_sha}:
+        raise SyncError("report upstream range mismatch")
+    for field in ("reachability", "design_questions"):
+        if not isinstance(data[field], list) or len(data[field]) > 100:
+            raise SyncError(f"invalid report {field}")
+    items = set()
+    for item in data["reachability"]:
+        _object(item, {"path", "symbol", "reached", "reason"}, "reachability item")
+        path = _report_text(item["path"], 500, "path")
+        if path.startswith("/") or "\\" in path or any(part in {"", ".", ".."} for part in path.split("/")) or any(ord(c) < 32 for c in path):
+            raise SyncError("invalid upstream inventory path")
+        _report_text(item["symbol"], 500, "symbol")
+        _report_text(item["reason"], 2000, "reachability reason")
+        if type(item["reached"]) is not bool or (path, item["symbol"]) in items:
+            raise SyncError("invalid or duplicate reachability item")
+        items.add((path, item["symbol"]))
+    questions = set()
+    for question in data["design_questions"]:
+        _object(question, {"id", "question"}, "design question")
+        slug = _report_text(question["id"], 100, "question id")
+        if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", slug) or slug in questions:
+            raise SyncError("invalid or duplicate design question id")
+        _report_text(question["question"], 2000, "question")
+        questions.add(slug)
+    if len(json.dumps(data).encode()) > MAX_REPORT_BYTES:
+        raise SyncError("report exceeds size limit")
+    return Report(**data)
+
+
+def validate_verification(value: object, meta: Meta, candidate: Candidate) -> Verification:
+    """Accept only complete, bound evidence; completed red tests remain valid."""
+    data = _object(value, set(Verification.__dataclass_fields__), "verification")
+    if (candidate.main_sha, candidate.target_sha) != (meta.main_sha, meta.target_sha):
+        raise SyncError("candidate verification binding mismatch")
+    if type(data["schema_version"]) is not int or data["schema_version"] != 1:
+        raise SyncError("invalid verification version")
+    for field, expected in (("main_sha", meta.main_sha), ("target_sha", meta.target_sha),
+                            ("patch_sha256", candidate.patch_sha256), ("candidate_tree", candidate.candidate_tree)):
+        if data[field] != expected:
+            raise SyncError("verification binding mismatch")
+    if data["pin_matches_target"] is not True or data["patch_applied"] is not True:
+        raise SyncError("incomplete verification: pin or patch not verified")
+    for field in ("hash_old", "hash_new"):
+        if not isinstance(data[field], str) or not re.fullmatch(r"[0-9a-f]{64}", data[field]):
+            raise SyncError("incomplete verification: invalid hash")
+    if type(data["hash_changed"]) is not bool or data["hash_changed"] != (data["hash_old"] != data["hash_new"]):
+        raise SyncError("inconsistent verification hash evidence")
+    if data["reason"] is not None or data["excluded_markers"] != ["perf"]:
+        raise SyncError("incomplete verification or unexpected test exclusions")
+    if not isinstance(data["image_id"], str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", data["image_id"]):
+        raise SyncError("incomplete verification image identity")
+    parsed = dict(data)
+    for field in ("candidate_tests", "baseline_tests"):
+        result = _object(data[field], set(TestResult.__dataclass_fields__), field)
+        if result["completed"] is not True or result["reason"] is not None:
+            raise SyncError("incomplete verification: test collection did not complete")
+        for count in ("exit_code", "collected", "passed", "failed", "errors", "skipped"):
+            if type(result[count]) is not int or result[count] < 0:
+                raise SyncError("invalid verification test count")
+        if (result["exit_code"] not in (0, 1) or result["collected"] <= 0
+                or sum(result[k] for k in ("passed", "failed", "errors", "skipped")) != result["collected"]
+                or (result["exit_code"] == 0) != (result["failed"] + result["errors"] == 0)
+                or result["collected"] == result["skipped"]):
+            raise SyncError("incomplete or inconsistent verification test results")
+        parsed[field] = TestResult(**result)
+    return Verification(**parsed)
+
+
+def classify(report: Report, candidate: Candidate, verification: Verification,
+             open_questions: list[dict]) -> tuple[str, str]:
+    """Classify already validated evidence, retaining conservative agent judgement."""
+    if verification.hash_changed:
+        return "needs-design", "semantic-change"
+    if candidate.protected_edits:
+        return "needs-design", "protected-path-edit"
+    if verification.baseline_tests.exit_code:
+        return "needs-design", "baseline-failure"
+    if verification.candidate_tests.exit_code:
+        return "needs-design", "compat-defect"
+    if report.cause == "new-feature":
+        return "needs-design", "new-feature"
+    if open_questions or report.design_questions or report.classification == "needs-design":
+        return "needs-design", "none"
+    if candidate.files_changed or any(item["reached"] for item in report.reachability):
+        return "mechanical", "none"
+    return "no-impact", "none"
+
+
+def publication_heads(runner: CommandRunner, origin: str, branch: str) -> dict[str, str]:
+    refs = {"refs/heads/main", f"refs/heads/{branch}"}
+    lines = runner.run(["git", "ls-remote", "--heads", origin, *sorted(refs)]).stdout.splitlines()
+    heads = {}
+    for line in lines:
+        fields = line.split()
+        if len(fields) != 2 or fields[1] not in refs or fields[1] in heads:
+            raise SyncError("invalid remote head response")
+        heads[fields[1]] = _sha(fields[0])
+    return heads
+
+
+def publication_pr(runner: CommandRunner, meta: Meta, app_login: str) -> dict | None:
+    pr = find_sync_pr(runner, meta.repository, app_login)
+    if ((meta.pr_number is None and pr is not None)
+            or (meta.pr_number is not None and (pr is None or pr["number"] != meta.pr_number
+                                               or pr["head"]["ref"] != meta.branch))):
+        raise SyncError("stale PR identity or state")
+    return pr
+
+
+def publication_commit(runner: CommandRunner, directory: Path, meta: Meta, report: Report,
+                       tree: str, classification: str, app_login: str, app_email: str) -> str:
+    parent = meta.pr_head_sha or meta.main_sha
+    parents = ["-p", parent]
+    if meta.pr_head_sha:
+        ancestry = _git(runner, directory, "merge-base", "--is-ancestor", meta.main_sha, parent, check=False).returncode
+        if ancestry not in (0, 1):
+            raise SyncError("could not establish publication ancestry")
+        if ancestry == 1:
+            parents += ["-p", meta.main_sha]
+    timestamp = int(_git(runner, directory, "show", "-s", "--format=%ct", parent).stdout.strip()) + 1
+    # Stable dates and complete input identity let a retry recognize exactly its
+    # own pushed commit after a branch-success/PR-failure split, without trusting authorship.
+    environment = {"GIT_AUTHOR_NAME": app_login, "GIT_COMMITTER_NAME": app_login,
+                   "GIT_AUTHOR_EMAIL": app_email, "GIT_COMMITTER_EMAIL": app_email,
+                   "GIT_AUTHOR_DATE": f"@{timestamp} +0000", "GIT_COMMITTER_DATE": f"@{timestamp} +0000"}
+    subject = report.summary.splitlines()[0].split(". ", 1)[0].rstrip(".")[:180]
+    body = json.dumps({"meta": asdict(meta), "report": asdict(report)}, sort_keys=True, indent=2)
+    message = f"dtl-sync: {classification}: {subject}\n\n{body}\n"
+    return _sha(_git(runner, directory, "commit-tree", tree, *parents,
+                     input_text=message, env=environment).stdout.strip())
+
+
+def publish_tree(*, meta: Meta, candidate: Candidate, patch: Path, report: object,
+                 verification: object, checkout: Path, directory: Path, output: Path,
+                 runner: CommandRunner, app_login: str, app_email: str,
+                 upstream_url: str = UPSTREAM_URL) -> dict:
+    validate_meta(asdict(meta))
+    validate_candidate(asdict(candidate))
+    report = validate_report(report, meta)
+    verification = validate_verification(verification, meta, candidate)
+    if meta.mode not in {"new-pr", "update-pr"}:
+        raise SyncError("publication requires an evaluated candidate")
+    if not re.fullmatch(r"[A-Za-z0-9-]+\[bot\]", app_login) or not re.fullmatch(r"[A-Za-z0-9+_.\[\]-]+@users\.noreply\.github\.com", app_email):
+        raise SyncError("invalid publication App identity")
+    output.mkdir(parents=True)
+    origin = _git(runner, checkout, "remote", "get-url", "origin").stdout.strip()
+    heads = publication_heads(runner, origin, meta.branch)
+    if heads.get("refs/heads/main") != meta.main_sha:
+        raise SyncError("stale main head")
+    pr = publication_pr(runner, meta, app_login)
+    observed = heads.get(f"refs/heads/{meta.branch}")
+    if pr is not None and pr["head"]["sha"] != observed:
+        raise SyncError("stale PR head differs from branch")
+    questions = read_state(pr["body"]).open_questions if pr else []
+    classification, cause = classify(report, candidate, verification, questions)
+    reconstruct_candidate(meta=meta, candidate=candidate, patch=patch, checkout=checkout,
+                          directory=directory, runner=runner, upstream_url=upstream_url)
+    upstream = directory / GITLINK_PATH
+    _git(runner, upstream, "fetch", "--no-tags", upstream_url, meta.main_pin)
+    changed = set(_git(runner, upstream, "diff", "--name-only", "--no-renames", "-z",
+                       meta.main_pin, meta.target_sha).stdout.split("\0")) - {""}
+    if {item["path"] for item in report.reachability} != changed:
+        raise SyncError("upstream reachability inventory does not cover the exact changed files")
+    if meta.pr_head_sha:
+        _git(runner, directory, "fetch", "--no-tags", origin, meta.pr_head_sha)
+    parent = meta.pr_head_sha or meta.main_sha
+    if _git(runner, directory, "rev-parse", f"{parent}^{{tree}}").stdout.strip() == candidate.candidate_tree:
+        outgoing = parent
+        outcome = "unchanged"
+    else:
+        outgoing = publication_commit(runner, directory, meta, report, candidate.candidate_tree,
+                                      classification, app_login, app_email)
+        outcome = "reconciled" if observed == outgoing else "pushed"
+    expected = meta.pr_head_sha
+    if observed != expected and observed != outgoing:
+        raise SyncError("stale branch head; refusing to overwrite unrelated work")
+    # Re-check both Git and GitHub immediately before the normal fast-forward push.
+    if publication_heads(runner, origin, meta.branch) != heads or publication_pr(runner, meta, app_login) != pr:
+        raise SyncError("stale remote state changed during publication")
+    if outcome == "pushed":
+        _git(runner, directory, "push", "--", origin, f"{outgoing}:refs/heads/{meta.branch}")
+    result = {"schema_version": 1, "outcome": outcome, "main_sha": meta.main_sha,
+              "target_sha": meta.target_sha, "prompt_version": meta.prompt_version,
+              "published_head_sha": outgoing, "candidate_tree": candidate.candidate_tree,
+              "patch_sha256": candidate.patch_sha256, "classification": classification, "cause": cause,
+              "verification": asdict(verification),
+              "report_sha256": hashlib.sha256(json.dumps(asdict(report), sort_keys=True).encode()).hexdigest()}
+    _write_json(output / "publication.json", result)
+    return result
+
+
+def read_publication_artifact(path: Path) -> object:
+    with path.open(encoding="utf-8") as file:
+        payload = file.read(MAX_REPORT_BYTES + 1)
+    return _json(payload, MAX_REPORT_BYTES, path.name)
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -961,6 +1189,12 @@ def main() -> int:
     for name in ("meta", "candidate", "patch", "checkout", "directory", "output"):
         verification.add_argument("--" + name, type=Path, required=True)
     verification.add_argument("--image", default="dtl-sync-verifier")
+    publication = commands.add_parser("publish", help="publish only a validated Git tree; PR delivery is separate")
+    publication.add_argument("stage", choices=["tree"])
+    for name in ("meta", "candidate", "patch", "report", "verification", "checkout", "directory", "output"):
+        publication.add_argument("--" + name, type=Path, required=True)
+    publication.add_argument("--app-login", required=True)
+    publication.add_argument("--app-email", required=True)
     args = parser.parse_args()
     try:
         runner = CommandRunner()
@@ -972,6 +1206,13 @@ def main() -> int:
             )
             write_meta(args.output, meta)
             print(meta.mode)
+        elif args.command == "publish":
+            result = publish_tree(meta=read_meta(args.meta), candidate=read_candidate(args.candidate),
+                patch=args.patch, report=read_publication_artifact(args.report),
+                verification=read_publication_artifact(args.verification), checkout=args.checkout,
+                directory=args.directory, output=args.output, runner=runner,
+                app_login=args.app_login, app_email=args.app_email)
+            print(result["outcome"])
         elif args.command == "verify":
             candidate = read_candidate(args.candidate)
             result = verify(meta=read_meta(args.meta), candidate=candidate, patch=args.patch,
