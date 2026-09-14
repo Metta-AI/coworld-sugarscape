@@ -54,3 +54,10 @@ Do not commit generated `uv.lock` during the sync implementation.
 The current automation is CI only: `tests`, `workflow-lint`, and the PR-only
 `image-smoke` jobs in `.github/workflows/ci.yml`. The upstream sync workflow
 will arrive in a later phase; do not describe it as operational yet.
+
+`tools/dtl_sync.py detect` resolves upstream and PR identities using scratch
+bare repositories and read-only `gh api` calls. It does not modify the input
+checkout or execute upstream code. See the runbook for required main-branch
+files and CLI arguments. Keep GitHub/command transports injectable for offline
+tests (`tests/test_dtl_sync.py`, `tests/dtl_sync_support.py`). Later sync
+subcommands and publication are not implemented yet.
