@@ -28,7 +28,10 @@ jobs:
           version: '0.12.13'
           enable-cache: false
       - run: uv sync
-      - run: .venv/bin/python -m pytest -q -n auto
+      - name: Run functional tests in parallel
+        run: .venv/bin/python -m pytest -q -n auto -m "not perf"
+      - name: Run performance tests serially
+        run: .venv/bin/python -m pytest -q -m perf
 
   workflow-lint:
     runs-on: ubuntu-24.04

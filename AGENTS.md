@@ -44,12 +44,20 @@ tokens or the drawn seed in player observations.
 ## CI checks
 
 CI uses Python 3.13.5 and uv 0.12.13. Run `uv sync`, then
-`PYTHONHASHSEED=0 .venv/bin/python -m pytest -q -n auto`. PyYAML is dev-only
+the parallel functional suite, then the serial performance suite:
+
+```sh
+PYTHONHASHSEED=0 .venv/bin/python -m pytest -q -n auto -m "not perf"
+PYTHONHASHSEED=0 .venv/bin/python -m pytest -q -m perf
+```
+
+Keep the performance assertions unchanged; parallel CPU contention can distort
+timing ratios. PyYAML is dev-only
 and supports `tests/test_dtl_sync_workflows.py`; quote workflow `'on'` keys.
 After workflow edits, run `build/tools/actionlint` (installation and checksums
 are in [docs/dtl-sync.md](docs/dtl-sync.md)). Keep action references pinned to
 full commit SHAs and checkouts configured with `persist-credentials: false`.
-Do not commit generated `uv.lock` during the sync implementation.
+Do not commit generated `uv.lock`; it is local generated state.
 
 CI has `tests`, `workflow-lint`, and PR-only `image-smoke` jobs. The four-job
 `.github/workflows/dtl-sync.yml` is implemented locally but has not been

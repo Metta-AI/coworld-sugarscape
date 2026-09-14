@@ -1,6 +1,6 @@
 # DTL sync: CI and implementation status
 
-The upstream sync automation is being built in reviewed phases. CI and the four-job sync workflow are implemented locally: detection, sandboxed
+CI and the four-job sync workflow are implemented locally: detection, sandboxed
 Codex evaluation, independent Docker verification, validated tree publication,
 PR state, and alert delivery. Hosted acceptance, credential provisioning, and
 activation remain pending. Scheduled runs require `DTL_SYNC_ENABLED=true`.
@@ -26,6 +26,10 @@ These are the job names to verify when configuring required status checks;
 `ci.yml` is a filename, not a check name. Branch protection and hosted execution
 have not been configured or validated by the local implementation work.
 
+The test job runs functional tests in parallel (`-m "not perf"`) and then
+performance tests serially (`-m perf`, no `-n`) in separate steps. Both remain
+required within the same `tests` job; performance assertions are unchanged.
+This avoids the ranking-ratio flake observed under parallel host CPU load.
 The test job initializes submodules, uses Python 3.13.5 and uv 0.12.13, runs
 `uv sync`, and sets `PYTHONHASHSEED=0`. PyYAML 6.0.3 is a development dependency
 for the structural tests; it is not a game runtime dependency. Workflow `'on'`
@@ -38,12 +42,13 @@ From an initialized clone, with Python 3.13.5 and uv 0.12.13:
 ```sh
 git submodule update --init
 uv sync
-PYTHONHASHSEED=0 .venv/bin/python -m pytest -q -n auto
+PYTHONHASHSEED=0 .venv/bin/python -m pytest -q -n auto -m "not perf"
+PYTHONHASHSEED=0 .venv/bin/python -m pytest -q -m perf
 ```
 
 If your installed uv is a different version, `uvx --from uv==0.12.13 uv sync`
 runs the pinned version without replacing a global installation. `uv.lock` is
-local generated state and must not be committed as part of this work.
+local generated state and must not be committed.
 
 Install actionlint 1.7.12 into ignored `build/tools/`. On macOS arm64:
 
@@ -278,11 +283,12 @@ allowlist, including main-only Dockerfile and protected tooling updates.
 The command prints that tree ID on success. Generated Git objects stay in the
 disposable candidate repository; this is not a commit or publication.
 
-## Remaining rollout work
+## Rollout status
 
-Hosted acceptance, credential provisioning/rotation, red PR review, and week-one
-operations still require the later rollout checklist and explicit authorization.
-Local workflow tests do not prove real GitHub, Codex, Discord, or Asana delivery.
+The operator procedures below are implemented contracts and an unexecuted
+rollout checklist. Hosted acceptance, credential provisioning, activation, and
+remote writes require explicit authorization. Local workflow tests do not prove
+real GitHub, Codex, Discord, or Asana delivery.
 
 ## Independent verification
 
@@ -884,3 +890,217 @@ performs read-only PR reconciliation and writes notification metadata. Neither
 helper sends alerts or pushes Git. Structural and offline fake-service tests
 are in `tests/test_dtl_sync_orchestration.py`; they cover new/update/no-op/red
 and missing-artifact paths without contacting production services.
+
+## Required checks for rollout
+
+Require `tests`, `workflow-lint`, and `image-smoke` on pull requests to main.
+
+Require one independent human review and keep bypass disabled for the sync App.
+Confirm these exact job contexts appear on a real PR before configuring branch
+protection; the workflow filename is not a check context. Image smoke runs on
+PRs only, while tests and workflow lint also run on main pushes. A red semantic
+sync PR must become green through an explained human change before merge.
+
+## Operator patch policy
+
+The following table is checked against the controller constants. Protected
+entries take precedence over allowed entries; everything outside the allowlist
+is excluded. The controller alone stages the target upstream gitlink.
+
+| Policy | Paths |
+|---|---|
+| Allowed directories | `src/coworld/`, `tests/`, `tools/`, `docs/` |
+| Allowed files | `README.md`, `AGENTS.md` |
+| Protected files | `tests/test_dtl.py`, `tests/conftest.py` |
+| Protected prefixes | `src/sugarscape/`, `tools/dtl_sync`, `.github/` |
+
+A prefix is literal: `tools/dtl_sync` also protects the contracts and delivery
+sibling modules. Binary and symlink changes are rejected. Protected human edits
+pause preparation even after an authorized resume; protected automation edits
+cannot enter the published patch. Inspect dropped/protected paths in the
+retained notes rather than assuming the working checkout is the published tree.
+
+## Manual dispatch examples
+
+These commands perform remote actions. Run only after rollout authorization,
+from the intended repository, with the workflow and trusted tools on main.
+Inspect the selected repository before dispatch. The historical target must be
+an actual reachable upstream commit; replay requires no open sync PR.
+
+```sh
+# Normal upstream evaluation (or quiet no-op).
+gh workflow run dtl-sync.yml --ref main -f upstream_ref=master
+# Forced reevaluation, including an unchanged target.
+gh workflow run dtl-sync.yml --ref main -f upstream_ref=master -f force=true
+# Replace HISTORICAL_SHA with an explicitly selected reachable commit.
+gh workflow run dtl-sync.yml --ref main -f upstream_ref=HISTORICAL_SHA -f replay=true
+# Real evaluation plus a synthetic design question and escalation.
+gh workflow run dtl-sync.yml --ref main -f upstream_ref=master -f exercise=needs-design
+# Authentication failure using only the dedicated invalid secret.
+gh workflow run dtl-sync.yml --ref main -f upstream_ref=master -f force=true -f test_invalid_key=true
+```
+
+Use the resulting Actions run to read each job result and retained artifacts;
+dispatch acceptance alone does not prove completion. These flags follow the
+[GitHub CLI dispatch contract](https://cli.github.com/manual/gh_workflow_run).
+For alert-only recovery, dispatch normally after restoring the failed service:
+detection selects `retry-alerts` when the publication tuple is unchanged and a
+receipt is unfinished. Do not force reevaluation just to retry a delivered PR's
+alerts. See the existing `publish retry-alerts` command for retained local
+metadata; it writes to services and needs the same authorization.
+
+## Provisioning and rotation
+
+This procedure is for a separately authorized operator. Nothing in the local
+build provisioned credentials. Keep `DTL_SYNC_ENABLED` unset or `false` during
+setup. Confirm the intended owner/repository, App installation, James's login,
+Discord recipient, and Asana project before writing settings.
+
+Provision every variable and secret in the [configuration table](#configuration-and-secret-boundaries),
+including `DTL_SYNC_APP_LOGIN`, `DTL_SYNC_APP_EMAIL`, `DTL_SYNC_JAMES_LOGIN`, and
+`DTL_SYNC_INVALID_OPENAI_API_KEY`. Verify the App's bot login and numeric user ID
+rather than deriving them from its display name; set its Git author email to
+`BOT_USER_ID+BOT_LOGIN@users.noreply.github.com`. The App installation is limited
+to this repository and the three documented write permissions. Create the
+`dtl-sync` and `needs-design` labels before acceptance.
+
+The service-secret provisioning scopes are:
+
+| GitHub secret | Broker scope | Handling |
+|---|---|---|
+| `OPENAI_API_KEY` | `openai.inference` | Confirm project/key lifetime and intended Actions use |
+| `DISCORD_BOT_TOKEN` | `discord.post` | Approval-tier request must explicitly name persistent Actions provisioning |
+| `ASANA_PAT` | `asana.rw` | Confirm project access and intended Actions use |
+
+Read the current Metta `devops/tf/token-broker/lambda/broker/AGENTS.md` and scope
+catalog before provisioning. Use the stdlib client from a verified Metta path;
+reading the client from the primary checkout is allowed, but never modify that
+checkout. Every broker call must set `TOKEN_BROKER_SESSION_ID` from this session's
+`CODEX_SESSION_ID`. Do not use the shared-session fallback. The broker audits
+provisioning; it does not audit every later Actions use of the stored secret.
+Confirm the credential lifetime supports this use before storing it.
+
+Example for one authorized OpenAI provisioning operation, using a verified
+client path and explicit repository. The secret passes directly from the
+broker-injected child environment to `gh` stdin, never into a shell argument,
+log, or intermediate file:
+
+```sh
+DTL_SYNC_REPOSITORY=owner/repository
+DTL_SYNC_BROKER_CLIENT=/absolute/path/to/metta/scripts/token_broker_client.py
+export DTL_SYNC_REPOSITORY
+TOKEN_BROKER_SESSION_ID="${CODEX_SESSION_ID:?session ID required}" python3 "$DTL_SYNC_BROKER_CLIENT" exec \
+  --scope openai.inference --reason "Provision the OpenAI key into the authorized Sugarscape repository Actions secret for scheduled DTL evaluation" -- \
+  python3 -c 'import os,subprocess; subprocess.run(["gh","secret","set","OPENAI_API_KEY","--repo",os.environ["DTL_SYNC_REPOSITORY"]], input=os.environ["OPENAI_API_KEY"], text=True, check=True)'
+```
+
+Apply the same stdin pattern separately for the other two scopes/secrets, with
+a reason naming each intended operation. For approval-tier scope requests, the
+broker reason is the permission request; do not separately request the same
+approval in chat. Never print a credential to obtain it. GitHub encrypts secrets
+locally before upload through [`gh secret set`](https://cli.github.com/manual/gh_secret_set).
+Confirm secret names through metadata, then confirm actual access in the hosted
+acceptance sequence; secret presence alone does not prove access.
+
+For the App private key, the operator generates a key in the App's settings and
+stores it as `DTL_SYNC_APP_PRIVATE_KEY` through a protected stdin/file upload;
+never commit it or put its contents in command arguments. This is App-owner key
+management, not a reason to fetch service credentials directly from a backing
+store. If a broker-managed per-user App key exists, use that scope instead.
+Record the key fingerprint, creation date, owner, and rotation due date without
+its value. Rotation follows [GitHub's App key procedure](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/managing-private-keys-for-github-apps):
+add the new key, replace the Actions secret, validate minting in an authorized
+run, then delete the old App key. Do not leave obsolete keys active.
+
+For a service rotation, pause schedules, rotate the source credential with its
+owner, update its broker backing entry through the authorized process, vend it
+with a session-scoped reason, and replace the corresponding Actions secret.
+Verify the relevant service and pending receipts before revoking any retained
+old credential and restoring schedules. Some service rotations invalidate old
+credentials immediately; plan that interruption with the service owner. Record
+broker request IDs and acceptance run links, never values. Keep the intentionally
+invalid exercise secret separate throughout; it is not a storage location for
+revoked working credentials.
+
+## Reviewing and recovering a sync PR
+
+Read the full report, measured stock hashes, candidate and baseline counts,
+patch/protected-path notes, and open questions before deciding what to change.
+A completed red measurement is useful review evidence; incomplete verification
+is a failure to establish evidence. Baseline failures are shown separately and
+must not be misreported as regressions introduced by the target.
+
+For a real semantic change, decide its effect on SugarLang, targets, scoring,
+and public behavior. A human may update `EXPECTED_TRAJECTORY_HASH` in the
+protected test only with an explanation and appropriate tests/docs, then bring
+all required PR checks green. Automation never updates that constant. Human
+protected edits pause automation until merge; merge under normal protection,
+without bypassing a red check or approving one's own work.
+
+For resolved design questions, post `resolved: QUESTION_ID` as an authorized
+maintainer or the configured James login. Detection notices the receipt and
+reevaluates; a comment does not override independent red evidence. For
+allowlisted human edits, post `resume-sync FULL_CURRENT_PR_HEAD_SHA`; the
+workflow discovers that comment and checks current permissions. A stale head
+or protected edit remains paused. Keep human explanations in comments because
+the PR body and state block are machine-owned.
+
+| Condition | Operator action |
+|---|---|
+| Stale main/head | Inspect intervening changes, then dispatch fresh detection; never reuse stale artifacts to overwrite them |
+| Merge conflict or unsupported human edit | Resolve through a reviewed human change; use head-bound resume only for allowlisted edits, otherwise finish the human PR and merge |
+| Closed PR | Do not reopen or reuse it automatically; inspect why it closed and begin a fresh detection after reconciling any retained branch work |
+| Multiple matching sync PRs | Have the owner choose the intended PR and reconcile the others; automation refuses ambiguity |
+| Push/create succeeded, later delivery failed | Prefer failed-job rerun with retained producer artifacts; exact publication/head/state reconciliation is required |
+| Unlabeled state-bearing initial PR | Reconcile using that run's retained evidence; fresh detection intentionally refuses it |
+| Missing/expired prior report | Retain questions/state and inspect the recorded context-loss note; current evidence still must be complete |
+| Malformed/oversized PR state or missing current artifacts | Stop publication and archive/reconcile with a human; do not erase state to make validation pass |
+| Discord/Asana failure | Restore service access, inspect persisted receipts, then normal dispatch retries unfinished channels |
+
+Alert delivery is at least once: a send accepted remotely but not saved locally
+can duplicate on retry. Asana uses its deterministic marker and pagination to
+reconcile tasks; Discord cannot promise exact deduplication in this window.
+Inspect receipts before deleting suspected duplicates. Never reset successful
+channel receipts merely to retry another channel.
+
+## Hosted acceptance and week-one checks
+
+All items below remain pending until an authorized operator records live proof.
+Before activation, land the reviewed local work on main, configure required
+checks and the App/settings above, and leave schedules disabled. Record the
+exact deployed main/workflow SHA and the selected upstream target for each run.
+
+1. Run a selected no-impact historical target with no open sync PR and replay
+   enabled. Verify the report, unchanged stock hash, complete evidence, App-owned
+   PR, and actual CI checks triggered by the App push/PR events.
+2. Run the synthetic needs-design exercise on a real candidate. Verify the
+   explicit exercise label in the report, stable question, unchanged genuine
+   verification facts, assignment, real Discord DM ID, and real Asana task GID.
+   Read back the actual message/task contents and the per-channel saved receipts.
+3. Repeat normal dispatch for the same successful tuple. Verify no extra commit,
+   message, or task. Exercise a failed channel and confirm recovery retries only
+   unfinished deliveries, preserving successful IDs and the publication tuple.
+4. Run the explicit invalid-key exercise with force. Verify evaluation fails,
+   candidate publication does not occur, the finalizer reports the failure,
+   and the working OpenAI secret remains unchanged. Confirm a later normal run
+   works without replacing the normal key.
+5. Resolve the exercise question with an authorized comment, confirm reevaluation
+   and label/state behavior, and finish any PR through independent review and
+   normal protection. An unchanged new-PR tree legitimately creates no PR; use
+   a selected differing target to test actual initial creation.
+6. Confirm artifact ID/producer/attempt links, 30-day retention, skip counts,
+   action/CLI versions, elapsed time, and explicit unknown model/token usage.
+   Configure an OpenAI budget alert; do not infer a hard spending cap from it.
+7. Only after all evidence is accepted, set `DTL_SYNC_ENABLED=true`. During week
+   one, inspect daily schedule/run history, no-op behavior, failures/finalizer
+   receipts, PR check events, unresolved questions, credentials, and usage.
+   Recheck schedule enablement after inactivity; missing runs are not no-ops.
+
+For rollback, set `DTL_SYNC_ENABLED=false` (or unset it) and confirm subsequent
+scheduled jobs skip. This gate does not cancel a running workflow or prohibit
+manual dispatch; separately stop active work if required. Preserve artifacts,
+PR state, and receipts for recovery. Revert an unwanted merged game change only
+through an independently reviewed PR; disabling sync alone changes no game pin.
+Do not restore schedules until the failure has an explained fix and fresh
+acceptance evidence. No activation, cancellation, rotation, or merge was
+performed as part of the local P1–P7 build.

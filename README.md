@@ -45,7 +45,10 @@ include review context and persisted retry receipts, and are tested with fake se
 the [four-job workflow](docs/dtl-sync.md#sync-workflow) is implemented locally.
 Hosted acceptance and activation remain pending; schedules are gated by
 `DTL_SYNC_ENABLED`. The [controller module map](docs/dtl-sync.md#controller-modules)
-identifies the trusted CLI, shared contracts, and delivery code.
+identifies the trusted CLI, shared contracts, and delivery code. The
+[rollout checklist](docs/dtl-sync.md#hosted-acceptance-and-week-one-checks) covers
+activation and recovery. CI runs functional tests in parallel and performance
+tests serially to avoid CPU contention in timing assertions.
 
 New here? Start with [`docs/getting-started.md`](docs/getting-started.md) —
 the game, the three leagues, local runs, the Ruleset Studio, and how to join
