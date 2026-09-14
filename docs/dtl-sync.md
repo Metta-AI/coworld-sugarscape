@@ -123,7 +123,9 @@ The command fetches the upstream commit graph and checks ancestry:
 
 PR discovery is paginated and accepts only an open PR in the named repository
 with main as its base, the configured App author, `dtl-sync` label, and a
-same-repository `dtl-sync/` head. Multiple matching PRs fail. A selected PR's
+same-repository `dtl-sync/` head. Multiple matching PRs fail. An otherwise matching App PR without the label
+but containing the state marker requires retained-publication reconciliation;
+it is not silently ignored as an unrelated PR. A selected PR's
 missing, malformed, duplicate, or oversized state block fails rather than
 discarding its delivery history.
 
@@ -132,9 +134,9 @@ The command writes a closed version-1 `meta.json` and prints one mode:
 | Mode | Meaning |
 |---|---|
 | `new-pr` | No open sync PR; evaluation is needed |
-| `update-pr` | Existing PR differs from the last successful publication, or force was requested |
+| `update-pr` | Existing PR differs, force was requested, or an authorized question resolution needs reevaluation |
 | `noop` | Target is already on main, or the live publication tuple is unchanged |
-| `retry-alerts` | Publication tuple is unchanged but at least one recorded channel is pending/failed |
+| `retry-alerts` | Publication tuple is unchanged but a channel is pending/failed or the design label needs repair |
 
 Modes are decisions only: the detector does not evaluate, publish, or retry
 alerts. New branch names include the target prefix, run ID, and attempt. If
@@ -150,9 +152,11 @@ The prompt version is its Git blob SHA. All identities are full hashes;
 unknown fields, inconsistent PR/mode pairs, invalid types, duplicate JSON
 keys, and artifacts over 64 KiB are rejected.
 
-The initial detection state is JSON between `<!-- dtl-sync-state` followed
+The publication state is JSON between `<!-- dtl-sync-state` followed
 by a newline and the closing newline plus `-->`. Its closed version-1 fields
-are `schema_version`, `last_publication`, `deliveries`, and `open_questions`.
+are `schema_version`, `last_publication`, `deliveries`, `open_questions`,
+`outcome`, `classification`, `cause`, `recent_runs`, `previous_report_artifact`,
+`telemetry`, `resolved_questions`, and `accepted_resumes`.
 Questions contain a unique stable lowercase slug `id` and nonempty `question`.
 Publication
 identity contains main/target/prompt SHAs and the outgoing `published_head_sha`.
@@ -163,9 +167,10 @@ never counts as evaluated.
 Deliveries are keyed by target SHA and channel (`assignment`, `discord`,
 `asana`), with `status`, nullable `remote_id`, `attempts`, and nullable
 `last_error`. A delivered receipt requires an ID. Any pending or failed
-receipt triggers retry-alerts when no new evaluation is needed. This initial
-state reader will be extended with the publication body, question resolution, and
-telemetry in P5b; it is not a live external integration yet.
+receipt triggers retry-alerts when no new evaluation is needed. The complete
+state is validated before writes; unknown fields are rejected. There is no
+compatibility reader for intermediate build-phase schemas; no hosted state has
+been created during this implementation.
 
 External command errors report only tool name and exit status, or timeout,
 without echoing arguments, stdin, or stderr that might contain credentials.
@@ -367,9 +372,9 @@ fail before an artifact is created; its absence is also a failure.
 
 The write boundary protects trusted control files and independent baseline
 measurements. It does not prove that arbitrary malicious code cannot falsify
-its own process output. Git tree publication is a separate command below. PR delivery and workflow
-artifact provenance checks arrive in later phases; verification alone does not
-publish anything.
+its own process output. Git tree publication and PR delivery are separate
+commands below. Workflow artifact provenance checks remain Phase 6 work;
+verification alone does not publish anything.
 
 Studio integration tests skip with explicit reasons when their external
 prerequisites are absent: discovery requires the Metta link app files and Node,
@@ -382,9 +387,9 @@ checkout nor a host home is mounted into verification containers.
 
 Phase 5A implements `publish tree`: this command can push a branch to the source
 checkout's origin. It does not create/update a PR, mutate its state block, mint
-credentials, assign anyone, or send alerts. Those delivery steps are Phase 5B;
-the hosted workflow and artifact provenance checks are Phase 6. Local tests use
-temporary remotes and fake read-only GitHub responses only.
+credentials, assign anyone, or send alerts. Delivery is a separate command
+below; the hosted workflow and artifact provenance checks remain Phase 6. Local
+tests use temporary remotes and fake GitHub/HTTP responses only.
 
 Run from the captured trusted controller checkout, with captured artifacts and
 an explicitly provisioned repository-scoped Git transport identity:
@@ -466,7 +471,8 @@ For complete evidence, the script computes the class/cause in this order:
 
 A red measured result is valid publication evidence. It pushes the exact
 verified tree for later human review; it never updates the trajectory constant.
-Resolving prior questions and delivering the resulting PR remain Phase 5B.
+Authorized resolution is checked through PR comments before classification;
+publication of the resulting body and receipts is described below.
 
 ### Git tree, races, retries, and unchanged results
 
@@ -497,9 +503,187 @@ rather than inventing a new evaluation for that collision.
 
 When the validated candidate tree equals the captured parent tree, the command
 creates no commit or new branch. It still writes fresh evidence, so a forced
-reevaluation can update an existing PR's evidence in Phase 5B without an empty
+reevaluation can update an existing PR's evidence without an empty
 commit. `publication.json` records `outcome` (`pushed`, `reconciled`, or
 `unchanged`), main/target/prompt identities, outgoing head, tree and patch digest,
 computed classification/cause, the full verified measurements, and a SHA-256
 of the report serialized as sorted-key JSON. An unchanged new-PR evaluation
 records main as its outgoing head; it does not mean a PR should be created.
+
+## PR state and delivery
+
+Phase 5B implements these commands locally. They can perform real remote
+writes when given real credentials; local acceptance uses only injected fake
+services. No hosted workflow, credential provisioning, PR, or alert has been
+activated by this phase. Run the controller from captured trusted main, never
+from the candidate checkout. P6 must verify each artifact's expected producer,
+run, and attempt before credentials are introduced.
+
+After `publish tree`, pass its retained receipt and matching input artifacts:
+
+```bash
+.venv/bin/python tools/dtl_sync.py publish deliver \
+  --meta /tmp/dtl-meta.json \
+  --candidate /tmp/dtl-patch/candidate.json \
+  --report /tmp/dtl-report.json \
+  --verification /tmp/dtl-verify/verify.json \
+  --publication /tmp/dtl-publication/publication.json \
+  --checkout "$PWD" --output /tmp/dtl-delivery \
+  --app-login 'dtl-sync[bot]' --james-login jamesboggs \
+  --discord-user-id "$DTL_SYNC_DISCORD_USER_ID" \
+  --asana-project-gid "$DTL_SYNC_ASANA_PROJECT_GID"
+```
+
+Supply `GH_TOKEN` as the repository-scoped App token, `DISCORD_BOT_TOKEN` as
+the agent bot token, and `ASANA_PAT` as the project-authorized token through the
+trusted job environment. The script does not mint credentials. The names and
+IDs above are examples/configuration inputs, not a claim that access is set up.
+Optional `--telemetry FILE` accepts the closed telemetry object below;
+`--report-artifact-id DECIMAL_ID` records the retained report artifact ID.
+`--resume-comment-id ID` records an accepted head-bound resume.
+
+Delivery checks the meta/candidate/report/verification bindings, the publication
+receipt's report digest, and live main/branch/PR identities. It uses the receipt's
+outgoing head, never the incoming head, for `last_publication`. For a new PR,
+the first create request includes the complete body and state atomically.
+There is no body-less PR creation step. An unchanged new-PR tree creates no PR;
+an unchanged existing-PR tree can receive updated evidence.
+
+The body contains summary, reachability, independent test counts (including
+skips), reasoning, open questions, telemetry, and run/artifact/compare links.
+Public text escapes HTML and mentions; JSON escapes HTML comment delimiters.
+Reachability display is capped at 12 KiB, with a pointer to the full report.
+The whole body is capped at 48 KiB; human text can be shortened, but state is
+never truncated or silently discarded. If complete state leaves no room for a
+summary, delivery stops for manual archival/reconciliation. State replacement
+on retry/failure also refuses oversize bodies. Humans should use PR comments;
+the body is machine-owned.
+
+### Questions, resume, and labels
+
+Use an exact PR comment `resolved: question-id`. The script accepts repository
+`write`, `maintain`, or `admin` permission, or the configured `--james-login`.
+Other users and bots cannot resolve questions. A receipt stores `id`, the
+question text, and `comment_id`; the same comment cannot resolve a later,
+different question reusing that ID. Unresolved questions persist across
+reports. Detection notices newly authorized resolutions and requests evaluation
+even when the successful publication tuple is unchanged. Resolution alone
+cannot override a changed stock hash, failed tests, protected edits, a new
+feature, or a fresh conservative report classification.
+
+Human edits to the PR head still require the existing P3 comment
+`resume-sync FULL_CAPTURED_HEAD_SHA`. Pass its ID to `prepare inputs` and
+`publish deliver` via `--resume-comment-id`; both reuse the same permission and
+head checks. `detect`, `prepare inputs`, and `publish tree` also accept optional
+`--james-login` for the configured owner exception. Accepted resumes record
+`comment_id` and `head_sha` in state. Resume does not permit protected-path
+edits, conflicts, stale heads, or automatic force-pushes.
+
+Every successful delivery restores `dtl-sync`; `needs-design` follows the
+current evidence and unresolved questions. Notification failure never removes
+it. A label mismatch wakes `retry-alerts`, including failed removal of an old
+red label after a positively green evaluation.
+
+### State details and alert recovery
+
+`recent_runs` retains the last ten distinct run-ID/attempt pairs and outcomes.
+`previous_report_artifact` is a nullable positive decimal artifact ID; omission
+on delivery preserves the prior pointer. Full reports belong in retained
+artifacts, not state. `resolved_questions` and `accepted_resumes` hold the
+authorization receipts above. `telemetry` has exactly:
+
+- `requested_model`, `actual_model`, `codex_version`: nullable strings.
+- `action_sha`: nullable full commit SHA.
+- `elapsed_seconds`: nullable finite nonnegative number.
+- `token_usage`: null or nonnegative integer `input_tokens`, `output_tokens`,
+  and `total_tokens`, with total equal to input plus output.
+- `unavailable_reason`: required nonempty explanation when any fact is null.
+
+Omitted telemetry defaults to null facts with an explicit unavailable reason;
+requested model is never substituted for actual model. The later workflow must
+supply trusted measurements when exposed by the pinned action.
+
+For every needs-design target, delivery initializes assignment, Discord, and
+Asana receipts. It saves the pending attempt before each side effect, then saves
+success with its returned ID (or a sanitized failure) before proceeding to the
+next channel. Assignment checks the API's returned assignees; its receipt is
+`owner/repo#PR:login`. Discord stores the message ID; Asana stores the task GID.
+A failed channel does not erase successful receipts. A receipt persistence
+failure stops further deliveries.
+
+Retry with fresh detection metadata and a new output directory:
+
+```bash
+.venv/bin/python tools/dtl_sync.py publish retry-alerts \
+  --meta /tmp/dtl-retry-meta.json --output /tmp/dtl-retry-delivery \
+  --app-login 'dtl-sync[bot]' --james-login jamesboggs \
+  --discord-user-id "$DTL_SYNC_DISCORD_USER_ID" \
+  --asana-project-gid "$DTL_SYNC_ASANA_PROJECT_GID"
+```
+
+This requires `mode: retry-alerts`, the matching successful tuple, and live PR
+state. It needs no patch, candidate, report, verification, publication artifact,
+or Git checkout. It repairs labels and retries only non-delivered channels,
+including pending targets from earlier publications. `delivery.json` contains
+the final state. Exit 1 and printed `retry-alerts` indicate pending/failed
+channels; the successful publication remains recorded. Otherwise exit is 0.
+A command/persistence failure can occur before the output file is written;
+retained PR state remains the recovery source.
+
+If the Git push succeeded but PR delivery failed, rerun `publish deliver` with
+the same retained artifacts and new output path. It searches paginated **all**
+PR history for the exact App-owned same-repository branch and outgoing head,
+including an unlabeled partial create. It requires matching initial state and
+refuses ambiguous, closed, foreign, or stale PRs. It never reopens a closed PR.
+A new detector run refuses an unlabeled state-bearing App PR so it cannot
+silently create a second sync PR. Reconcile the retained publication first.
+If the publication receipt itself was lost before PR creation, rerun
+`publish tree` from retained evaluation inputs to recover its exact commit.
+Expired or missing captured evidence requires operator review, not guessed
+artifacts or adoption based only on author/branch names.
+
+Delivery is **at-least-once**, not exactly-once. A crash or uncertain response
+between a remote side effect and receipt persistence may repeat it. Asana
+lists project tasks in pages of 100 and reuses a task whose notes contain the
+exact line `dtl-sync:FULL_TARGET_SHA`; it follows only the returned offset,
+never a returned URL, and refuses pagination cycles or more than 100 pages.
+New tasks carry the marker, PR link, and run link. Assignment is naturally
+repeatable; an uncertain Discord send can produce a duplicate DM. Receipts are
+per target, per channel, rather than per evaluation run.
+
+Discord/Asana use synchronous stdlib HTTP, 10-second request timeouts and at
+most three attempts for 429, 5xx, or transport errors. `Retry-After` seconds or
+HTTP dates are capped at five seconds; transport backoff is one then two
+seconds. Permanent 4xx failures are not retried. All redirects are refused,
+credentials are attached only to fixed service hosts, responses are bounded,
+and errors omit tokens/response bodies. Discord disables mention parsing.
+GitHub uses checked, timed `gh api` calls with JSON on stdin.
+
+The API contracts are [GitHub PR creation](https://docs.github.com/en/rest/pulls/pulls#create-a-pull-request),
+[Discord Create DM](https://docs.discord.com/developers/resources/user#create-dm),
+[Asana project task listing](https://developers.asana.com/reference/gettasksforproject),
+and [Asana task creation](https://developers.asana.com/reference/createtask).
+
+### Failure without candidate evidence
+
+The finalizer can notify from trusted workflow context even if `meta.json`
+does not exist:
+
+```bash
+.venv/bin/python tools/dtl_sync.py publish failure \
+  --repository owner/repository --run-id 123 --run-attempt 1 \
+  --outcome operational-failure --discord-user-id "$DTL_SYNC_DISCORD_USER_ID" \
+  --output /tmp/dtl-failure
+```
+
+Allowed failures are `needs-human`, `incomplete-verification`, and
+`operational-failure`. This path performs no Git writes and consumes no
+candidate artifacts. With valid `--meta FILE` naming a PR and `--app-login`,
+it updates that owned open PR's outcome/recent run and adds a run-linked
+comment, preserving the last successful publication tuple and all deliveries.
+Otherwise it sends a Discord DM naming only the trusted repository and run;
+it does not invent target or PR identities. `failure.json` records the outcome,
+run URL, and PR number or Discord message ID. Exit 0 means the failure was
+reported, not that evaluation succeeded. The workflow must retain the original
+failure result. Hosted finalizer wiring and real service acceptance remain P6
+and rollout work.

@@ -88,11 +88,21 @@ or mount a host checkout to satisfy those prerequisites.
 
 `publish tree` validates the closed report and verification contracts before
 reconstructing and pushing the complete measured tree. It uses only Git and
-read-only GitHub PR discovery; PR body/state updates and delivery are later
-work. Tests in `tests/test_dtl_sync_publish.py` push only to temporary local
+read-only GitHub PR discovery and authorized question resolution. Tests in `tests/test_dtl_sync_publish.py` push only to temporary local
 remotes. Never test this command against the real origin without authorization.
 Keep `excluded_markers: ["perf"]` in the verification contract and count skips
 separately. Preserve completed red results and reject incomplete artifacts
 regardless of patch size. Retry reconciliation requires the exact deterministic
 commit, not a branch name or author string. See the runbook for all CLI inputs,
 report fields, stale-write checks, and unchanged-tree evidence.
+
+`publish deliver` consumes retained publication evidence and writes the PR body,
+state, labels, assignment, and alert receipts. `publish retry-alerts` needs only
+captured metadata plus the PR state; `publish failure` can notify from trusted
+repository/run context without candidate artifacts or metadata. These commands
+can write to real services: tests must inject fake GitHub/HTTP transports and
+use temporary Git remotes. Never use live credentials for local acceptance.
+Keep the initial state in the first PR create request, preserve the successful
+publication tuple on failures, and save each channel receipt before continuing.
+Use the shared head-bound resume permission helper; public comments alone do
+not authorize resolution. See `tests/test_dtl_sync_alerts.py` and the runbook.

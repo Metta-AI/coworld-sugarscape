@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import asdict
 import hashlib
 import json
 import subprocess
@@ -37,7 +38,7 @@ def world(tmp_path):
 
 def pr_state(sync, world, head, questions=None):
     return sync.STATE_START + json.dumps({
-        "schema_version": 1, "last_publication": {
+        **asdict(sync.new_state()), "schema_version": 1, "last_publication": {
             "main_sha": world.main, "target_sha": world.first,
             "published_head_sha": head, "prompt_version": world.prompt,
         }, "deliveries": {}, "open_questions": questions or [],

@@ -77,7 +77,7 @@ class World:
 import json, os, sys
 args = sys.argv[1:]
 responses = json.load(open(os.environ["FAKE_GH_RESPONSES"]))
-if len(args) == 4 and args[:3] == ["api", "--method", "GET"]:
+if len(args) >= 4 and args[:3] == ["api", "--method", "GET"] and args[3] in responses:
     print(json.dumps(responses[args[3]]))
     sys.exit(0)
 assert args == ["api", "--method", "GET", "repos/owner/game/pulls?state=open&base=main&per_page=100", "--paginate", "--slurp"], args

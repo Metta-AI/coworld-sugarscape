@@ -40,7 +40,8 @@ upstream sync implementation status, read-only detection, and disposable
 candidate preparation, and [Docker verification setup](docs/dtl-sync.md#independent-verification).
 Container verification excludes timing tests and records that exclusion; host/CI
 checks retain them. The [Git tree publisher](docs/dtl-sync.md#validated-git-tree-publication)
-validates evidence before pushing; PR delivery and scheduled sync are not enabled.
+validates evidence before pushing. [PR delivery and alert recovery](docs/dtl-sync.md#pr-state-and-delivery)
+are implemented and tested with fake services; hosted sync and scheduling remain pending.
 
 New here? Start with [`docs/getting-started.md`](docs/getting-started.md) —
 the game, the three leagues, local runs, the Ruleset Studio, and how to join
