@@ -51,9 +51,16 @@ are in [docs/dtl-sync.md](docs/dtl-sync.md)). Keep action references pinned to
 full commit SHAs and checkouts configured with `persist-credentials: false`.
 Do not commit generated `uv.lock` during the sync implementation.
 
-The current automation is CI only: `tests`, `workflow-lint`, and the PR-only
-`image-smoke` jobs in `.github/workflows/ci.yml`. The upstream sync workflow
-will arrive in a later phase; do not describe it as operational yet.
+CI has `tests`, `workflow-lint`, and PR-only `image-smoke` jobs. The four-job
+`.github/workflows/dtl-sync.yml` is implemented locally but has not been
+activated or qualified on hosted services. Scheduling requires
+`DTL_SYNC_ENABLED=true`; every job checks the default main branch before secrets.
+Keep producer artifact IDs and producer attempts bound independently, including
+failed-job reruns. No candidate Python may run before the Codex action: its
+working directory is the disposable candidate, with a link to dependencies
+installed from trusted main. Upload only bounded regular data files through the
+collector; never execute candidate code in verify/publish host steps.
+See `tests/test_dtl_sync_orchestration.py` for workflow and fake-service coverage.
 
 `tools/dtl_sync.py detect` resolves upstream and PR identities using scratch
 bare repositories and read-only `gh api` calls. It does not modify the input

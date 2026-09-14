@@ -1,0 +1,5 @@
+# The pinned action selects :workspace and installs its Responses API proxy.
+# Workflow setup marks only the disposable candidate project untrusted.
+approval_policy = "never"
+web_search = "disabled"
+project_doc_max_bytes = 0

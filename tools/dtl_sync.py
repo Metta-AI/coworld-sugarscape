@@ -46,6 +46,8 @@ from dtl_sync_contracts import (
     read_meta,
     read_publication_artifact,
     read_state,
+    validate_artifact_provenance,
+    validate_reachability,
     validate_candidate,
     validate_meta,
     validate_report,
@@ -59,11 +61,16 @@ from dtl_sync_delivery import (
     _resume_authorized,
     deliver_publication,
     find_sync_pr,
+    failure_context,
+    github,
     new_state,
     notify_failure,
     publication_heads,
+    previous_report_identity,
     resolve_questions,
     retry_deliveries,
+    state_block,
+    check_delivery_pr,
 )
 
 
@@ -642,9 +649,9 @@ def verify(*, meta: Meta, candidate: Candidate, patch: Path, checkout: Path,
     return result
 
 
-def publication_pr(runner: CommandRunner, meta: Meta, app_login: str) -> dict | None:
-    pr = find_sync_pr(runner, meta.repository, app_login)
-    if ((meta.pr_number is None and pr is not None)
+def publication_pr(runner: CommandRunner, meta: Meta, app_login: str, *, allow_recovery: bool = False) -> dict | None:
+    pr = find_sync_pr(runner, meta.repository, app_login, allow_unlabeled=allow_recovery)
+    if ((meta.pr_number is None and pr is not None and not (allow_recovery and pr["head"]["ref"] == meta.branch))
             or (meta.pr_number is not None and (pr is None or pr["number"] != meta.pr_number
                                                or pr["head"]["ref"] != meta.branch))):
         raise SyncError("stale PR identity or state")
@@ -677,7 +684,7 @@ def publication_commit(runner: CommandRunner, directory: Path, meta: Meta, repor
 def publish_tree(*, meta: Meta, candidate: Candidate, patch: Path, report: object,
                  verification: object, checkout: Path, directory: Path, output: Path,
                  runner: CommandRunner, app_login: str, app_email: str,
-                 upstream_url: str = UPSTREAM_URL, james_login: str | None = None) -> dict:
+                 upstream_url: str = UPSTREAM_URL, james_login: str | None = None, dry_run: bool = False) -> dict:
     validate_meta(asdict(meta))
     validate_candidate(asdict(candidate))
     report = validate_report(report, meta)
@@ -691,13 +698,13 @@ def publish_tree(*, meta: Meta, candidate: Candidate, patch: Path, report: objec
     heads = publication_heads(runner, origin, meta.branch)
     if heads.get("refs/heads/main") != meta.main_sha:
         raise SyncError("stale main head")
-    pr = publication_pr(runner, meta, app_login)
+    pr = publication_pr(runner, meta, app_login, allow_recovery=True)
     observed = heads.get(f"refs/heads/{meta.branch}")
     if pr is not None and pr["head"]["sha"] != observed:
         raise SyncError("stale PR head differs from branch")
     question_state = resolve_questions(runner, meta, read_state(pr["body"]), report.design_questions,
-                                       james_login=james_login) if pr else new_state()
-    resolved_report = replace(report, design_questions=question_state.open_questions) if pr else report
+                                       james_login=james_login) if pr and meta.pr_number else new_state()
+    resolved_report = replace(report, design_questions=question_state.open_questions) if pr and meta.pr_number else report
     classification, cause = classify(resolved_report, candidate, verification, question_state.open_questions)
     reconstruct_candidate(meta=meta, candidate=candidate, patch=patch, checkout=checkout,
                           directory=directory, runner=runner, upstream_url=upstream_url)
@@ -705,8 +712,7 @@ def publish_tree(*, meta: Meta, candidate: Candidate, patch: Path, report: objec
     _git(runner, upstream, "fetch", "--no-tags", upstream_url, meta.main_pin)
     changed = set(_git(runner, upstream, "diff", "--name-only", "--no-renames", "-z",
                        meta.main_pin, meta.target_sha).stdout.split("\0")) - {""}
-    if {item["path"] for item in report.reachability} != changed:
-        raise SyncError("upstream reachability inventory does not cover the exact changed files")
+    validate_reachability(report.reachability, changed)
     if meta.pr_head_sha:
         _git(runner, directory, "fetch", "--no-tags", origin, meta.pr_head_sha)
     parent = meta.pr_head_sha or meta.main_sha
@@ -717,13 +723,17 @@ def publish_tree(*, meta: Meta, candidate: Candidate, patch: Path, report: objec
         outgoing = publication_commit(runner, directory, meta, report, candidate.candidate_tree,
                                       classification, app_login, app_email)
         outcome = "reconciled" if observed == outgoing else "pushed"
+    if pr and meta.pr_number is None:
+        identity = PublicationIdentity(meta.main_sha, meta.target_sha, outgoing, meta.prompt_version)
+        if read_state(pr["body"]).last_publication != identity:
+            raise SyncError("recovered PR does not match exact captured publication")
     expected = meta.pr_head_sha
     if observed != expected and observed != outgoing:
         raise SyncError("stale branch head; refusing to overwrite unrelated work")
     # Re-check both Git and GitHub immediately before the normal fast-forward push.
-    if publication_heads(runner, origin, meta.branch) != heads or publication_pr(runner, meta, app_login) != pr:
+    if publication_heads(runner, origin, meta.branch) != heads or publication_pr(runner, meta, app_login, allow_recovery=True) != pr:
         raise SyncError("stale remote state changed during publication")
-    if outcome == "pushed":
+    if outcome == "pushed" and not dry_run:
         _git(runner, directory, "push", "--", origin, f"{outgoing}:refs/heads/{meta.branch}")
     result = {"schema_version": 1, "outcome": outcome, "main_sha": meta.main_sha,
               "target_sha": meta.target_sha, "prompt_version": meta.prompt_version,
@@ -731,8 +741,250 @@ def publish_tree(*, meta: Meta, candidate: Candidate, patch: Path, report: objec
               "patch_sha256": candidate.patch_sha256, "classification": classification, "cause": cause,
               "verification": asdict(verification),
               "report_sha256": hashlib.sha256(json.dumps(asdict(report), sort_keys=True).encode()).hexdigest()}
-    _write_json(output / "publication.json", result)
+    if dry_run:
+        result["outcome"] = "validated"
+    _write_json(output / ("preflight.json" if dry_run else "publication.json"), result)
     return result
+
+
+def workflow_route(mode: str, detected: str, evaluated: str, verified: str, prepared: str) -> str:
+    if detected != "success":
+        return "operational-failure"
+    if mode in {"noop", "retry-alerts"}:
+        return mode
+    if prepared == "needs-human":
+        return "needs-human"
+    if evaluated != "success":
+        return "operational-failure"
+    if verified != "success":
+        return "incomplete-verification"
+    return "publish"
+
+
+def workflow_inputs(event: str, force: str, replay: str, exercise: str, invalid_key: str) -> dict:
+    if event not in {"schedule", "workflow_dispatch"}:
+        raise SyncError("sync requires schedule or workflow_dispatch")
+    if any(value not in {"", "true", "false"} for value in (force, replay, invalid_key)):
+        raise SyncError("invalid boolean dispatch input")
+    if exercise not in {"", "none", "needs-design"}:
+        raise SyncError("invalid exercise input")
+    if invalid_key == "true" and (event != "workflow_dispatch" or force != "true"):
+        raise SyncError("test_invalid_key requires manual dispatch and force=true")
+    if event != "workflow_dispatch" and (force == "true" or replay == "true" or exercise == "needs-design"):
+        raise SyncError("exercise/force/replay require manual dispatch")
+    return {"force": "true" if force == "true" or exercise == "needs-design" else "false",
+            "replay": "true" if replay == "true" else "false", "exercise": exercise or "none",
+            "invalid_key": "true" if invalid_key == "true" else "false"}
+
+
+def workflow_meta(path: Path, repository: str, run_id: str, run_attempt: str, main_sha: str) -> Meta:
+    meta = read_meta(path)
+    if (meta.repository, meta.run_id, meta.run_attempt, meta.main_sha) != (repository, run_id, run_attempt, main_sha):
+        raise SyncError("detected metadata differs from trusted workflow context")
+    return meta
+
+
+def workflow_context(runner: CommandRunner, meta: Meta, app_login: str, james_login: str) -> dict:
+    result = {"resume_comment_id": "", "previous_artifact": ""}
+    if meta.pr_number is None:
+        return result
+    pr = publication_pr(runner, meta, app_login)
+    if pr["head"]["sha"] != meta.pr_head_sha:
+        raise SyncError("PR moved before preparation")
+    state = read_state(pr["body"])
+    result["previous_artifact"] = state.previous_report_artifact or ""
+    pages = github(runner, "GET", f"repos/{meta.repository}/issues/{meta.pr_number}/comments?per_page=100", paginate=True)
+    if not isinstance(pages, list) or any(not isinstance(page, list) for page in pages):
+        raise SyncError("invalid comment pages")
+    for comment in reversed([comment for page in pages for comment in page]):
+        if isinstance(comment, dict) and comment.get("body", "").strip() == f"resume-sync {meta.pr_head_sha}":
+            if _resume_authorized(runner, meta, comment.get("id"), james_login=james_login):
+                result["resume_comment_id"] = str(comment["id"])
+                break
+    return result
+
+
+def workflow_report(meta: Meta, report: object, exercise: str) -> Report:
+    report = validate_report(report, meta)
+    if exercise == "needs-design":
+        questions = [q for q in report.design_questions if q["id"] != "exercise-needs-design"]
+        questions.append({"id": "exercise-needs-design", "question": "Exercise only: confirm escalation delivery before resolving this question."})
+        report = replace(report, classification="needs-design", summary=("EXERCISE: " + report.summary)[:1000],
+                         design_questions=questions)
+    elif exercise != "none":
+        raise SyncError("invalid exercise")
+    return validate_report(asdict(report), meta)
+
+
+def publication_preflight(*, meta: Meta, checkout: Path, directory: Path, candidate: Candidate,
+                          patch: Path, report: Report, verification: object, runner: CommandRunner,
+                          app_login: str, app_email: str, james_login: str,
+                          upstream_url: str = UPSTREAM_URL) -> None:
+    # Reuse the exact tree/commit/recovery checks; this path never pushes.
+    publish_tree(meta=meta, checkout=checkout, directory=directory / "tree", output=directory / "evidence",
+                 candidate=candidate, patch=patch, report=asdict(report), verification=verification,
+                 runner=runner, app_login=app_login, app_email=app_email, james_login=james_login,
+                 upstream_url=upstream_url, dry_run=True)
+
+
+def workflow_outputs(path: Path, values: dict) -> None:
+    with path.open("a", encoding="utf-8") as output:
+        for key, value in values.items():
+            value = str(value)
+            if not re.fullmatch(r"[a-z_]+", key) or "\n" in value or "\r" in value:
+                raise SyncError("invalid workflow output")
+            output.write(f"{key}={value}\n")
+
+
+def run_workflow(args, runner: CommandRunner) -> dict:
+    if args.stage == "failure-context":
+        meta = workflow_meta(args.meta, args.repository, args.run_id, args.run_attempt, args.main_sha)
+        notification = failure_context(runner, meta, args.app_login, args.current_attempt,
+                                       read_publication_artifact(args.publication))
+        _write_json(args.notification_meta, asdict(notification))
+        return {"has_pr": "true"}
+    if args.stage == "previous":
+        return previous_report_identity(runner, args.repository, args.artifact_id)
+    if args.stage == "collect":
+        collect_evaluation_artifacts(args.source, args.directory)
+        return {"collected": "true"}
+    if args.stage == "inputs":
+        return workflow_inputs(args.event, args.force, args.replay, args.exercise, args.invalid_key)
+    if args.stage == "artifact":
+        artifact = github(runner, "GET", f"repos/{_repository(args.repository)}/actions/artifacts/{_identifier(args.artifact_id)}")
+        run = github(runner, "GET", f"repos/{args.repository}/actions/runs/{_identifier(args.run_id)}/attempts/{_identifier(args.run_attempt)}")
+        validate_artifact_provenance(artifact, run, producer=args.producer, artifact_id=args.artifact_id,
+            repository=args.repository, run_id=args.run_id, run_attempt=args.run_attempt, workflow_sha=args.workflow_sha)
+        return {"validated": "true"}
+    if args.stage == "check-meta":
+        meta = workflow_meta(args.meta, args.repository, args.run_id, args.run_attempt, args.main_sha)
+        return {"validated": "true", "main_sha": meta.main_sha, "mode": meta.mode,
+                "has_pr": "true" if meta.pr_number else "false"}
+    if args.stage == "context":
+        return workflow_context(runner, read_meta(args.meta), args.app_login, args.james_login)
+    if args.stage == "report":
+        report = workflow_report(read_meta(args.meta), read_publication_artifact(args.report), args.exercise)
+        _write_json(args.report, asdict(report))
+        telemetry = new_state().telemetry
+        try:
+            version = runner.run(["codex", "--version"]).stdout.strip()
+            match = re.fullmatch(r"(?:codex|codex-cli) ([0-9]+\.[0-9]+\.[0-9]+)", version)
+            if match:
+                telemetry["codex_version"] = match[1]
+        except SyncError:
+            pass
+        telemetry.update(requested_model="action default",
+                         action_sha="86365089eb2b84e0a8fb0717b304f8bdcb13b20e",
+                         elapsed_seconds=max(0, time.time() - args.started_at),
+                         unavailable_reason="Actual model/token usage are not exposed by this action; any missing CLI version could not be measured.")
+        _write_json(args.report.parent / "telemetry.json", telemetry)
+        return {"ready": "true"}
+    # The finalizer never turns unvalidated data into a selector for privileged code.
+    meta = None
+    has_pr = False
+    mode = "operational-failure"
+    try:
+        if args.meta_valid != "true":
+            return {"mode": mode, "has_pr": "false"}
+        meta = workflow_meta(args.meta, args.repository, args.run_id, args.run_attempt, args.main_sha)
+        mode = workflow_route(meta.mode, args.detected, args.evaluated, args.verified, args.prepared)
+        if meta.pr_number and mode != "noop":
+            check_delivery_pr(github(runner, "GET", f"repos/{meta.repository}/pulls/{meta.pr_number}"),
+                              meta, args.app_login, None)
+            has_pr = True
+        if mode == "publish":
+            if args.evaluate_valid != "true" or args.verify_valid != "true":
+                raise SyncError("required producer artifacts were not validated")
+            candidate = read_candidate(args.evaluation / "candidate.json")
+            report = validate_report(read_publication_artifact(args.evaluation / "report.json"), meta)
+            publication_preflight(meta=meta, checkout=args.checkout, directory=args.directory,
+                candidate=candidate, patch=args.evaluation / "candidate.patch", report=report,
+                verification=read_publication_artifact(args.verification / "verify.json"),
+                runner=runner, app_login=args.app_login, app_email=args.app_email, james_login=args.james_login)
+            # Validate optional telemetry before the first privileged state write.
+            telemetry = read_publication_artifact(args.evaluation / "telemetry.json")
+            state_block(replace(new_state(), telemetry=telemetry))
+    except (SyncError, OSError) as error:
+        print(str(error) if isinstance(error, SyncError) else "missing workflow artifact", file=sys.stderr)
+        mode = "operational-failure"
+    if has_pr:
+        _identifier(args.current_attempt)
+        _write_json(args.notification_meta, asdict(replace(meta, run_attempt=args.current_attempt)))
+    return {"mode": mode, "has_pr": "true" if has_pr else "false"}
+
+
+def collect_evaluation_artifacts(source: Path, destination: Path) -> None:
+    limits = {name: MAX_REPORT_BYTES for name in ("report.json", "telemetry.json", "candidate.json",
+              "report-notes.json", "prepare.json", "context-notes.json", "previous-report.json")}
+    limits["candidate.patch"] = MAX_PATCH_BYTES
+    limits.update({name: MAX_LOG_BYTES for name in ("upstream.log", "upstream.diff", "upstream-filtered.diff",
+                                                  "previous-pin.diff", "wrapper.diff")})
+    destination.mkdir(parents=True)
+    invalid = []
+    for name, limit in limits.items():
+        file = source / name
+        if not file.exists() and not file.is_symlink():
+            continue
+        if file.is_symlink() or not file.is_file() or file.stat().st_size > limit:
+            invalid.append(name)
+            continue
+        with file.open("rb") as stream:
+            data = stream.read(limit + 1)
+        if len(data) > limit:
+            invalid.append(name)
+            continue
+        (destination / name).write_bytes(data)
+    if invalid:
+        raise SyncError("refused unsafe or oversized evaluation artifact: " + ", ".join(invalid))
+
+
+def workflow_parser(commands):
+    workflow = commands.add_parser("workflow", help="trusted workflow input, provenance, and finalizer checks")
+    stages = workflow.add_subparsers(dest="stage", required=True)
+    previous = stages.add_parser("previous")
+    previous.add_argument("--repository", required=True)
+    previous.add_argument("--artifact-id", required=True)
+    collect = stages.add_parser("collect")
+    collect.add_argument("--source", type=Path, required=True)
+    collect.add_argument("--directory", type=Path, required=True)
+    inputs = stages.add_parser("inputs")
+    inputs.add_argument("--event", required=True)
+    for name in ("force", "replay", "exercise", "invalid-key"):
+        inputs.add_argument("--" + name, default="")
+    artifact = stages.add_parser("artifact")
+    artifact.add_argument("--artifact-id", required=True)
+    artifact.add_argument("--producer", choices=["detect", "evaluate", "verify"], required=True)
+    artifact.add_argument("--workflow-sha", required=True)
+    meta = stages.add_parser("check-meta")
+    context = stages.add_parser("context")
+    report = stages.add_parser("report")
+    report.add_argument("--report", type=Path, required=True)
+    report.add_argument("--exercise", choices=["none", "needs-design"], required=True)
+    report.add_argument("--started-at", type=float, required=True)
+    route = stages.add_parser("route")
+    failure = stages.add_parser("failure-context")
+    failure.add_argument("--publication", type=Path, required=True)
+    for stage in (meta, route, failure):
+        stage.add_argument("--main-sha", required=True)
+    for stage in (artifact, meta, route, failure):
+        for name in ("repository", "run-id", "run-attempt"):
+            stage.add_argument("--" + name, required=True)
+    for stage in (meta, context, report, route, failure):
+        stage.add_argument("--meta", type=Path, required=True)
+    for stage in (context, route, failure):
+        stage.add_argument("--app-login", required=True)
+    context.add_argument("--james-login", required=True)
+    route.add_argument("--james-login", required=True)
+    route.add_argument("--app-email", required=True)
+    for stage in (route, failure):
+        stage.add_argument("--current-attempt", required=True)
+        stage.add_argument("--notification-meta", type=Path, required=True)
+    for name in ("meta-valid", "evaluate-valid", "verify-valid", "detected", "evaluated", "verified", "prepared"):
+        route.add_argument("--" + name, default="")
+    for name in ("checkout", "directory", "evaluation", "verification"):
+        route.add_argument("--" + name, type=Path, required=True)
+    for stage in (inputs, artifact, meta, context, report, route, collect, previous, failure):
+        stage.add_argument("--output", type=Path, required=True)
 
 
 def main() -> int:
@@ -797,10 +1049,13 @@ def main() -> int:
     failure.add_argument("--outcome", choices=["needs-human", "incomplete-verification", "operational-failure"], required=True)
     command.add_argument("--james-login")
     inputs.add_argument("--james-login")
+    workflow_parser(commands)
     args = parser.parse_args()
     try:
         runner = CommandRunner()
-        if args.command == "detect":
+        if args.command == "workflow":
+            workflow_outputs(args.output, run_workflow(args, runner))
+        elif args.command == "detect":
             meta = detect(
                 checkout=args.checkout, scratch=args.scratch, repository=args.repository,
                 app_login=args.app_login, run_id=args.run_id, run_attempt=args.run_attempt,

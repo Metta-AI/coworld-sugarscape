@@ -36,6 +36,7 @@ from dtl_sync_contracts import (
     _sha,
     classify,
     read_state,
+    validate_artifact_provenance,
     validate_candidate,
     validate_meta,
     validate_report,
@@ -52,7 +53,7 @@ def _git(runner: CommandRunner, directory: Path, *args: str, check: bool = True,
     return runner.run(["git", "-C", str(directory), *args], check=check, env=env, input_text=input_text)
 
 
-def find_sync_pr(runner: CommandRunner, repository: str, app_login: str) -> dict | None:
+def find_sync_pr(runner: CommandRunner, repository: str, app_login: str, *, allow_unlabeled: bool = False) -> dict | None:
     endpoint = f"repos/{repository}/pulls?state=open&base=main&per_page=100"
     result = runner.run(["gh", "api", "--method", "GET", endpoint, "--paginate", "--slurp"])
     pages = _json(result.stdout, 8 * 1024 * 1024, "GitHub response")
@@ -69,9 +70,10 @@ def find_sync_pr(runner: CommandRunner, repository: str, app_login: str) -> dict
                         and pr["head"]["repo"]["full_name"] == repository
                         and pr["head"]["ref"].startswith("dtl-sync/")):
                     if not any(label["name"] == "dtl-sync" for label in pr["labels"]):
-                        if isinstance(pr["body"], str) and STATE_START in pr["body"]:
+                        if not isinstance(pr["body"], str) or STATE_START not in pr["body"]:
+                            continue
+                        if not allow_unlabeled:
                             raise SyncError("unlabeled sync state requires retained-publication reconciliation")
-                        continue
                     _branch(pr["head"]["ref"])
                     _sha(pr["head"]["sha"])
                     if type(pr["number"]) is not int or pr["number"] <= 0 or not isinstance(pr["body"], str):
@@ -531,3 +533,36 @@ def retry_deliveries(*, meta: Meta, runner: CommandRunner, http: AlertHTTP, app_
     deliver_channels(runner, http, meta, state, save, james_login=james_login,
                      discord_user_id=discord_user_id, asana_project_gid=asana_project_gid)
     return state
+
+
+def previous_report_identity(runner: CommandRunner, repository: str, artifact_id: str) -> dict:
+    _repository(repository)
+    _identifier(artifact_id)
+    artifact = github(runner, "GET", f"repos/{repository}/actions/artifacts/{artifact_id}")
+    try:
+        match = re.fullmatch(r"dtl-sync-evaluate-([1-9][0-9]*)-([1-9][0-9]*)", artifact["name"])
+        workflow_sha = _sha(artifact["workflow_run"]["head_sha"])
+    except (KeyError, TypeError):
+        raise SyncError("invalid previous report provenance") from None
+    if match is None:
+        raise SyncError("previous report is not an evaluation artifact")
+    run_id, attempt = match.groups()
+    run = github(runner, "GET", f"repos/{repository}/actions/runs/{run_id}/attempts/{attempt}")
+    validate_artifact_provenance(artifact, run, producer="evaluate", artifact_id=artifact_id,
+        repository=repository, run_id=run_id, run_attempt=attempt, workflow_sha=workflow_sha)
+    return {"artifact_id": artifact_id, "run_id": run_id}
+
+
+def failure_context(runner: CommandRunner, meta: Meta, app_login: str,
+                    current_attempt: str, publication: object) -> Meta:
+    _identifier(current_attempt)
+    if not isinstance(publication, dict) or any(publication.get(key) != getattr(meta, key)
+            for key in ("main_sha", "target_sha", "prompt_version")):
+        raise SyncError("failure publication context mismatch")
+    head = _sha(publication.get("published_head_sha"))
+    pr = delivery_pr(runner, meta, app_login, head)
+    expected = PublicationIdentity(meta.main_sha, meta.target_sha, head, meta.prompt_version)
+    if pr is None or read_state(pr["body"]).last_publication != expected:
+        raise SyncError("no matching initial PR publication for failure notification")
+    return replace(meta, run_attempt=current_attempt, pr_number=pr["number"],
+                   pr_head_sha=head, mode="update-pr")

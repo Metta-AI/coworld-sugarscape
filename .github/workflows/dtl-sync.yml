@@ -1,0 +1,642 @@
+name: DTL upstream sync
+'on':
+  schedule:
+  - cron: 0 13 * * *
+  workflow_dispatch:
+    inputs:
+      upstream_ref:
+        description: Upstream master or a reachable commit prefix
+        type: string
+        default: master
+      force:
+        description: Evaluate even when the successful tuple is unchanged
+        type: boolean
+        default: false
+      replay:
+        description: Allow a historical target only with no open sync PR
+        type: boolean
+        default: false
+      exercise:
+        description: Synthetic design question on real verified evidence
+        type: choice
+        options:
+        - none
+        - needs-design
+        default: none
+      test_invalid_key:
+        description: Use the dedicated invalid key; requires force
+        type: boolean
+        default: false
+permissions: {}
+concurrency:
+  group: dtl-upstream-sync
+  cancel-in-progress: false
+env:
+  REPOSITORY: ${{ github.repository }}
+  RUN_ID: ${{ github.run_id }}
+  RUN_ATTEMPT: ${{ github.run_attempt }}
+  WORKFLOW_SHA: ${{ github.workflow_sha }}
+  APP_LOGIN: ${{ vars.DTL_SYNC_APP_LOGIN }}
+  JAMES_LOGIN: ${{ vars.DTL_SYNC_JAMES_LOGIN }}
+  PYTHONHASHSEED: '0'
+  PYTHONDONTWRITEBYTECODE: '1'
+  GIT_TERMINAL_PROMPT: '0'
+  GIT_CONFIG_COUNT: '3'
+  GIT_CONFIG_KEY_0: credential.helper
+  GIT_CONFIG_VALUE_0: '!f() { if [ "$1" = get ] && [ -n "$GH_TOKEN" ]; then printf ''%s\n'' username=x-access-token
+    "password=$GH_TOKEN"; fi; }; f'
+  GIT_CONFIG_KEY_1: core.fsmonitor
+  GIT_CONFIG_VALUE_1: 'false'
+  GIT_CONFIG_KEY_2: core.hooksPath
+  GIT_CONFIG_VALUE_2: /dev/null
+jobs:
+  detect:
+    if: github.ref == 'refs/heads/main' && github.event.repository.default_branch == 'main' && github.workflow_ref
+      == format('{0}/.github/workflows/dtl-sync.yml@refs/heads/main', github.repository) && (github.event_name ==
+      'workflow_dispatch' || (github.event_name == 'schedule' && vars.DTL_SYNC_ENABLED == 'true'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: read
+    outputs:
+      artifact_id: ${{ steps.artifact.outputs.artifact-id }}
+      main_sha: ${{ steps.detect.outputs.main_sha }}
+      mode: ${{ steps.detect.outputs.mode }}
+      exercise: ${{ steps.inputs.outputs.exercise }}
+      invalid_key: ${{ steps.inputs.outputs.invalid_key }}
+      run_attempt: ${{ github.run_attempt }}
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        ref: ${{ github.workflow_sha }}
+        path: controller
+        persist-credentials: false
+    - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+      with:
+        python-version: 3.13.5
+    - name: Validate dispatch inputs
+      id: inputs
+      env:
+        EVENT_NAME: ${{ github.event_name }}
+        FORCE: ${{ inputs.force }}
+        REPLAY: ${{ inputs.replay }}
+        EXERCISE: ${{ inputs.exercise }}
+        INVALID_KEY: ${{ inputs.test_invalid_key }}
+      run: |-
+        python controller/tools/dtl_sync.py workflow inputs --event "$EVENT_NAME" \
+          --force "$FORCE" --replay "$REPLAY" --exercise "$EXERCISE" \
+          --invalid-key "$INVALID_KEY" --output "$GITHUB_OUTPUT"
+    - name: Capture main and upstream identities
+      id: detect
+      env:
+        GH_TOKEN: ${{ github.token }}
+        FORCE: ${{ steps.inputs.outputs.force }}
+        REPLAY: ${{ steps.inputs.outputs.replay }}
+        UPSTREAM_REF: ${{ inputs.upstream_ref || 'master' }}
+      run: |-
+        mkdir detection
+        args=()
+        if [ "$FORCE" = true ]; then args+=(--force); fi
+        if [ "$REPLAY" = true ]; then args+=(--replay); fi
+        python controller/tools/dtl_sync.py detect --checkout controller --scratch detect-scratch \
+          --output detection/meta.json --repository "$REPOSITORY" --run-id "$RUN_ID" \
+          --run-attempt "$RUN_ATTEMPT" --app-login "$APP_LOGIN" --james-login "$JAMES_LOGIN" \
+          --upstream-ref "$UPSTREAM_REF" "${args[@]}"
+        python -c 'import json,os; m=json.load(open("detection/meta.json")); f=open(os.environ["GITHUB_OUTPUT"],"a"); f.write("main_sha="+m["main_sha"]+"\nmode="+m["mode"]+"\n")'
+    - name: Retain detect artifacts
+      id: artifact
+      if: steps.detect.outcome == 'success'
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: dtl-sync-detect-${{ github.run_id }}-${{ github.run_attempt }}
+        path: detection/meta.json
+        retention-days: 30
+        if-no-files-found: error
+  evaluate:
+    needs:
+    - detect
+    if: github.ref == 'refs/heads/main' && github.event.repository.default_branch == 'main' && github.workflow_ref
+      == format('{0}/.github/workflows/dtl-sync.yml@refs/heads/main', github.repository) && needs.detect.result
+      == 'success' && (needs.detect.outputs.mode == 'new-pr' || needs.detect.outputs.mode == 'update-pr')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: read
+    env:
+      MAIN_SHA: ${{ needs.detect.outputs.main_sha }}
+      CAPTURE_ATTEMPT: ${{ needs.detect.outputs.run_attempt }}
+    outputs:
+      artifact_id: ${{ steps.artifact.outputs.artifact-id }}
+      prepared: ${{ steps.prepare.outputs.outcome }}
+      resume_comment_id: ${{ steps.context.outputs.resume_comment_id }}
+      run_attempt: ${{ github.run_attempt }}
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        ref: ${{ needs.detect.outputs.main_sha }}
+        path: controller
+        persist-credentials: false
+    - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+      with:
+        python-version: 3.13.5
+    - name: Validate detect producer identity
+      id: detect_identity
+      if: needs.detect.outputs.artifact_id != ''
+      env:
+        GH_TOKEN: ${{ github.token }}
+        ARTIFACT_ID: ${{ needs.detect.outputs.artifact_id }}
+        PRODUCER_ATTEMPT: ${{ needs.detect.outputs.run_attempt }}
+      run: |-
+        python controller/tools/dtl_sync.py workflow artifact --producer detect \
+          --artifact-id "$ARTIFACT_ID" --repository "$REPOSITORY" --run-id "$RUN_ID" \
+          --run-attempt "$PRODUCER_ATTEMPT" --workflow-sha "$WORKFLOW_SHA" --output "$GITHUB_OUTPUT"
+    - name: Download only detect artifact
+      id: detect_download
+      if: always() && steps.detect_identity.outcome == 'success'
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        artifact-ids: ${{ needs.detect.outputs.artifact_id }}
+        path: detection
+        run-id: ${{ github.run_id }}
+        repository: ${{ github.repository }}
+        github-token: ${{ github.token }}
+        digest-mismatch: error
+    - name: Bind detection metadata to trusted context
+      id: meta
+      if: steps.detect_download.outcome == 'success'
+      run: |-
+        python controller/tools/dtl_sync.py workflow check-meta --meta detection/meta.json \
+          --repository "$REPOSITORY" --run-id "$RUN_ID" --run-attempt "$CAPTURE_ATTEMPT" \
+          --main-sha "$MAIN_SHA" --output "$GITHUB_OUTPUT"
+    - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      with:
+        version: 0.12.13
+        enable-cache: false
+    - name: Install dependencies from trusted main only
+      run: uv sync --project controller
+    - name: Read authorized resume and prior context
+      id: context
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |-
+        python controller/tools/dtl_sync.py workflow context --meta detection/meta.json \
+          --app-login "$APP_LOGIN" --james-login "$JAMES_LOGIN" --output "$GITHUB_OUTPUT"
+    - name: Validate prior report provenance when retained
+      id: previous
+      if: steps.context.outputs.previous_artifact != ''
+      continue-on-error: true
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PREVIOUS_ARTIFACT: ${{ steps.context.outputs.previous_artifact }}
+      run: python controller/tools/dtl_sync.py workflow previous --repository "$REPOSITORY" --artifact-id "$PREVIOUS_ARTIFACT"
+        --output "$GITHUB_OUTPUT"
+    - name: Download optional previous report context
+      id: previous_download
+      if: steps.previous.outcome == 'success'
+      continue-on-error: true
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        artifact-ids: ${{ steps.previous.outputs.artifact_id }}
+        run-id: ${{ steps.previous.outputs.run_id }}
+        repository: ${{ github.repository }}
+        github-token: ${{ github.token }}
+        path: previous
+        digest-mismatch: error
+    - name: Prepare disposable candidate from Git data
+      id: prepare
+      env:
+        GH_TOKEN: ${{ github.token }}
+        RESUME_ID: ${{ steps.context.outputs.resume_comment_id }}
+        PREVIOUS_OK: ${{ steps.previous_download.outcome }}
+      run: |-
+        args=()
+        if [ "$PREVIOUS_OK" = success ]; then args+=(--previous-report previous/report.json); fi
+        if [ -n "$RESUME_ID" ]; then args+=(--resume-comment-id "$RESUME_ID"); fi
+        set +e
+        python controller/tools/dtl_sync.py prepare inputs --meta detection/meta.json --checkout controller \
+          --directory candidate --output inputs --app-login "$APP_LOGIN" --james-login "$JAMES_LOGIN" "${args[@]}"
+        status=$?
+        set -e
+        if [ -f inputs/prepare.json ]; then
+          python -c 'import json,os; p=json.load(open("inputs/prepare.json")); open(os.environ["GITHUB_OUTPUT"],"a").write("outcome="+p["outcome"]+"\n")'
+        fi
+        exit "$status"
+    - name: Prepare trusted action config and report directory
+      id: clock
+      run: |-
+        ln -s "$GITHUB_WORKSPACE/controller/.venv" candidate/.venv
+        mkdir evaluation
+        printf '\n[projects."%s/candidate"]\ntrust_level = "untrusted"\n' "$GITHUB_WORKSPACE" >> controller/tools/dtl_sync/codex-home/config.toml
+        printf 'started_at=%s\n' "$(date +%s)" >> "$GITHUB_OUTPUT"
+    - name: Evaluate inside the Codex sandbox
+      id: codex
+      uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e
+      with:
+        openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+        working-directory: ${{ github.workspace }}/candidate
+        prompt-file: ${{ github.workspace }}/controller/tools/dtl_sync/PROMPT.md
+        output-schema-file: ${{ github.workspace }}/controller/tools/dtl_sync/REPORT_SCHEMA.json
+        output-file: ${{ github.workspace }}/evaluation/report.json
+        permission-profile: :workspace
+        safety-strategy: drop-sudo
+        codex-version: 0.154.0
+        effort: high
+        codex-home: ${{ github.workspace }}/controller/tools/dtl_sync/codex-home
+      if: needs.detect.outputs.invalid_key == 'false'
+    - name: Exercise authentication failure with the dedicated invalid key
+      id: codex_invalid
+      uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e
+      with:
+        openai-api-key: ${{ secrets.DTL_SYNC_INVALID_OPENAI_API_KEY }}
+        working-directory: ${{ github.workspace }}/candidate
+        prompt-file: ${{ github.workspace }}/controller/tools/dtl_sync/PROMPT.md
+        output-schema-file: ${{ github.workspace }}/controller/tools/dtl_sync/REPORT_SCHEMA.json
+        output-file: ${{ github.workspace }}/evaluation/report.json
+        permission-profile: :workspace
+        safety-strategy: drop-sudo
+        codex-version: 0.154.0
+        effort: high
+        codex-home: ${{ github.workspace }}/controller/tools/dtl_sync/codex-home
+      if: needs.detect.outputs.invalid_key == 'true'
+    - name: Validate report and collect complete patch as data
+      env:
+        EXERCISE: ${{ needs.detect.outputs.exercise }}
+        STARTED_AT: ${{ steps.clock.outputs.started_at }}
+      run: |-
+        python controller/tools/dtl_sync.py workflow report --meta detection/meta.json \
+          --report evaluation/report.json --exercise "$EXERCISE" --started-at "$STARTED_AT" --output "$GITHUB_OUTPUT"
+        python controller/tools/dtl_sync.py prepare patch --meta detection/meta.json --directory candidate --output patch
+        cp patch/candidate.json patch/candidate.patch patch/report-notes.json evaluation/
+    - name: Stage bounded input logs in the producer archive
+      if: always()
+      run: |-
+        mkdir -p evaluation
+        for name in prepare.json context-notes.json upstream.log upstream.diff upstream-filtered.diff previous-pin.diff wrapper.diff previous-report.json; do
+          if [ -f "inputs/$name" ]; then cp "inputs/$name" "evaluation/$name"; fi
+        done
+    - name: Collect bounded regular data files only
+      if: always()
+      run: python controller/tools/dtl_sync.py workflow collect --source evaluation --directory evaluate-artifact
+        --output "$GITHUB_OUTPUT"
+    - name: Retain evaluate artifacts
+      id: artifact
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: dtl-sync-evaluate-${{ github.run_id }}-${{ github.run_attempt }}
+        path: |-
+          evaluate-artifact/report.json
+          evaluate-artifact/telemetry.json
+          evaluate-artifact/candidate.json
+          evaluate-artifact/candidate.patch
+          evaluate-artifact/report-notes.json
+          evaluate-artifact/prepare.json
+          evaluate-artifact/context-notes.json
+          evaluate-artifact/upstream.log
+          evaluate-artifact/upstream.diff
+          evaluate-artifact/upstream-filtered.diff
+          evaluate-artifact/previous-pin.diff
+          evaluate-artifact/wrapper.diff
+          evaluate-artifact/previous-report.json
+        retention-days: 30
+        if-no-files-found: error
+  verify:
+    needs:
+    - detect
+    - evaluate
+    if: github.ref == 'refs/heads/main' && github.event.repository.default_branch == 'main' && github.workflow_ref
+      == format('{0}/.github/workflows/dtl-sync.yml@refs/heads/main', github.repository) && needs.evaluate.result
+      == 'success' && (needs.detect.outputs.mode == 'new-pr' || needs.detect.outputs.mode == 'update-pr')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+    env:
+      MAIN_SHA: ${{ needs.detect.outputs.main_sha }}
+      CAPTURE_ATTEMPT: ${{ needs.detect.outputs.run_attempt }}
+    outputs:
+      artifact_id: ${{ steps.artifact.outputs.artifact-id }}
+      run_attempt: ${{ github.run_attempt }}
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        ref: ${{ needs.detect.outputs.main_sha }}
+        path: controller
+        persist-credentials: false
+    - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+      with:
+        python-version: 3.13.5
+    - name: Validate detect producer identity
+      id: detect_identity
+      if: needs.detect.outputs.artifact_id != ''
+      env:
+        GH_TOKEN: ${{ github.token }}
+        ARTIFACT_ID: ${{ needs.detect.outputs.artifact_id }}
+        PRODUCER_ATTEMPT: ${{ needs.detect.outputs.run_attempt }}
+      run: |-
+        python controller/tools/dtl_sync.py workflow artifact --producer detect \
+          --artifact-id "$ARTIFACT_ID" --repository "$REPOSITORY" --run-id "$RUN_ID" \
+          --run-attempt "$PRODUCER_ATTEMPT" --workflow-sha "$WORKFLOW_SHA" --output "$GITHUB_OUTPUT"
+    - name: Download only detect artifact
+      id: detect_download
+      if: always() && steps.detect_identity.outcome == 'success'
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        artifact-ids: ${{ needs.detect.outputs.artifact_id }}
+        path: detection
+        run-id: ${{ github.run_id }}
+        repository: ${{ github.repository }}
+        github-token: ${{ github.token }}
+        digest-mismatch: error
+    - name: Bind detection metadata to trusted context
+      id: meta
+      if: steps.detect_download.outcome == 'success'
+      run: |-
+        python controller/tools/dtl_sync.py workflow check-meta --meta detection/meta.json \
+          --repository "$REPOSITORY" --run-id "$RUN_ID" --run-attempt "$CAPTURE_ATTEMPT" \
+          --main-sha "$MAIN_SHA" --output "$GITHUB_OUTPUT"
+    - name: Validate evaluate producer identity
+      id: evaluate_identity
+      if: needs.evaluate.outputs.artifact_id != ''
+      env:
+        GH_TOKEN: ${{ github.token }}
+        ARTIFACT_ID: ${{ needs.evaluate.outputs.artifact_id }}
+        PRODUCER_ATTEMPT: ${{ needs.evaluate.outputs.run_attempt }}
+      run: |-
+        python controller/tools/dtl_sync.py workflow artifact --producer evaluate \
+          --artifact-id "$ARTIFACT_ID" --repository "$REPOSITORY" --run-id "$RUN_ID" \
+          --run-attempt "$PRODUCER_ATTEMPT" --workflow-sha "$WORKFLOW_SHA" --output "$GITHUB_OUTPUT"
+    - name: Download only evaluate artifact
+      id: evaluate_download
+      if: always() && steps.evaluate_identity.outcome == 'success'
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        artifact-ids: ${{ needs.evaluate.outputs.artifact_id }}
+        path: evaluation
+        run-id: ${{ github.run_id }}
+        repository: ${{ github.repository }}
+        github-token: ${{ github.token }}
+        digest-mismatch: error
+    - name: Build verifier from trusted main
+      run: docker build -f controller/tools/dtl_sync/verify.Dockerfile -t dtl-sync-verifier controller
+    - name: Measure candidate and baseline independently
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |-
+        python controller/tools/dtl_sync.py verify --meta detection/meta.json \
+          --candidate evaluation/candidate.json --patch evaluation/candidate.patch \
+          --checkout controller --directory verification-work --output verification --image dtl-sync-verifier
+    - name: Retain verify artifacts
+      id: artifact
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: dtl-sync-verify-${{ github.run_id }}-${{ github.run_attempt }}
+        path: |-
+          verification/verify.json
+          verification/stock.log
+          verification/candidate_tests.log
+          verification/baseline_tests.log
+        retention-days: 30
+        if-no-files-found: error
+  publish:
+    needs:
+    - detect
+    - evaluate
+    - verify
+    if: always() && github.ref == 'refs/heads/main' && github.event.repository.default_branch == 'main' && github.workflow_ref
+      == format('{0}/.github/workflows/dtl-sync.yml@refs/heads/main', github.repository) && (github.event_name ==
+      'workflow_dispatch' || (github.event_name == 'schedule' && vars.DTL_SYNC_ENABLED == 'true'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      actions: read
+    env:
+      MAIN_SHA: ${{ needs.detect.outputs.main_sha }}
+      CAPTURE_ATTEMPT: ${{ needs.detect.outputs.run_attempt }}
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        ref: ${{ github.workflow_sha }}
+        path: bootstrap
+        persist-credentials: false
+    - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+      with:
+        python-version: 3.13.5
+    - name: Validate detect producer identity
+      id: detect_identity
+      if: always() && needs.detect.outputs.artifact_id != ''
+      env:
+        GH_TOKEN: ${{ github.token }}
+        ARTIFACT_ID: ${{ needs.detect.outputs.artifact_id }}
+        PRODUCER_ATTEMPT: ${{ needs.detect.outputs.run_attempt }}
+      run: |-
+        python bootstrap/tools/dtl_sync.py workflow artifact --producer detect \
+          --artifact-id "$ARTIFACT_ID" --repository "$REPOSITORY" --run-id "$RUN_ID" \
+          --run-attempt "$PRODUCER_ATTEMPT" --workflow-sha "$WORKFLOW_SHA" --output "$GITHUB_OUTPUT"
+    - name: Download only detect artifact
+      id: detect_download
+      if: always() && steps.detect_identity.outcome == 'success'
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        artifact-ids: ${{ needs.detect.outputs.artifact_id }}
+        path: detection
+        run-id: ${{ github.run_id }}
+        repository: ${{ github.repository }}
+        github-token: ${{ github.token }}
+        digest-mismatch: error
+    - name: Bind detection metadata to trusted context
+      id: meta
+      if: always() && steps.detect_download.outcome == 'success'
+      run: |-
+        python bootstrap/tools/dtl_sync.py workflow check-meta --meta detection/meta.json \
+          --repository "$REPOSITORY" --run-id "$RUN_ID" --run-attempt "$CAPTURE_ATTEMPT" \
+          --main-sha "$MAIN_SHA" --output "$GITHUB_OUTPUT"
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        ref: ${{ needs.detect.outputs.main_sha }}
+        path: controller
+        persist-credentials: false
+      if: always() && steps.meta.outputs.validated == 'true'
+    - name: Validate evaluate producer identity
+      id: evaluate_identity
+      if: always() && steps.meta.outputs.validated == 'true' && needs.evaluate.outputs.artifact_id != ''
+      env:
+        GH_TOKEN: ${{ github.token }}
+        ARTIFACT_ID: ${{ needs.evaluate.outputs.artifact_id }}
+        PRODUCER_ATTEMPT: ${{ needs.evaluate.outputs.run_attempt }}
+      run: |-
+        python bootstrap/tools/dtl_sync.py workflow artifact --producer evaluate \
+          --artifact-id "$ARTIFACT_ID" --repository "$REPOSITORY" --run-id "$RUN_ID" \
+          --run-attempt "$PRODUCER_ATTEMPT" --workflow-sha "$WORKFLOW_SHA" --output "$GITHUB_OUTPUT"
+    - name: Download only evaluate artifact
+      id: evaluate_download
+      if: always() && steps.evaluate_identity.outcome == 'success'
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        artifact-ids: ${{ needs.evaluate.outputs.artifact_id }}
+        path: evaluation
+        run-id: ${{ github.run_id }}
+        repository: ${{ github.repository }}
+        github-token: ${{ github.token }}
+        digest-mismatch: error
+    - name: Validate verify producer identity
+      id: verify_identity
+      if: always() && steps.meta.outputs.validated == 'true' && needs.verify.outputs.artifact_id != ''
+      env:
+        GH_TOKEN: ${{ github.token }}
+        ARTIFACT_ID: ${{ needs.verify.outputs.artifact_id }}
+        PRODUCER_ATTEMPT: ${{ needs.verify.outputs.run_attempt }}
+      run: |-
+        python bootstrap/tools/dtl_sync.py workflow artifact --producer verify \
+          --artifact-id "$ARTIFACT_ID" --repository "$REPOSITORY" --run-id "$RUN_ID" \
+          --run-attempt "$PRODUCER_ATTEMPT" --workflow-sha "$WORKFLOW_SHA" --output "$GITHUB_OUTPUT"
+    - name: Download only verify artifact
+      id: verify_download
+      if: always() && steps.verify_identity.outcome == 'success'
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        artifact-ids: ${{ needs.verify.outputs.artifact_id }}
+        path: verification
+        run-id: ${{ github.run_id }}
+        repository: ${{ github.repository }}
+        github-token: ${{ github.token }}
+        digest-mismatch: error
+    - name: Route outcomes and validate before minting credentials
+      id: route
+      if: always()
+      env:
+        GH_TOKEN: ${{ github.token }}
+        META_VALID: ${{ steps.meta.outputs.validated }}
+        EVALUATE_VALID: ${{ steps.evaluate_download.outcome == 'success' && steps.evaluate_identity.outputs.validated
+          == 'true' }}
+        VERIFY_VALID: ${{ steps.verify_download.outcome == 'success' && steps.verify_identity.outputs.validated
+          == 'true' }}
+        DETECTED: ${{ needs.detect.result }}
+        EVALUATED: ${{ needs.evaluate.result }}
+        VERIFIED: ${{ needs.verify.result }}
+        PREPARED: ${{ needs.evaluate.outputs.prepared }}
+        APP_EMAIL: ${{ vars.DTL_SYNC_APP_EMAIL }}
+      run: |-
+        tool=bootstrap/tools/dtl_sync.py
+        if [ "$META_VALID" = true ]; then tool=controller/tools/dtl_sync.py; fi
+        python "$tool" workflow route --meta detection/meta.json --meta-valid "$META_VALID" \
+          --evaluate-valid "$EVALUATE_VALID" --verify-valid "$VERIFY_VALID" \
+          --repository "$REPOSITORY" --run-id "$RUN_ID" --run-attempt "$CAPTURE_ATTEMPT" --main-sha "$MAIN_SHA" \
+          --detected "$DETECTED" --evaluated "$EVALUATED" --verified "$VERIFIED" --prepared "$PREPARED" \
+          --checkout controller --directory preflight --evaluation evaluation --verification verification \
+          --app-login "$APP_LOGIN" --output "$GITHUB_OUTPUT" \
+          --app-email "$APP_EMAIL" --james-login "$JAMES_LOGIN" --current-attempt "$RUN_ATTEMPT" --notification-meta notification-meta.json
+    - name: Mint repository-scoped App token after validation
+      id: app
+      if: always() && steps.route.outcome == 'success' && (steps.route.outputs.mode == 'publish' || steps.route.outputs.mode
+        == 'retry-alerts' || (steps.route.outputs.mode != 'noop' && steps.route.outputs.has_pr == 'true'))
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      with:
+        app-id: ${{ vars.DTL_SYNC_APP_ID }}
+        private-key: ${{ secrets.DTL_SYNC_APP_PRIVATE_KEY }}
+        owner: ${{ github.repository_owner }}
+        repositories: ${{ github.event.repository.name }}
+        permission-contents: write
+        permission-pull-requests: write
+        permission-issues: write
+    - name: Publish the verified tree
+      id: tree
+      if: always() && steps.route.outputs.mode == 'publish' && steps.app.outcome == 'success'
+      env:
+        GH_TOKEN: ${{ steps.app.outputs.token }}
+        APP_EMAIL: ${{ vars.DTL_SYNC_APP_EMAIL }}
+      run: |-
+        python controller/tools/dtl_sync.py publish tree --meta detection/meta.json \
+          --candidate evaluation/candidate.json --patch evaluation/candidate.patch --report evaluation/report.json \
+          --verification verification/verify.json --checkout controller --directory publication-work --output publication \
+          --app-login "$APP_LOGIN" --app-email "$APP_EMAIL" --james-login "$JAMES_LOGIN"
+    - name: Deliver PR body state and alerts
+      id: deliver
+      if: always() && steps.tree.outcome == 'success'
+      env:
+        GH_TOKEN: ${{ steps.app.outputs.token }}
+        DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+        ASANA_PAT: ${{ secrets.ASANA_PAT }}
+        DISCORD_ID: ${{ vars.DTL_SYNC_DISCORD_USER_ID }}
+        ASANA_PROJECT: ${{ vars.DTL_SYNC_ASANA_PROJECT_GID }}
+        REPORT_ARTIFACT: ${{ needs.evaluate.outputs.artifact_id }}
+        RESUME_ID: ${{ needs.evaluate.outputs.resume_comment_id }}
+      run: |-
+        args=()
+        if [ -n "$RESUME_ID" ]; then args+=(--resume-comment-id "$RESUME_ID"); fi
+        python controller/tools/dtl_sync.py publish deliver --meta detection/meta.json \
+          --candidate evaluation/candidate.json --report evaluation/report.json --verification verification/verify.json \
+          --publication publication/publication.json --checkout controller --output delivery \
+          --app-login "$APP_LOGIN" --james-login "$JAMES_LOGIN" --discord-user-id "$DISCORD_ID" \
+          --asana-project-gid "$ASANA_PROJECT" --telemetry evaluation/telemetry.json \
+          --report-artifact-id "$REPORT_ARTIFACT" "${args[@]}"
+    - name: Retry only unfinished channels
+      id: retry
+      if: always() && steps.route.outputs.mode == 'retry-alerts' && steps.app.outcome == 'success'
+      env:
+        GH_TOKEN: ${{ steps.app.outputs.token }}
+        DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+        ASANA_PAT: ${{ secrets.ASANA_PAT }}
+        DISCORD_ID: ${{ vars.DTL_SYNC_DISCORD_USER_ID }}
+        ASANA_PROJECT: ${{ vars.DTL_SYNC_ASANA_PROJECT_GID }}
+      run: |-
+        python controller/tools/dtl_sync.py publish retry-alerts --meta detection/meta.json --output retry-delivery \
+          --app-login "$APP_LOGIN" --james-login "$JAMES_LOGIN" --discord-user-id "$DISCORD_ID" --asana-project-gid "$ASANA_PROJECT"
+    - name: Report failures even when metadata is absent
+      id: failure
+      if: always() && (steps.route.outputs.mode == '' || steps.route.outputs.mode == 'needs-human' || steps.route.outputs.mode
+        == 'incomplete-verification' || steps.route.outputs.mode == 'operational-failure' || steps.app.outcome ==
+        'failure' || steps.tree.outcome == 'failure' || steps.deliver.outcome == 'failure' || steps.retry.outcome
+        == 'failure')
+      env:
+        GH_TOKEN: ${{ steps.app.outputs.token }}
+        DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+        DISCORD_ID: ${{ vars.DTL_SYNC_DISCORD_USER_ID }}
+        ROUTE: ${{ steps.route.outputs.mode }}
+        APP_OK: ${{ steps.app.outcome }}
+        HAS_PR: ${{ steps.route.outputs.has_pr }}
+        TREE_OK: ${{ steps.tree.outcome }}
+      run: |-
+        outcome=operational-failure
+        case "$ROUTE" in needs-human|incomplete-verification) outcome="$ROUTE";; esac
+        if [ "$APP_OK" = success ] && [ "$HAS_PR" != true ] && [ "$TREE_OK" = success ]; then
+          if python controller/tools/dtl_sync.py workflow failure-context --meta detection/meta.json \
+                    --repository "$REPOSITORY" --run-id "$RUN_ID" --run-attempt "$CAPTURE_ATTEMPT" --main-sha "$MAIN_SHA" \
+                    --publication publication/publication.json --app-login "$APP_LOGIN" --current-attempt "$RUN_ATTEMPT" \
+                    --notification-meta notification-meta.json --output "$GITHUB_OUTPUT"; then
+            HAS_PR=true
+          fi
+        fi
+        args=()
+        tool=bootstrap/tools/dtl_sync.py
+        if [ "$APP_OK" = success ] && [ "$HAS_PR" = true ]; then
+          args+=(--meta notification-meta.json --app-login "$APP_LOGIN")
+          tool=controller/tools/dtl_sync.py
+        fi
+        python "$tool" publish failure --repository "$REPOSITORY" --run-id "$RUN_ID" --run-attempt "$RUN_ATTEMPT" \
+          --outcome "$outcome" --discord-user-id "$DISCORD_ID" --output failure "${args[@]}"
+    - name: Retain publish artifacts
+      id: receipts
+      if: always() && steps.route.outputs.mode != 'noop'
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: dtl-sync-publish-${{ github.run_id }}-${{ github.run_attempt }}
+        path: |-
+          publication/publication.json
+          delivery/delivery.json
+          retry-delivery/delivery.json
+          failure/failure.json
+        retention-days: 30
+        if-no-files-found: error
+    - name: Preserve negative job outcome
+      if: always() && (steps.failure.outcome != 'skipped' || steps.route.outcome != 'success')
+      run: exit 1

@@ -351,9 +351,11 @@ def validate_report(value: object, meta: Meta) -> Report:
     for item in data["reachability"]:
         _object(item, {"path", "symbol", "reached", "reason"}, "reachability item")
         path = _report_text(item["path"], 500, "path")
-        if path.startswith("/") or "\\" in path or any(part in {"", ".", ".."} for part in path.split("/")) or any(ord(c) < 32 for c in path):
+        if path.startswith("/") or "\\" in path or any(part in {"", ".", ".."} for part in (path[:-1] if path.endswith("/") else path).split("/")) or any(ord(c) < 32 for c in path):
             raise SyncError("invalid upstream inventory path")
         _report_text(item["symbol"], 500, "symbol")
+        if path.endswith("/") and item["symbol"] != "*":
+            raise SyncError("directory inventory symbol must be *")
         _report_text(item["reason"], 2000, "reachability reason")
         if type(item["reached"]) is not bool or (path, item["symbol"]) in items:
             raise SyncError("invalid or duplicate reachability item")
@@ -493,3 +495,42 @@ def validate_publication_state_fields(data: dict) -> None:
             raise SyncError("invalid token telemetry")
     if any(telemetry[key] is None for key in TELEMETRY_FIELDS - {"unavailable_reason"}) and not telemetry["unavailable_reason"]:
         raise SyncError("missing telemetry must have a reason")
+
+
+def validate_reachability(entries: list[dict], changed: set[str]) -> None:
+    covered = set()
+    for entry in entries:
+        path = entry["path"]
+        matches = {file for file in changed if file.startswith(path)} if path.endswith("/") else {path} & changed
+        if not matches or covered & matches:
+            raise SyncError("upstream inventory has empty or duplicate coverage")
+        covered.update(matches)
+    if covered != changed:
+        raise SyncError("upstream inventory does not cover the exact changed files")
+
+
+def validate_artifact_provenance(artifact: object, run: object, *, producer: str,
+                                 artifact_id: str, repository: str, run_id: str,
+                                 run_attempt: str, workflow_sha: str) -> None:
+    _repository(repository)
+    for identifier in (artifact_id, run_id, run_attempt):
+        _identifier(identifier)
+    _sha(workflow_sha)
+    if producer not in ("detect", "evaluate", "verify"):
+        raise SyncError("invalid artifact producer")
+    try:
+        valid = (type(artifact["id"]) is int and artifact["id"] == int(artifact_id)
+                 and artifact["name"] == f"dtl-sync-{producer}-{run_id}-{run_attempt}"
+                 and artifact["expired"] is False
+                 and artifact["workflow_run"]["id"] == int(run_id)
+                 and artifact["workflow_run"]["head_sha"] == workflow_sha
+                 and type(run["id"]) is int and run["id"] == int(run_id)
+                 and type(run["run_attempt"]) is int and run["run_attempt"] == int(run_attempt)
+                 and run["head_sha"] == workflow_sha and run["head_branch"] == "main"
+                 and run["path"] == ".github/workflows/dtl-sync.yml"
+                 and run["event"] in ("schedule", "workflow_dispatch")
+                 and run["repository"]["full_name"] == repository)
+    except (KeyError, TypeError):
+        valid = False
+    if not valid:
+        raise SyncError("artifact provenance mismatch")

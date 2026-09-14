@@ -1,10 +1,9 @@
 # DTL sync: CI and implementation status
 
-The upstream sync automation is being built in reviewed phases. Currently,
-CI, read-only detection, disposable candidate preparation, and independent
-Docker verification and validated Git tree publication are implemented. Codex
-evaluation, PR creation/body updates, alerts, and scheduled dispatch are not
-implemented or enabled.
+The upstream sync automation is being built in reviewed phases. CI and the four-job sync workflow are implemented locally: detection, sandboxed
+Codex evaluation, independent Docker verification, validated tree publication,
+PR state, and alert delivery. Hosted acceptance, credential provisioning, and
+activation remain pending. Scheduled runs require `DTL_SYNC_ENABLED=true`.
 The intended system is described in the
 [upstream sync design](designs/2026-09-10-dtl-upstream-sync.md).
 
@@ -74,7 +73,7 @@ docker run --rm --network none sugarscape-ci python -c \
 
 The import smoke catches missing submodule contents that a Docker `COPY` alone
 would not detect. It does not certify a complete hosted game or exercise the
-future sync service. No CI step pushes the image.
+hosted sync service. No CI step pushes the image.
 
 ## Detect upstream changes
 
@@ -87,9 +86,9 @@ The input checkout's `origin` must be the intended repository. Detection
 fetches `origin/main` into a new scratch bare repository, captures its commit
 and `src/sugarscape` gitlink, and reads the blob identity of
 `tools/dtl_sync/PROMPT.md` from that commit. Both files must exist on main.
-The prompt is added in a later phase, so this CLI is currently qualified with
-offline fixtures; it is not yet ready to run against the repository's present
-remote main. There is no fallback to a local prompt or another pin.
+The prompt is implemented locally at `tools/dtl_sync/PROMPT.md`; it and the
+controller must reach main before hosted detection can run. Local qualification
+uses offline fixtures. There is no fallback to a local prompt or another pin.
 
 Once those prerequisites are in place, a manual invocation has this form:
 
@@ -196,7 +195,7 @@ prerequisites above are deployed:
 
 This fetches main and the recorded PR head into the disposable checkout,
 rechecks the PR identity, and merges captured main when necessary. The merge
-is left uncommitted; it is input for the future publisher's tree construction.
+is left uncommitted; it is input for the publisher's tree construction.
 The target upstream commit is fetched into that checkout's `src/sugarscape`
 and its gitlink is staged before any later tests. The source checkout and its
 submodule remain untouched. No candidate Python or agent is executed by this
@@ -231,7 +230,7 @@ branch-specific check.
 
 ## Build the complete candidate patch
 
-After editing/testing the disposable candidate in the future evaluation step:
+After editing/testing the disposable candidate inside the evaluation sandbox:
 
 ```sh
 .venv/bin/python tools/dtl_sync.py prepare patch \
@@ -279,11 +278,11 @@ allowlist, including main-only Dockerfile and protected tooling updates.
 The command prints that tree ID on success. Generated Git objects stay in the
 disposable candidate repository; this is not a commit or publication.
 
-## Later phases
+## Remaining rollout work
 
-This runbook will grow with implemented commands for dispatch, red PR review,
-credential rotation, and week-one operations. Until those phases are complete,
-use the design as a proposal, not an operational command reference.
+Hosted acceptance, credential provisioning/rotation, red PR review, and week-one
+operations still require the later rollout checklist and explicit authorization.
+Local workflow tests do not prove real GitHub, Codex, Discord, or Asana delivery.
 
 ## Independent verification
 
@@ -373,7 +372,7 @@ fail before an artifact is created; its absence is also a failure.
 The write boundary protects trusted control files and independent baseline
 measurements. It does not prove that arbitrary malicious code cannot falsify
 its own process output. Git tree publication and PR delivery are separate
-commands below. Workflow artifact provenance checks remain Phase 6 work;
+commands below. The workflow checks producer-specific artifact provenance before consumption;
 verification alone does not publish anything.
 
 Studio integration tests skip with explicit reasons when their external
@@ -388,8 +387,9 @@ checkout nor a host home is mounted into verification containers.
 Phase 5A implements `publish tree`: this command can push a branch to the source
 checkout's origin. It does not create/update a PR, mutate its state block, mint
 credentials, assign anyone, or send alerts. Delivery is a separate command
-below; the hosted workflow and artifact provenance checks remain Phase 6. Local
-tests use temporary remotes and fake GitHub/HTTP responses only.
+below. The local workflow implements provenance checks and publication routing;
+hosted acceptance is pending. Local tests use temporary remotes and fake
+GitHub/HTTP responses only.
 
 Run from the captured trusted controller checkout, with captured artifacts and
 an explicitly provisioned repository-scoped Git transport identity:
@@ -432,7 +432,11 @@ upstream diff. All fields are required:
   functions, configuration keys, or module-level changes. `reached` is a real
   boolean. Reasons explain reachability, not just whether a file was imported.
   Paths/symbols are limited to 500 characters, reasons to 2,000. Duplicate
-  path/symbol pairs are rejected.
+  path/symbol pairs are rejected. A directory `path` ends in `/` and must use
+  `symbol: "*"`; its reason and reached value cover every changed descendant.
+  File entries cover one exact changed path. No file may be covered twice, even
+  through different symbols or overlapping directories. Empty directory coverage
+  and entries outside the changed set are rejected.
 - `design_questions`: up to 100 unique stable slug `id`/`question` pairs;
   IDs are at most 100 characters, questions at most 2,000.
 - `reasoning`: nonempty text up to 8,000 characters.
@@ -525,17 +529,19 @@ Keep these files together in the captured trusted checkout. The CLI imports
 its sibling modules explicitly; delivery uses the injected command runner and
 has no runtime import of the controller. The test loader presents the combined
 namespace used by existing tests. This extraction changes no command, argument,
-artifact name, state schema, or delivery behavior. Hosted workflow wiring must
-source all three files from trusted main, never candidate patches.
+artifact name, state schema, or delivery behavior. The workflow sources all three
+files from captured trusted main, never candidate patches. The default-branch
+workflow commit supplies the bootstrap controller when metadata is absent.
 
 ## PR state and delivery
 
 Phase 5B implements these commands locally. They can perform real remote
 writes when given real credentials; local acceptance uses only injected fake
-services. No hosted workflow, credential provisioning, PR, or alert has been
-activated by this phase. Run the controller from captured trusted main, never
-from the candidate checkout. P6 must verify each artifact's expected producer,
-run, and attempt before credentials are introduced.
+services. No credential provisioning, hosted dispatch, PR, or alert has been
+performed by the local implementation work. Run the controller from captured trusted main, never
+from the candidate checkout. The workflow verifies each artifact's expected
+producer, repository, workflow, run, and producer attempt before introducing
+publication credentials.
 
 After `publish tree`, pass its retained receipt and matching input artifacts:
 
@@ -621,8 +627,10 @@ authorization receipts above. `telemetry` has exactly:
 - `unavailable_reason`: required nonempty explanation when any fact is null.
 
 Omitted telemetry defaults to null facts with an explicit unavailable reason;
-requested model is never substituted for actual model. The later workflow must
-supply trusted measurements when exposed by the pinned action.
+requested model is never substituted for actual model. The workflow records
+`requested_model: "action default"`, the pinned action SHA, elapsed action time,
+and the measured `codex --version` when available. The pinned action exposes
+no actual-model or token-usage output; these remain null with an explicit reason.
 
 For every needs-design target, delivery initializes assignment, Discord, and
 Asana receipts. It saves the pending attempt before each side effect, then saves
@@ -712,6 +720,167 @@ comment, preserving the last successful publication tuple and all deliveries.
 Otherwise it sends a Discord DM naming only the trusted repository and run;
 it does not invent target or PR identities. `failure.json` records the outcome,
 run URL, and PR number or Discord message ID. Exit 0 means the failure was
-reported, not that evaluation succeeded. The workflow must retain the original
-failure result. Hosted finalizer wiring and real service acceptance remain P6
-and rollout work.
+reported, not that evaluation succeeded. The workflow preserves a failing job
+result after notification. Its finalizer wiring is tested locally; real service
+acceptance remains pending.
+
+## Sync workflow
+
+[dtl-sync.yml](../.github/workflows/dtl-sync.yml) implements four separate jobs.
+It is locally tested and has not been dispatched or enabled by this work.
+
+| Job | Timeout | Execution and credentials |
+|---|---|---|
+| `detect` | 10 minutes | Trusted Git/stdlib only; read-only repository, PR, and Actions access |
+| `evaluate` | 30 minutes | Trusted dependency setup; candidate code runs only inside the pinned Codex sandbox; read-only GitHub access and the selected OpenAI key |
+| `verify` | 60 minutes | Trusted Docker build/controller; separate isolated stock, candidate, and baseline containers; read-only contents/Actions access |
+| `publish` | 10 minutes | Trusted controller only; validates evidence before minting a repository-scoped App token; PR/alert delivery through existing commands |
+
+All jobs require `refs/heads/main`, repository default branch `main`, and the
+workflow path on that branch. This check precedes secret-bearing steps, including
+manual dispatch. No checkout persists credentials. Actions use the immutable
+SHAs selected in the implementation plan; Python is 3.13.5, uv is 0.12.13, and
+Codex is 0.154.0. The static concurrency group is `dtl-upstream-sync` with
+`cancel-in-progress: false`. No candidate cache is restored into trusted jobs.
+
+The schedule is `0 13 * * *` (13:00 UTC daily) and runs only when repository
+variable `DTL_SYNC_ENABLED` is exactly `true`. Manual dispatch bypasses that
+schedule gate but still requires the trusted main-branch checks.
+
+### Dispatch inputs
+
+These inputs are implemented; live use requires separate rollout authorization
+and the workflow/controller/prompt already present on main.
+
+| Input | Default | Meaning |
+|---|---|---|
+| `upstream_ref` | `master` | Upstream master or a unique reachable commit prefix |
+| `force` | `false` | Bypass unchanged-publication and already-pinned shortcuts |
+| `replay` | `false` | Permit a historical target only when no sync PR is open |
+| `exercise` | `none` | `needs-design` forces evaluation and overlays a synthetic design question on the real report |
+| `test_invalid_key` | `false` | Select only the dedicated invalid key; requires manual dispatch and explicit `force=true` |
+
+The exercise uses stable question ID `exercise-needs-design` and prefixes the
+summary with `EXERCISE:`. It does not alter the patch, verification, measured
+hashes, or classification precedence, and creates no artificial empty commit.
+An authorized operator must resolve the exercise question before merging.
+The invalid-key action is mutually exclusive with the normal action; an empty
+invalid key never falls back to the working key. Use an intentionally invalid
+string for that dedicated secret, never an old working credential.
+
+### Configuration and secret boundaries
+
+| Repository setting | Consumer |
+|---|---|
+| Variable `DTL_SYNC_ENABLED` | Schedule gate only |
+| Variables `DTL_SYNC_APP_ID`, `DTL_SYNC_APP_LOGIN`, `DTL_SYNC_APP_EMAIL` | App token, bot ownership, and Git author identity |
+| Variable `DTL_SYNC_JAMES_LOGIN` | Assignment and authorized human resolution |
+| Variables `DTL_SYNC_DISCORD_USER_ID`, `DTL_SYNC_ASANA_PROJECT_GID` | Fixed alert destinations |
+| Secret `OPENAI_API_KEY` | Normal Codex evaluation only |
+| Secret `DTL_SYNC_INVALID_OPENAI_API_KEY` | Explicit authentication-failure exercise only |
+| Secret `DTL_SYNC_APP_PRIVATE_KEY` | Publish job App-token minting only |
+| Secrets `DISCORD_BOT_TOKEN`, `ASANA_PAT` | Publish delivery/retry; failure-only fallback needs Discord |
+
+No credentials were provisioned or accessed for local acceptance. Use the
+project's token-broker-first policy when a separately authorized operator
+provisions these settings. The App installation token is explicitly scoped to
+this repository, with contents, pull requests, and issues write permissions.
+No App token is minted for a no-op. Notification-only paths with no validated
+owned PR use trusted run context and Discord without an App token.
+
+The trusted [prompt](../tools/dtl_sync/PROMPT.md),
+[report schema](../tools/dtl_sync/REPORT_SCHEMA.json), and
+[Codex config](../tools/dtl_sync/codex-home/config.toml) come from captured main.
+The action runs in the disposable `candidate/`, never the controller. Before
+it runs, dependencies are installed with `uv sync --project controller`, and
+`candidate/.venv` links to that environment so sandboxed subprocess tests use
+the same dependencies. Trusted setup does not import candidate Python.
+
+The config disables automatic project-document loading and web search; setup
+marks the candidate project untrusted so candidate project config cannot supply
+hooks or MCP servers. The action uses `permission-profile: :workspace`,
+`safety-strategy: drop-sudo`, `output-schema-file`, and `output-file`. Candidate
+source and review context are data under the trusted task. Git hooks and
+filesystem monitors are disabled for controller Git operations. The
+[pinned action contract](https://github.com/openai/codex-action/blob/86365089eb2b84e0a8fb0717b304f8bdcb13b20e/action.yml)
+is verified structurally; actual hosted sandbox behavior still requires rollout
+acceptance.
+
+### Artifact provenance and reruns
+
+Each producer uploads a flat archive named
+`dtl-sync-{detect|evaluate|verify}-{run_id}-{producer_attempt}`, retained for
+30 days, and exposes its exact artifact ID and attempt through job outputs.
+Consumers query the artifact and the corresponding workflow run attempt before
+downloading that single ID. They require the expected repository, run, producer
+name/attempt, workflow path, workflow SHA, main branch, allowed event, and an
+unexpired artifact. Detection metadata must additionally match the captured
+main SHA and detection attempt. A consumer's current attempt is not substituted
+for a successful producer's earlier attempt on a failed-job rerun.
+
+Downloads explicitly bind repository/run and fail on digest mismatch. Routing
+requires both successful provenance validation and successful download; residual
+files from a failed download cannot authorize publication. These checks use the
+[GitHub artifact API](https://docs.github.com/en/rest/actions/artifacts) and the
+[pinned download implementation](https://github.com/actions/download-artifact/blob/3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c/src/download-artifact.ts).
+
+Evaluation's collector accepts only fixed regular-file names: report, telemetry,
+candidate metadata/patch, preparation notes, and diff/context logs. JSON files
+are bounded to 64 KiB, patches to 2 MiB, and logs to 1 MiB. It rejects symlinks,
+nonregular files, and oversized files, retaining other valid files while marking
+the collection failed. It never uploads a candidate checkout, environment, or
+arbitrary executable. Verification retains its closed result and three bounded
+measurement logs. Publication retains publication/delivery/failure receipts.
+
+Prior report context uses the saved evaluate artifact ID and independently
+validates its original run/attempt. Missing or expired context is recoverable:
+preparation records the loss and retains questions from PR state, the full
+main-to-target upstream diff, and cumulative wrapper changes. Such prior
+artifacts never substitute for current publication evidence.
+
+Before an App token is minted, publication preflight uses the same independent
+Git reconstruction, report/verification bindings, exact inventory, protected-path
+checks, deterministic commit, and stale-head checks as `publish tree`. It never
+pushes and writes only a preflight receipt. `publish tree` repeats the checks
+with the write identity. A failed-job rerun can reconcile the exact already-pushed
+commit and an initial PR whose state was atomically created before label/alert
+completion; both head and publication tuple must match. A fresh detection run
+still refuses an unlabeled state-bearing PR and requires retained-publication
+reconciliation. It does not adopt arbitrary branches or PRs.
+
+### Outcome routing and workflow helpers
+
+Publish has job-level `always()` so failed or skipped dependencies reach its
+trusted finalizer. It first loads bootstrap code from the default-branch workflow
+commit; only validated metadata selects the captured-main controller.
+
+| Input outcome | Publish behavior |
+|---|---|
+| Disabled schedule | All jobs skipped |
+| `noop` | No evaluation, verification, publication, or alert work |
+| `retry-alerts` | Existing PR state drives only unfinished deliveries; no candidate artifacts required |
+| Preparation `needs-human` | Preserve successful publication and notify the owned PR |
+| Failed detection/evaluation or invalid publication evidence | Operational failure; no candidate publication |
+| Failed/incomplete verification | Incomplete-verification notification; no candidate publication |
+| Complete evidence, including completed red tests | Independently classify, publish measured tree, then call `publish deliver` |
+| Tree/PR/alert delivery failure | Preserve receipts and report failure; keep the job failed |
+
+The first PR body and state are still created atomically by `publish deliver`.
+If that command creates a PR and then fails, the finalizer can recover its
+identity only from the trusted publication receipt, exact live head, App
+ownership, and matching saved publication tuple. Failure comments use the
+current attempt, while the original detection metadata remains unchanged.
+With missing metadata or no validated PR, the fallback Discord message names
+only the trusted repository and run. Successful notification does not make the
+failed evaluation green. Runner loss or a killed finalizer cannot guarantee a
+notification; hosted acceptance must exercise ordinary failure paths.
+
+The synchronous `workflow` CLI subcommands support this wiring:
+`inputs`, `artifact`, `check-meta`, `context`, `previous`, `report`, `collect`,
+`route`, and `failure-context`. Use `python tools/dtl_sync.py workflow NAME --help`
+for exact arguments; the workflow supplies their trusted context and output
+paths. `route` performs read-only publication preflight; `failure-context`
+performs read-only PR reconciliation and writes notification metadata. Neither
+helper sends alerts or pushes Git. Structural and offline fake-service tests
+are in `tests/test_dtl_sync_orchestration.py`; they cover new/update/no-op/red
+and missing-artifact paths without contacting production services.
