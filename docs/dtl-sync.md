@@ -1,9 +1,9 @@
 # DTL sync: CI and implementation status
 
 The upstream sync automation is being built in reviewed phases. Currently,
-CI, read-only detection, and disposable candidate preparation are implemented. Codex evaluation,
-independent verification, PR publication, alerts, and scheduled dispatch are
-not implemented or enabled.
+CI, read-only detection, disposable candidate preparation, and independent
+Docker verification are implemented. Codex evaluation, PR publication, alerts,
+and scheduled dispatch are not implemented or enabled.
 The intended system is described in the
 [upstream sync design](designs/2026-09-10-dtl-upstream-sync.md).
 
@@ -257,7 +257,7 @@ Other outside-allowlist edits are dropped and listed in `report-notes.json`.
 Protected edits force a `needs-design` note with cause `protected-path-edit`;
 the protected bytes are never shipped in the patch. A dirty upstream tree or
 clean upstream checkout at the wrong SHA is also recorded as a protected edit.
-This note is not independent verification; the later verifier must fetch and
+This note is not independent verification; the verifier must fetch and
 measure the intended upstream itself.
 
 Outputs:
@@ -278,3 +278,100 @@ disposable candidate repository; this is not a commit or publication.
 This runbook will grow with implemented commands for dispatch, red PR review,
 credential rotation, and week-one operations. Until those phases are complete,
 use the design as a proposal, not an operational command reference.
+
+## Independent verification
+
+Build the verifier image from the trusted main checkout before executing any
+candidate code. It installs Python 3.13.5, Git, uv 0.12.13, and the development
+and runtime dependencies from that checkout's `pyproject.toml`. It does not
+build the candidate or install candidate dependencies. PyYAML remains a dev
+requirement; the verifier runs the workflow structural tests too.
+
+```bash
+docker build -f tools/dtl_sync/verify.Dockerfile -t dtl-sync-verifier .
+docker image inspect dtl-sync-verifier --format '{{.Id}}'
+docker run --rm --network=none --entrypoint cat dtl-sync-verifier /opt/dependencies.txt
+DTL_SYNC_REQUIRE_DOCKER=1 PYTHONHASHSEED=0 .venv/bin/python -m pytest -q -ra tests/test_dtl_sync_isolation.py
+```
+
+Retain the build log (including the resolved Python base digest), image ID,
+and `/opt/dependencies.txt` with the run artifacts. Dependency versions are
+resolved at image build time, then all three measurements use that exact image
+ID. Rebuild from each captured main in automation. Docker must be running;
+missing Docker or a missing image returns a setup error naming the build command.
+There is no unisolated fallback.
+
+The real host acceptance above requires Docker and the prepared image. In the
+ordinary offline suite, these infrastructure tests explicitly skip when Docker
+is unavailable. Inside a measurement container they always skip with the reason
+that there is no Docker socket. The suite's `-ra` output records these skips;
+host acceptance is a separate required check and cannot be replaced by them.
+
+After `prepare patch`, run from the trusted controller checkout:
+
+```bash
+.venv/bin/python tools/dtl_sync.py verify \
+  --meta build/dtl-sync/meta.json \
+  --candidate build/dtl-sync/patch/candidate.json \
+  --patch build/dtl-sync/patch/candidate.patch \
+  --checkout . \
+  --directory build/dtl-sync/measurements \
+  --output build/dtl-sync/verification \
+  --image dtl-sync-verifier
+```
+
+Both directory arguments must be new. The verifier fetches captured main and
+the target independently into fresh self-contained repositories. It checks the
+main gitlink, patch size/digest, allowed paths, regular modes, UTF-8 text,
+changed-file list, target gitlink, and reconstructed tree. Forbidden received
+patches fail; they are never filtered into publishable evidence.
+
+The stock measurement uses only main's wrapper, trajectory test, and conftest
+with the target upstream. The controller parses the old hash constant without
+importing Python code. A second container runs the complete candidate suite;
+a third runs main's suite with main's original pin. Each suite records JUnit
+XML and collection count. Completed failing tests and changed hashes remain
+valid negative evidence. Empty collection, malformed/missing/truncated XML,
+invalid counts, inconsistent exits, timeout, or missing probe output produce
+incomplete evidence, never success.
+
+Every container uses uid/gid 65534, a read-only root, no network, no Linux
+capabilities, no privilege escalation, 2 CPUs, 4 GiB memory, and 256 PIDs. Only
+its repository (including local Git metadata) and main's harness are mounted,
+read-only. `/tmp` is a 1 GiB writable, executable tmpfs (the tests execute temporary fake
+CLI scripts). Each disposable repository has an untracked `.venv` link to the
+image's trusted `/opt/venv`; tests invoking `.venv/bin/python` use the same
+installed environment as the harness. The suite harness adds the repository
+root to Python's import path, matching `python -m pytest`. No controller/evidence directory,
+baseline sibling, host home, credentials, or Docker socket is exposed. Ordinary
+loopback socket tests can still run. Measurement output is bounded to 1 MiB and
+the timeout is 15 minutes; cleanup forcibly removes the named container, including
+remaining descendants. It also runs after output-limit or launch failures.
+
+`verify.json` is written by the host controller after measurement. Its version-1
+fields bind `main_sha`, `target_sha`, `patch_sha256`, and `candidate_tree`;
+`pin_matches_target`, `patch_applied`, `hash_changed`, `hash_old`, and `hash_new`
+are positive facts or null. `candidate_tests` and `baseline_tests` contain
+`completed`, `exit_code`, `collected`, `passed`, `failed`, `errors`, `skipped`,
+and `reason`. Missing facts are null with `completed: false`; `reason` explains
+incomplete evidence. `image_id` identifies the actual measured image. Bounded
+`stock.log`, `candidate_tests.log`, and `baseline_tests.log` retain completed
+process output. The command returns 0 for complete evidence (including red
+results), 1 for incomplete/invalid evidence. A malformed top-level input can
+fail before an artifact is created; its absence is also a failure.
+
+The write boundary protects trusted control files and independent baseline
+measurements. It does not prove that arbitrary malicious code cannot falsify
+its own process output. Publication and workflow artifact provenance checks
+arrive in later phases; verification alone does not publish anything.
+
+Current local qualification found a baseline limitation: the Studio discovery
+and launcher tests assume Node and a separate Metta bridge checkout exist.
+Those resources are absent from this Python verifier image and must not be
+supplied by mounting the operator's home or Metta checkout. These tests can
+therefore produce complete red baseline evidence even without an upstream
+change. The ranking timing assertion can also fail under the container's CPU
+quota while pytest runs workers in parallel. The verifier retains these
+failures; a green automated sync requires a separate review of these test
+environment assumptions. Host test success alone does not establish a green
+container baseline.

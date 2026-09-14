@@ -66,5 +66,17 @@ gitlink there; it never alters the source checkout. `prepare patch` writes a
 complete main-to-candidate patch using a temporary index, preserving the
 candidate's existing index. Keep patch output outside the candidate checkout.
 See `tests/test_dtl_sync_prepare.py` for cumulative changes, main merges,
-authorized resume, protected paths, and binary/symlink rejection. Verification
-and publication are not implemented yet.
+authorized resume, protected paths, and binary/symlink rejection. Publication
+is not implemented yet.
+
+`verify` reconstructs from captured main and runs stock, candidate, and baseline
+measurements in separate nonroot Docker containers. Build the verifier from
+trusted main with `docker build -f tools/dtl_sync/verify.Dockerfile -t dtl-sync-verifier .`.
+Run mandatory host isolation acceptance with
+`DTL_SYNC_REQUIRE_DOCKER=1 PYTHONHASHSEED=0 .venv/bin/python -m pytest -q -ra tests/test_dtl_sync_isolation.py`.
+Containers deliberately skip this nested infrastructure test with a printed
+reason: they have no Docker socket. Never fall back to host execution when
+Docker/image setup is missing. Keep the controller and final evidence outside
+all mounted paths; only the current measurement and trusted harness are mounted,
+read-only. The verifier harness and image files under `tools/dtl_sync/` must
+come from captured main, never candidate patches.

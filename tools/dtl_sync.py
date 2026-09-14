@@ -1,4 +1,4 @@
-"""Detect and prepare DTL updates without publishing or executing upstream code."""
+"""Detect, prepare, and independently verify DTL updates without publishing."""
 from __future__ import annotations
 
 import argparse
@@ -12,6 +12,10 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
+import uuid
+import xml.etree.ElementTree as ET
+import ast
 
 
 UPSTREAM_URL = "https://github.com/nkremerh/sugarscape"
@@ -59,6 +63,33 @@ class CommandRunner:
             # Arguments, stdin and stderr may contain credentials or private API data.
             raise SyncError(f"{Path(args[0]).name} exited with status {result.returncode}")
         return result
+
+
+    def run_bounded(self, args: list[str], *, timeout: float = 900) -> subprocess.CompletedProcess[str]:
+        """Bound child output while it runs, including output from hostile test code."""
+        with tempfile.TemporaryFile() as output:
+            try:
+                process = subprocess.Popen(args, stdout=output, stderr=subprocess.STDOUT,
+                                           env=self.env)
+            except OSError:
+                raise SyncError("could not execute Docker; check verifier setup") from None
+            deadline = time.monotonic() + timeout
+            try:
+                while process.poll() is None:
+                    if time.monotonic() >= deadline:
+                        raise SyncError("measurement timed out")
+                    if os.fstat(output.fileno()).st_size > MAX_LOG_BYTES:
+                        raise SyncError("measurement output exceeds size limit")
+                    time.sleep(0.05)
+                output.seek(0)
+                data = output.read(MAX_LOG_BYTES + 1)
+                if len(data) > MAX_LOG_BYTES:
+                    raise SyncError("measurement output exceeds size limit")
+                return subprocess.CompletedProcess(args, process.returncode, data.decode("utf-8", errors="replace"), "")
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                process.wait()
 
 
 @dataclass(frozen=True)
@@ -257,8 +288,8 @@ def read_state(body: str) -> DetectionState:
     return DetectionState(1, identity, parsed, questions)
 
 
-def _git(runner: CommandRunner, directory: Path, *args: str, check: bool = True, env=None):
-    return runner.run(["git", "-C", str(directory), *args], check=check, env=env)
+def _git(runner: CommandRunner, directory: Path, *args: str, check: bool = True, env=None, input_text=None):
+    return runner.run(["git", "-C", str(directory), *args], check=check, env=env, input_text=input_text)
 
 
 def _bare_fetch(runner: CommandRunner, directory: Path, url: str, branch: str) -> None:
@@ -610,6 +641,295 @@ def prepare_patch(*, meta: Meta, directory: Path, output: Path, runner: CommandR
     return result
 
 
+
+@dataclass(frozen=True)
+class TestResult:
+    completed: bool
+    exit_code: int | None = None
+    collected: int | None = None
+    passed: int | None = None
+    failed: int | None = None
+    errors: int | None = None
+    skipped: int | None = None
+    reason: str | None = None
+
+
+@dataclass(frozen=True)
+class Verification:
+    schema_version: int
+    main_sha: str
+    target_sha: str
+    patch_sha256: str
+    candidate_tree: str | None
+    pin_matches_target: bool | None
+    patch_applied: bool | None
+    hash_changed: bool | None
+    hash_old: str | None
+    hash_new: str | None
+    candidate_tests: TestResult
+    baseline_tests: TestResult
+    reason: str | None
+    image_id: str | None
+
+
+def validate_candidate(value: object) -> Candidate:
+    data = _object(value, set(Candidate.__dataclass_fields__), "candidate")
+    if type(data["schema_version"]) is not int or data["schema_version"] != 1:
+        raise SyncError("unsupported candidate version")
+    for key in ("main_sha", "target_sha", "candidate_tree"):
+        _sha(data[key])
+    if not isinstance(data["patch_sha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", data["patch_sha256"]):
+        raise SyncError("invalid patch digest")
+    for key in ("files_changed", "protected_edits", "dropped_edits"):
+        items = data[key]
+        if not isinstance(items, list) or any(not isinstance(item, str) for item in items):
+            raise SyncError("invalid candidate path list")
+        if items != sorted(set(items)):
+            raise SyncError("candidate paths must be unique and sorted")
+    return Candidate(**data)
+
+
+
+def read_candidate(path: Path) -> Candidate:
+    with path.open(encoding="utf-8") as file:
+        text = file.read(MAX_REPORT_BYTES + 1)
+    return validate_candidate(_json(text, MAX_REPORT_BYTES, "candidate"))
+
+
+def fresh_checkout(runner: CommandRunner, source: Path, directory: Path, main: str,
+                   pin: str, upstream_url: str) -> None:
+    directory.mkdir(parents=True)
+    _git(runner, directory, "init")
+    _git(runner, directory, "config", "core.hooksPath", "/dev/null")
+    origin = _git(runner, source, "remote", "get-url", "origin").stdout.strip()
+    _git(runner, directory, "fetch", "--no-tags", origin, main)
+    _git(runner, directory, "checkout", "--detach", main)
+    upstream = directory / GITLINK_PATH
+    upstream.mkdir(parents=True, exist_ok=True)
+    _git(runner, upstream, "init")
+    _git(runner, upstream, "config", "core.hooksPath", "/dev/null")
+    _git(runner, upstream, "fetch", "--no-tags", upstream_url, pin)
+    _git(runner, upstream, "checkout", "--detach", pin)
+    if _git(runner, upstream, "rev-parse", "HEAD").stdout.strip() != pin:
+        raise SyncError("independent upstream checkout has wrong pin")
+    _git(runner, directory, "update-index", "--add", "--cacheinfo", f"160000,{pin},{GITLINK_PATH}")
+
+
+def reconstruct_candidate(*, meta: Meta, candidate: Candidate, patch: Path,
+                          checkout: Path, directory: Path, runner: CommandRunner,
+                          upstream_url: str = UPSTREAM_URL) -> Path:
+    validate_meta(asdict(meta))
+    validate_candidate(asdict(candidate))
+    if (candidate.main_sha, candidate.target_sha) != (meta.main_sha, meta.target_sha):
+        raise SyncError("candidate identity mismatch")
+    with patch.open("rb") as file:
+        payload = file.read(MAX_PATCH_BYTES + 1)
+    if len(payload) > MAX_PATCH_BYTES or hashlib.sha256(payload).hexdigest() != candidate.patch_sha256:
+        raise SyncError("candidate patch size or digest mismatch")
+    try:
+        text = payload.decode("utf-8")
+    except UnicodeDecodeError:
+        raise SyncError("candidate patch is not UTF-8") from None
+    fresh_checkout(runner, checkout, directory, meta.main_sha, meta.target_sha, upstream_url)
+    base = _tree_entries(runner, directory, meta.main_sha)
+    if base.get(GITLINK_PATH) != ("160000", meta.main_pin):
+        raise SyncError("captured main pin mismatch")
+    # Git validates paths and modes in its index; no candidate hooks or filters run.
+    if text:
+        summary = _git(runner, directory, "apply", "--numstat", "-z", "-", input_text=text).stdout
+        for entry in summary.split("\0"):
+            if not entry:
+                continue
+            parts = entry.split("\t", 2)
+            if len(parts) != 3 or not path_is_allowed(parts[2]):
+                raise SyncError("candidate patch contains a forbidden path")
+            if "-" in parts[:2]:
+                raise SyncError("binary candidate patch encoding")
+        _git(runner, directory, "apply", "--cached", "--check", "--whitespace=nowarn", "-", input_text=text)
+        _git(runner, directory, "apply", "--cached", "--whitespace=nowarn", "-", input_text=text)
+    tree = _git(runner, directory, "write-tree").stdout.strip()
+    entries = _tree_entries(runner, directory, tree)
+    changed = sorted(path for path in base.keys() | entries.keys() if base.get(path) != entries.get(path) and path != GITLINK_PATH)
+    if entries.get(GITLINK_PATH) != ("160000", meta.target_sha):
+        raise SyncError("patch changes the independently staged gitlink")
+    for path in changed:
+        if not path_is_allowed(path):
+            raise SyncError("candidate patch contains a forbidden path")
+        for entry in (base.get(path), entries.get(path)):
+            if entry is None:
+                continue
+            if entry[0] not in {"100644", "100755"}:
+                raise SyncError("candidate patch requires regular files")
+            # cat-file returns bytes through a strict UTF-8 command transport.
+            try:
+                content = _git(runner, directory, "cat-file", "blob", entry[1]).stdout
+            except UnicodeDecodeError:
+                raise SyncError("binary candidate patch") from None
+            if "\0" in content:
+                raise SyncError("binary candidate patch")
+    if changed != candidate.files_changed or tree != candidate.candidate_tree:
+        raise SyncError("candidate file list or tree mismatch")
+    # Populate only after policy validation, using fresh trusted Git configuration.
+    _git(runner, directory, "read-tree", "--reset", "-u", tree)
+    return directory
+
+
+def parse_test_result(payload: str, exit_code: int | None, collected: object,
+                      collection_complete: object) -> TestResult:
+    unknown = TestResult(False, exit_code, reason="missing or inconsistent test evidence")
+    if (type(exit_code) is not int or exit_code not in (0, 1) or type(collected) is not int
+            or collected <= 0 or collection_complete is not True or not isinstance(payload, str)
+            or len(payload.encode()) > MAX_LOG_BYTES or "<!" in payload):
+        return unknown
+    try:
+        root = ET.fromstring(payload)
+        if root.tag != "testsuites" or len(root) != 1 or root[0].tag != "testsuite":
+            return unknown
+        suite = root[0]
+        counts = {key: int(suite.attrib[key]) for key in ("tests", "failures", "errors", "skipped")}
+        cases = list(suite)
+        if any(case.tag != "testcase" for case in cases) or any(value < 0 for value in counts.values()):
+            return unknown
+        failed = sum(case.find("failure") is not None for case in cases)
+        errors = sum(case.find("error") is not None for case in cases)
+        skipped = sum(case.find("skipped") is not None for case in cases)
+        if (len(cases) != counts["tests"] or counts["tests"] != collected
+                or (failed, errors, skipped) != (counts["failures"], counts["errors"], counts["skipped"])
+                or failed + errors + skipped > collected
+                or (exit_code == 0) != (failed + errors == 0)):
+            return unknown
+        return TestResult(True, exit_code, collected, collected-failed-errors-skipped,
+                          failed, errors, skipped)
+    except (ET.ParseError, KeyError, ValueError, RecursionError):
+        return unknown
+
+
+VERIFIER_SETUP = "docker build -f tools/dtl_sync/verify.Dockerfile -t dtl-sync-verifier ."
+RESULT_PREFIX = "DTL_SYNC_RESULT="
+
+
+def verifier_image(runner: CommandRunner, image: str) -> str:
+    try:
+        identity = runner.run(["docker", "image", "inspect", image, "--format", "{{.Id}}"]).stdout.strip()
+        if not re.fullmatch(r"sha256:[0-9a-f]{64}", identity):
+            raise SyncError("invalid image identity")
+        return identity
+    except SyncError:
+        raise SyncError(f"Docker/verifier image unavailable. Start Docker, then run: {VERIFIER_SETUP}") from None
+
+
+def container_measurement(*, runner: CommandRunner, image: str, directory: Path,
+                          harness: Path, command: list[str], timeout: float = 900):
+    name = "dtl-sync-" + uuid.uuid4().hex
+    mounts = []
+    for source, target in ((directory, "/workspace"), (harness, "/harness")):
+        if "," in str(source.resolve()):
+            raise SyncError("Docker mount path cannot contain commas")
+        mounts.extend(["--mount", f"type=bind,src={source.resolve()},dst={target},readonly"])
+    args = ["docker", "run", "--name", name, "--read-only", "--network=none",
+            "--user", "65534:65534", "--cap-drop=ALL", "--security-opt=no-new-privileges",
+            "--cpus=2", "--memory=4g", "--pids-limit=256", "--log-driver=none",
+            "--tmpfs", "/tmp:rw,exec,nosuid,nodev,size=1g,mode=1777", "--workdir", "/workspace",
+            "--env", "PYTHONHASHSEED=0", "--env", "PYTHONDONTWRITEBYTECODE=1",
+            "--env", "DTL_SYNC_CONTAINER=1", *mounts, image,
+            "/opt/venv/bin/python", "-I", "/harness/" + command[0], *command[1:]]
+    try:
+        return runner.run_bounded(args, timeout=timeout)
+    finally:
+        # Removing by controller-generated name kills every remaining container process.
+        runner.run(["docker", "rm", "--force", name])
+
+
+def measurement_data(result) -> dict:
+    lines = [line[len(RESULT_PREFIX):] for line in result.stdout.splitlines() if line.startswith(RESULT_PREFIX)]
+    if len(lines) != 1:
+        raise SyncError("measurement did not emit exactly one result")
+    data = _json(lines[0], MAX_LOG_BYTES, "measurement")
+    if not isinstance(data, dict):
+        raise SyncError("invalid measurement")
+    return data
+
+
+def prepare_measurement_environment(directory: Path) -> None:
+    """Expose the image's trusted environment at the repository's normal test path."""
+    (directory / ".venv").symlink_to("/opt/venv", target_is_directory=True)
+
+
+def suite_measurement(runner: CommandRunner, image: str, directory: Path,
+                      harness: Path, log: Path) -> TestResult:
+    try:
+        result = container_measurement(runner=runner, image=image, directory=directory,
+                                       harness=harness, command=["test_results.py"])
+        _write_log(log, result.stdout)
+        data = measurement_data(result)
+        return parse_test_result(data.get("xml", ""), result.returncode,
+                                 data.get("collected"), data.get("collection_complete"))
+    except SyncError as error:
+        return TestResult(False, reason=str(error))
+
+
+def verify(*, meta: Meta, candidate: Candidate, patch: Path, checkout: Path,
+           directory: Path, output: Path, runner: CommandRunner,
+           image: str = "dtl-sync-verifier", upstream_url: str = UPSTREAM_URL) -> Verification:
+    validate_meta(asdict(meta))
+    validate_candidate(asdict(candidate))
+    output.mkdir(parents=True)
+    directory.mkdir(parents=True)
+    unknown = TestResult(False, reason="measurement not run")
+    fields = dict(schema_version=1, main_sha=meta.main_sha, target_sha=meta.target_sha,
+                  patch_sha256=candidate.patch_sha256, candidate_tree=None,
+                  pin_matches_target=None, patch_applied=None, hash_changed=None,
+                  hash_old=None, hash_new=None, candidate_tests=unknown, baseline_tests=unknown,
+                  reason=None, image_id=None)
+    try:
+        fields["image_id"] = verifier_image(runner, image)
+        candidate_dir = reconstruct_candidate(meta=meta, candidate=candidate, patch=patch,
+            checkout=checkout, directory=directory / "candidate", runner=runner, upstream_url=upstream_url)
+        fields.update(candidate_tree=candidate.candidate_tree, patch_applied=True, pin_matches_target=True)
+        stock = directory / "stock"
+        baseline = directory / "baseline"
+        fresh_checkout(runner, checkout, stock, meta.main_sha, meta.target_sha, upstream_url)
+        fresh_checkout(runner, checkout, baseline, meta.main_sha, meta.main_pin, upstream_url)
+        harness = directory / "harness"
+        harness.mkdir()
+        for name in ("probe.py", "test_results.py"):
+            content = _git(runner, baseline, "show", f"{meta.main_sha}:tools/dtl_sync/{name}").stdout
+            (harness / name).write_text(content)
+        # Read the expected constant as syntax, never import main/candidate code on the host.
+        syntax = ast.parse((baseline / "tests/test_dtl.py").read_text())
+        constants = [node.value.value for node in syntax.body if isinstance(node, ast.Assign)
+                     and any(isinstance(target, ast.Name) and target.id == "EXPECTED_TRAJECTORY_HASH" for target in node.targets)
+                     and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)]
+        if len(constants) != 1 or not re.fullmatch(r"[0-9a-f]{64}", constants[0]):
+            raise SyncError("trusted trajectory constant unavailable")
+        fields["hash_old"] = constants[0]
+        for tree in (candidate_dir, stock, baseline):
+            prepare_measurement_environment(tree)
+        reasons = []
+        try:
+            result = container_measurement(runner=runner, image=fields["image_id"], directory=stock,
+                                           harness=harness, command=["probe.py"])
+            _write_log(output / "stock.log", result.stdout)
+            data = measurement_data(result)
+            measured = data.get("hash_new")
+            if result.returncode != 0 or not isinstance(measured, str) or not re.fullmatch(r"[0-9a-f]{64}", measured):
+                raise SyncError("stock probe did not complete")
+            fields.update(hash_new=measured, hash_changed=measured != fields["hash_old"])
+        except SyncError as error:
+            reasons.append(str(error))
+        for key, tree in (("candidate_tests", candidate_dir), ("baseline_tests", baseline)):
+            measured = suite_measurement(runner, fields["image_id"], tree, harness, output / f"{key}.log")
+            fields[key] = measured
+            if not measured.completed:
+                reasons.append(f"{key}: {measured.reason}")
+        fields["reason"] = "; ".join(reasons) or None
+    except (SyncError, OSError, SyntaxError) as error:
+        fields["reason"] = str(error) if isinstance(error, SyncError) else "verifier input/setup failed"
+    result = Verification(**fields)
+    _write_json(output / "verify.json", asdict(result))
+    return result
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -636,6 +956,10 @@ def main() -> int:
     inputs.add_argument("--app-login", required=True)
     inputs.add_argument("--previous-report", type=Path)
     inputs.add_argument("--resume-comment-id", type=int)
+    verification = commands.add_parser("verify", help="independently reconstruct and measure inside Docker")
+    for name in ("meta", "candidate", "patch", "checkout", "directory", "output"):
+        verification.add_argument("--" + name, type=Path, required=True)
+    verification.add_argument("--image", default="dtl-sync-verifier")
     args = parser.parse_args()
     try:
         runner = CommandRunner()
@@ -647,6 +971,15 @@ def main() -> int:
             )
             write_meta(args.output, meta)
             print(meta.mode)
+        elif args.command == "verify":
+            candidate = read_candidate(args.candidate)
+            result = verify(meta=read_meta(args.meta), candidate=candidate, patch=args.patch,
+                            checkout=args.checkout, directory=args.directory, output=args.output,
+                            image=args.image, runner=runner)
+            if result.reason:
+                print(result.reason, file=sys.stderr)
+                return 1
+            print("complete")
         elif args.stage == "inputs":
             result = prepare_inputs(
                 meta=read_meta(args.meta), checkout=args.checkout, directory=args.directory,
