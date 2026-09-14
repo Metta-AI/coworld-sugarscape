@@ -12,12 +12,22 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def load_sync():
-    name = "dtl_sync_tool"
-    spec = importlib.util.spec_from_file_location(name, ROOT / "tools/dtl_sync.py")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
+    modules = []
+    for name, filename in (("dtl_sync_contracts", "dtl_sync_contracts.py"),
+                           ("dtl_sync_delivery", "dtl_sync_delivery.py"),
+                           ("dtl_sync_tool", "dtl_sync.py")):
+        spec = importlib.util.spec_from_file_location(name, ROOT / "tools" / filename)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+        modules.append(module)
+    controller = modules[-1]
+    # Preserve the fixture's combined namespace; production uses explicit imports.
+    for module in modules[:-1]:
+        for name, value in vars(module).items():
+            if not name.startswith("__") and not hasattr(controller, name):
+                setattr(controller, name, value)
+    return controller
 
 
 def git(directory: Path, *args: str, input_text: str | None = None) -> str:

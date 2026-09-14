@@ -510,6 +510,24 @@ computed classification/cause, the full verified measurements, and a SHA-256
 of the report serialized as sorted-key JSON. An unchanged new-PR evaluation
 records main as its outgoing head; it does not mean a PR should be created.
 
+## Controller modules
+
+The trusted tool has three sibling modules, all covered by the protected
+`tools/dtl_sync` path prefix:
+
+| Module | Responsibility |
+|---|---|
+| `tools/dtl_sync.py` | CLI, detection, Git preparation, independent verification, and tree publication |
+| `tools/dtl_sync_contracts.py` | Shared dataclasses, closed validators, identifier/JSON helpers, and path policy |
+| `tools/dtl_sync_delivery.py` | PR state/rendering, GitHub discovery and authorization, publication-head reads, alerts, receipts, and failure notification |
+
+Keep these files together in the captured trusted checkout. The CLI imports
+its sibling modules explicitly; delivery uses the injected command runner and
+has no runtime import of the controller. The test loader presents the combined
+namespace used by existing tests. This extraction changes no command, argument,
+artifact name, state schema, or delivery behavior. Hosted workflow wiring must
+source all three files from trusted main, never candidate patches.
+
 ## PR state and delivery
 
 Phase 5B implements these commands locally. They can perform real remote

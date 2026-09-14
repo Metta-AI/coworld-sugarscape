@@ -42,7 +42,8 @@ Container verification excludes timing tests and records that exclusion; host/CI
 checks retain them. The [Git tree publisher](docs/dtl-sync.md#validated-git-tree-publication)
 validates evidence before pushing. [PR delivery and alert recovery](docs/dtl-sync.md#pr-state-and-delivery)
 include review context and persisted retry receipts, and are tested with fake services;
-hosted sync and scheduling remain pending.
+hosted sync and scheduling remain pending. The [controller module map](docs/dtl-sync.md#controller-modules)
+identifies the trusted CLI, shared contracts, and delivery code.
 
 New here? Start with [`docs/getting-started.md`](docs/getting-started.md) —
 the game, the three leagues, local runs, the Ruleset Studio, and how to join

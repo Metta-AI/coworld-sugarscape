@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, replace
 import json
 import hashlib
 import os
@@ -16,34 +16,55 @@ import time
 import uuid
 import xml.etree.ElementTree as ET
 import ast
-import html
-import math
-from email.utils import parsedate_to_datetime
-from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode, urlsplit
-from urllib.request import Request, HTTPRedirectHandler, build_opener
 
+from dtl_sync_contracts import (
+    ALLOWED_DIRECTORIES,
+    ALLOWED_FILES,
+    Candidate,
+    GITLINK_PATH,
+    MAX_LOG_BYTES,
+    MAX_PATCH_BYTES,
+    MAX_REPORT_BYTES,
+    Meta,
+    PROMPT_PATH,
+    PROTECTED_FILES,
+    PublicationIdentity,
+    Report,
+    SyncError,
+    TestResult,
+    UPSTREAM_URL,
+    Verification,
+    _identifier,
+    _json,
+    _repository,
+    _sha,
+    _write_json,
+    classify,
+    path_is_allowed,
+    path_is_protected,
+    read_candidate,
+    read_meta,
+    read_publication_artifact,
+    read_state,
+    validate_candidate,
+    validate_meta,
+    validate_report,
+    validate_verification,
+    write_meta,
+)
 
-UPSTREAM_URL = "https://github.com/nkremerh/sugarscape"
-GITLINK_PATH = "src/sugarscape"
-PROMPT_PATH = "tools/dtl_sync/PROMPT.md"
-MAX_REPORT_BYTES = 64 * 1024
-MAX_PR_BODY_BYTES = 48 * 1024
-MAX_PATCH_BYTES = 2 * 1024 * 1024
-MAX_LOG_BYTES = 1024 * 1024
-ALLOWED_DIRECTORIES = ("src/coworld/", "tests/", "tools/", "docs/")
-ALLOWED_FILES = frozenset({"README.md", "AGENTS.md"})
-PROTECTED_FILES = frozenset({"tests/test_dtl.py", "tests/conftest.py"})
-PROTECTED_PREFIXES = ("src/sugarscape/", "tools/dtl_sync", ".github/")
-STATE_START = "<!-- dtl-sync-state\n"
-STATE_END = "\n-->"
-SHA_PATTERN = re.compile(r"[0-9a-f]{40}")
-REPOSITORY_PATTERN = re.compile(r"[A-Za-z0-9_-]+/[A-Za-z0-9_.-]+")
-MODES = {"new-pr", "update-pr", "noop", "retry-alerts"}
-
-
-class SyncError(Exception):
-    """A failed command or invalid external input that requires operator attention."""
+from dtl_sync_delivery import (
+    AlertHTTP,
+    _git,
+    _resume_authorized,
+    deliver_publication,
+    find_sync_pr,
+    new_state,
+    notify_failure,
+    publication_heads,
+    resolve_questions,
+    retry_deliveries,
+)
 
 
 class CommandRunner:
@@ -98,217 +119,6 @@ class CommandRunner:
                 process.wait()
 
 
-@dataclass(frozen=True)
-class Meta:
-    schema_version: int
-    repository: str
-    run_id: str
-    run_attempt: str
-    main_sha: str
-    main_pin: str
-    target_sha: str
-    prompt_version: str
-    pr_number: int | None
-    pr_head_sha: str | None
-    branch: str
-    mode: str
-    compare_url: str
-    force: bool
-    replay: bool
-
-
-@dataclass(frozen=True)
-class PublicationIdentity:
-    main_sha: str
-    target_sha: str
-    published_head_sha: str
-    prompt_version: str
-
-
-@dataclass(frozen=True)
-class Delivery:
-    status: str
-    remote_id: str | None
-    attempts: int
-    last_error: str | None
-
-
-@dataclass(frozen=True)
-class PublicationState:
-    """Bounded, bot-owned publication and per-channel delivery state."""
-
-    schema_version: int
-    last_publication: PublicationIdentity | None
-    deliveries: dict[str, dict[str, Delivery]]
-    open_questions: list[dict[str, str]]
-    outcome: str
-    classification: str | None
-    cause: str | None
-    recent_runs: list[dict]
-    previous_report_artifact: str | None
-    telemetry: dict
-    resolved_questions: list[dict]
-    accepted_resumes: list[dict]
-    summary: str
-    reasoning: str
-
-
-@dataclass(frozen=True)
-class Candidate:
-    schema_version: int
-    main_sha: str
-    target_sha: str
-    patch_sha256: str
-    candidate_tree: str
-    files_changed: list[str]
-    protected_edits: list[str]
-    dropped_edits: list[str]
-
-
-def _object(value: object, keys: set[str], context: str) -> dict:
-    if not isinstance(value, dict) or set(value) != keys:
-        raise SyncError(f"invalid {context} fields")
-    return value
-
-
-def _sha(value: object) -> str:
-    if not isinstance(value, str) or not SHA_PATTERN.fullmatch(value):
-        raise SyncError("invalid commit/blob identity")
-    return value
-
-
-def _repository(value: object) -> str:
-    if not isinstance(value, str) or not REPOSITORY_PATTERN.fullmatch(value) or value.split("/")[1] in {".", ".."}:
-        raise SyncError("invalid repository; expected owner/name")
-    return value
-
-
-def _identifier(value: object) -> str:
-    if not isinstance(value, str) or not re.fullmatch(r"[1-9][0-9]*", value):
-        raise SyncError("run id and attempt must be positive decimal strings")
-    return value
-
-
-def _branch(value: object) -> str:
-    if (not isinstance(value, str) or not re.fullmatch(r"dtl-sync/[A-Za-z0-9][A-Za-z0-9._/-]*", value)
-            or ".." in value or "//" in value
-            or any(part.startswith(".") or part.endswith((".", ".lock")) for part in value.split("/"))
-            or value.endswith("/")):
-        raise SyncError("invalid sync branch")
-    return value
-
-
-def _json(text: str, limit: int, context: str) -> object:
-    if len(text.encode("utf-8")) > limit:
-        raise SyncError(f"{context} exceeds size limit")
-    def unique_pairs(pairs):
-        result = {}
-        for key, value in pairs:
-            if key in result:
-                raise SyncError(f"duplicate field in {context}")
-            result[key] = value
-        return result
-    try:
-        return json.loads(text, object_pairs_hook=unique_pairs)
-    except (ValueError, RecursionError):
-        raise SyncError(f"invalid {context} JSON") from None
-
-
-def validate_meta(value: object) -> Meta:
-    data = _object(value, set(Meta.__dataclass_fields__), "meta")
-    if type(data["schema_version"]) is not int or data["schema_version"] != 1:
-        raise SyncError("unsupported meta version")
-    _repository(data["repository"])
-    for field in ("run_id", "run_attempt"):
-        _identifier(data[field])
-    for field in ("main_sha", "main_pin", "target_sha", "prompt_version"):
-        _sha(data[field])
-    for field in ("force", "replay"):
-        if type(data[field]) is not bool:
-            raise SyncError(f"invalid {field}")
-    _branch(data["branch"])
-    if not isinstance(data["mode"], str) or data["mode"] not in MODES:
-        raise SyncError("invalid detection mode")
-    number = data["pr_number"]
-    if number is not None:
-        if type(number) is not int or number <= 0:
-            raise SyncError("invalid PR number")
-        _sha(data["pr_head_sha"])
-    elif data["pr_head_sha"] is not None:
-        raise SyncError("PR identity is incomplete")
-    if data["mode"] in {"update-pr", "retry-alerts"} and number is None:
-        raise SyncError("detection mode requires a PR")
-    if data["mode"] == "new-pr" and number is not None:
-        raise SyncError("new-pr mode cannot reference an existing PR")
-    if data["compare_url"] != f"{UPSTREAM_URL}/compare/{data['main_pin']}...{data['target_sha']}":
-        raise SyncError("invalid upstream compare URL")
-    return Meta(**data)
-
-
-def write_meta(path: Path, meta: Meta) -> None:
-    validate_meta(asdict(meta))
-    path.write_text(json.dumps(asdict(meta), indent=2) + "\n", encoding="utf-8")
-
-
-def read_meta(path: Path) -> Meta:
-    with path.open(encoding="utf-8") as file:
-        text = file.read(MAX_REPORT_BYTES + 1)
-    return validate_meta(_json(text, MAX_REPORT_BYTES, "meta"))
-
-
-def read_state(body: str) -> PublicationState:
-    if len(body.encode("utf-8")) > MAX_PR_BODY_BYTES or body.count(STATE_START) != 1:
-        raise SyncError("missing, repeated, or oversized sync state")
-    text, separator, _ = body.split(STATE_START, 1)[1].partition(STATE_END)
-    if not separator:
-        raise SyncError("unterminated sync state")
-    data = _object(_json(text, MAX_PR_BODY_BYTES, "state"), set(PublicationState.__dataclass_fields__), "state")
-    if type(data["schema_version"]) is not int or data["schema_version"] != 1:
-        raise SyncError("unsupported state version")
-    identity = data["last_publication"]
-    if identity is not None:
-        identity = _object(identity, set(PublicationIdentity.__dataclass_fields__), "state identity")
-        identity = PublicationIdentity(**{key: _sha(value) for key, value in identity.items()})
-    deliveries = data["deliveries"]
-    if not isinstance(deliveries, dict):
-        raise SyncError("invalid state deliveries")
-    parsed = {}
-    for target, channels in deliveries.items():
-        _sha(target)
-        if not isinstance(channels, dict) or not set(channels) <= {"assignment", "discord", "asana"}:
-            raise SyncError("invalid state channels")
-        parsed[target] = {}
-        for channel, receipt in channels.items():
-            receipt = _object(receipt, set(Delivery.__dataclass_fields__), "state receipt")
-            if receipt["status"] not in ("pending", "failed", "delivered"):
-                raise SyncError("invalid state delivery status")
-            if type(receipt["attempts"]) is not int or receipt["attempts"] < 0:
-                raise SyncError("invalid state attempt count")
-            for field in ("remote_id", "last_error"):
-                if receipt[field] is not None and not isinstance(receipt[field], str):
-                    raise SyncError("invalid state delivery details")
-            if receipt["status"] == "delivered" and not receipt["remote_id"]:
-                raise SyncError("delivered state requires a receipt")
-            parsed[target][channel] = Delivery(**receipt)
-    questions = data["open_questions"]
-    if not isinstance(questions, list):
-        raise SyncError("invalid state questions")
-    seen = set()
-    for question in questions:
-        _object(question, {"id", "question"}, "state question")
-        slug = question["id"]
-        if (not isinstance(slug, str) or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", slug)
-                or slug in seen or not isinstance(question["question"], str) or not question["question"].strip()):
-            raise SyncError("invalid state question")
-        seen.add(slug)
-    validate_publication_state_fields(data)
-    return PublicationState(**{**data, "last_publication": identity, "deliveries": parsed})
-
-
-def _git(runner: CommandRunner, directory: Path, *args: str, check: bool = True, env=None, input_text=None):
-    return runner.run(["git", "-C", str(directory), *args], check=check, env=env, input_text=input_text)
-
-
 def _bare_fetch(runner: CommandRunner, directory: Path, url: str, branch: str) -> None:
     directory.mkdir(parents=True)
     _git(runner, directory, "init", "--bare")
@@ -339,38 +149,6 @@ def resolve_upstream(runner: CommandRunner, scratch: Path, url: str, ref: str) -
     if _git(runner, scratch, "merge-base", "--is-ancestor", target, head, check=False).returncode:
         raise SyncError("upstream commit is unreachable from master")
     return target
-
-
-def find_sync_pr(runner: CommandRunner, repository: str, app_login: str) -> dict | None:
-    endpoint = f"repos/{repository}/pulls?state=open&base=main&per_page=100"
-    result = runner.run(["gh", "api", "--method", "GET", endpoint, "--paginate", "--slurp"])
-    pages = _json(result.stdout, 8 * 1024 * 1024, "GitHub response")
-    if not isinstance(pages, list) or any(not isinstance(page, list) for page in pages):
-        raise SyncError("invalid paginated GitHub response")
-    matches = []
-    try:
-        for page in pages:
-            for pr in page:
-                if (pr["state"] == "open" and pr["user"]["login"] == app_login
-                        and pr["base"]["ref"] == "main"
-                        and pr["base"]["repo"]["full_name"] == repository
-                        and pr["head"]["repo"] is not None
-                        and pr["head"]["repo"]["full_name"] == repository
-                        and pr["head"]["ref"].startswith("dtl-sync/")):
-                    if not any(label["name"] == "dtl-sync" for label in pr["labels"]):
-                        if isinstance(pr["body"], str) and STATE_START in pr["body"]:
-                            raise SyncError("unlabeled sync state requires retained-publication reconciliation")
-                        continue
-                    _branch(pr["head"]["ref"])
-                    _sha(pr["head"]["sha"])
-                    if type(pr["number"]) is not int or pr["number"] <= 0 or not isinstance(pr["body"], str):
-                        raise SyncError("invalid sync PR identity/body")
-                    matches.append(pr)
-    except (KeyError, TypeError, AttributeError):
-        raise SyncError("invalid GitHub PR response") from None
-    if len(matches) > 1:
-        raise SyncError("multiple open sync PRs; resolve the ambiguity before rerunning")
-    return matches[0] if matches else None
 
 
 def detect(
@@ -436,26 +214,6 @@ def detect(
     return result
 
 
-def path_is_protected(path: str) -> bool:
-    return path in PROTECTED_FILES or path in {GITLINK_PATH, ".github"} or path.startswith(PROTECTED_PREFIXES)
-
-
-def path_is_allowed(path: str) -> bool:
-    parts = path.split("/")
-    if (not path or path.startswith("/") or "\\" in path
-            or any(part in {"", ".", ".."} or part.lower() == ".git" for part in parts)
-            or any(ord(character) < 32 for character in path)):
-        raise SyncError("unsafe or noncanonical patch path")
-    return not path_is_protected(path) and (path in ALLOWED_FILES or path.startswith(ALLOWED_DIRECTORIES))
-
-
-def _write_json(path: Path, value: object) -> None:
-    text = json.dumps(value, indent=2) + "\n"
-    if len(text.encode()) > MAX_REPORT_BYTES:
-        raise SyncError("artifact exceeds size limit")
-    path.write_text(text, encoding="utf-8")
-
-
 def _write_log(path: Path, text: str) -> None:
     if len(text.encode()) > MAX_LOG_BYTES:
         raise SyncError("input log/diff exceeds size limit; manual review required")
@@ -477,27 +235,6 @@ def _allowed_pathspecs() -> list[str]:
     return [*ALLOWED_DIRECTORIES, *sorted(ALLOWED_FILES),
             *[f":(exclude){path}" for path in sorted(PROTECTED_FILES)],
             ":(exclude)tools/dtl_sync*"]
-
-
-def _resume_authorized(runner: CommandRunner, meta: Meta, comment_id: int | None, *, james_login: str | None = None) -> bool:
-    if comment_id is None:
-        return False
-    if type(comment_id) is not int or comment_id <= 0:
-        raise SyncError("invalid resume comment id")
-    def get(endpoint):
-        response = runner.run(["gh", "api", "--method", "GET", endpoint])
-        return _json(response.stdout, MAX_REPORT_BYTES, "GitHub comment/permission")
-    comment = get(f"repos/{meta.repository}/issues/comments/{comment_id}")
-    if (not isinstance(comment, dict)
-            or not isinstance(comment.get("body"), str)
-            or comment["body"].strip() != f"resume-sync {meta.pr_head_sha}"
-            or comment.get("issue_url") != f"https://api.github.com/repos/{meta.repository}/issues/{meta.pr_number}"):
-        return False
-    user = comment.get("user")
-    login = user.get("login") if isinstance(user, dict) else None
-    if not isinstance(login, str) or not re.fullmatch(r"[A-Za-z0-9-]+", login):
-        raise SyncError("invalid resume author")
-    return author_can_manage(runner, meta.repository, login, james_login)
 
 
 def prepare_inputs(
@@ -669,62 +406,6 @@ def prepare_patch(*, meta: Meta, directory: Path, output: Path, runner: CommandR
     return result
 
 
-
-@dataclass(frozen=True)
-class TestResult:
-    completed: bool
-    exit_code: int | None = None
-    collected: int | None = None
-    passed: int | None = None
-    failed: int | None = None
-    errors: int | None = None
-    skipped: int | None = None
-    reason: str | None = None
-
-
-@dataclass(frozen=True)
-class Verification:
-    schema_version: int
-    main_sha: str
-    target_sha: str
-    patch_sha256: str
-    candidate_tree: str | None
-    pin_matches_target: bool | None
-    patch_applied: bool | None
-    hash_changed: bool | None
-    hash_old: str | None
-    hash_new: str | None
-    candidate_tests: TestResult
-    baseline_tests: TestResult
-    reason: str | None
-    image_id: str | None
-    excluded_markers: list[str]
-
-
-def validate_candidate(value: object) -> Candidate:
-    data = _object(value, set(Candidate.__dataclass_fields__), "candidate")
-    if type(data["schema_version"]) is not int or data["schema_version"] != 1:
-        raise SyncError("unsupported candidate version")
-    for key in ("main_sha", "target_sha", "candidate_tree"):
-        _sha(data[key])
-    if not isinstance(data["patch_sha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", data["patch_sha256"]):
-        raise SyncError("invalid patch digest")
-    for key in ("files_changed", "protected_edits", "dropped_edits"):
-        items = data[key]
-        if not isinstance(items, list) or any(not isinstance(item, str) for item in items):
-            raise SyncError("invalid candidate path list")
-        if items != sorted(set(items)):
-            raise SyncError("candidate paths must be unique and sorted")
-    return Candidate(**data)
-
-
-
-def read_candidate(path: Path) -> Candidate:
-    with path.open(encoding="utf-8") as file:
-        text = file.read(MAX_REPORT_BYTES + 1)
-    return validate_candidate(_json(text, MAX_REPORT_BYTES, "candidate"))
-
-
 def fresh_checkout(runner: CommandRunner, source: Path, directory: Path, main: str,
                    pin: str, upstream_url: str) -> None:
     directory.mkdir(parents=True)
@@ -834,6 +515,8 @@ def parse_test_result(payload: str, exit_code: int | None, collected: object,
 
 
 VERIFIER_SETUP = "docker build -f tools/dtl_sync/verify.Dockerfile -t dtl-sync-verifier ."
+
+
 RESULT_PREFIX = "DTL_SYNC_RESULT="
 
 
@@ -959,138 +642,6 @@ def verify(*, meta: Meta, candidate: Candidate, patch: Path, checkout: Path,
     return result
 
 
-
-@dataclass(frozen=True)
-class Report:
-    classification: str
-    cause: str
-    summary: str
-    upstream_range: dict[str, str]
-    reachability: list[dict]
-    design_questions: list[dict[str, str]]
-    reasoning: str
-
-
-CLASSIFICATIONS = {"mechanical", "no-impact", "needs-design"}
-CAUSES = {"semantic-change", "new-feature", "compat-defect", "baseline-failure",
-          "protected-path-edit", "incomplete-verification", "none"}
-
-
-def _report_text(value: object, limit: int, field: str) -> str:
-    if not isinstance(value, str) or not value.strip() or len(value) > limit or any(ord(c) < 32 and c not in "\n\t" for c in value):
-        raise SyncError(f"invalid report {field}")
-    return value
-
-
-def validate_report(value: object, meta: Meta) -> Report:
-    data = _object(value, set(Report.__dataclass_fields__), "report")
-    if not isinstance(data["classification"], str) or data["classification"] not in CLASSIFICATIONS:
-        raise SyncError("invalid report classification")
-    if not isinstance(data["cause"], str) or data["cause"] not in CAUSES:
-        raise SyncError("invalid report cause")
-    _report_text(data["summary"], 1000, "summary")
-    _report_text(data["reasoning"], 8000, "reasoning")
-    interval = _object(data["upstream_range"], {"from", "to"}, "upstream range")
-    if interval != {"from": meta.main_pin, "to": meta.target_sha}:
-        raise SyncError("report upstream range mismatch")
-    for field in ("reachability", "design_questions"):
-        if not isinstance(data[field], list) or len(data[field]) > 100:
-            raise SyncError(f"invalid report {field}")
-    items = set()
-    for item in data["reachability"]:
-        _object(item, {"path", "symbol", "reached", "reason"}, "reachability item")
-        path = _report_text(item["path"], 500, "path")
-        if path.startswith("/") or "\\" in path or any(part in {"", ".", ".."} for part in path.split("/")) or any(ord(c) < 32 for c in path):
-            raise SyncError("invalid upstream inventory path")
-        _report_text(item["symbol"], 500, "symbol")
-        _report_text(item["reason"], 2000, "reachability reason")
-        if type(item["reached"]) is not bool or (path, item["symbol"]) in items:
-            raise SyncError("invalid or duplicate reachability item")
-        items.add((path, item["symbol"]))
-    questions = set()
-    for question in data["design_questions"]:
-        _object(question, {"id", "question"}, "design question")
-        slug = _report_text(question["id"], 100, "question id")
-        if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", slug) or slug in questions:
-            raise SyncError("invalid or duplicate design question id")
-        _report_text(question["question"], 2000, "question")
-        questions.add(slug)
-    if len(json.dumps(data).encode()) > MAX_REPORT_BYTES:
-        raise SyncError("report exceeds size limit")
-    return Report(**data)
-
-
-def validate_verification(value: object, meta: Meta, candidate: Candidate) -> Verification:
-    """Accept only complete, bound evidence; completed red tests remain valid."""
-    data = _object(value, set(Verification.__dataclass_fields__), "verification")
-    if (candidate.main_sha, candidate.target_sha) != (meta.main_sha, meta.target_sha):
-        raise SyncError("candidate verification binding mismatch")
-    if type(data["schema_version"]) is not int or data["schema_version"] != 1:
-        raise SyncError("invalid verification version")
-    for field, expected in (("main_sha", meta.main_sha), ("target_sha", meta.target_sha),
-                            ("patch_sha256", candidate.patch_sha256), ("candidate_tree", candidate.candidate_tree)):
-        if data[field] != expected:
-            raise SyncError("verification binding mismatch")
-    if data["pin_matches_target"] is not True or data["patch_applied"] is not True:
-        raise SyncError("incomplete verification: pin or patch not verified")
-    for field in ("hash_old", "hash_new"):
-        if not isinstance(data[field], str) or not re.fullmatch(r"[0-9a-f]{64}", data[field]):
-            raise SyncError("incomplete verification: invalid hash")
-    if type(data["hash_changed"]) is not bool or data["hash_changed"] != (data["hash_old"] != data["hash_new"]):
-        raise SyncError("inconsistent verification hash evidence")
-    if data["reason"] is not None or data["excluded_markers"] != ["perf"]:
-        raise SyncError("incomplete verification or unexpected test exclusions")
-    if not isinstance(data["image_id"], str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", data["image_id"]):
-        raise SyncError("incomplete verification image identity")
-    parsed = dict(data)
-    for field in ("candidate_tests", "baseline_tests"):
-        result = _object(data[field], set(TestResult.__dataclass_fields__), field)
-        if result["completed"] is not True or result["reason"] is not None:
-            raise SyncError("incomplete verification: test collection did not complete")
-        for count in ("exit_code", "collected", "passed", "failed", "errors", "skipped"):
-            if type(result[count]) is not int or result[count] < 0:
-                raise SyncError("invalid verification test count")
-        if (result["exit_code"] not in (0, 1) or result["collected"] <= 0
-                or sum(result[k] for k in ("passed", "failed", "errors", "skipped")) != result["collected"]
-                or (result["exit_code"] == 0) != (result["failed"] + result["errors"] == 0)
-                or result["collected"] == result["skipped"]):
-            raise SyncError("incomplete or inconsistent verification test results")
-        parsed[field] = TestResult(**result)
-    return Verification(**parsed)
-
-
-def classify(report: Report, candidate: Candidate, verification: Verification,
-             open_questions: list[dict]) -> tuple[str, str]:
-    """Classify already validated evidence, retaining conservative agent judgement."""
-    if verification.hash_changed:
-        return "needs-design", "semantic-change"
-    if candidate.protected_edits:
-        return "needs-design", "protected-path-edit"
-    if verification.baseline_tests.exit_code:
-        return "needs-design", "baseline-failure"
-    if verification.candidate_tests.exit_code:
-        return "needs-design", "compat-defect"
-    if report.cause == "new-feature":
-        return "needs-design", "new-feature"
-    if open_questions or report.design_questions or report.classification == "needs-design":
-        return "needs-design", "none"
-    if candidate.files_changed or any(item["reached"] for item in report.reachability):
-        return "mechanical", "none"
-    return "no-impact", "none"
-
-
-def publication_heads(runner: CommandRunner, origin: str, branch: str) -> dict[str, str]:
-    refs = {"refs/heads/main", f"refs/heads/{branch}"}
-    lines = runner.run(["git", "ls-remote", "--heads", origin, *sorted(refs)]).stdout.splitlines()
-    heads = {}
-    for line in lines:
-        fields = line.split()
-        if len(fields) != 2 or fields[1] not in refs or fields[1] in heads:
-            raise SyncError("invalid remote head response")
-        heads[fields[1]] = _sha(fields[0])
-    return heads
-
-
 def publication_pr(runner: CommandRunner, meta: Meta, app_login: str) -> dict | None:
     pr = find_sync_pr(runner, meta.repository, app_login)
     if ((meta.pr_number is None and pr is not None)
@@ -1183,486 +734,6 @@ def publish_tree(*, meta: Meta, candidate: Candidate, patch: Path, report: objec
     _write_json(output / "publication.json", result)
     return result
 
-
-def read_publication_artifact(path: Path) -> object:
-    with path.open(encoding="utf-8") as file:
-        payload = file.read(MAX_REPORT_BYTES + 1)
-    return _json(payload, MAX_REPORT_BYTES, path.name)
-
-
-OUTCOMES = {"noop", "published", "needs-human", "incomplete-verification", "operational-failure"}
-TELEMETRY_FIELDS = {"requested_model", "actual_model", "codex_version", "action_sha",
-                    "elapsed_seconds", "token_usage", "unavailable_reason"}
-
-
-def new_state() -> PublicationState:
-    telemetry = dict.fromkeys(TELEMETRY_FIELDS)
-    telemetry["unavailable_reason"] = "workflow telemetry was not supplied"
-    return PublicationState(1, None, {}, [], "noop", None, None, [], None, telemetry, [], [], "", "")
-
-
-def validate_publication_state_fields(data: dict) -> None:
-    for field, limit in (("summary", 500), ("reasoning", 1500)):
-        if not isinstance(data[field], str) or len(data[field]) > limit:
-            raise SyncError(f"invalid state {field} excerpt")
-    if not isinstance(data["outcome"], str) or data["outcome"] not in OUTCOMES:
-        raise SyncError("invalid state outcome")
-    for key, allowed in (("classification", CLASSIFICATIONS), ("cause", CAUSES)):
-        if data[key] is not None and (not isinstance(data[key], str) or data[key] not in allowed):
-            raise SyncError("invalid state classification/cause")
-    artifact = data["previous_report_artifact"]
-    if artifact is not None and (not isinstance(artifact, str) or not re.fullmatch(r"[1-9][0-9]*", artifact)):
-        raise SyncError("invalid report artifact id")
-    runs = data["recent_runs"]
-    if not isinstance(runs, list) or len(runs) > 10:
-        raise SyncError("invalid recent runs")
-    for run in runs:
-        _object(run, {"run_id", "run_attempt", "outcome"}, "state run")
-        _identifier(run["run_id"]); _identifier(run["run_attempt"])
-        if not isinstance(run["outcome"], str) or run["outcome"] not in OUTCOMES:
-            raise SyncError("invalid run outcome")
-    for field, keys in (("resolved_questions", {"id", "question", "comment_id"}),
-                        ("accepted_resumes", {"comment_id", "head_sha"})):
-        if not isinstance(data[field], list):
-            raise SyncError("invalid authorization receipts")
-        seen = set()
-        for receipt in data[field]:
-            _object(receipt, keys, "authorization receipt")
-            number = receipt["comment_id"]
-            if type(number) is not int or number <= 0 or number in seen:
-                raise SyncError("invalid authorization comment id")
-            seen.add(number)
-            if field == "accepted_resumes":
-                _sha(receipt["head_sha"])
-            elif (not isinstance(receipt["id"], str) or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", receipt["id"])
-                  or not isinstance(receipt["question"], str) or not receipt["question"].strip()):
-                raise SyncError("invalid resolved question")
-    telemetry = _object(data["telemetry"], TELEMETRY_FIELDS, "telemetry")
-    for key in ("requested_model", "actual_model", "codex_version", "unavailable_reason"):
-        if telemetry[key] is not None:
-            _report_text(telemetry[key], 500, key)
-    if telemetry["action_sha"] is not None:
-        _sha(telemetry["action_sha"])
-    elapsed = telemetry["elapsed_seconds"]
-    if elapsed is not None and (type(elapsed) not in (int, float) or not math.isfinite(elapsed) or elapsed < 0):
-        raise SyncError("invalid elapsed telemetry")
-    usage = telemetry["token_usage"]
-    if usage is not None:
-        _object(usage, {"input_tokens", "output_tokens", "total_tokens"}, "token usage")
-        if any(type(v) is not int or v < 0 for v in usage.values()) or usage["total_tokens"] != usage["input_tokens"] + usage["output_tokens"]:
-            raise SyncError("invalid token telemetry")
-    if any(telemetry[key] is None for key in TELEMETRY_FIELDS - {"unavailable_reason"}) and not telemetry["unavailable_reason"]:
-        raise SyncError("missing telemetry must have a reason")
-
-
-def github(runner: CommandRunner, method: str, endpoint: str, payload=None, *, paginate=False):
-    args = ["gh", "api", "--method", method, endpoint]
-    options = {}
-    if payload is not None:
-        args += ["--input", "-"]
-        options["input_text"] = json.dumps(payload)
-    if paginate:
-        args += ["--paginate", "--slurp"]
-    response = runner.run(args, **options)
-    return _json(response.stdout, MAX_LOG_BYTES, "GitHub response") if response.stdout.strip() else None
-
-
-def author_can_manage(runner: CommandRunner, repository: str, login: str, james_login: str | None) -> bool:
-    if not isinstance(login, str) or not re.fullmatch(r"[A-Za-z0-9-]+", login):
-        return False
-    if james_login is not None and login == james_login:
-        return True
-    permission = github(runner, "GET", f"repos/{repository}/collaborators/{login}/permission")
-    return isinstance(permission, dict) and permission.get("permission") in {"write", "maintain", "admin"}
-
-
-def resolve_questions(runner: CommandRunner, meta: Meta, state: PublicationState,
-                      proposed: list[dict], *, james_login: str | None) -> PublicationState:
-    resolved = [dict(receipt) for receipt in state.resolved_questions]
-    closed = {(receipt["id"], receipt["question"]) for receipt in resolved}
-    questions = {question["id"]: dict(question) for question in state.open_questions}
-    for question in proposed:
-        if (question["id"], question["question"]) not in closed:
-            questions[question["id"]] = dict(question)
-    if questions:
-        pages = github(runner, "GET", f"repos/{meta.repository}/issues/{meta.pr_number}/comments?per_page=100", paginate=True)
-        if not isinstance(pages, list) or any(not isinstance(page, list) for page in pages):
-            raise SyncError("invalid comment pages")
-        consumed = {receipt["comment_id"] for receipt in resolved}
-        for comment in (comment for page in pages for comment in page):
-            if not isinstance(comment, dict) or not isinstance(comment.get("body"), str):
-                raise SyncError("invalid resolution comment")
-            match = re.fullmatch(r"resolved: ([a-z0-9]+(?:-[a-z0-9]+)*)", comment["body"].strip())
-            number = comment.get("id")
-            if not match or match[1] not in questions or number in consumed:
-                continue
-            if type(number) is not int or number <= 0:
-                raise SyncError("invalid resolution comment id")
-            user = comment.get("user")
-            login = user.get("login") if isinstance(user, dict) else None
-            if author_can_manage(runner, meta.repository, login, james_login):
-                question = questions.pop(match[1])
-                resolved.append({**question, "comment_id": number})
-                consumed.add(number)
-    return replace(state, open_questions=list(questions.values()), resolved_questions=resolved)
-
-
-def state_block(state: PublicationState) -> str:
-    payload = json.dumps(asdict(state), sort_keys=True).replace("<", "\\u003c").replace(">", "\\u003e")
-    block = STATE_START + payload + STATE_END
-    read_state(block)
-    return block
-
-
-def public_text(value: str, limit: int = 1500) -> str:
-    return html.escape(value[:limit]).replace("@", "&#64;").replace("|", "\\|")
-
-
-def render_pr_body(report: Report | None, state: PublicationState, run_url: str, compare_url: str | None,
-                   verification: Verification | None = None) -> str:
-    lines = ["## DTL upstream sync", "", f"Outcome: **{state.outcome}**. Classification: **{state.classification or 'unavailable'}**; cause: **{state.cause or 'unavailable'}**.",
-             f"[Run and artifacts]({run_url})"]
-    if compare_url:
-        lines.append(f"[Upstream comparison]({compare_url})")
-    if report:
-        lines += ["", public_text(report.summary), "", "### Reachability", "", "Path / symbol | Reached | Reason", "--- | --- | ---"]
-        table_bytes = 0
-        for item in report.reachability:
-            row = f"{public_text(item['path'],500)} / {public_text(item['symbol'],500)} | {item['reached']} | {public_text(item['reason'],200).replace(chr(10),' ')}"
-            table_bytes += len(row.encode()) + 1
-            if table_bytes > 12 * 1024:
-                lines += ["", "Full report, including remaining reachability entries, is in the linked artifacts."]
-                break
-            lines.append(row)
-        lines += ["", "### Reasoning", "", public_text(report.reasoning,2000)]
-    if verification:
-        lines += ["", "### Independent measurements", "", f"Stock hash changed: {verification.hash_changed}. Excluded markers: perf."]
-        for name, result in (("Candidate", verification.candidate_tests), ("Baseline", verification.baseline_tests)):
-            lines.append(f"{name}: exit {result.exit_code}; {result.passed} passed, {result.failed} failed, {result.errors} errors, {result.skipped} skipped / {result.collected} collected.")
-    lines += ["", "### Open design questions", ""]
-    lines += [f"- **{question['id']}**: {public_text(question['question'],500)}" for question in state.open_questions] or ["None."]
-    telemetry = state.telemetry
-    lines += ["", "### Telemetry", "", public_text(json.dumps(telemetry),1500)]
-    block = state_block(state)
-    human = "\n".join(lines)
-    budget = MAX_PR_BODY_BYTES - len(block.encode()) - 2
-    if len(human.encode()) > budget:
-        notice = f"\n\nFull report is in [the run artifacts]({run_url}); human summary shortened to retain complete state."
-        if budget < len(notice.encode()):
-            raise SyncError("complete state leaves no room for the PR summary; manual archival required")
-        human = human.encode()[:budget - len(notice.encode())].decode("utf-8", errors="ignore") + notice
-    return human + "\n\n" + block
-
-
-class NoAlertRedirect(HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        raise SyncError("alert redirect refused")
-
-
-class AlertHTTP:
-    def __init__(self, *, discord_token: str, asana_token: str, open_request=None, sleep=time.sleep):
-        self.tokens = {"discord": discord_token, "asana": asana_token}
-        self.open_request = open_request or build_opener(NoAlertRedirect()).open
-        self.sleep = sleep
-
-    def request(self, service: str, method: str, path: str, payload=None):
-        hosts = {"discord": "discord.com/api/v10", "asana": "app.asana.com/api/1.0"}
-        if service not in hosts or not path.startswith("/") or path.startswith("//") or "\\" in path or urlsplit(path).scheme or urlsplit(path).netloc:
-            raise SyncError("invalid alert API path")
-        if not self.tokens[service]:
-            raise SyncError(f"missing {service} credential")
-        url = "https://" + hosts[service] + path
-        token = ("Bot " if service == "discord" else "Bearer ") + self.tokens[service]
-        request = Request(url, data=None if payload is None else json.dumps(payload).encode(),
-                          headers={"Authorization": token, "Content-Type": "application/json"}, method=method)
-        for attempt in range(3):
-            try:
-                with self.open_request(request, timeout=10) as response:
-                    raw = response.read(MAX_LOG_BYTES + 1)
-                return _json(raw.decode(), MAX_LOG_BYTES, "alert response")
-            except HTTPError as error:
-                if error.code != 429 and not 500 <= error.code <= 599 or attempt == 2:
-                    raise SyncError(f"{service} HTTP {error.code}") from None
-                delay = error.headers.get("Retry-After", "1") if error.headers else "1"
-                try:
-                    delay = float(delay)
-                except ValueError:
-                    try:
-                        delay = parsedate_to_datetime(delay).timestamp() - time.time()
-                    except (ValueError, TypeError, OverflowError):
-                        delay = 1
-                self.sleep(max(0, min(5, delay)))
-            except (URLError, OSError):
-                if attempt == 2:
-                    raise SyncError(f"{service} transport failed after three attempts") from None
-                self.sleep(attempt + 1)
-            except UnicodeDecodeError:
-                raise SyncError(f"invalid {service} response encoding") from None
-
-
-def send_discord(http: AlertHTTP, recipient: str, message: str) -> str:
-    _identifier(recipient)
-    channel = http.request("discord", "POST", "/users/@me/channels", {"recipient_id": recipient})
-    channel_id = _identifier(channel.get("id") if isinstance(channel, dict) else None)
-    response = http.request("discord", "POST", f"/channels/{channel_id}/messages",
-                            {"content": truncate_alert(message), "allowed_mentions": {"parse": []}})
-    return _identifier(response.get("id") if isinstance(response, dict) else None)
-
-
-def send_asana(http: AlertHTTP, project: str, target: str, title: str, message: str) -> str:
-    _identifier(project); _sha(target)
-    marker = "dtl-sync:" + target
-    offset = None
-    seen = set()
-    for _ in range(100):
-        query = {"limit": "100", "opt_fields": "gid,notes"}
-        if offset:
-            query["offset"] = offset
-        page = http.request("asana", "GET", f"/projects/{project}/tasks?{urlencode(query)}")
-        if not isinstance(page, dict) or not isinstance(page.get("data"), list):
-            raise SyncError("invalid Asana project tasks")
-        matches = [task for task in page["data"] if isinstance(task, dict) and marker in str(task.get("notes", "")).splitlines()]
-        if matches:
-            return _identifier(matches[0].get("gid"))
-        next_page = page.get("next_page")
-        if next_page is None:
-            response = http.request("asana", "POST", "/tasks", {"data": {"name": title[:200], "notes": marker + "\n" + message, "projects": [project]}})
-            task = response.get("data") if isinstance(response, dict) else None
-            return _identifier(task.get("gid") if isinstance(task, dict) else None)
-        offset = next_page.get("offset") if isinstance(next_page, dict) else None
-        if not isinstance(offset, str) or not offset or offset in seen:
-            raise SyncError("invalid Asana pagination")
-        seen.add(offset)
-    raise SyncError("Asana project pagination limit reached")
-
-
-def run_link(repository: str, run_id: str, run_attempt: str) -> str:
-    _repository(repository); _identifier(run_id); _identifier(run_attempt)
-    return f"https://github.com/{repository}/actions/runs/{run_id}/attempts/{run_attempt}"
-
-
-def notify_failure(*, repository: str, run_id: str, run_attempt: str, outcome: str,
-                   discord_user_id: str, http: AlertHTTP, meta: Meta | None = None,
-                   runner: CommandRunner | None = None, app_login: str | None = None) -> dict:
-    if outcome not in {"needs-human", "incomplete-verification", "operational-failure"}:
-        raise SyncError("invalid failure outcome")
-    link = run_link(repository, run_id, run_attempt)
-    if meta is not None and meta.pr_number is not None:
-        validate_meta(asdict(meta))
-        if (repository, run_id, run_attempt) != (meta.repository, meta.run_id, meta.run_attempt):
-            raise SyncError("failure context differs from captured metadata")
-        pr = check_delivery_pr(github(runner, "GET", f"repos/{repository}/pulls/{meta.pr_number}"), meta, app_login, None)
-        state = remember_run(read_state(pr["body"]), meta, outcome)
-        body = replace_state_block(pr["body"], state)
-        github(runner, "PATCH", f"repos/{repository}/pulls/{meta.pr_number}", {"body": body})
-        github(runner, "POST", f"repos/{repository}/issues/{meta.pr_number}/comments", {"body": f"DTL sync {outcome}. [Run and artifacts]({link}). No candidate edits were published by this failure path."})
-        return {"outcome": outcome, "run_url": link, "pr_number": meta.pr_number}
-    receipt = send_discord(http, discord_user_id, f"DTL sync {outcome}: {repository}\n{link}")
-    return {"outcome": outcome, "run_url": link, "discord_message_id": receipt}
-
-
-def check_delivery_pr(pr: object, meta: Meta, app_login: str, head: str | None) -> dict:
-    try:
-        valid = (isinstance(pr, dict) and pr["state"] == "open" and pr["user"]["login"] == app_login
-                 and pr["base"]["ref"] == "main" and pr["base"]["repo"]["full_name"] == meta.repository
-                 and pr["head"]["repo"]["full_name"] == meta.repository and pr["head"]["ref"] == meta.branch
-                 and (head is None or pr["head"]["sha"] == head)
-                 and (meta.pr_number is None or pr["number"] == meta.pr_number)
-                 and type(pr["number"]) is int and pr["number"] > 0 and isinstance(pr["body"], str))
-    except (KeyError, TypeError):
-        valid = False
-    if not valid:
-        raise SyncError("stale, closed, or unowned delivery PR")
-    return pr
-
-
-def delivery_pr(runner: CommandRunner, meta: Meta, app_login: str, head: str) -> dict | None:
-    if meta.pr_number:
-        return check_delivery_pr(github(runner, "GET", f"repos/{meta.repository}/pulls/{meta.pr_number}"), meta, app_login, head)
-    # Include closed PRs and unlabeled partial creates, but only for this exact head branch.
-    query = urlencode({"state": "all", "head": meta.repository.split('/')[0] + ':' + meta.branch,
-                       "base": "main", "per_page": 100})
-    pages = github(runner, "GET", f"repos/{meta.repository}/pulls?{query}", paginate=True)
-    if not isinstance(pages, list) or any(not isinstance(page, list) for page in pages):
-        raise SyncError("invalid delivery PR response")
-    matches = [pr for page in pages for pr in page]
-    if len(matches) > 1:
-        raise SyncError("ambiguous delivery PR history")
-    return check_delivery_pr(matches[0], meta, app_login, head) if matches else None
-
-
-def remember_run(state: PublicationState, meta: Meta, outcome: str) -> PublicationState:
-    runs = [run for run in state.recent_runs if (run["run_id"], run["run_attempt"]) != (meta.run_id, meta.run_attempt)]
-    runs.append({"run_id": meta.run_id, "run_attempt": meta.run_attempt, "outcome": outcome})
-    return replace(state, outcome=outcome, recent_runs=runs[-10:])
-
-
-def replace_state_block(body: str, state: PublicationState) -> str:
-    read_state(body)
-    before, remaining = body.split(STATE_START, 1)
-    _, _, after = remaining.partition(STATE_END)
-    result = before + state_block(state) + after
-    if len(result.encode()) > MAX_PR_BODY_BYTES:
-        raise SyncError("PR body exceeds size limit")
-    return result
-
-
-def truncate_alert(message: str) -> str:
-    notice = "\n[Truncated; see PR for full details.]"
-    return message if len(message) < 2000 else message[:1999 - len(notice)] + notice
-
-
-def alert_content(meta: Meta, target: str, state: PublicationState, *, asana: bool) -> str:
-    lines = [f"DTL sync review: {meta.repository} at {target}",
-             f"https://github.com/{meta.repository}/pull/{meta.pr_number}",
-             run_link(meta.repository, meta.run_id, meta.run_attempt),
-             f"Classification: {state.classification or 'unavailable'}; cause: {state.cause or 'unavailable'}.",
-             "Summary (up to 500 characters): " + public_text(state.summary, 500),
-             "Open design questions:"]
-    lines += [f"- {public_text(question['id'],100)}: {public_text(question['question'],300)}"
-              for question in state.open_questions[:5]] or ["None."]
-    if len(state.open_questions) > 5 or any(len(question["question"]) > 300 for question in state.open_questions[:5]):
-        lines.append("[Truncated questions; see PR for full details.]")
-    if asana:
-        lines += ["Reasoning (up to 1500 characters): " + public_text(state.reasoning, 1500)]
-    return "\n".join(lines)
-
-
-def deliver_channels(runner: CommandRunner, http: AlertHTTP, meta: Meta, state: PublicationState,
-                     save, *, james_login: str, discord_user_id: str, asana_project_gid: str) -> None:
-    for target, channels in state.deliveries.items():
-        for channel, receipt in list(channels.items()):
-            if receipt.status == "delivered":
-                continue
-            channels[channel] = replace(receipt, status="pending", attempts=receipt.attempts + 1, last_error=None)
-            save(state)
-            try:
-                if channel == "discord":
-                    remote_id = send_discord(http, discord_user_id, alert_content(meta, target, state, asana=False))
-                elif channel == "asana":
-                    remote_id = send_asana(http, asana_project_gid, target, f"DTL sync review: {meta.repository}",
-                                           alert_content(meta, target, state, asana=True))
-                else:
-                    response = github(runner, "POST", f"repos/{meta.repository}/issues/{meta.pr_number}/assignees", {"assignees": [james_login]})
-                    if not isinstance(response, dict) or not any(user.get("login") == james_login for user in response.get("assignees", [])):
-                        raise SyncError("GitHub did not confirm assignment")
-                    remote_id = f"{meta.repository}#{meta.pr_number}:{james_login}"
-                channels[channel] = replace(channels[channel], status="delivered", remote_id=remote_id)
-            except SyncError as error:
-                channels[channel] = replace(channels[channel], status="failed", last_error=str(error)[:300])
-            # A persistence failure stops the loop: do not lose more receipts.
-            save(state)
-
-
-def deliver_publication(*, meta: Meta, candidate: Candidate, report: object, verification: object,
-                        publication: object, checkout: Path, runner: CommandRunner, http: AlertHTTP,
-                        app_login: str, james_login: str, discord_user_id: str, asana_project_gid: str,
-                        telemetry: dict | None = None, report_artifact_id: str | None = None,
-                        resume_comment_id: int | None = None) -> PublicationState:
-    validate_meta(asdict(meta)); validate_candidate(asdict(candidate))
-    report = validate_report(report, meta)
-    verification = validate_verification(verification, meta, candidate)
-    fields = {"schema_version", "outcome", "main_sha", "target_sha", "prompt_version", "published_head_sha",
-              "candidate_tree", "patch_sha256", "classification", "cause", "verification", "report_sha256"}
-    publication = _object(publication, fields, "publication")
-    expected = {"main_sha": meta.main_sha, "target_sha": meta.target_sha, "prompt_version": meta.prompt_version,
-                "candidate_tree": candidate.candidate_tree, "patch_sha256": candidate.patch_sha256,
-                "verification": asdict(verification),
-                "report_sha256": hashlib.sha256(json.dumps(asdict(report), sort_keys=True).encode()).hexdigest()}
-    if (type(publication["schema_version"]) is not int or publication["schema_version"] != 1
-            or publication["outcome"] not in {"pushed", "reconciled", "unchanged"}
-            or any(publication[key] != value for key, value in expected.items())):
-        raise SyncError("invalid publication receipt bindings")
-    head = _sha(publication["published_head_sha"])
-    _identifier(discord_user_id); _identifier(asana_project_gid)
-    if not re.fullmatch(r"[A-Za-z0-9-]+", james_login):
-        raise SyncError("invalid maintainer login")
-    origin = _git(runner, checkout, "remote", "get-url", "origin").stdout.strip()
-    heads = publication_heads(runner, origin, meta.branch)
-    if heads.get("refs/heads/main") != meta.main_sha:
-        raise SyncError("stale main before PR delivery")
-    if publication["outcome"] == "unchanged" and meta.pr_number is None:
-        if head != meta.main_sha:
-            raise SyncError("invalid unchanged publication head")
-        return new_state()
-    if heads.get(f"refs/heads/{meta.branch}") != head:
-        raise SyncError("stale branch before PR delivery")
-    pr = delivery_pr(runner, meta, app_login, head)
-    identity = PublicationIdentity(meta.main_sha, meta.target_sha, head, meta.prompt_version)
-    if pr and meta.pr_number is None and read_state(pr["body"]).last_publication != identity:
-        raise SyncError("partial-create state does not match captured publication")
-    active_meta = replace(meta, pr_number=pr["number"], pr_head_sha=head, mode="update-pr") if pr else meta
-    state = read_state(pr["body"]) if pr else new_state()
-    state = resolve_questions(runner, active_meta, state, report.design_questions, james_login=james_login) if pr else replace(state, open_questions=list(report.design_questions))
-    if resume_comment_id is not None:
-        if not _resume_authorized(runner, meta, resume_comment_id, james_login=james_login):
-            raise SyncError("resume comment is not authorized for the captured head")
-        receipt = {"comment_id": resume_comment_id, "head_sha": meta.pr_head_sha}
-        if receipt not in state.accepted_resumes:
-            state.accepted_resumes.append(receipt)
-    classification, cause = classify(replace(report, design_questions=state.open_questions), candidate, verification, state.open_questions)
-    state = replace(remember_run(state, meta, "published"), last_publication=identity,
-                    classification=classification, cause=cause,
-                    summary=report.summary[:500], reasoning=report.reasoning[:1500],
-                    telemetry=telemetry if telemetry is not None else new_state().telemetry,
-                    previous_report_artifact=report_artifact_id or state.previous_report_artifact)
-    if classification == "needs-design":
-        channels = state.deliveries.setdefault(meta.target_sha, {})
-        for channel in ("assignment", "discord", "asana"):
-            channels.setdefault(channel, Delivery("pending", None, 0, None))
-    link = run_link(meta.repository, meta.run_id, meta.run_attempt)
-    body = render_pr_body(report, state, link, meta.compare_url, verification)
-    if pr is None:
-        pr = github(runner, "POST", f"repos/{meta.repository}/pulls",
-                    {"title": f"DTL sync: {classification}: {report.summary.splitlines()[0][:120]}",
-                     "head": meta.branch, "base": "main", "body": body})
-        pr = check_delivery_pr(pr, meta, app_login, head)
-        if read_state(pr["body"]) != state:
-            raise SyncError("created PR did not retain initial state")
-    active_meta = replace(meta, pr_number=pr["number"], pr_head_sha=head, mode="update-pr")
-    current_body = pr["body"]
-    def save(updated):
-        nonlocal current_body
-        latest = check_delivery_pr(github(runner, "GET", f"repos/{meta.repository}/pulls/{pr['number']}"), active_meta, app_login, head)
-        if latest["body"] != current_body:
-            raise SyncError("PR body changed during delivery")
-        current_body = render_pr_body(report, updated, link, meta.compare_url, verification)
-        github(runner, "PATCH", f"repos/{meta.repository}/pulls/{pr['number']}", {"body": current_body})
-    save(state)
-    labels = ["dtl-sync"] + (["needs-design"] if classification == "needs-design" else [])
-    github(runner, "POST", f"repos/{meta.repository}/issues/{pr['number']}/labels", {"labels": labels})
-    if classification != "needs-design" and any(label["name"] == "needs-design" for label in pr.get("labels", [])):
-        github(runner, "DELETE", f"repos/{meta.repository}/issues/{pr['number']}/labels/needs-design")
-    deliver_channels(runner, http, active_meta, state, save, james_login=james_login,
-                     discord_user_id=discord_user_id, asana_project_gid=asana_project_gid)
-    return state
-
-
-def retry_deliveries(*, meta: Meta, runner: CommandRunner, http: AlertHTTP, app_login: str,
-                     james_login: str, discord_user_id: str, asana_project_gid: str) -> PublicationState:
-    validate_meta(asdict(meta))
-    if meta.mode != "retry-alerts":
-        raise SyncError("retry requires captured retry-alerts metadata")
-    pr = delivery_pr(runner, meta, app_login, meta.pr_head_sha)
-    state = read_state(pr["body"])
-    if state.last_publication != PublicationIdentity(meta.main_sha, meta.target_sha, meta.pr_head_sha, meta.prompt_version):
-        raise SyncError("retry metadata does not match successful publication")
-    current_body = pr["body"]
-    def save(updated):
-        nonlocal current_body
-        latest = delivery_pr(runner, meta, app_login, meta.pr_head_sha)
-        if latest["body"] != current_body:
-            raise SyncError("PR body changed during retry")
-        current_body = replace_state_block(current_body, updated)
-        github(runner, "PATCH", f"repos/{meta.repository}/pulls/{meta.pr_number}", {"body": current_body})
-    # Restore labels if a prior label request failed after body creation/update.
-    github(runner, "POST", f"repos/{meta.repository}/issues/{meta.pr_number}/labels",
-           {"labels": ["dtl-sync"] + (["needs-design"] if state.classification == "needs-design" else [])})
-    if state.classification in {"mechanical", "no-impact"} and any(label["name"] == "needs-design" for label in pr.get("labels", [])):
-        github(runner, "DELETE", f"repos/{meta.repository}/issues/{meta.pr_number}/labels/needs-design")
-    deliver_channels(runner, http, meta, state, save, james_login=james_login,
-                     discord_user_id=discord_user_id, asana_project_gid=asana_project_gid)
-    return state
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)

@@ -110,3 +110,13 @@ not authorize resolution. See `tests/test_dtl_sync_alerts.py` and the runbook.
 Alert retries read bounded summary/reasoning excerpts and open questions from
 publication state. Keep the closed schema and sanitized, bounded Discord/Asana
 payloads in sync; Discord truncation must be visible to the reader.
+
+The sync controller is split across three protected sibling modules:
+`tools/dtl_sync.py` owns the CLI, detection, Git preparation, verification, and
+Git tree publication; `tools/dtl_sync_contracts.py` owns shared dataclasses,
+closed validators, and identifier/JSON/path helpers; `tools/dtl_sync_delivery.py`
+owns PR state/rendering, GitHub authorization, alerts, receipts, and failure
+notification. Keep all three sourced from trusted main. The existing
+`tools/dtl_sync` protected prefix covers both new module names. The offline
+fixture loader exposes a combined test namespace; production uses explicit
+imports and the same `tools/dtl_sync.py` CLI.
