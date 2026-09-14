@@ -1,7 +1,7 @@
 # DTL upstream sync: keeping the coworld wrapper current with `nkremerh/sugarscape`
 
-Status: revision 3, 2026-09-14, after two Codex design review rounds (findings
-in the collab record). Approved direction from James on 2026-09-10; not yet
+Status: revision 4, 2026-09-14, after three Codex design review rounds
+(findings in the collab record). Approved direction from James on 2026-09-10; not yet
 implemented.
 Depends on: the `src/sugarscape` git submodule (branch `dtl-submodule`, commit
 "Replace the vendored DTL copy with a pristine upstream submodule").
@@ -302,19 +302,39 @@ artifacts, and everything else takes the notification path.
   stale writes.
 - Validate `report.json` against the closed schema in trusted code and
   `verify.json` against its bindings. Compute the classification as above.
-- **Build the commit.** In the data checkout, reset the allowed paths to
-  their `main_sha` content, apply `candidate.patch`, set the gitlink to
-  `target_sha`, and confirm the resulting tree id equals the candidate tree id
-  from `verify.json`. Commit as the App with parent `pr_head_sha` (or
-  `main_sha` for a new PR), subject
-  `dtl-sync: <classification>: <summary first sentence>`, and the report in
-  the body. Push with a normal fast-forward; a rejected push (remote moved)
-  fails the run without force. Create the PR or update it.
-- **Invalid or missing report, or failed verification** with a non-empty
-  patch: publish no branch change. No pin-only fallback exists, because a
-  green patched tree says nothing about the bare pin. The run reports
-  `incomplete-verification` on the existing PR's state block or, with no PR,
-  through the notification path.
+- **Build the commit.** Construct the entire publication tree from
+  `main_sha`: start from `main_sha`'s tree, apply the complete allowlisted
+  `candidate.patch`, and set the gitlink to `target_sha`. Do this in a
+  separate data index, never in the trusted publisher checkout. Require the
+  resulting tree id to equal the candidate tree id in `verify.json`. Old PR
+  head content is never retained outside the allowlist: files `main` changed
+  while the PR was open (for example `Dockerfile` or `tools/dtl_sync.py`)
+  come from `main_sha`, which is what `verify` measured. Parents: for a new
+  PR, `main_sha`; for an existing PR, `pr_head_sha` as first parent, and
+  additionally `main_sha` as a second parent when `main_sha` is not already
+  an ancestor of `pr_head_sha`, so the branch records the merge and later
+  ancestry checks do not rediscover the same advance. Commit as the App with
+  subject `dtl-sync: <classification>: <summary first sentence>` and the
+  report in the body. Push with a normal fast-forward after the remote-head
+  check; a rejected push fails the run without force. Create the PR or
+  update it.
+- **What may be published.** Two different situations must not be confused:
+  - *Incomplete or invalid verification*: missing or invalid report, any
+    required verifier fact `null` or inconsistent, mismatched artifact
+    bindings, wrong pin, rejected patch paths, or a patch that did not apply.
+    Publish no branch change regardless of patch size (an empty patch does not
+    make a missing report acceptable). Report `incomplete-verification` on the
+    existing PR's state block or, with no PR, through the notification path.
+    No pin-only fallback exists, because a green patched tree says nothing
+    about the bare pin.
+  - *Complete verification with negative results*: the report is valid, the
+    bindings match, the patch applied, and the verifier measured a changed
+    hash or completed test failures. This is the system's main product:
+    publish the exact verified candidate as a `needs-design` PR with red CI
+    and cause `semantic-change` or `compat-defect`, and deliver the full
+    escalation (label, assignment, Discord, Asana). Human review and the
+    ordinary required checks govern merge; the expected hash is never changed
+    automatically. A completed red result is not incomplete verification.
 - **PR body**: a human section (regenerated summary, reachability table,
   verifier test results, reasoning, open design questions with their ids,
   links to the run, the artifacts, and the upstream compare view) and a
@@ -347,7 +367,8 @@ artifacts, and everything else takes the notification path.
 ### Failure handling
 
 Outcomes are an enum in job outputs and in the state block: `noop`,
-`published`, `needs-human` (merge conflict, human commits on the branch),
+`published` (green or red; a red `needs-design` PR is a normal published
+outcome), `needs-human` (merge conflict, human commits on the branch),
 `incomplete-verification`, `operational-failure` (checkout, toolchain, Codex
 auth or timeout, missing artifacts, runner death). Because `publish` runs
 `if: always()`, every outcome reaches it. On `needs-human`,
@@ -437,10 +458,15 @@ and injected HTTP responses. Coverage:
   detected; test counts; every null field yields `incomplete-verification`;
   binding mismatch (evidence for a different patch digest) rejected.
 - publish: forced `needs-design` for each verify condition; no branch change
-  on invalid report; tree id equality before commit; commit parent is the PR
-  head; fast-forward rejection on remote movement; two sequential bumps where
-  the second depends on the first's new file and `main` advanced between
-  them; stale head refusal; state block round-trip; alert-once per channel
+  on invalid report, with an empty patch and with a non-empty one; a valid
+  patch plus an independently measured hash mismatch publishes a red
+  `needs-design` PR with cause `semantic-change` and all escalation
+  channels; tree id equality before commit; commit parents are the PR head
+  and, when `main` advanced, `main_sha`; two sequential bumps where the
+  second depends on the first's new file and `main` advanced between them
+  with a change to `Dockerfile` (outside the allowlist) and a change to
+  `tools/dtl_sync.py` (protected), asserting tree equality and `main`
+  ancestry; fast-forward rejection on remote movement; stale head refusal; state block round-trip; alert-once per channel
   with retry of a failed channel; Asana marker reuse; unresolved design
   question keeps the label after a later green run; unauthorized
   `resolved:` comment ignored; human commit on the branch pauses automation;
@@ -453,18 +479,19 @@ and injected HTTP responses. Coverage:
 
 Hosted acceptance (not mocked), in order:
 
-1. Dispatch against the three commits pending on 2026-09-10 (`2c77f4e`,
-   `22b7350`, `585282e`). Expected: `no-impact`, green, unchanged hash, PR
-   opened, `ci.yml` runs from the App push, no alert.
-2. Dispatch again: `noop` on the unchanged tuple.
-3. When upstream moves again (or by dispatching an intermediate commit first
-   and then `master`): a second bump onto the same PR, with a `synchronize`
-   CI run observed.
+1. Dispatch with `upstream_ref=2c77f4e` (the first pending commit).
+   Expected: `no-impact`, green, unchanged hash, PR opened, `ci.yml` runs
+   from the App push, no alert.
+2. Dispatch again with the same ref: `noop` on the unchanged tuple.
+3. Dispatch with `upstream_ref=master` (through `22b7350` and `585282e`): a
+   second bump onto the same PR, cumulative range in the body, and a
+   `synchronize` CI run observed.
 4. `exercise=needs-design`: escalation with one real Discord DM and one Asana
    task that James reads back.
 5. Merge the PR, then dispatch: `noop`.
-6. Dispatch with a deliberately broken `OPENAI_API_KEY` in a fork of the
-   secrets: `operational-failure` reaches the Discord channel with a run link.
+6. Dispatch with `force=true` and the invalid-key test input (a separate
+   secret holding a revoked key): `operational-failure` reaches the Discord
+   channel with a run link, and the working secret is untouched.
 
 ## Rollout
 
@@ -495,6 +522,45 @@ Cost controls: `effort: high` on a daily cumulative context is bounded by the
 skip-on-unchanged-tuple rule and per-job timeouts. The OpenAI project that
 owns the key gets a budget alert; whether the provider enforces a hard limit
 is checked during rollout rather than assumed.
+
+## Notes for the implementation plan
+
+Accepted review refinements that are implementation decisions rather than
+design changes. The plan must settle each one explicitly.
+
+- **Verifier write boundary.** The design requires that candidate child
+  processes cannot modify the verifier's controller, `main`'s harness, the
+  final `verify.json`, or the baseline checkout. A sibling directory and a
+  same-user subprocess do not enforce that. Choose an existing mechanism
+  (for example a non-privileged user with read-only harness paths and a
+  single writable scratch directory), record it, add one attempted-write
+  test, and assemble the final evidence only after all child processes have
+  exited.
+- **Identity and resume precision.** The no-op check compares the live PR
+  head with the recorded `published_head_sha`. Human-commit detection
+  inspects only the branch-specific commit range (PR head minus `main`
+  history), so ordinary human commits on `main` never trigger a pause.
+  `resume-sync` needs the same authorized-maintainer check as `resolved:` and
+  is bound to the branch head observed when the comment was made. If human
+  edits touch paths the patch contract cannot represent, automation stays
+  paused until merge rather than dropping them. An expired previous-report
+  artifact is recoverable context loss: the run proceeds without it and says
+  so in the report.
+- **Executable acceptance.** Start the acceptance PR at an intermediate
+  descendant of the current pin (`2c77f4e`), verify the immediate no-op,
+  then advance to `master` and observe the `synchronize` CI run, rather than
+  rewinding an open PR. The operational-failure test uses a dedicated
+  dispatch input that selects an invalid test key from a separate secret,
+  never by overwriting the working secret, and `force=true` so detection does
+  not short-circuit on no-op.
+- **Artifact provenance and bootstrap.** Publish loads `meta.json` only from
+  `detect`'s artifact, `verify.json` only from `verify`'s, and the report and
+  patch only from `evaluate`'s, by fixed producer-specific names; matching
+  SHAs inside a file are not provenance. Publish handles `noop`, disabled
+  schedule, and detection failure before requiring candidate artifacts, so a
+  quiet day is not reported as a missing-artifact failure. When `detect`
+  failed before writing `meta.json`, the failure-reporting code comes from the
+  workflow's own checked-out revision, never from candidate-controlled code.
 
 ## Open questions
 
