@@ -423,7 +423,7 @@ def classify(report: Report, candidate: Candidate, verification: Verification,
         return "needs-design", "baseline-failure"
     if verification.candidate_tests.exit_code:
         return "needs-design", "compat-defect"
-    if report.cause == "new-feature":
+    if report.cause == "new-feature" and report.classification == "needs-design":
         return "needs-design", "new-feature"
     if open_questions or report.design_questions or report.classification == "needs-design":
         return "needs-design", "none"

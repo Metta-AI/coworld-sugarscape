@@ -59,7 +59,9 @@ candidate and report the limitation honestly.
 Include every required field: `classification`, `cause`, `summary`,
 `upstream_range`, `reachability`, `design_questions`, and `reasoning`.
 `upstream_range.from` equals main_pin; `.to` equals target_sha, both full SHAs.
-Use the schema's exact classification/cause enums. The publisher applies
+Use the schema's exact classification/cause enums. `cause` is `none` unless
+`classification` is `needs-design`; `new-feature` is only for a change that
+you are escalating as a design decision. The publisher applies
 measured precedence, so your classification cannot override independent red
 or incomplete evidence. Explain what changed, the wrapper impact, adaptations,
 remaining uncertainty, and relevant advisory test outcomes in reasoning.
