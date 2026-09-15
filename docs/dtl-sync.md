@@ -264,6 +264,10 @@ Existing excluded archival symlinks are inspected as link text, never followed,
 and retained from main; they are not candidate patch entries.
 
 Other outside-allowlist edits are dropped and listed in `report-notes.json`.
+An agent `cause` of `new-feature` escalates only when the agent's own
+classification is `needs-design`; on a `mechanical` or `no-impact` proposal
+it is treated as `none` (the first hosted acceptance run escalated an
+unreached GUI change because of exactly that inconsistency).
 Protected edits force a `needs-design` note with cause `protected-path-edit`;
 the protected bytes are never shipped in the patch. A dirty upstream tree or
 clean upstream checkout at the wrong SHA is also recorded as a protected edit.

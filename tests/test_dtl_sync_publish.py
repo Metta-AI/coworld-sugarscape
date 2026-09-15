@@ -115,6 +115,9 @@ def test_classification_counts_skips_separately_and_requires_inventory(sync,worl
     assert sync.classify(sync.validate_report(report,meta),candidate,parsed,[]) == ('mechanical','none')
     report['classification']='needs-design';report['cause']='new-feature'
     assert sync.classify(sync.validate_report(report,meta),candidate,parsed,[]) == ('needs-design','new-feature')
+    # A stray new-feature cause on a no-impact proposal must not escalate (hosted run 35023057479).
+    report['classification']='no-impact';report['reachability'][0]['reached']=False
+    assert sync.classify(sync.validate_report(report,meta),candidate,parsed,[]) == ('no-impact','none')
 
 
 def test_protected_edits_and_unresolved_questions_force_design(sync,world):
