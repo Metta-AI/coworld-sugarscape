@@ -1,11 +1,12 @@
 # DTL upstream sync: keeping the coworld wrapper current with `nkremerh/sugarscape`
 
-Status: implemented locally on branch `dtl-sync` at
-`2ed74f2e855ad742940200d77859e62e590784be`; hosted acceptance and activation pending.
-This is the accepted P6 implementation reference; P7 consolidates operator docs
-and separates CI performance tests without changing their assertions.
-Design revision 4 was approved after three review rounds on 2026-09-14.
-See [the operator runbook](../dtl-sync.md) for the implemented command contract.
+Status: activated 2026-09-15. Merged to `main` via PRs #26-#36; the six hosted
+acceptance dispatches passed (first PR #34 with CI from the App push; no-op
+repeat; cumulative advance to upstream `585282e`; escalation delivery to
+assignment, Discord, and a tagged Asana task; post-merge no-op; invalid-key
+failure notification). `DTL_SYNC_ENABLED=true`; the schedule runs daily at
+13:00 UTC. Design revision 4 was approved after three review rounds on
+2026-09-14. See [the operator runbook](../dtl-sync.md).
 Depends on: the `src/sugarscape` git submodule (branch `dtl-submodule`, commit
 "Replace the vendored DTL copy with a pristine upstream submodule").
 

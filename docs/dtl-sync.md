@@ -295,10 +295,12 @@ disposable candidate repository; this is not a commit or publication.
 
 ## Rollout status
 
-The operator procedures below are implemented contracts and an unexecuted
-rollout checklist. Hosted acceptance, credential provisioning, activation, and
-remote writes require explicit authorization. Local workflow tests do not prove
-real GitHub, Codex, Discord, or Asana delivery.
+Activated on 2026-09-15. All six hosted acceptance dispatches passed (runs
+35023057479, 35024908748, 35025005250 with one failed-job rerun for the
+PR-head lag fixed in #36, the escalation delivered by 35023057479, 35029282152,
+and 35029372847). Inference runs through OpenRouter (`openai/gpt-5.3-codex`)
+via the action's proxy; the action is pinned to v1.11. `DTL_SYNC_ENABLED=true`.
+Week-one checks from the checklist below still apply.
 
 ## Independent verification
 
