@@ -241,7 +241,7 @@ jobs:
         prompt-file: ${{ github.workspace }}/controller/tools/dtl_sync/PROMPT.md
         output-schema-file: ${{ github.workspace }}/controller/tools/dtl_sync/REPORT_SCHEMA.json
         output-file: ${{ github.workspace }}/evaluation/report.json
-        permission-profile: :workspace
+        permission-profile: ':workspace'
         safety-strategy: drop-sudo
         codex-version: 0.154.0
         effort: high
@@ -256,7 +256,7 @@ jobs:
         prompt-file: ${{ github.workspace }}/controller/tools/dtl_sync/PROMPT.md
         output-schema-file: ${{ github.workspace }}/controller/tools/dtl_sync/REPORT_SCHEMA.json
         output-file: ${{ github.workspace }}/evaluation/report.json
-        permission-profile: :workspace
+        permission-profile: ':workspace'
         safety-strategy: drop-sudo
         codex-version: 0.154.0
         effort: high
