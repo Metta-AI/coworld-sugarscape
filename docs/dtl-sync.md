@@ -787,6 +787,16 @@ cancelled by the job timeout with its log discarded). Both Codex steps carry a
 evaluate job timeout stays 30 minutes. A complete local evaluation of the
 three pending upstream commits took about two minutes and 128k tokens.
 
+The agent's own test run is advisory and deliberately small: the prompt asks
+for a bounded, serial run of `tests/test_dtl.py`, `tests/test_ruleset_agent.py`,
+and `tests/test_episode.py` only. Two hosted runs wedged the runner for the
+full 30-minute job timeout, with the step timeout unable to interrupt and no
+log uploaded, after the agent started the full parallel suite inside the
+sandbox; the same evaluation completed locally in two minutes, and both the
+OpenRouter endpoint and the action's proxy were reproduced locally without
+stalling. The verifier job runs the complete functional suite independently,
+so the agent does not need to.
+
 ### Configuration and secret boundaries
 
 | Repository setting | Consumer |

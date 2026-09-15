@@ -23,8 +23,11 @@ upstream checkout at `src/sugarscape/` is immutable input, not a place to patch.
 
 ## Evaluate and adapt
 
-Run `../controller/.venv/bin/python -m pytest -q -n auto` from this directory
-inside the supplied sandbox. Do not install dependencies or run tests on an
+Run only the targeted, serial advisory check from this directory inside the
+supplied sandbox, and bound it:
+`timeout 300 ../controller/.venv/bin/python -m pytest -q -p no:cacheprovider tests/test_dtl.py tests/test_ruleset_agent.py tests/test_episode.py`.
+Do not run the full suite, do not use `-n auto`, and do not start servers,
+Docker, or Node; the verifier runs the complete suite independently. Do not install dependencies or run tests on an
 unsandboxed host. The environment was prepared from trusted main. Your tests
 are advisory: the separate verifier measures the stock trajectory, candidate,
 and main baseline independently. Keep existing red results visible.
