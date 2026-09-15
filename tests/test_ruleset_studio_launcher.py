@@ -54,6 +54,8 @@ def fetch_json(request: Request | str) -> tuple[int, dict[str, object]]:
 def launch_once(tmp_path: Path, link_server: Path, suffix: str) -> bytes:
     if shutil.which("node") is None:
         pytest.skip("Studio launcher integration requires node on PATH")
+    if not (launcher.DEFAULT_METTA_ROOT / launcher.LINK_APP / "link-bridge.mjs").is_file():
+        pytest.skip("Studio launcher integration requires the external Metta link bridge")
     link_port, api_port, run_port = unused_port(), unused_port(), unused_port()
     runs = tmp_path / f"runs-{suffix}"
     process = subprocess.Popen(
