@@ -285,8 +285,11 @@ def send_discord(http: AlertHTTP, recipient: str, message: str) -> str:
     return _identifier(response.get("id") if isinstance(response, dict) else None)
 
 
-def send_asana(http: AlertHTTP, project: str, target: str, title: str, message: str) -> str:
+def send_asana(http: AlertHTTP, project: str, target: str, title: str, message: str,
+               tag: str | None = None) -> str:
     _identifier(project); _sha(target)
+    if tag:
+        _identifier(tag)
     marker = "dtl-sync:" + target
     offset = None
     seen = set()
@@ -302,7 +305,10 @@ def send_asana(http: AlertHTTP, project: str, target: str, title: str, message: 
             return _identifier(matches[0].get("gid"))
         next_page = page.get("next_page")
         if next_page is None:
-            response = http.request("asana", "POST", "/tasks", {"data": {"name": title[:200], "notes": marker + "\n" + message, "projects": [project]}})
+            data = {"name": title[:200], "notes": marker + "\n" + message, "projects": [project]}
+            if tag:
+                data["tags"] = [tag]
+            response = http.request("asana", "POST", "/tasks", {"data": data})
             task = response.get("data") if isinstance(response, dict) else None
             return _identifier(task.get("gid") if isinstance(task, dict) else None)
         offset = next_page.get("offset") if isinstance(next_page, dict) else None
@@ -405,7 +411,8 @@ def alert_content(meta: Meta, target: str, state: PublicationState, *, asana: bo
 
 
 def deliver_channels(runner: CommandRunner, http: AlertHTTP, meta: Meta, state: PublicationState,
-                     save, *, james_login: str, discord_user_id: str, asana_project_gid: str) -> None:
+                     save, *, james_login: str, discord_user_id: str, asana_project_gid: str,
+                     asana_tag_gid: str | None = None) -> None:
     for target, channels in state.deliveries.items():
         for channel, receipt in list(channels.items()):
             if receipt.status == "delivered":
@@ -417,7 +424,7 @@ def deliver_channels(runner: CommandRunner, http: AlertHTTP, meta: Meta, state: 
                     remote_id = send_discord(http, discord_user_id, alert_content(meta, target, state, asana=False))
                 elif channel == "asana":
                     remote_id = send_asana(http, asana_project_gid, target, f"DTL sync review: {meta.repository}",
-                                           alert_content(meta, target, state, asana=True))
+                                           alert_content(meta, target, state, asana=True), tag=asana_tag_gid)
                 else:
                     response = github(runner, "POST", f"repos/{meta.repository}/issues/{meta.pr_number}/assignees", {"assignees": [james_login]})
                     if not isinstance(response, dict) or not any(user.get("login") == james_login for user in response.get("assignees", [])):
@@ -432,7 +439,7 @@ def deliver_channels(runner: CommandRunner, http: AlertHTTP, meta: Meta, state: 
 
 def deliver_publication(*, meta: Meta, candidate: Candidate, report: object, verification: object,
                         publication: object, checkout: Path, runner: CommandRunner, http: AlertHTTP,
-                        app_login: str, james_login: str, discord_user_id: str, asana_project_gid: str,
+                        app_login: str, james_login: str, discord_user_id: str, asana_project_gid: str, asana_tag_gid: str | None = None,
                         telemetry: dict | None = None, report_artifact_id: str | None = None,
                         resume_comment_id: int | None = None) -> PublicationState:
     validate_meta(asdict(meta)); validate_candidate(asdict(candidate))
@@ -510,12 +517,13 @@ def deliver_publication(*, meta: Meta, candidate: Candidate, report: object, ver
     if classification != "needs-design" and any(label["name"] == "needs-design" for label in pr.get("labels", [])):
         github(runner, "DELETE", f"repos/{meta.repository}/issues/{pr['number']}/labels/needs-design")
     deliver_channels(runner, http, active_meta, state, save, james_login=james_login,
-                     discord_user_id=discord_user_id, asana_project_gid=asana_project_gid)
+                     discord_user_id=discord_user_id, asana_project_gid=asana_project_gid,
+                     asana_tag_gid=asana_tag_gid)
     return state
 
 
 def retry_deliveries(*, meta: Meta, runner: CommandRunner, http: AlertHTTP, app_login: str,
-                     james_login: str, discord_user_id: str, asana_project_gid: str) -> PublicationState:
+                     james_login: str, discord_user_id: str, asana_project_gid: str, asana_tag_gid: str | None = None) -> PublicationState:
     validate_meta(asdict(meta))
     if meta.mode != "retry-alerts":
         raise SyncError("retry requires captured retry-alerts metadata")
@@ -537,7 +545,8 @@ def retry_deliveries(*, meta: Meta, runner: CommandRunner, http: AlertHTTP, app_
     if state.classification in {"mechanical", "no-impact"} and any(label["name"] == "needs-design" for label in pr.get("labels", [])):
         github(runner, "DELETE", f"repos/{meta.repository}/issues/{meta.pr_number}/labels/needs-design")
     deliver_channels(runner, http, meta, state, save, james_login=james_login,
-                     discord_user_id=discord_user_id, asana_project_gid=asana_project_gid)
+                     discord_user_id=discord_user_id, asana_project_gid=asana_project_gid,
+                     asana_tag_gid=asana_tag_gid)
     return state
 
 

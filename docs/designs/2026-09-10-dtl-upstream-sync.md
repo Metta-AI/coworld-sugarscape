@@ -100,7 +100,7 @@ executes only the script from trusted `main` and treats the patch as data.
 | Job | Executes code from | Secrets present | Purpose |
 |---|---|---|---|
 | `detect` | trusted `main` | none (read-only `GITHUB_TOKEN`) | resolve identities, decide whether to run, emit `meta.json` |
-| `evaluate` | trusted setup, then candidate code only inside the Codex sandbox | `OPENAI_API_KEY`, through the action's proxy | bump, write inputs, run Codex; emit `report.json` and `candidate.patch` |
+| `evaluate` | trusted setup, then candidate code only inside the Codex sandbox | `OPENROUTER_API_KEY`, through the action's proxy to OpenRouter's Responses endpoint | bump, write inputs, run Codex; emit `report.json` and `candidate.patch` |
 | `verify` | trusted script; candidate code in isolated Docker containers | none | independent stock probe and candidate suite; emit `verify.json` |
 | `publish` | trusted script only | App token minted per run, Discord, Asana | validate, classify, commit, push, PR, labels, alerts |
 
@@ -370,7 +370,8 @@ artifacts, and everything else takes the notification path.
 - **Alerts** on `needs-design`, at-least-once per `target_sha` per channel:
   assign James; Discord DM via the agent bot to
   `vars.DTL_SYNC_DISCORD_USER_ID`; Asana task in
-  `vars.DTL_SYNC_ASANA_PROJECT_GID`. Before creating an Asana task, search the
+  `vars.DTL_SYNC_ASANA_PROJECT_GID`, tagged with `vars.DTL_SYNC_ASANA_TAG_GID`
+  when set. Before creating an Asana task, search the
   project for the deterministic marker `dtl-sync:<target_sha>` and reuse a hit.
   Record each delivery's ID after success; retry only failed channels on
   later runs. A run that fails before publication is never marked evaluated.
@@ -406,14 +407,14 @@ dispatch with explicit `force=true` required).
 
 | Secret or variable | Source | Used by |
 |---|---|---|
-| `OPENAI_API_KEY` (secret) | broker `openai.inference` | `evaluate`, via the action's proxy only |
+| `OPENROUTER_API_KEY` (secret) | broker `openrouter.inference` (hard spend limit) | `evaluate`, via the action's proxy to `https://openrouter.ai/api/v1/responses`, model `openai/gpt-5.3-codex` (workflow env `CODEX_MODEL`). Switched from OpenAI on 2026-09-15 because the OpenAI agent identity had no credits. |
 | `DTL_SYNC_INVALID_OPENAI_API_KEY` (secret) | operator-provided intentionally invalid string, never a former working key | dedicated manual invalid-key exercise; requires explicit `force=true` |
 | `DTL_SYNC_APP_LOGIN`, `DTL_SYNC_APP_EMAIL` (variables) | verified App bot login and Git author email | ownership validation and publication commits |
 | `DTL_SYNC_JAMES_LOGIN` (variable) | verified James GitHub login | assignment and authorized resolution/resume |
 | `DISCORD_BOT_TOKEN` (secret) | broker `discord.post` (approval tier) | `publish` alerts |
 | `ASANA_PAT` (secret) | broker `asana.rw` | `publish` alerts |
 | `DTL_SYNC_APP_PRIVATE_KEY` (secret), `DTL_SYNC_APP_ID` (variable) | a GitHub App installed on this repo only, permissions `contents: write`, `pull-requests: write`, `issues: write`, no branch-protection bypass | `publish`, minted per run with `actions/create-github-app-token` |
-| `DTL_SYNC_DISCORD_USER_ID`, `DTL_SYNC_ASANA_PROJECT_GID`, `DTL_SYNC_ENABLED` (variables) | James | `publish`, schedule gate |
+| `DTL_SYNC_DISCORD_USER_ID`, `DTL_SYNC_ASANA_PROJECT_GID`, `DTL_SYNC_ASANA_TAG_GID` (optional), `DTL_SYNC_ENABLED` (variables) | James | `publish`, schedule gate |
 
 Installation tokens expire after one hour, so the App token is minted inside
 the `publish` job, never stored. The default `GITHUB_TOKEN` is not used for
@@ -538,10 +539,11 @@ are acceptance criteria, not results already observed:
 3. Create the GitHub App and install it on this repo; store the private key
    as `DTL_SYNC_APP_PRIVATE_KEY` and the App ID as `DTL_SYNC_APP_ID`; set verified
    `DTL_SYNC_APP_LOGIN`, `DTL_SYNC_APP_EMAIL`, and `DTL_SYNC_JAMES_LOGIN`.
-   Provision `OPENAI_API_KEY`, `DISCORD_BOT_TOKEN`, and `ASANA_PAT` through their
+   Provision `OPENROUTER_API_KEY`, `DISCORD_BOT_TOKEN`, and `ASANA_PAT` through their
    broker scopes using a per-session ID. Set `DTL_SYNC_INVALID_OPENAI_API_KEY`
-   to an intentionally invalid string, and set `DTL_SYNC_DISCORD_USER_ID` and
-   `DTL_SYNC_ASANA_PROJECT_GID`. Leave `DTL_SYNC_ENABLED` unset. Create the
+   to an intentionally invalid string, and set `DTL_SYNC_DISCORD_USER_ID`,
+   `DTL_SYNC_ASANA_PROJECT_GID`, and optionally `DTL_SYNC_ASANA_TAG_GID`; the
+   broker's Asana bot user must be a member of that project. Leave `DTL_SYNC_ENABLED` unset. Create the
    `dtl-sync` and `needs-design` labels. The pinned action does not expose actual
    model/token usage; retain explicit nulls and verify the available telemetry.
 4. Land `dtl-sync.yml`, the script, the prompt, the schema, and the tests,

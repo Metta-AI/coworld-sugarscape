@@ -142,7 +142,12 @@ def test_sync_action_inputs_match_pinned_contract():
     assert args['permission-profile'] == ':workspace'
     assert args['safety-strategy'] == 'drop-sudo'
     assert args['effort'] == 'high'
-    assert 'sandbox' not in args and 'model' not in args
+    assert 'sandbox' not in args
+    assert args['model'] == '${{ env.CODEX_MODEL }}'
+    assert args['responses-api-endpoint'] == '${{ env.CODEX_RESPONSES_ENDPOINT }}'
+    env = workflow()['env']
+    assert env['CODEX_MODEL'] == 'openai/gpt-5.3-codex'
+    assert env['CODEX_RESPONSES_ENDPOINT'] == 'https://openrouter.ai/api/v1/responses'
     assert args['output-schema-file'].endswith('/controller/tools/dtl_sync/REPORT_SCHEMA.json')
     assert args['output-file'].endswith('/evaluation/report.json')
 
@@ -224,7 +229,7 @@ def test_invalid_key_selection_cannot_fall_back_to_working_secret():
     actions = [s for s in workflow()['jobs']['evaluate']['steps'] if s.get('uses', '').startswith('openai/')]
     assert len(actions) == 2
     invalid = next(s for s in actions if s['with']['openai-api-key'] == '${{ secrets.DTL_SYNC_INVALID_OPENAI_API_KEY }}')
-    working = next(s for s in actions if s['with']['openai-api-key'] == '${{ secrets.OPENAI_API_KEY }}')
+    working = next(s for s in actions if s['with']['openai-api-key'] == '${{ secrets.OPENROUTER_API_KEY }}')
     assert "== 'true'" in invalid['if']
     assert "== 'false'" in working['if']
 

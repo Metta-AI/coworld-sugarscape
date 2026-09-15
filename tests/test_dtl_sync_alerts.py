@@ -71,6 +71,27 @@ def test_asana_marker_reuses_paginated_project_task(sync):
     assert 'evil' not in calls[1][2]
 
 
+def test_asana_task_creation_applies_the_configured_tag(sync):
+    calls = []
+
+    class HTTP:
+
+        def request(self, service, method, path, payload=None):
+            calls.append((service, method, path, payload))
+            if method == 'GET':
+                return {'data': [], 'next_page': None}
+            return {'data': {'gid': '321'}}
+    assert sync.send_asana(HTTP(), '99', 'b' * 40, 'Review', 'Run URL', tag='777') == '321'
+    created = next(c for c in calls if c[1] == 'POST' and c[2] == '/tasks')
+    assert created[3]['data']['tags'] == ['777']
+    assert created[3]['data']['projects'] == ['99']
+    calls.clear()
+    assert sync.send_asana(HTTP(), '99', 'b' * 40, 'Review', 'Run URL') == '321'
+    assert 'tags' not in next(c for c in calls if c[1] == 'POST')[3]['data']
+    with pytest.raises(sync.SyncError):
+        sync.send_asana(HTTP(), '99', 'b' * 40, 'Review', 'Run URL', tag='not-a-gid')
+
+
 def test_discord_dm_disables_mentions(sync):
     calls = []
 
