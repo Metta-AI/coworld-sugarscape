@@ -132,7 +132,7 @@ def test_sync_action_inputs_match_pinned_contract():
         'actions/upload-artifact': '043fb46d1a93c77aae656e7c1c64a875d1fc6a0a',
         'actions/download-artifact': '3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c',
         'actions/create-github-app-token': 'bcd2ba49218906704ab6c1aa796996da409d3eb1',
-        'openai/codex-action': '86365089eb2b84e0a8fb0717b304f8bdcb13b20e'}
+        'openai/codex-action': '7c168a233489ca36cb495409e8f1fba7b522bb40'}
     for job in workflow()['jobs'].values():
         for step in job['steps']:
             if 'uses' in step:
@@ -144,6 +144,7 @@ def test_sync_action_inputs_match_pinned_contract():
     assert args['permission-profile'] == ':workspace'
     assert args['safety-strategy'] == 'drop-sudo'
     assert args['effort'] == 'high'
+    assert args['codex-args'] == '["--disable","code_mode_host"]'
     assert 'sandbox' not in args
     assert args['model'] == '${{ env.CODEX_MODEL }}'
     assert args['responses-api-endpoint'] == '${{ env.CODEX_RESPONSES_ENDPOINT }}'

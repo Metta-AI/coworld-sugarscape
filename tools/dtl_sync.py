@@ -874,7 +874,7 @@ def run_workflow(args, runner: CommandRunner) -> dict:
         except SyncError:
             pass
         telemetry.update(requested_model=args.requested_model,
-                         action_sha="86365089eb2b84e0a8fb0717b304f8bdcb13b20e",
+                         action_sha="7c168a233489ca36cb495409e8f1fba7b522bb40",
                          elapsed_seconds=max(0, time.time() - args.started_at),
                          unavailable_reason="Actual model/token usage are not exposed by this action; any missing CLI version could not be measured.")
         _write_json(args.report.parent / "telemetry.json", telemetry)

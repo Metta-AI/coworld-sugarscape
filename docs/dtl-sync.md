@@ -787,6 +787,17 @@ cancelled by the job timeout with its log discarded). Both Codex steps carry a
 evaluate job timeout stays 30 minutes. A complete local evaluation of the
 three pending upstream commits took about two minutes and 128k tokens.
 
+The action is pinned to v1.11 (`7c168a233489ca36cb495409e8f1fba7b522bb40`), not the newer v1.12. Two open
+upstream defects in v1.12 match the wedges seen in hosted acceptance: the
+action waits on its child's stream close and hangs until the job timeout when
+any descendant keeps stdout open after Codex finishes (issue #150, fix PR #151
+unmerged), and its `drop-sudo` step chmods root-owned sockets under `/run`,
+which breaks D-Bus and `systemd-resolved` and makes the runner lose contact
+with GitHub, so no log is uploaded and cancellation waits out the grace period
+(issue #160). v1.11 has neither. Both Codex steps also pass
+`--disable code_mode_host`, the helper process known to outlive `codex exec`.
+Re-check those issues before moving the pin forward.
+
 The agent's own test run is advisory and deliberately small: the prompt asks
 for a bounded, serial run of `tests/test_dtl.py`, `tests/test_ruleset_agent.py`,
 and `tests/test_episode.py` only. Two hosted runs wedged the runner for the
@@ -832,7 +843,7 @@ hooks or MCP servers. The action uses `permission-profile: :workspace`,
 `safety-strategy: drop-sudo`, `output-schema-file`, and `output-file`. Candidate
 source and review context are data under the trusted task. Git hooks and
 filesystem monitors are disabled for controller Git operations. The
-[pinned action contract](https://github.com/openai/codex-action/blob/86365089eb2b84e0a8fb0717b304f8bdcb13b20e/action.yml)
+[pinned action contract](https://github.com/openai/codex-action/blob/7c168a233489ca36cb495409e8f1fba7b522bb40/action.yml)
 is verified structurally; actual hosted sandbox behavior still requires rollout
 acceptance.
 

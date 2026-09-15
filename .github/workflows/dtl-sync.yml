@@ -246,7 +246,7 @@ jobs:
     - name: Evaluate inside the Codex sandbox
       id: codex
       timeout-minutes: 20
-      uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e
+      uses: openai/codex-action@7c168a233489ca36cb495409e8f1fba7b522bb40 # v1.11: v1.12 hangs after completion (#150) and chmods /run sockets (#160)
       with:
         openai-api-key: ${{ secrets.OPENROUTER_API_KEY }}
         responses-api-endpoint: ${{ env.CODEX_RESPONSES_ENDPOINT }}
@@ -258,13 +258,14 @@ jobs:
         permission-profile: ':workspace'
         safety-strategy: drop-sudo
         codex-version: 0.154.0
+        codex-args: '["--disable","code_mode_host"]'
         effort: high
         codex-home: ${{ github.workspace }}/controller/tools/dtl_sync/codex-home
       if: needs.detect.outputs.invalid_key == 'false'
     - name: Exercise authentication failure with the dedicated invalid key
       id: codex_invalid
       timeout-minutes: 20
-      uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e
+      uses: openai/codex-action@7c168a233489ca36cb495409e8f1fba7b522bb40 # v1.11: v1.12 hangs after completion (#150) and chmods /run sockets (#160)
       with:
         openai-api-key: ${{ secrets.DTL_SYNC_INVALID_OPENAI_API_KEY }}
         responses-api-endpoint: ${{ env.CODEX_RESPONSES_ENDPOINT }}
@@ -276,6 +277,7 @@ jobs:
         permission-profile: ':workspace'
         safety-strategy: drop-sudo
         codex-version: 0.154.0
+        codex-args: '["--disable","code_mode_host"]'
         effort: high
         codex-home: ${{ github.workspace }}/controller/tools/dtl_sync/codex-home
       if: needs.detect.outputs.invalid_key == 'true'
