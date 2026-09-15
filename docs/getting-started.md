@@ -51,8 +51,8 @@ Everything scores locally, fast — a full 1,000-tick episode takes seconds
 on small worlds and under about a minute on the biggest ranked ones:
 
 ```sh
-git clone https://github.com/Metta-AI/coworld-sugarscape
-cd coworld-sugarscape
+git clone --recurse-submodules https://github.com/Metta-AI/coworld-sugarscape
+cd coworld-sugarscape            # already cloned? run: git submodule update --init
 uv sync                          # creates .venv with all dependencies
 .venv/bin/python -m pytest       # the offline suite; should be all green
 docker compose up                # one-seat local game + the bundled baseline

@@ -5,8 +5,7 @@ from __future__ import annotations
 import random
 from typing import Any
 
-from sugarscape.agent import Agent
-
+from .dtl import Agent
 from .instrumentation import timed_subphase
 from .ruleset import FeatureContext
 

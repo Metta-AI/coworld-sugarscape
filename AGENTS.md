@@ -21,15 +21,19 @@ implementation.
 
 ## v3 layout
 
-- `src/sugarscape/` is the pinned DTL vendor. Keep changes on the documented
-  `UPSTREAM.md` allowlist; new behavior belongs elsewhere.
+- `src/sugarscape/` is the upstream DTL Sugarscape git submodule
+  (`nkremerh/sugarscape`), pinned by commit and never edited. `src/coworld/dtl.py`
+  loads it and swaps the agent class; all new behavior belongs in `src/coworld/`.
+  To bump: `git -C src/sugarscape checkout <commit>` then `git add src/sugarscape`;
+  `tests/test_dtl.py` checks the pin and the stock trajectory hash.
 - `src/coworld/` owns SugarLang, seats, simulation integration, measurement,
   scoring, replay, and the async-only server edge.
 - `targets/` is the validated histogram catalog. Every target sharing a
   variable must use that variable's canonical support and bins.
 - `players/baseline/` is the bundled one-shot player; `replay-viewer/` is a
   dependency-free static bundle.
-- Setup from a fresh clone: `uv sync` (creates `.venv` from `pyproject.toml`).
+- Setup from a fresh clone: `git submodule update --init`, then `uv sync`
+  (creates `.venv` from `pyproject.toml`).
   Run `.venv/bin/python -m pytest` offline. Server socket tests need permission
   to bind a localhost port. Do not introduce async outside `server.py`.
 

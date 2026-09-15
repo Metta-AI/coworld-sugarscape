@@ -9,7 +9,7 @@ from coworld.instrumentation import EpisodeInstrumentation
 from coworld.ruleset import compile_ruleset
 from coworld.seats import parse_trait_ranges
 from coworld.simulation import CoworldSugarscape
-from sugarscape.sugarscape import Sugarscape
+from coworld.dtl import Sugarscape
 
 
 def _measure(agent: object, *, batches: int = 7, iterations: int = 150) -> int:

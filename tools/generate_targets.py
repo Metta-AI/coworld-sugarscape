@@ -4,7 +4,7 @@
 Family A targets (see docs/TARGETS.md and the 2026-08-11 sourcing research)
 have no published tabulated data anywhere — Epstein & Axtell 1996 and every
 replication shipped figures only. The honest primary source is therefore the
-vendored DTL engine itself: run the literature-referenced example config for
+DTL engine submodule itself: run the literature-referenced example config for
 many seeds under stock DTL semantics (the "none" greedy decision model from
 DTL's own __main__ defaults — NOT the bentham data-collection profile in the
 shipped config.json), pool the target variable over the final measurement
@@ -28,6 +28,7 @@ import argparse
 import ast
 import json
 import random
+import subprocess
 import sys
 from collections import Counter
 from concurrent.futures import ProcessPoolExecutor
@@ -37,7 +38,14 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-ENGINE_COMMIT = "a46ec6ff909e2bc73a4c9e9f36b2aed160eccad8"
+# The DTL engine is the git submodule at src/sugarscape; its checked-out commit
+# is the only pin, so read it rather than duplicating it here.
+ENGINE_COMMIT = subprocess.run(
+    ["git", "-C", str(REPO_ROOT / "src" / "sugarscape"), "rev-parse", "HEAD"],
+    check=True,
+    capture_output=True,
+    text=True,
+).stdout.strip()
 WINDOW_TICKS = 100
 
 
@@ -209,7 +217,7 @@ def run_one_seed(args: tuple) -> dict:
     """
     spec_index, seed = args
     spec = SPECS[spec_index]
-    from sugarscape import sugarscape as dtl
+    from coworld import dtl
 
     config = build_run_config(spec, seed)
     random.seed(seed)
@@ -316,7 +324,7 @@ def regenerate(spec: GenerationSpec, seeds: int, jobs: int, dry_run: bool) -> di
     target["probs"] = bin_samples(pooled, target["support"], target["bins"])
     target["provisional"] = False
     target["source"] = (
-        f"Generated from the vendored DTL Sugarscape engine (commit {ENGINE_COMMIT}, "
+        f"Generated from the DTL Sugarscape engine submodule (commit {ENGINE_COMMIT}, "
         f"Unlicense) running examples/{spec.example_config} under DTL internal "
         f"defaults (decision model 'none'). Literature anchor: {spec.gas_reference} "
         f"(Epstein & Axtell 1996). No tabulated data for this result was ever "
