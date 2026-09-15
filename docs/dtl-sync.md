@@ -782,7 +782,8 @@ string for that dedicated secret, never an old working credential.
 | Variables `DTL_SYNC_APP_ID`, `DTL_SYNC_APP_LOGIN`, `DTL_SYNC_APP_EMAIL` | App token, bot ownership, and Git author identity |
 | Variable `DTL_SYNC_JAMES_LOGIN` | Assignment and authorized human resolution |
 | Variables `DTL_SYNC_DISCORD_USER_ID`, `DTL_SYNC_ASANA_PROJECT_GID` | Fixed alert destinations |
-| Secret `OPENAI_API_KEY` | Normal Codex evaluation only |
+| Variable `DTL_SYNC_ASANA_TAG_GID` (optional) | Tag applied to every created Asana task |
+| Secret `OPENROUTER_API_KEY` | Normal Codex evaluation only; the action's proxy forwards it as the bearer token to the OpenRouter Responses endpoint (workflow env `CODEX_RESPONSES_ENDPOINT`) for model `CODEX_MODEL` |
 | Secret `DTL_SYNC_INVALID_OPENAI_API_KEY` | Explicit authentication-failure exercise only |
 | Secret `DTL_SYNC_APP_PRIVATE_KEY` | Publish job App-token minting only |
 | Secrets `DISCORD_BOT_TOKEN`, `ASANA_PAT` | Publish delivery/retry; failure-only fallback needs Discord |
@@ -954,7 +955,10 @@ metadata; it writes to services and needs the same authorization.
 This procedure is for a separately authorized operator. Nothing in the local
 build provisioned credentials. Keep `DTL_SYNC_ENABLED` unset or `false` during
 setup. Confirm the intended owner/repository, App installation, James's login,
-Discord recipient, and Asana project before writing settings.
+Discord recipient, and Asana project before writing settings. The broker's
+Asana bot user must be a member of that project, or task creation returns
+"You do not have access to this project"; `DTL_SYNC_ASANA_TAG_GID` names an
+existing tag in the same workspace.
 
 Provision every variable and secret in the [configuration table](#configuration-and-secret-boundaries),
 including `DTL_SYNC_APP_LOGIN`, `DTL_SYNC_APP_EMAIL`, `DTL_SYNC_JAMES_LOGIN`, and
@@ -968,7 +972,7 @@ The service-secret provisioning scopes are:
 
 | GitHub secret | Broker scope | Handling |
 |---|---|---|
-| `OPENAI_API_KEY` | `openai.inference` | Confirm project/key lifetime and intended Actions use |
+| `OPENROUTER_API_KEY` | `openrouter.inference` | Dedicated agent key with a hard spend limit; confirm remaining budget before acceptance |
 | `DISCORD_BOT_TOKEN` | `discord.post` | Approval-tier request must explicitly name persistent Actions provisioning |
 | `ASANA_PAT` | `asana.rw` | Confirm project access and intended Actions use |
 
@@ -980,7 +984,7 @@ checkout. Every broker call must set `TOKEN_BROKER_SESSION_ID` from this session
 provisioning; it does not audit every later Actions use of the stored secret.
 Confirm the credential lifetime supports this use before storing it.
 
-Example for one authorized OpenAI provisioning operation, using a verified
+Example for one authorized OpenRouter provisioning operation, using a verified
 client path and explicit repository. The secret passes directly from the
 broker-injected child environment to `gh` stdin, never into a shell argument,
 log, or intermediate file:
@@ -990,8 +994,8 @@ DTL_SYNC_REPOSITORY=owner/repository
 DTL_SYNC_BROKER_CLIENT=/absolute/path/to/metta/scripts/token_broker_client.py
 export DTL_SYNC_REPOSITORY
 TOKEN_BROKER_SESSION_ID="${CODEX_SESSION_ID:?session ID required}" python3 "$DTL_SYNC_BROKER_CLIENT" exec \
-  --scope openai.inference --reason "Provision the OpenAI key into the authorized Sugarscape repository Actions secret for scheduled DTL evaluation" -- \
-  python3 -c 'import os,subprocess; subprocess.run(["gh","secret","set","OPENAI_API_KEY","--repo",os.environ["DTL_SYNC_REPOSITORY"]], input=os.environ["OPENAI_API_KEY"], text=True, check=True)'
+  --scope openrouter.inference --reason "Provision the OpenRouter key into the authorized Sugarscape repository Actions secret for scheduled DTL evaluation" -- \
+  python3 -c 'import os,subprocess; subprocess.run(["gh","secret","set","OPENROUTER_API_KEY","--repo",os.environ["DTL_SYNC_REPOSITORY"]], input=os.environ["OPENROUTER_API_KEY"], text=True, check=True)'
 ```
 
 Apply the same stdin pattern separately for the other two scopes/secrets, with

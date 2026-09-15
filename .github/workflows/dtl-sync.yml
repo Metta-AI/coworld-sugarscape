@@ -38,6 +38,8 @@ env:
   WORKFLOW_SHA: ${{ github.workflow_sha }}
   APP_LOGIN: ${{ vars.DTL_SYNC_APP_LOGIN }}
   JAMES_LOGIN: ${{ vars.DTL_SYNC_JAMES_LOGIN }}
+  CODEX_MODEL: openai/gpt-5.3-codex
+  CODEX_RESPONSES_ENDPOINT: https://openrouter.ai/api/v1/responses
   PYTHONHASHSEED: '0'
   PYTHONDONTWRITEBYTECODE: '1'
   GIT_TERMINAL_PROMPT: '0'
@@ -236,7 +238,9 @@ jobs:
       id: codex
       uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e
       with:
-        openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+        openai-api-key: ${{ secrets.OPENROUTER_API_KEY }}
+        responses-api-endpoint: ${{ env.CODEX_RESPONSES_ENDPOINT }}
+        model: ${{ env.CODEX_MODEL }}
         working-directory: ${{ github.workspace }}/candidate
         prompt-file: ${{ github.workspace }}/controller/tools/dtl_sync/PROMPT.md
         output-schema-file: ${{ github.workspace }}/controller/tools/dtl_sync/REPORT_SCHEMA.json
@@ -252,6 +256,8 @@ jobs:
       uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e
       with:
         openai-api-key: ${{ secrets.DTL_SYNC_INVALID_OPENAI_API_KEY }}
+        responses-api-endpoint: ${{ env.CODEX_RESPONSES_ENDPOINT }}
+        model: ${{ env.CODEX_MODEL }}
         working-directory: ${{ github.workspace }}/candidate
         prompt-file: ${{ github.workspace }}/controller/tools/dtl_sync/PROMPT.md
         output-schema-file: ${{ github.workspace }}/controller/tools/dtl_sync/REPORT_SCHEMA.json
@@ -268,7 +274,8 @@ jobs:
         STARTED_AT: ${{ steps.clock.outputs.started_at }}
       run: |-
         python controller/tools/dtl_sync.py workflow report --meta detection/meta.json \
-          --report evaluation/report.json --exercise "$EXERCISE" --started-at "$STARTED_AT" --output "$GITHUB_OUTPUT"
+          --report evaluation/report.json --exercise "$EXERCISE" --started-at "$STARTED_AT" \
+          --requested-model "$CODEX_MODEL" --output "$GITHUB_OUTPUT"
         python controller/tools/dtl_sync.py prepare patch --meta detection/meta.json --directory candidate --output patch
         cp patch/candidate.json patch/candidate.patch patch/report-notes.json evaluation/
     - name: Stage bounded input logs in the producer archive
@@ -568,11 +575,13 @@ jobs:
         ASANA_PAT: ${{ secrets.ASANA_PAT }}
         DISCORD_ID: ${{ vars.DTL_SYNC_DISCORD_USER_ID }}
         ASANA_PROJECT: ${{ vars.DTL_SYNC_ASANA_PROJECT_GID }}
+        ASANA_TAG: ${{ vars.DTL_SYNC_ASANA_TAG_GID }}
         REPORT_ARTIFACT: ${{ needs.evaluate.outputs.artifact_id }}
         RESUME_ID: ${{ needs.evaluate.outputs.resume_comment_id }}
       run: |-
         args=()
         if [ -n "$RESUME_ID" ]; then args+=(--resume-comment-id "$RESUME_ID"); fi
+        if [ -n "$ASANA_TAG" ]; then args+=(--asana-tag-gid "$ASANA_TAG"); fi
         python controller/tools/dtl_sync.py publish deliver --meta detection/meta.json \
           --candidate evaluation/candidate.json --report evaluation/report.json --verification verification/verify.json \
           --publication publication/publication.json --checkout controller --output delivery \
@@ -588,9 +597,12 @@ jobs:
         ASANA_PAT: ${{ secrets.ASANA_PAT }}
         DISCORD_ID: ${{ vars.DTL_SYNC_DISCORD_USER_ID }}
         ASANA_PROJECT: ${{ vars.DTL_SYNC_ASANA_PROJECT_GID }}
+        ASANA_TAG: ${{ vars.DTL_SYNC_ASANA_TAG_GID }}
       run: |-
+        args=()
+        if [ -n "$ASANA_TAG" ]; then args+=(--asana-tag-gid "$ASANA_TAG"); fi
         python controller/tools/dtl_sync.py publish retry-alerts --meta detection/meta.json --output retry-delivery \
-          --app-login "$APP_LOGIN" --james-login "$JAMES_LOGIN" --discord-user-id "$DISCORD_ID" --asana-project-gid "$ASANA_PROJECT"
+          --app-login "$APP_LOGIN" --james-login "$JAMES_LOGIN" --discord-user-id "$DISCORD_ID" --asana-project-gid "$ASANA_PROJECT" "${args[@]}"
     - name: Report failures even when metadata is absent
       id: failure
       if: always() && (steps.route.outputs.mode == '' || steps.route.outputs.mode == 'needs-human' || steps.route.outputs.mode

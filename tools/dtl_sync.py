@@ -873,7 +873,7 @@ def run_workflow(args, runner: CommandRunner) -> dict:
                 telemetry["codex_version"] = match[1]
         except SyncError:
             pass
-        telemetry.update(requested_model="action default",
+        telemetry.update(requested_model=args.requested_model,
                          action_sha="86365089eb2b84e0a8fb0717b304f8bdcb13b20e",
                          elapsed_seconds=max(0, time.time() - args.started_at),
                          unavailable_reason="Actual model/token usage are not exposed by this action; any missing CLI version could not be measured.")
@@ -961,6 +961,7 @@ def workflow_parser(commands):
     report.add_argument("--report", type=Path, required=True)
     report.add_argument("--exercise", choices=["none", "needs-design"], required=True)
     report.add_argument("--started-at", type=float, required=True)
+    report.add_argument("--requested-model", default="action default")
     route = stages.add_parser("route")
     failure = stages.add_parser("failure-context")
     failure.add_argument("--publication", type=Path, required=True)
@@ -1033,6 +1034,7 @@ def main() -> int:
         stage.add_argument("--app-login", required=True)
         stage.add_argument("--james-login", required=True)
         stage.add_argument("--asana-project-gid", required=True)
+        stage.add_argument("--asana-tag-gid", default=None)
     for stage in (delivery, retry, failure):
         stage.add_argument("--output", type=Path, required=True, help="new artifact directory")
         stage.add_argument("--discord-user-id", required=True)
@@ -1088,7 +1090,8 @@ def main() -> int:
             else:
                 common = dict(meta=read_meta(args.meta), runner=runner, http=http,
                               app_login=args.app_login, james_login=args.james_login,
-                              discord_user_id=args.discord_user_id, asana_project_gid=args.asana_project_gid)
+                              discord_user_id=args.discord_user_id, asana_project_gid=args.asana_project_gid,
+                              asana_tag_gid=args.asana_tag_gid or None)
                 if args.stage == "retry-alerts":
                     state = retry_deliveries(**common)
                 else:
