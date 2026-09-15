@@ -138,7 +138,10 @@ class GitHub:
             self.pr = {'number': 7, 'state': 'open', 'user': {'login': 'dtl-sync[bot]'}, 'body': body['body'], 'base': {'ref': 'main', 'repo': {'full_name': self.meta.repository}}, 'head': {'ref': self.meta.branch, 'sha': self.head, 'repo': {'full_name': self.meta.repository}}, 'labels': []}
             result = self.pr
         elif method == 'PATCH' and '/pulls/' in endpoint:
-            self.pr['body'] = body['body']
+            if 'body' in body:
+                self.pr['body'] = body['body']
+            if 'title' in body:
+                self.pr['title'] = body['title']
             result = self.pr
         elif method == 'POST' and endpoint.endswith('/assignees'):
             if self.fail_assignment:
@@ -552,3 +555,33 @@ def test_alert_requests_send_an_explicit_user_agent(sync):
         agent = request.get_header('User-agent')
         assert agent == sync.ALERT_USER_AGENT
         assert 'Python-urllib' not in agent
+
+
+def test_delivery_waits_for_pr_head_to_catch_up_after_push(sync, world):
+    values, publication, gh, runner = delivery_setup(sync, world)
+    http = Alerts()
+    http.fail_asana = False
+    http.sleep = lambda seconds: naps.append(seconds)
+    naps = []
+    deliver(sync, world, values, publication, runner, http)
+    real_head = gh.pr['head']['sha']
+    stale = {'count': 0}
+    original = gh.run
+
+    def lagging(args, **kwargs):
+        result = original(args, **kwargs)
+        if args[3] == 'GET' and args[4].endswith('/pulls/7') and stale['count'] < 2:
+            stale['count'] += 1
+            import json as _json, subprocess as _sp
+            pr = _json.loads(result.stdout)
+            pr['head'] = {**pr['head'], 'sha': 'e' * 40}
+            return _sp.CompletedProcess(args, 0, _json.dumps(pr), '')
+        return result
+    gh.run = lagging
+    meta = sync.replace(values[0], pr_number=7, pr_head_sha=real_head, mode='update-pr')
+    state = sync.deliver_publication(meta=meta, candidate=values[1], report=values[3], verification=asdict(values[4]),
+        publication=publication, checkout=world.parent, runner=runner, http=http, app_login='dtl-sync[bot]',
+        james_login='james', discord_user_id='99', asana_project_gid='88')
+    assert state.outcome == 'published'
+    assert stale['count'] == 2 and naps == [5, 5]
+    assert gh.pr['title'].startswith('DTL sync: needs-design: ')
