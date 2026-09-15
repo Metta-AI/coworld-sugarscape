@@ -504,3 +504,30 @@ def test_alert_state_excerpts_are_closed_and_bounded(sync, field, limit):
         data[field] = value
         with pytest.raises(sync.SyncError):
             sync.read_state(sync.STATE_START + json.dumps(data) + sync.STATE_END)
+
+
+def test_alert_requests_send_an_explicit_user_agent(sync):
+    seen = []
+
+    class Response:
+        status = 200
+
+        def read(self, n=None):
+            return b'{"id": "1"}'
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    def open_request(request, timeout):
+        seen.append(request)
+        return Response()
+    http = sync.AlertHTTP(discord_token='d', asana_token='a', open_request=open_request, sleep=lambda s: None)
+    http.request('discord', 'GET', '/users/@me')
+    http.request('asana', 'GET', '/users/me')
+    for request in seen:
+        agent = request.get_header('User-agent')
+        assert agent == sync.ALERT_USER_AGENT
+        assert 'Python-urllib' not in agent

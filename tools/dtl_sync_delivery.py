@@ -224,6 +224,9 @@ def render_pr_body(report: Report | None, state: PublicationState, run_url: str,
     return human + "\n\n" + block
 
 
+ALERT_USER_AGENT = "DiscordBot (https://github.com/Metta-AI/coworld-sugarscape, 1.0) dtl-sync"
+
+
 class NoAlertRedirect(HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         raise SyncError("alert redirect refused")
@@ -243,8 +246,11 @@ class AlertHTTP:
             raise SyncError(f"missing {service} credential")
         url = "https://" + hosts[service] + path
         token = ("Bot " if service == "discord" else "Bearer ") + self.tokens[service]
+        # Discord's edge rejects Python's default urllib User-Agent (Cloudflare 1010).
+        headers = {"Authorization": token, "Content-Type": "application/json",
+                   "User-Agent": ALERT_USER_AGENT}
         request = Request(url, data=None if payload is None else json.dumps(payload).encode(),
-                          headers={"Authorization": token, "Content-Type": "application/json"}, method=method)
+                          headers=headers, method=method)
         for attempt in range(3):
             try:
                 with self.open_request(request, timeout=10) as response:
