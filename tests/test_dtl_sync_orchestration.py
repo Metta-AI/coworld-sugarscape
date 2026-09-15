@@ -117,6 +117,8 @@ def test_evaluate_executes_no_candidate_code_before_codex():
     assert 'uv sync --project controller' in prior
     assert 'prepare inputs' in prior
     assert 'pytest' not in prior and 'pip install' not in prior
+    assert 'bubblewrap' in prior and 'apparmor_restrict_unprivileged_userns=0' in prior
+    assert steps[codex]['timeout-minutes'] == 20
     assert 'working-directory' not in str(steps[:codex])
     action = steps[codex]['with']
     assert action['working-directory'] == '${{ github.workspace }}/candidate'

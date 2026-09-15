@@ -234,8 +234,22 @@ jobs:
         mkdir evaluation
         printf '\n[projects."%s/candidate"]\ntrust_level = "untrusted"\n' "$GITHUB_WORKSPACE" >> controller/tools/dtl_sync/codex-home/config.toml
         printf 'started_at=%s\n' "$(date +%s)" >> "$GITHUB_OUTPUT"
+    - name: Install Codex sandbox prerequisites
+      # Trusted setup before the action: bubblewrap plus the Ubuntu 24.04 AppArmor
+      # user-namespace settings from the Codex sandboxing docs. Without them the
+      # bundled bubblewrap fallback can hang on the first sandboxed command.
+      run: |-
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq bubblewrap apparmor-profiles apparmor-utils
+        if [ -f /usr/share/apparmor/extra-profiles/bwrap-userns-restrict ]; then
+          sudo install -m 0644 /usr/share/apparmor/extra-profiles/bwrap-userns-restrict /etc/apparmor.d/bwrap-userns-restrict
+          sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict || true
+        fi
+        sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+        bwrap --version
     - name: Evaluate inside the Codex sandbox
       id: codex
+      timeout-minutes: 20
       uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e
       with:
         openai-api-key: ${{ secrets.OPENROUTER_API_KEY }}
@@ -253,6 +267,7 @@ jobs:
       if: needs.detect.outputs.invalid_key == 'false'
     - name: Exercise authentication failure with the dedicated invalid key
       id: codex_invalid
+      timeout-minutes: 20
       uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e
       with:
         openai-api-key: ${{ secrets.DTL_SYNC_INVALID_OPENAI_API_KEY }}
