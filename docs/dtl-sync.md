@@ -774,6 +774,19 @@ The invalid-key action is mutually exclusive with the normal action; an empty
 invalid key never falls back to the working key. Use an intentionally invalid
 string for that dedicated secret, never an old working credential.
 
+### Sandbox prerequisites on the runner
+
+Before the Codex action runs, `evaluate` installs `bubblewrap` and applies the
+Ubuntu 24.04 AppArmor user-namespace settings from the Codex sandboxing
+documentation (`bwrap-userns-restrict` profile, then
+`kernel.apparmor_restrict_unprivileged_userns=0`). This is trusted setup that
+runs no candidate code. Without it the action's bundled bubblewrap fallback
+hung on the first sandboxed command in hosted acceptance (run 35013438187,
+cancelled by the job timeout with its log discarded). Both Codex steps carry a
+20-minute step timeout so a hang fails the step and keeps its log; the
+evaluate job timeout stays 30 minutes. A complete local evaluation of the
+three pending upstream commits took about two minutes and 128k tokens.
+
 ### Configuration and secret boundaries
 
 | Repository setting | Consumer |
