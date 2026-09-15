@@ -358,9 +358,18 @@ def check_delivery_pr(pr: object, meta: Meta, app_login: str, head: str | None) 
     return pr
 
 
-def delivery_pr(runner: CommandRunner, meta: Meta, app_login: str, head: str) -> dict | None:
+def delivery_pr(runner: CommandRunner, meta: Meta, app_login: str, head: str, *,
+                sleep=time.sleep) -> dict | None:
     if meta.pr_number:
-        return check_delivery_pr(github(runner, "GET", f"repos/{meta.repository}/pulls/{meta.pr_number}"), meta, app_login, head)
+        # GitHub's PR head can lag a branch push by a few seconds (observed in
+        # hosted run 35025005250); wait briefly before treating it as stale.
+        for attempt in range(6):
+            pr = github(runner, "GET", f"repos/{meta.repository}/pulls/{meta.pr_number}")
+            if isinstance(pr, dict) and isinstance(pr.get("head"), dict) and pr["head"].get("sha") == head:
+                break
+            if attempt < 5:
+                sleep(5)
+        return check_delivery_pr(pr, meta, app_login, head)
     # Include closed PRs and unlabeled partial creates, but only for this exact head branch.
     query = urlencode({"state": "all", "head": meta.repository.split('/')[0] + ':' + meta.branch,
                        "base": "main", "per_page": 100})
@@ -470,7 +479,7 @@ def deliver_publication(*, meta: Meta, candidate: Candidate, report: object, ver
         return new_state()
     if heads.get(f"refs/heads/{meta.branch}") != head:
         raise SyncError("stale branch before PR delivery")
-    pr = delivery_pr(runner, meta, app_login, head)
+    pr = delivery_pr(runner, meta, app_login, head, sleep=getattr(http, "sleep", time.sleep))
     identity = PublicationIdentity(meta.main_sha, meta.target_sha, head, meta.prompt_version)
     if pr and meta.pr_number is None and read_state(pr["body"]).last_publication != identity:
         raise SyncError("partial-create state does not match captured publication")
@@ -512,6 +521,9 @@ def deliver_publication(*, meta: Meta, candidate: Candidate, report: object, ver
         current_body = render_pr_body(report, updated, link, meta.compare_url, verification)
         github(runner, "PATCH", f"repos/{meta.repository}/pulls/{pr['number']}", {"body": current_body})
     save(state)
+    title = f"DTL sync: {classification}: {report.summary.splitlines()[0][:120]}"
+    if pr.get("title") != title:
+        github(runner, "PATCH", f"repos/{meta.repository}/pulls/{pr['number']}", {"title": title})
     labels = ["dtl-sync"] + (["needs-design"] if classification == "needs-design" else [])
     github(runner, "POST", f"repos/{meta.repository}/issues/{pr['number']}/labels", {"labels": labels})
     if classification != "needs-design" and any(label["name"] == "needs-design" for label in pr.get("labels", [])):

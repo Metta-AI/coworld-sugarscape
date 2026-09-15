@@ -264,6 +264,12 @@ Existing excluded archival symlinks are inspected as link text, never followed,
 and retained from main; they are not candidate patch entries.
 
 Other outside-allowlist edits are dropped and listed in `report-notes.json`.
+After `publish tree` pushes, delivery re-reads the PR and waits up to about
+30 seconds for GitHub's PR head to match the pushed commit before treating
+it as stale (hosted run 35025005250 hit that read-after-write lag; its rerun
+reconciled). The PR title is refreshed to the current classification on every
+update.
+
 An agent `cause` of `new-feature` escalates only when the agent's own
 classification is `needs-design`; on a `mechanical` or `no-impact` proposal
 it is treated as `none` (the first hosted acceptance run escalated an
