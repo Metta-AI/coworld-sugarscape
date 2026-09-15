@@ -33,6 +33,23 @@ without player I/O. Distribution leagues score how closely the measured outcome
 matches the target, while Commonwealth scores the wellness produced by a fixed
 constitution.
 
+CI runs the Python suite and workflow lint on PRs to `main` and main pushes;
+every PR also builds the game image and checks its headless import. See
+[`docs/dtl-sync.md`](docs/dtl-sync.md) for pinned tools, local checks, and the
+upstream sync implementation status, read-only detection, and disposable
+candidate preparation, and [Docker verification setup](docs/dtl-sync.md#independent-verification).
+Container verification excludes timing tests and records that exclusion; host/CI
+checks retain them. The [Git tree publisher](docs/dtl-sync.md#validated-git-tree-publication)
+validates evidence before pushing. [PR delivery and alert recovery](docs/dtl-sync.md#pr-state-and-delivery)
+include review context and persisted retry receipts, and are tested with fake services;
+the [four-job workflow](docs/dtl-sync.md#sync-workflow) is implemented locally.
+Hosted acceptance and activation remain pending; schedules are gated by
+`DTL_SYNC_ENABLED`. The [controller module map](docs/dtl-sync.md#controller-modules)
+identifies the trusted CLI, shared contracts, and delivery code. The
+[rollout checklist](docs/dtl-sync.md#hosted-acceptance-and-week-one-checks) covers
+activation and recovery. CI runs functional tests in parallel and performance
+tests serially to avoid CPU contention in timing assertions.
+
 New here? Start with [`docs/getting-started.md`](docs/getting-started.md) —
 the game, the three leagues, local runs, the Ruleset Studio, and how to join
 a league (with or without a coding agent).

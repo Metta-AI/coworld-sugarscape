@@ -1,8 +1,11 @@
 # DTL upstream sync: keeping the coworld wrapper current with `nkremerh/sugarscape`
 
-Status: revision 4, 2026-09-14, after three Codex design review rounds
-(findings in the collab record). Approved direction from James on 2026-09-10; not yet
-implemented.
+Status: implemented locally on branch `dtl-sync` at
+`2ed74f2e855ad742940200d77859e62e590784be`; hosted acceptance and activation pending.
+This is the accepted P6 implementation reference; P7 consolidates operator docs
+and separates CI performance tests without changing their assertions.
+Design revision 4 was approved after three review rounds on 2026-09-14.
+See [the operator runbook](../dtl-sync.md) for the implemented command contract.
 Depends on: the `src/sugarscape` git submodule (branch `dtl-submodule`, commit
 "Replace the vendored DTL copy with a pristine upstream submodule").
 
@@ -73,13 +76,15 @@ notices any of these until someone bumps the pin by hand.
 
 ## Architecture
 
-Two workflows and one script. The workflows are thin; the script holds every
-decision so it can be unit-tested offline and run from a laptop.
+Two workflows and one synchronous CLI backed by three protected sibling modules.
+The controller decisions can be unit-tested offline and run from a laptop.
 
 ```
-.github/workflows/ci.yml          pytest + actionlint + image smoke on PRs; pytest on push to main (new; no CI today)
+.github/workflows/ci.yml          pytest + actionlint + image smoke on PRs; pytest on push to main (implemented locally)
 .github/workflows/dtl-sync.yml    schedule (daily) + workflow_dispatch; four jobs, see below
-tools/dtl_sync.py                 detect | prepare | verify | publish subcommands (sync, stdlib only)
+tools/dtl_sync.py                 detect | prepare | verify | publish | workflow subcommands (sync, stdlib only)
+tools/dtl_sync_contracts.py       closed dataclasses, validators, and path policy
+tools/dtl_sync_delivery.py        PR state, authorization, and alert receipts
 tools/dtl_sync/PROMPT.md          the Codex task prompt, versioned with the repo
 tools/dtl_sync/REPORT_SCHEMA.json the closed JSON schema for the agent's final message
 tests/test_dtl_sync.py            offline unit tests against throwaway git repos and fake gh/HTTP
@@ -96,7 +101,7 @@ executes only the script from trusted `main` and treats the patch as data.
 |---|---|---|---|
 | `detect` | trusted `main` | none (read-only `GITHUB_TOKEN`) | resolve identities, decide whether to run, emit `meta.json` |
 | `evaluate` | trusted setup, then candidate code only inside the Codex sandbox | `OPENAI_API_KEY`, through the action's proxy | bump, write inputs, run Codex; emit `report.json` and `candidate.patch` |
-| `verify` | trusted script; candidate code in child processes | none | independent stock probe and candidate suite; emit `verify.json` |
+| `verify` | trusted script; candidate code in isolated Docker containers | none | independent stock probe and candidate suite; emit `verify.json` |
 | `publish` | trusted script only | App token minted per run, Discord, Asana | validate, classify, commit, push, PR, labels, alerts |
 
 Every checkout uses `persist-credentials: false`. Every action is pinned to a
@@ -192,8 +197,9 @@ test runs and it could alter the probe's environment.
 
 ### `verify`
 
-Trusted script from `main_sha`; candidate code runs only in child processes
-whose results the controlling process collects after they exit. Verifier
+Trusted script from `main_sha`; candidate code runs only in separate nonroot
+Docker containers with no network, host credentials, or Docker socket. The host
+controller collects results after they exit; trusted harness mounts are read-only. Verifier
 control code and results live outside candidate-writable paths.
 
 - Fresh checkout of `main_sha`, submodule fetched independently from upstream
@@ -206,8 +212,9 @@ control code and results live outside candidate-writable paths.
 - **Candidate suite.** In a second checkout, apply `candidate.patch` from
   `main_sha` (`git apply --check` first; any hunk outside the allowed paths
   fails verification), stage the gitlink at `target_sha`, and run the full
-  suite in a child process. Record exit status, passed, failed, and error
-  counts, and whether collection succeeded.
+  functional suite (`-m "not perf"`) in its container. Record exit status, passed, failed, and error
+  counts, skips, and whether collection succeeded. The verifier records
+  `excluded_markers: ["perf"]`; host CI runs those timing tests separately.
 - **Baseline.** Also run the suite once on `main_sha` with `main_pin` (the
   unmodified baseline) so `cause` attribution has independently collected
   baseline facts. On an existing PR this is still `main`, not the PR tree.
@@ -239,6 +246,10 @@ The prompt is reviewed like code. Its contract:
   `config.json` keys the wrapper reads, and which changes are in imported
   files but on paths the wrapper never calls. An empty or incomplete
   inventory is not evidence of unreachability.
+  Keep the report within 64 KiB and at most 100 inventory items. File entries
+  cover one changed file; canonical directory paths ending in `/` with symbol
+  `*` cover all changed descendants. Their union must equal the changed-file set
+  exactly, with no overlap or empty directory coverage.
 - Return the final message as JSON matching `REPORT_SCHEMA.json`:
   `classification`, `cause`, `summary`, `upstream_range`, `reachability`
   (list of changed items with `reached: true|false` and why),
@@ -294,11 +305,11 @@ Job-level `if: always()` so it runs after failed or skipped dependencies;
 inside, normal publication is gated on complete, mutually consistent
 artifacts, and everything else takes the notification path.
 
-- Two checkouts: a trusted one of `main_sha` limited to `tools/dtl_sync*`
-  (the only code that executes), and a full working checkout of the PR head
-  (or `main_sha` for a new PR) used purely as data to build the commit. Mint
-  the App token with the pinned `actions/create-github-app-token`, scoped to
-  this repository.
+- Bootstrap from the default-branch workflow commit; validate metadata before
+  selecting the captured `main_sha` controller. A separate disposable checkout
+  is data for tree reconstruction, never executable publisher code. Validate
+  exact producer artifacts and perform read-only publication preflight before
+  minting the repository-scoped App token. Recheck before pushing.
 - Re-check `main` head, PR head, and PR state against `meta.json`; refuse
   stale writes.
 - Validate `report.json` against the closed schema in trusted code and
@@ -387,13 +398,18 @@ model output is never pasted into the public PR body unbounded.
 described under Identities), `force` (re-evaluate an unchanged tuple),
 `replay` (allow a non-descendant target when no sync PR is open), and
 `exercise` (default `none`; `needs-design` runs a synthetic escalation
-fixture end to end, including real alert delivery, for rollout).
+overlay on real evidence, including real alert delivery for rollout), and
+`test_invalid_key` (default false; dedicated intentionally invalid secret, manual
+dispatch with explicit `force=true` required).
 
 ## Credentials
 
 | Secret or variable | Source | Used by |
 |---|---|---|
 | `OPENAI_API_KEY` (secret) | broker `openai.inference` | `evaluate`, via the action's proxy only |
+| `DTL_SYNC_INVALID_OPENAI_API_KEY` (secret) | operator-provided intentionally invalid string, never a former working key | dedicated manual invalid-key exercise; requires explicit `force=true` |
+| `DTL_SYNC_APP_LOGIN`, `DTL_SYNC_APP_EMAIL` (variables) | verified App bot login and Git author email | ownership validation and publication commits |
+| `DTL_SYNC_JAMES_LOGIN` (variable) | verified James GitHub login | assignment and authorized resolution/resume |
 | `DISCORD_BOT_TOKEN` (secret) | broker `discord.post` (approval tier) | `publish` alerts |
 | `ASANA_PAT` (secret) | broker `asana.rw` | `publish` alerts |
 | `DTL_SYNC_APP_PRIVATE_KEY` (secret), `DTL_SYNC_APP_ID` (variable) | a GitHub App installed on this repo only, permissions `contents: write`, `pull-requests: write`, `issues: write`, no branch-protection bypass | `publish`, minted per run with `actions/create-github-app-token` |
@@ -403,8 +419,9 @@ Installation tokens expire after one hour, so the App token is minted inside
 the `publish` job, never stored. The default `GITHUB_TOKEN` is not used for
 the push or the PR: pushes it makes do not start other workflow runs, and PR
 events it creates can require manual approval, so the sync PR would sit
-without CI. The App token avoids both. A fine-grained PAT is a documented
-fallback with an expiry and rotation note. Real App scopes and the lifetime
+without CI. The App token avoids both. The implemented workflow has no PAT
+fallback; an identity change would require
+a separately reviewed workflow change. Real App scopes and the lifetime
 of the broker-vended service credentials are rollout checks.
 
 ## Security
@@ -422,7 +439,8 @@ of the broker-vended service credentials are rollout checks.
   workflows; verifier-owned probe and test facts measured with `main`'s
   harness; artifact bindings by SHA and digest; the App token confined to
   `publish`; human merge; and branch protection on `main` requiring one review
-  and green `ci.yml` (created during rollout; it does not exist today).
+  and green `tests`, `workflow-lint`, and `image-smoke` checks from the locally
+  implemented `ci.yml`. Hosted branch protection remains a rollout step.
   Changes to the protected paths are made by humans through ordinary PRs.
 - The App is installed on this repository only and cannot bypass branch
   protection.
@@ -440,6 +458,17 @@ and SHAs are validated by regex and passed as arguments, never interpolated
 into shell text.
 
 ## Testing
+
+P4 review approved a deliberate exception to the full-suite measurements above:
+inside the CPU-limited verifier containers, the trusted pytest harness runs
+`-m "not perf"`. The ranking ratio test carries the registered `perf` marker;
+CPU quota and parallel scheduling make that timing assertion unreliable there.
+`verify.json` explicitly records `excluded_markers: ["perf"]`. Host and CI runs
+retain the performance assertion. Studio integration tests skip with an explicit
+reason when the external Metta link app files or Node executable they require
+are absent; their assertions remain unchanged where those prerequisites exist.
+Nested Docker acceptance still runs separately on the host, with visible skips
+inside measurement containers.
 
 `tests/test_dtl_sync.py` runs offline against temporary repositories (a fake
 upstream bare repo with a real submodule relationship), a fake `gh` executable
@@ -480,7 +509,11 @@ and injected HTTP responses. Coverage:
   `publish` `if: always()`, and that no step in `evaluate` runs pytest or
   imports candidate code before the Codex action.
 
-Hosted acceptance (not mocked), in order:
+Hosted acceptance (not mocked), in order. The commit prefixes below are the
+design-time examples; re-resolve them and compare against the deployed main pin
+before dispatch. If they are historical, use replay with no open sync PR or
+select an equivalent forward sequence and record full SHAs. These expectations
+are acceptance criteria, not results already observed:
 
 1. Dispatch with `upstream_ref=2c77f4e` (the first pending commit).
    Expected: `no-impact`, green, unchanged hash, PR opened, `ci.yml` runs
@@ -493,20 +526,26 @@ Hosted acceptance (not mocked), in order:
    task that James reads back.
 5. Merge the PR, then dispatch: `noop`.
 6. Dispatch with `force=true` and the invalid-key test input (a separate
-   secret holding a revoked key): `operational-failure` reaches the Discord
+   secret holding an intentionally invalid string, never a former working key): `operational-failure` reaches the Discord
    channel with a run link, and the working secret is untouched.
 
 ## Rollout
 
 1. Merge the submodule PR.
-2. Land `ci.yml`; enable branch protection on `main` (one review, `ci.yml`
-   required).
+2. Land `ci.yml`; verify actual PR checks and enable branch protection on `main`
+   (one independent review; `tests`, `workflow-lint`, and `image-smoke` required).
+   Functional tests run in parallel; performance tests run in a serial step.
 3. Create the GitHub App and install it on this repo; store the private key
-   and App ID; provision the three broker secrets; set the three variables;
-   create the `dtl-sync` and `needs-design` labels; confirm James's GitHub
-   login for assignment; confirm the pinned action exposes usage telemetry.
+   as `DTL_SYNC_APP_PRIVATE_KEY` and the App ID as `DTL_SYNC_APP_ID`; set verified
+   `DTL_SYNC_APP_LOGIN`, `DTL_SYNC_APP_EMAIL`, and `DTL_SYNC_JAMES_LOGIN`.
+   Provision `OPENAI_API_KEY`, `DISCORD_BOT_TOKEN`, and `ASANA_PAT` through their
+   broker scopes using a per-session ID. Set `DTL_SYNC_INVALID_OPENAI_API_KEY`
+   to an intentionally invalid string, and set `DTL_SYNC_DISCORD_USER_ID` and
+   `DTL_SYNC_ASANA_PROJECT_GID`. Leave `DTL_SYNC_ENABLED` unset. Create the
+   `dtl-sync` and `needs-design` labels. The pinned action does not expose actual
+   model/token usage; retain explicit nulls and verify the available telemetry.
 4. Land `dtl-sync.yml`, the script, the prompt, the schema, and the tests,
-   with `DTL_SYNC_ENABLED` unset so the schedule job exits immediately while
+   with `DTL_SYNC_ENABLED` unset so the scheduled jobs are skipped while
    manual dispatch still works.
 5. Run the hosted acceptance sequence and review each result.
 6. Set `DTL_SYNC_ENABLED=true`. Schedule: `0 13 * * *` UTC, which is 06:00

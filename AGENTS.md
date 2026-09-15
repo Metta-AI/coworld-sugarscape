@@ -40,3 +40,98 @@ implementation.
 Deterministic comparisons use `canonical_results_payload()`, which excludes
 wall-clock timings. Cross-process replay assumes `PYTHONHASHSEED=0`. Never put
 tokens or the drawn seed in player observations.
+
+## CI checks
+
+CI uses Python 3.13.5 and uv 0.12.13. Run `uv sync`, then
+the parallel functional suite, then the serial performance suite:
+
+```sh
+PYTHONHASHSEED=0 .venv/bin/python -m pytest -q -n auto -m "not perf"
+PYTHONHASHSEED=0 .venv/bin/python -m pytest -q -m perf
+```
+
+Keep the performance assertions unchanged; parallel CPU contention can distort
+timing ratios. PyYAML is dev-only
+and supports `tests/test_dtl_sync_workflows.py`; quote workflow `'on'` keys.
+After workflow edits, run `build/tools/actionlint` (installation and checksums
+are in [docs/dtl-sync.md](docs/dtl-sync.md)). Keep action references pinned to
+full commit SHAs and checkouts configured with `persist-credentials: false`.
+Do not commit generated `uv.lock`; it is local generated state.
+
+CI has `tests`, `workflow-lint`, and PR-only `image-smoke` jobs. The four-job
+`.github/workflows/dtl-sync.yml` is implemented locally but has not been
+activated or qualified on hosted services. Scheduling requires
+`DTL_SYNC_ENABLED=true`; every job checks the default main branch before secrets.
+Keep producer artifact IDs and producer attempts bound independently, including
+failed-job reruns. No candidate Python may run before the Codex action: its
+working directory is the disposable candidate, with a link to dependencies
+installed from trusted main. Upload only bounded regular data files through the
+collector; never execute candidate code in verify/publish host steps.
+See `tests/test_dtl_sync_orchestration.py` for workflow and fake-service coverage.
+
+`tools/dtl_sync.py detect` resolves upstream and PR identities using scratch
+bare repositories and read-only `gh api` calls. It does not modify the input
+checkout or execute upstream code. See the runbook for required main-branch
+files and CLI arguments. Keep GitHub/command transports injectable for offline
+tests (`tests/test_dtl_sync.py`, `tests/dtl_sync_support.py`).
+
+`prepare inputs` creates a new disposable checkout and stages the target
+gitlink there; it never alters the source checkout. `prepare patch` writes a
+complete main-to-candidate patch using a temporary index, preserving the
+candidate's existing index. Keep patch output outside the candidate checkout.
+See `tests/test_dtl_sync_prepare.py` for cumulative changes, main merges,
+authorized resume, protected paths, and binary/symlink rejection.
+
+`verify` reconstructs from captured main and runs stock, candidate, and baseline
+measurements in separate nonroot Docker containers. Build the verifier from
+trusted main with `docker build -f tools/dtl_sync/verify.Dockerfile -t dtl-sync-verifier .`.
+Run mandatory host isolation acceptance with
+`DTL_SYNC_REQUIRE_DOCKER=1 PYTHONHASHSEED=0 .venv/bin/python -m pytest -q -ra tests/test_dtl_sync_isolation.py`.
+Containers deliberately skip this nested infrastructure test with a printed
+reason: they have no Docker socket. Never fall back to host execution when
+Docker/image setup is missing. Keep the controller and final evidence outside
+all mounted paths; only the current measurement and trusted harness are mounted,
+read-only. The verifier harness and image files under `tools/dtl_sync/` must
+come from captured main, never candidate patches.
+
+The verifier runs the functional suite with `-m "not perf"` under its CPU quota
+and records `excluded_markers: ["perf"]` in `verify.json`. Host/CI commands above
+still run the registered `perf` tests. Studio integration tests explicitly skip
+when external Metta link app files or Node are missing; do not remove assertions
+or mount a host checkout to satisfy those prerequisites.
+
+`publish tree` validates the closed report and verification contracts before
+reconstructing and pushing the complete measured tree. It uses only Git and
+read-only GitHub PR discovery and authorized question resolution. Tests in `tests/test_dtl_sync_publish.py` push only to temporary local
+remotes. Never test this command against the real origin without authorization.
+Keep `excluded_markers: ["perf"]` in the verification contract and count skips
+separately. Preserve completed red results and reject incomplete artifacts
+regardless of patch size. Retry reconciliation requires the exact deterministic
+commit, not a branch name or author string. See the runbook for all CLI inputs,
+report fields, stale-write checks, and unchanged-tree evidence.
+
+`publish deliver` consumes retained publication evidence and writes the PR body,
+state, labels, assignment, and alert receipts. `publish retry-alerts` needs only
+captured metadata plus the PR state; `publish failure` can notify from trusted
+repository/run context without candidate artifacts or metadata. These commands
+can write to real services: tests must inject fake GitHub/HTTP transports and
+use temporary Git remotes. Never use live credentials for local acceptance.
+Keep the initial state in the first PR create request, preserve the successful
+publication tuple on failures, and save each channel receipt before continuing.
+Use the shared head-bound resume permission helper; public comments alone do
+not authorize resolution. See `tests/test_dtl_sync_alerts.py` and the runbook.
+
+Alert retries read bounded summary/reasoning excerpts and open questions from
+publication state. Keep the closed schema and sanitized, bounded Discord/Asana
+payloads in sync; Discord truncation must be visible to the reader.
+
+The sync controller is split across three protected sibling modules:
+`tools/dtl_sync.py` owns the CLI, detection, Git preparation, verification, and
+Git tree publication; `tools/dtl_sync_contracts.py` owns shared dataclasses,
+closed validators, and identifier/JSON/path helpers; `tools/dtl_sync_delivery.py`
+owns PR state/rendering, GitHub authorization, alerts, receipts, and failure
+notification. Keep all three sourced from trusted main. The existing
+`tools/dtl_sync` protected prefix covers both new module names. The offline
+fixture loader exposes a combined test namespace; production uses explicit
+imports and the same `tools/dtl_sync.py` CLI.
