@@ -636,7 +636,7 @@ jobs:
           retry-delivery/delivery.json
           failure/failure.json
         retention-days: 30
-        if-no-files-found: error
+        if-no-files-found: ignore
     - name: Preserve negative job outcome
       if: always() && (steps.failure.outcome != 'skipped' || steps.route.outcome != 'success')
       run: exit 1
