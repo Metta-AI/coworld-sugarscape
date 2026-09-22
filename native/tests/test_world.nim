@@ -5,7 +5,7 @@ import ../sugarscape_native
 proc initialSnapshot(): JsonNode =
   let fixture = parseFile(currentSourcePath.parentDir / "fixtures" / "python_random_1729.json")
   %*{
-    "schemaVersion": 4,
+    "schemaVersion": 5,
     "sourcePin": "585282e9ce7b22a33b89abb0d777917bd5887d1a",
     "configurationSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "rulesetSha256": [
@@ -18,6 +18,9 @@ proc initialSnapshot(): JsonNode =
     "sugarRegrowRate": 1,
     "spiceRegrowRate": 0,
     "maxCellDistance": 1,
+    "maxCombatLoot": 0,
+    "maxTribes": 1,
+    "inheritancePolicy": "none",
     "rng": fixture["rng"],
     "liveOrder": [10],
     "cells": [
@@ -36,6 +39,7 @@ proc initialSnapshot(): JsonNode =
         "fertilityFactor": 0, "fertilityFactorModifier": 0,
         "depressed": false, "happinessUnit": 1, "maxFriends": 0,
         "friendlinessModifier": 0, "happinessModifier": 0,
+        "tags": newJNull(), "tribe": newJNull(), "tagging": false,
       },
     ],
     "orderedCandidates": [
@@ -43,6 +47,7 @@ proc initialSnapshot(): JsonNode =
       [[0, 1], [2, 1]],
       [[1, 1], [0, 1]],
     ],
+    "orderedNeighbors": [[2, 1, 1, 2], [0, 2, 2, 0], [1, 0, 0, 1]],
     "deaths": [],
   }
 
@@ -85,6 +90,7 @@ suite "native world":
         "fertilityFactor": 0, "fertilityFactorModifier": 0,
         "depressed": false, "happinessUnit": 1, "maxFriends": 0,
         "friendlinessModifier": 0, "happinessModifier": 0,
+        "tags": newJNull(), "tribe": newJNull(), "tagging": false,
       },
       {
         "id": 20, "seat": 1, "x": 1, "y": 0, "sugar": 10, "spice": 0, "age": 2,
@@ -96,9 +102,11 @@ suite "native world":
         "fertilityFactor": 0, "fertilityFactorModifier": 0,
         "depressed": false, "happinessUnit": 1, "maxFriends": 0,
         "friendlinessModifier": 0, "happinessModifier": 0,
+        "tags": newJNull(), "tribe": newJNull(), "tagging": false,
       },
     ]
     node["orderedCandidates"] = %*[[[1, 1]], [[0, 1]]]
+    node["orderedNeighbors"] = %*[[1, 1, 1, 1], [0, 0, 0, 0]]
     var world = loadWorld(node)
     world.stepOne()
     check world.agents.len == 1
@@ -197,6 +205,8 @@ suite "native world":
     node["agents"][0]["sugarMetabolism"] = %6
     node["agents"][0]["spiceMetabolism"] = %6
     node["agents"][0]["aggressionFactor"] = %1.145
+    node["agents"][0]["tags"] = %*[0]
+    node["agents"][0]["tribe"] = %0
     node["agents"][0]["happinessUnit"] = %0.5763
     node["agents"][0]["maxFriends"] = %3
     let world = loadWorld(node)
@@ -227,3 +237,72 @@ suite "native world":
     check world.agents[0].sugar == 3
     check world.agents[0].spice == 0
     check world.agents[0].age == 1
+
+  test "combat caps each loot resource and records the victim":
+    var node = initialSnapshot()
+    node["maxCombatLoot"] = %2
+    node["maxTribes"] = %2
+    node["sugarRegrowRate"] = %0
+    node["liveOrder"] = %*[20, 10]
+    node["cells"] = %*[
+      {"sugar": 0, "maxSugar": 0, "spice": 0, "maxSpice": 0, "occupantId": 10},
+      {"sugar": 0, "maxSugar": 0, "spice": 0, "maxSpice": 0, "occupantId": 20},
+      {"sugar": 0, "maxSugar": 0, "spice": 0, "maxSpice": 0, "occupantId": newJNull()},
+    ]
+    var attacker = node["agents"][0].copy()
+    attacker["sugar"] = %10
+    attacker["spice"] = %10
+    attacker["sugarMetabolism"] = %0
+    attacker["aggressionFactor"] = %1
+    attacker["tags"] = %*[0]
+    attacker["tribe"] = %1
+    var prey = attacker.copy()
+    prey["id"] = %20
+    prey["seat"] = %1
+    prey["x"] = %1
+    prey["sugar"] = %4
+    prey["spice"] = %3
+    prey["aggressionFactor"] = %0
+    prey["tags"] = %*[1]
+    prey["tribe"] = %0
+    node["agents"] = %*[attacker, prey]
+    var world = loadWorld(node)
+    world.stepOne()
+    check world.agents.len == 1
+    check world.agents[0].id == 10
+    check world.agents[0].x == 1
+    check world.agents[0].sugar == 12
+    check world.agents[0].spice == 12
+    check world.deaths.len == 1
+    check world.deaths[0].id == 20
+    check world.deaths[0].cause == "combat"
+
+  test "tagging preserves duplicate neighbor draws and recomputes tribe":
+    var node = initialSnapshot()
+    node["width"] = %2
+    node["maxTribes"] = %2
+    node["liveOrder"] = %*[20, 10]
+    node["cells"] = %*[
+      {"sugar": 0, "maxSugar": 0, "spice": 0, "maxSpice": 0, "occupantId": 10},
+      {"sugar": 0, "maxSugar": 0, "spice": 0, "maxSpice": 0, "occupantId": 20},
+    ]
+    var tagger = node["agents"][0].copy()
+    tagger["movement"] = %0
+    tagger["sugarMetabolism"] = %0
+    tagger["tags"] = %*[0]
+    tagger["tribe"] = %1
+    tagger["tagging"] = %true
+    var target = tagger.copy()
+    target["id"] = %20
+    target["seat"] = %1
+    target["x"] = %1
+    target["tags"] = %*[1]
+    target["tribe"] = %0
+    target["tagging"] = %false
+    node["agents"] = %*[tagger, target]
+    node["orderedCandidates"] = %*[[[1, 1]], [[0, 1]]]
+    node["orderedNeighbors"] = %*[[1, 1, 1, 1], [0, 0, 0, 0]]
+    var world = loadWorld(node)
+    world.stepOne()
+    check world.agents[1].tags == @[0]
+    check world.agents[1].tribe == 1

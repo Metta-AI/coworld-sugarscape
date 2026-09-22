@@ -12,7 +12,7 @@ from typing import Mapping
 from .simulation import CoworldSugarscape
 
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 SOURCE_PIN = "585282e9ce7b22a33b89abb0d777917bd5887d1a"
 _WELFARE_MOVEMENT = [{"score": ["get", "cell.welfare"]}]
 
@@ -87,6 +87,9 @@ class NativeSnapshot:
     sugar_regrow_rate: int | float
     spice_regrow_rate: int | float
     max_cell_distance: int
+    max_combat_loot: int | float
+    max_tribes: int
+    inheritance_policy: str
     rng_words: tuple[int, ...]
     rng_index: int
     live_order: tuple[int, ...]
@@ -95,6 +98,7 @@ class NativeSnapshot:
     ]
     agents: tuple[tuple[int | float, ...], ...]
     ordered_candidates: tuple[tuple[tuple[int, int | float], ...], ...]
+    ordered_neighbors: tuple[tuple[int, ...], ...]
     deaths: tuple[tuple[int, int, int, str], ...]
 
     @classmethod
@@ -112,11 +116,15 @@ class NativeSnapshot:
             "sugarRegrowRate",
             "spiceRegrowRate",
             "maxCellDistance",
+            "maxCombatLoot",
+            "maxTribes",
+            "inheritancePolicy",
             "rng",
             "liveOrder",
             "cells",
             "agents",
             "orderedCandidates",
+            "orderedNeighbors",
             "deaths",
         }
         _closed(raw, keys, "snapshot")
@@ -136,6 +144,10 @@ class NativeSnapshot:
         width = _int(raw["width"], "width", 1)
         height = _int(raw["height"], "height", 1)
         max_cell_distance = _int(raw["maxCellDistance"], "maxCellDistance")
+        max_combat_loot = _number(raw["maxCombatLoot"], "maxCombatLoot")
+        max_tribes = _int(raw["maxTribes"], "maxTribes", 1)
+        if raw["inheritancePolicy"] != "none":
+            raise ValueError("inheritancePolicy must be none")
         rng = raw["rng"]
         if not isinstance(rng, Mapping):
             raise ValueError("rng must be an object")
@@ -159,6 +171,7 @@ class NativeSnapshot:
         raw_agents = raw["agents"]
         raw_order = raw["liveOrder"]
         raw_candidates = raw["orderedCandidates"]
+        raw_neighbors = raw["orderedNeighbors"]
         raw_deaths = raw["deaths"]
         count = width * height
         if not isinstance(raw_cells, list) or len(raw_cells) != count:
@@ -167,6 +180,8 @@ class NativeSnapshot:
             raise ValueError("agents and liveOrder must be arrays")
         if not isinstance(raw_candidates, list) or len(raw_candidates) != count:
             raise ValueError("orderedCandidates must contain width * height arrays")
+        if not isinstance(raw_neighbors, list) or len(raw_neighbors) != count:
+            raise ValueError("orderedNeighbors must contain width * height arrays")
         if not isinstance(raw_deaths, list):
             raise ValueError("deaths must be an array")
 
@@ -225,6 +240,9 @@ class NativeSnapshot:
             "maxFriends",
             "friendlinessModifier",
             "happinessModifier",
+            "tags",
+            "tribe",
+            "tagging",
         }
         agents = []
         for index, agent in enumerate(raw_agents):
@@ -234,6 +252,12 @@ class NativeSnapshot:
             max_age = agent["maxAge"]
             if isinstance(max_age, bool) or not isinstance(max_age, int) or max_age < -1:
                 raise ValueError("agent.maxAge must be -1 or a non-negative integer")
+            raw_tags = agent["tags"]
+            if raw_tags is not None and not isinstance(raw_tags, list):
+                raise ValueError("agent.tags must be null or an array")
+            parsed_tags = None if raw_tags is None else tuple(
+                _int(tag, "agent.tags") for tag in raw_tags
+            )
             values = (
                 _int(agent["id"], "agent.id"),
                 _int(agent["seat"], "agent.seat"),
@@ -273,13 +297,32 @@ class NativeSnapshot:
                 _int(agent["maxFriends"], "agent.maxFriends"),
                 _signed_number(agent["friendlinessModifier"], "agent.friendlinessModifier"),
                 _signed_number(agent["happinessModifier"], "agent.happinessModifier"),
+                parsed_tags,
+                None if agent["tribe"] is None else _int(agent["tribe"], "agent.tribe"),
+                agent["tagging"],
             )
             if not isinstance(values[21], bool):
                 raise ValueError("agent.depressed must be a boolean")
+            tags, tribe, tagging = values[26:29]
+            if not isinstance(tagging, bool):
+                raise ValueError("agent.tagging must be a boolean")
+            if tags is not None:
+                if not tags or any(tag not in {0, 1} for tag in tags):
+                    raise ValueError("agent.tags must be null or a non-empty bit array")
+                tribe_size = (len(tags) + 1) / max_tribes
+                expected = min(math.ceil((tags.count(0) + 1) / tribe_size) - 1, max_tribes - 1)
+                if tribe != expected:
+                    raise ValueError("agent.tribe is inconsistent with tags")
+            elif tribe is not None or tagging:
+                raise ValueError("null tags require null tribe and disabled tagging")
             if values[2] >= width or values[3] >= height:
                 raise ValueError("agent position is outside the world")
             agents.append(values)
         ids = [int(agent[0]) for agent in agents]
+        if any(agent[28] for agent in agents) and any(agent[26] is None for agent in agents):
+            raise ValueError("every agent must have tags when tagging is enabled")
+        if any(max(0, agent[17] + agent[18]) > 0 and agent[26] is None for agent in agents):
+            raise ValueError("combat requires agent tags and tribes")
         live_order = tuple(_int(value, "liveOrder") for value in raw_order)
         if ids != sorted(set(ids)) or sorted(live_order) != ids:
             raise ValueError("agents must be ID-sorted and liveOrder must be its permutation")
@@ -310,14 +353,22 @@ class NativeSnapshot:
             if len(set(targets)) != len(targets) or origin in targets:
                 raise ValueError("ordered candidates must be unique and exclude their origin")
             candidates.append(tuple(parsed))
+        neighbors = []
+        for entries in raw_neighbors:
+            if not isinstance(entries, list):
+                raise ValueError("orderedNeighbors entries must be arrays")
+            parsed_neighbors = tuple(_int(entry, "neighbor index") for entry in entries)
+            if any(entry >= count for entry in parsed_neighbors):
+                raise ValueError("neighbor index is outside the world")
+            neighbors.append(parsed_neighbors)
         deaths = []
         for index, death in enumerate(raw_deaths):
             if not isinstance(death, Mapping):
                 raise ValueError(f"deaths[{index}] must be an object")
             _closed(death, {"id", "seat", "age", "cause"}, f"deaths[{index}]")
             cause = death["cause"]
-            if cause not in {"starvation", "aging"}:
-                raise ValueError("death cause must be starvation or aging")
+            if cause not in {"starvation", "aging", "combat"}:
+                raise ValueError("death cause must be starvation, aging, or combat")
             deaths.append(
                 (
                     _int(death["id"], "death.id"),
@@ -338,12 +389,16 @@ class NativeSnapshot:
             _number(raw["sugarRegrowRate"], "sugarRegrowRate"),
             _number(raw["spiceRegrowRate"], "spiceRegrowRate"),
             max_cell_distance,
+            max_combat_loot,
+            max_tribes,
+            "none",
             rng_words,
             rng_index,
             live_order,
             tuple(cells),
             tuple(agents),
             tuple(candidates),
+            tuple(neighbors),
             tuple(deaths),
         )
 
@@ -359,6 +414,9 @@ class NativeSnapshot:
             "sugarRegrowRate": self.sugar_regrow_rate,
             "spiceRegrowRate": self.spice_regrow_rate,
             "maxCellDistance": self.max_cell_distance,
+            "maxCombatLoot": self.max_combat_loot,
+            "maxTribes": self.max_tribes,
+            "inheritancePolicy": self.inheritance_policy,
             "rng": {
                 "version": 3,
                 "words": list(self.rng_words),
@@ -389,17 +447,19 @@ class NativeSnapshot:
                             "fertilityFactor", "fertilityFactorModifier",
                             "depressed", "happinessUnit", "maxFriends",
                             "friendlinessModifier", "happinessModifier",
+                            "tags", "tribe", "tagging",
                         ),
                         agent,
                         strict=True,
                     )
-                )
+                ) | {"tags": None if agent[26] is None else list(agent[26])}
                 for agent in self.agents
             ],
             "orderedCandidates": [
                 [list(entry) for entry in entries]
                 for entries in self.ordered_candidates
             ],
+            "orderedNeighbors": [list(entries) for entries in self.ordered_neighbors],
             "deaths": [
                 {"id": agent_id, "seat": seat, "age": age, "cause": cause}
                 for agent_id, seat, age, cause in self.deaths
@@ -435,11 +495,11 @@ def validate_supported_world(world: CoworldSugarscape) -> None:
         ),
         (config["startingDiseases"] == 0, "disease is unsupported"),
         (config["agentReplacements"] == 0, "replacement is unsupported"),
-        (config["agentTagging"] is False, "tagging is unsupported"),
         (config["agentTradeFactor"] == [0, 0], "trade is unsupported"),
         (config["agentLendingFactor"] == [0, 0], "lending is unsupported"),
         (config["agentFertilityFactor"] == [0, 0], "reproduction is unsupported"),
-        (config["agentAggressionFactor"] == [0, 0], "combat is unsupported"),
+        (config["agentTagPreferences"] is False, "tag preferences are unsupported"),
+        (config["agentInheritancePolicy"] == "none", "inheritancePolicy must be none"),
         (
             config["agentUniversalSugar"] == [0, 0]
             and config["agentUniversalSpice"] == [0, 0],
@@ -457,10 +517,16 @@ def validate_supported_world(world: CoworldSugarscape) -> None:
             raise ValueError(f"agents[{index}] must be alive and placed")
         if agent.diseases:
             raise ValueError(f"agents[{index}] disease state is unsupported")
-        if agent.findAggression() != 0 or agent.fertilityFactor + agent.fertilityFactorModifier > 0:
+        if agent.fertilityFactor + agent.fertilityFactorModifier > 0:
             raise ValueError(
-                f"agents[{index}] effective aggression and fertility must remain inactive"
+                f"agents[{index}] effective fertility must remain inactive"
             )
+        if agent.tradeFactor != 0:
+            raise ValueError(f"agents[{index}] effective tradeFactor is unsupported")
+        if agent.lendingFactor != 0:
+            raise ValueError(f"agents[{index}] effective lendingFactor is unsupported")
+        if agent.inheritancePolicy != "none" or agent.socialNetwork["children"]:
+            raise ValueError(f"agents[{index}] inheritance state is unsupported")
     for column in world.environment.grid:
         for cell in column:
             if cell.pollution != 0:
@@ -472,8 +538,6 @@ def audit_snapshot_compatibility(world: CoworldSugarscape) -> NativeCompatibilit
 
     agents = world.agents
     blockers = []
-    if any(agent.findAggression() != 0 for agent in agents):
-        blockers.append("combat")
     if any(agent.tradeFactor != 0 for agent in agents):
         blockers.append("trade")
     if any(agent.lendingFactor != 0 for agent in agents):
@@ -482,8 +546,8 @@ def audit_snapshot_compatibility(world: CoworldSugarscape) -> NativeCompatibilit
         blockers.append("reproduction")
     if any(agent.diseases for agent in agents) or world.configuration["startingDiseases"] > 0:
         blockers.append("disease_progression")
-    if world.configuration["agentTagging"]:
-        blockers.append("tagging")
+    if world.configuration["agentInheritancePolicy"] != "none":
+        blockers.append("inheritance")
     return NativeCompatibilityAudit(
         _digest(world.configuration),
         tuple(_digest(ruleset.normalized) for ruleset in world.seat_manager.rulesets),
@@ -555,6 +619,9 @@ def snapshot_world(world: CoworldSugarscape) -> NativeSnapshot:
             agent.maxFriends,
             agent.friendlinessModifier,
             agent.happinessModifier,
+            None if agent.tags is None else tuple(agent.tags),
+            agent.tribe,
+            agent.tagging,
         )
         for agent in sorted(world.agents, key=lambda value: value.ID)
     )
@@ -567,6 +634,11 @@ def snapshot_world(world: CoworldSugarscape) -> NativeSnapshot:
         for column in environment.grid
         for cell in column
     )
+    neighbors = tuple(
+        tuple(neighbor.x * environment.height + neighbor.y for neighbor in cell.neighbors.values())
+        for column in environment.grid
+        for cell in column
+    )
     return NativeSnapshot(
         _digest(world.configuration),
         tuple(_digest(ruleset.normalized) for ruleset in world.seat_manager.rulesets),
@@ -576,18 +648,22 @@ def snapshot_world(world: CoworldSugarscape) -> NativeSnapshot:
         environment.sugarRegrowRate,
         environment.spiceRegrowRate,
         environment.maxCellDistance,
+        environment.maxCombatLoot,
+        world.configuration["environmentMaxTribes"],
+        "none",
         tuple(state[:624]),
         state[624],
         tuple(agent.ID for agent in world.agents),
         cells,
         agents,
         candidates,
+        neighbors,
         tuple(getattr(world, "native_deaths", ())),
     )
 
 
 def step_python(snapshot: NativeSnapshot, ticks: int) -> NativeSnapshot:
-    """Run the reduced v2 contract in Python from the same wire snapshot."""
+    """Run the reduced v5 contract in Python from the same wire snapshot."""
 
     if isinstance(ticks, bool) or not isinstance(ticks, int) or ticks < 0:
         raise ValueError("ticks must be a non-negative integer")
@@ -602,19 +678,22 @@ def step_python(snapshot: NativeSnapshot, ticks: int) -> NativeSnapshot:
     for _ in range(ticks):
         if not live_order:
             break
-        deaths = []
+        deaths_by_id: dict[int, tuple[int, int, int, str]] = {}
         timestep += 1
         for cell in cells:
             cell[0] = min(cell[1], cell[0] + snapshot.sugar_regrow_rate)
             cell[2] = min(cell[3], cell[2] + snapshot.spice_regrow_rate)
         rng.shuffle(live_order)
         for agent_id in live_order:
+            if agent_id in deaths_by_id:
+                continue
             agent = agents[agent_id]
             origin = int(agent[2]) * snapshot.height + int(agent[3])
             effective_vision = max(0, int(agent[9]) + int(agent[13]))
             effective_movement = max(0, int(agent[10]) + int(agent[14]))
             sugar_metabolism = max(0, agent[7] + agent[15])
             spice_metabolism = max(0, agent[8] + agent[16])
+            aggression = max(0, agent[17] + agent[18])
             cell_range = min(
                 effective_vision,
                 effective_movement,
@@ -626,12 +705,33 @@ def step_python(snapshot: NativeSnapshot, ticks: int) -> NativeSnapshot:
                 if distance <= cell_range
             ]
             rng.shuffle(candidates)
+            retaliators: dict[int | None, int | float] = {}
+            for target, _distance in candidates:
+                occupant_id = cells[target][4]
+                if occupant_id is not None and occupant_id not in deaths_by_id:
+                    occupant = agents[occupant_id]
+                    wealth = occupant[4] + occupant[5]
+                    tribe = occupant[27]
+                    retaliators[tribe] = max(retaliators.get(tribe, 0), wealth)
             destination = origin
             best_welfare = float("-inf")
             best_distance = float("inf")
             for target, distance in candidates:
-                if cells[target][4] is not None:
-                    continue
+                occupant_id = cells[target][4]
+                sugar_reward = spice_reward = 0
+                prey_tribe = None
+                if occupant_id is not None:
+                    prey = agents[occupant_id]
+                    if (
+                        occupant_id in deaths_by_id
+                        or aggression <= 0
+                        or agent[27] == prey[27]
+                        or agent[4] + agent[5] < prey[4] + prey[5]
+                    ):
+                        continue
+                    prey_tribe = prey[27]
+                    sugar_reward = aggression * min(snapshot.max_combat_loot, prey[4])
+                    spice_reward = aggression * min(snapshot.max_combat_loot, prey[5])
                 total_metabolism = sugar_metabolism + spice_metabolism
                 sugar_proportion = (
                     sugar_metabolism / total_metabolism if total_metabolism else 0
@@ -640,20 +740,41 @@ def step_python(snapshot: NativeSnapshot, ticks: int) -> NativeSnapshot:
                     spice_metabolism / total_metabolism if total_metabolism else 0
                 )
                 adjusted_sugar = max(
-                    agent[4] + cells[target][0] - sugar_metabolism * agent[12], 0
+                    agent[4] + cells[target][0] + sugar_reward
+                    - sugar_metabolism * agent[12], 0
                 )
                 adjusted_spice = max(
-                    agent[5] + cells[target][2] - spice_metabolism * agent[12], 0
+                    agent[5] + cells[target][2] + spice_reward
+                    - spice_metabolism * agent[12], 0
                 )
                 welfare = (adjusted_sugar**sugar_proportion) * (
                     adjusted_spice**spice_proportion
                 )
+                if not math.isfinite(welfare):
+                    welfare = 0
+                if occupant_id is not None and retaliators[prey_tribe] > (
+                    agent[4] + agent[5] + welfare
+                ):
+                    continue
                 if welfare > best_welfare or (
                     welfare == best_welfare and distance < best_distance
                 ):
                     destination = target
                     best_welfare = welfare
                     best_distance = distance
+            prey_id = cells[destination][4]
+            if destination != origin and prey_id is not None:
+                prey = agents[prey_id]
+                sugar_loot = min(snapshot.max_combat_loot, prey[4])
+                spice_loot = min(snapshot.max_combat_loot, prey[5])
+                agent[4] += sugar_loot
+                agent[5] += spice_loot
+                prey[4] -= sugar_loot
+                prey[5] -= spice_loot
+                deaths_by_id[prey_id] = (
+                    prey_id, int(prey[1]), int(prey[6]), "combat"
+                )
+                cells[destination][4] = None
             if destination != origin:
                 cells[origin][4] = None
                 cells[destination][4] = agent_id
@@ -673,12 +794,34 @@ def step_python(snapshot: NativeSnapshot, ticks: int) -> NativeSnapshot:
             )
             if sugar_starved or spice_starved:
                 cells[destination][4] = None
-                deaths.append((agent_id, int(agent[1]), int(agent[6]), "starvation"))
+                deaths_by_id[agent_id] = (
+                    agent_id, int(agent[1]), int(agent[6]), "starvation"
+                )
                 continue
+            if agent[28]:
+                neighbors = list(snapshot.ordered_neighbors[destination])
+                rng.shuffle(neighbors)
+                for neighbor in neighbors:
+                    neighbor_id = cells[neighbor][4]
+                    if neighbor_id is not None and neighbor_id not in deaths_by_id:
+                        position = rng.randrange(len(agent[26]))
+                        target = agents[neighbor_id]
+                        target[26] = tuple(
+                            agent[26][position] if index == position else tag
+                            for index, tag in enumerate(target[26])
+                        )
+                        tribe_size = (len(target[26]) + 1) / snapshot.max_tribes
+                        target[27] = min(
+                            math.ceil((target[26].count(0) + 1) / tribe_size) - 1,
+                            snapshot.max_tribes - 1,
+                        )
             agent[6] += 1
             if agent[11] != -1 and agent[6] >= agent[11]:
                 cells[destination][4] = None
-                deaths.append((agent_id, int(agent[1]), int(agent[6]), "aging"))
+                deaths_by_id[agent_id] = (
+                    agent_id, int(agent[1]), int(agent[6]), "aging"
+                )
+        deaths = [deaths_by_id[agent_id] for agent_id in live_order if agent_id in deaths_by_id]
         for agent_id, _seat, _age, _cause in deaths:
             agents.pop(agent_id)
         dead_ids = {death[0] for death in deaths}
@@ -696,11 +839,15 @@ def step_python(snapshot: NativeSnapshot, ticks: int) -> NativeSnapshot:
         snapshot.sugar_regrow_rate,
         snapshot.spice_regrow_rate,
         snapshot.max_cell_distance,
+        snapshot.max_combat_loot,
+        snapshot.max_tribes,
+        snapshot.inheritance_policy,
         tuple(state[:624]),
         state[624],
         tuple(live_order),
         tuple(tuple(cell) for cell in cells),
         tuple(tuple(agents[agent_id]) for agent_id in sorted(agents)),
         snapshot.ordered_candidates,
+        snapshot.ordered_neighbors,
         tuple(deaths),
     )

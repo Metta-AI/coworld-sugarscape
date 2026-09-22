@@ -1,10 +1,10 @@
-import std/[algorithm, json, math, monotimes, strutils, tables, times]
+import std/[algorithm, json, math, monotimes, sequtils, strutils, tables, times]
 
 when isMainModule:
   import std/os
 
 const
-  SchemaVersion = 4
+  SchemaVersion = 5
   SourcePin = "585282e9ce7b22a33b89abb0d777917bd5887d1a"
   MtWords = 624
   EmptyOccupant = -1'i64
@@ -46,6 +46,10 @@ type
     maxFriends*: int
     friendlinessModifier*: float64
     happinessModifier*: float64
+    hasTags*: bool
+    tags*: seq[int]
+    tribe*: int
+    tagging*: bool
     maxAge*: int64
     lookaheadFactor*: float64
 
@@ -69,11 +73,15 @@ type
     sugarRegrowRate*: float64
     spiceRegrowRate*: float64
     maxCellDistance*: int
+    maxCombatLoot*: float64
+    maxTribes*: int
+    inheritancePolicy*: string
     rng*: PythonMt19937
     liveOrder*: seq[int64]
     cells*: seq[Cell]
     agents*: seq[Agent]
     orderedCandidates*: seq[seq[Candidate]]
+    orderedNeighbors*: seq[seq[int]]
     deaths*: seq[Death]
 
 proc twist(rng: var PythonMt19937) =
@@ -147,10 +155,11 @@ proc readInt(node: JsonNode, field: string): int64 =
 
 proc readNumber(node: JsonNode, field: string): float64 =
   doAssert node[field].kind in {JInt, JFloat}, field & " must be a number"
-  if node[field].kind == JInt:
+  result = if node[field].kind == JInt:
     float64(node[field].getBiggestInt())
   else:
     node[field].getFloat()
+  doAssert result.classify notin {fcNan, fcInf, fcNegInf}, field & " must be finite"
 
 proc isSha256(value: string): bool =
   if value.len != 64:
@@ -179,7 +188,8 @@ proc loadWorld*(node: JsonNode): World =
   node.requireFields(
     ["schemaVersion", "sourcePin", "configurationSha256", "rulesetSha256", "timestep", "width", "height",
      "sugarRegrowRate", "spiceRegrowRate",
-     "maxCellDistance", "rng", "liveOrder", "cells", "agents", "orderedCandidates", "deaths"],
+     "maxCellDistance", "maxCombatLoot", "maxTribes", "inheritancePolicy", "rng",
+     "liveOrder", "cells", "agents", "orderedCandidates", "orderedNeighbors", "deaths"],
     "snapshot",
   )
   doAssert node["schemaVersion"].getInt() == SchemaVersion, "unsupported schema version"
@@ -199,11 +209,17 @@ proc loadWorld*(node: JsonNode): World =
   result.sugarRegrowRate = node.readNumber("sugarRegrowRate")
   result.spiceRegrowRate = node.readNumber("spiceRegrowRate")
   result.maxCellDistance = int(node.readInt("maxCellDistance"))
+  result.maxCombatLoot = node.readNumber("maxCombatLoot")
+  result.maxTribes = int(node.readInt("maxTribes"))
+  result.inheritancePolicy = node["inheritancePolicy"].getStr()
   doAssert result.timestep >= 0, "timestep must be nonnegative"
   doAssert result.width > 0 and result.height > 0, "world dimensions must be positive"
   doAssert result.sugarRegrowRate >= 0 and result.spiceRegrowRate >= 0,
     "resource regrow rates must be nonnegative"
   doAssert result.maxCellDistance >= 0, "maxCellDistance must be nonnegative"
+  doAssert result.maxCombatLoot >= 0, "maxCombatLoot must be nonnegative"
+  doAssert result.maxTribes > 0, "maxTribes must be positive"
+  doAssert result.inheritancePolicy == "none", "only inheritancePolicy none is supported"
   result.rng = loadRng(node["rng"])
 
   doAssert node["liveOrder"].kind == JArray, "liveOrder must be an array"
@@ -241,10 +257,10 @@ proc loadWorld*(node: JsonNode): World =
        "vision", "movement", "visionModifier", "movementModifier", "maxAge", "lookaheadFactor",
        "aggressionFactor", "aggressionFactorModifier", "fertilityFactor",
        "fertilityFactorModifier", "depressed", "happinessUnit", "maxFriends",
-       "friendlinessModifier", "happinessModifier"],
+       "friendlinessModifier", "happinessModifier", "tags", "tribe", "tagging"],
       "agent",
     )
-    let agent = Agent(
+    var agent = Agent(
       id: agentNode.readInt("id"),
       seat: int(agentNode.readInt("seat")),
       x: int(agentNode.readInt("x")),
@@ -269,6 +285,9 @@ proc loadWorld*(node: JsonNode): World =
       maxFriends: int(agentNode.readInt("maxFriends")),
       friendlinessModifier: agentNode.readNumber("friendlinessModifier"),
       happinessModifier: agentNode.readNumber("happinessModifier"),
+      hasTags: agentNode["tags"].kind != JNull,
+      tribe: (if agentNode["tribe"].kind == JNull: -1 else: int(agentNode.readInt("tribe"))),
+      tagging: agentNode["tagging"].getBool(),
       maxAge: agentNode.readInt("maxAge"),
       lookaheadFactor: agentNode.readNumber("lookaheadFactor"),
     )
@@ -283,6 +302,21 @@ proc loadWorld*(node: JsonNode): World =
       agent.happinessUnit >= 0 and agent.maxFriends >= 0,
       "agent base social traits must be nonnegative"
     doAssert agent.maxAge >= -1, "agent maxAge must be -1 or nonnegative"
+    if agent.hasTags:
+      doAssert agentNode["tags"].kind == JArray and agentNode["tags"].len > 0,
+        "agent tags must be null or a nonempty array"
+      for tagNode in agentNode["tags"].items:
+        let tag = tagNode.getInt()
+        doAssert tag in [0, 1], "agent tags must contain only 0 or 1"
+        agent.tags.add(tag)
+      let zeroes = agent.tags.count(0)
+      let tribeSize = float64(agent.tags.len + 1) / float64(result.maxTribes)
+      let expectedTribe = min(int(ceil(float64(zeroes + 1) / tribeSize)) - 1,
+        result.maxTribes - 1)
+      doAssert agent.tribe == expectedTribe, "agent tribe is inconsistent with tags"
+    else:
+      doAssert agent.tribe == -1, "agent tribe must be null when tags are null"
+      doAssert not agent.tagging, "tagging requires nonempty tags"
     previousId = agent.id
     agentIds.add(agent.id)
     result.agents.add(agent)
@@ -290,6 +324,12 @@ proc loadWorld*(node: JsonNode): World =
   var orderedIds = result.liveOrder
   orderedIds.sort()
   doAssert orderedIds == agentIds, "liveOrder must contain every agent id exactly once"
+  let taggingEnabled = result.agents.anyIt(it.tagging)
+  for agent in result.agents:
+    doAssert not taggingEnabled or agent.hasTags,
+      "every agent must have tags when tagging is enabled"
+    doAssert max(0.0, agent.aggressionFactor + agent.aggressionFactorModifier) == 0 or
+      agent.hasTags, "combat requires agent tags and tribes"
   for index, cell in result.cells:
     if cell.occupantId != EmptyOccupant:
       doAssert cell.occupantId in agentIds, "cell occupantId does not name an agent"
@@ -325,6 +365,19 @@ proc loadWorld*(node: JsonNode): World =
     result.orderedCandidates.add(candidates)
     inc origin
 
+  doAssert node["orderedNeighbors"].kind == JArray and
+    node["orderedNeighbors"].len == result.cells.len,
+    "orderedNeighbors must contain one array per cell"
+  for neighborsNode in node["orderedNeighbors"].items:
+    doAssert neighborsNode.kind == JArray, "orderedNeighbors entries must be arrays"
+    var neighbors = newSeq[int]()
+    for neighborNode in neighborsNode.items:
+      let neighbor = neighborNode.getInt()
+      doAssert neighbor >= 0 and neighbor < result.cells.len,
+        "ordered neighbor index is invalid"
+      neighbors.add(neighbor)
+    result.orderedNeighbors.add(neighbors)
+
   doAssert node["deaths"].kind == JArray, "deaths must be an array"
   for deathNode in node["deaths"].items:
     deathNode.requireFields(["id", "seat", "age", "cause"], "death")
@@ -337,7 +390,7 @@ proc loadWorld*(node: JsonNode): World =
     doAssert death.id >= 0 and death.id notin agentIds,
       "death id must not name a living agent"
     doAssert death.seat >= 0 and death.age >= 0, "death seat and age must be nonnegative"
-    doAssert death.cause in ["starvation", "aging"], "unsupported death cause"
+    doAssert death.cause in ["starvation", "aging", "combat"], "unsupported death cause"
     for previous in result.deaths:
       doAssert previous.id != death.id, "death ids must be unique"
     result.deaths.add(death)
@@ -378,6 +431,9 @@ proc snapshot*(world: World): JsonNode =
       "depressed": agent.depressed, "happinessUnit": agent.happinessUnit,
       "maxFriends": agent.maxFriends, "friendlinessModifier": agent.friendlinessModifier,
       "happinessModifier": agent.happinessModifier,
+      "tags": (if agent.hasTags: %agent.tags else: newJNull()),
+      "tribe": (if agent.hasTags: %agent.tribe else: newJNull()),
+      "tagging": agent.tagging,
       "maxAge": agent.maxAge,
       "lookaheadFactor": agent.lookaheadFactor,
     })
@@ -390,6 +446,9 @@ proc snapshot*(world: World): JsonNode =
   var deaths = newJArray()
   for death in world.deaths:
     deaths.add(%*{"id": death.id, "seat": death.seat, "age": death.age, "cause": death.cause})
+  var orderedNeighbors = newJArray()
+  for neighbors in world.orderedNeighbors:
+    orderedNeighbors.add(%neighbors)
   var rulesetSha256 = newJArray()
   for digest in world.rulesetSha256:
     rulesetSha256.add(%digest)
@@ -399,10 +458,31 @@ proc snapshot*(world: World): JsonNode =
     "timestep": world.timestep,
     "width": world.width, "height": world.height, "sugarRegrowRate": world.sugarRegrowRate,
     "spiceRegrowRate": world.spiceRegrowRate,
-    "maxCellDistance": world.maxCellDistance, "rng": rngJson(world.rng),
+    "maxCellDistance": world.maxCellDistance, "maxCombatLoot": world.maxCombatLoot,
+    "maxTribes": world.maxTribes, "inheritancePolicy": world.inheritancePolicy,
+    "rng": rngJson(world.rng),
     "liveOrder": liveOrder, "cells": cells, "agents": agents,
-    "orderedCandidates": orderedCandidates, "deaths": deaths,
+    "orderedCandidates": orderedCandidates, "orderedNeighbors": orderedNeighbors,
+    "deaths": deaths,
   }
+
+proc welfare(agent: Agent, cell: Cell, sugarReward, spiceReward,
+    sugarMetabolism, spiceMetabolism: float64): float64 =
+  let totalMetabolism = sugarMetabolism + spiceMetabolism
+  let sugarProportion = if totalMetabolism == 0: 0.0 else: sugarMetabolism / totalMetabolism
+  let spiceProportion = if totalMetabolism == 0: 0.0 else: spiceMetabolism / totalMetabolism
+  let adjustedSugar = max(agent.sugar + cell.sugar + sugarReward -
+    sugarMetabolism * agent.lookaheadFactor, 0.0)
+  let adjustedSpice = max(agent.spice + cell.spice + spiceReward -
+    spiceMetabolism * agent.lookaheadFactor, 0.0)
+  let computed = pow(adjustedSugar, sugarProportion) * pow(adjustedSpice, spiceProportion)
+  if computed.classify in {fcNan, fcInf, fcNegInf}: 0.0 else: computed
+
+proc recomputeTribe(world: World, agent: var Agent) =
+  let zeroes = agent.tags.count(0)
+  let tribeSize = float64(agent.tags.len + 1) / float64(world.maxTribes)
+  agent.tribe = min(int(ceil(float64(zeroes + 1) / tribeSize)) - 1,
+    world.maxTribes - 1)
 
 proc stepOne*(world: var World) =
   world.deaths.setLen(0)
@@ -415,8 +495,11 @@ proc stepOne*(world: var World) =
   var agentIndexById = initTable[int64, int]()
   for index, agent in world.agents:
     agentIndexById[agent.id] = index
+  var dead = initTable[int64, Death]()
 
   for id in world.liveOrder:
+    if dead.hasKey(id):
+      continue
     let agentIndex = agentIndexById[id]
     var agent = world.agents[agentIndex]
     let origin = agent.x * world.height + agent.y
@@ -426,6 +509,7 @@ proc stepOne*(world: var World) =
       agent.sugarMetabolism + agent.sugarMetabolismModifier)
     let effectiveSpiceMetabolism = max(0.0,
       agent.spiceMetabolism + agent.spiceMetabolismModifier)
+    let aggression = max(0.0, agent.aggressionFactor + agent.aggressionFactorModifier)
     let cellRange = min(min(effectiveVision, effectiveMovement), world.maxCellDistance)
     var candidates = newSeq[Candidate]()
     for candidate in world.orderedCandidates[origin]:
@@ -433,35 +517,62 @@ proc stepOne*(world: var World) =
         candidates.add(candidate)
     world.rng.pythonShuffle(candidates)
 
+    var retaliators = initTable[int, float64]()
+    for candidate in candidates:
+      let occupantId = world.cells[candidate.target].occupantId
+      if occupantId != EmptyOccupant and not dead.hasKey(occupantId):
+        let occupant = world.agents[agentIndexById[occupantId]]
+        let wealth = occupant.sugar + occupant.spice
+        if not retaliators.hasKey(occupant.tribe) or retaliators[occupant.tribe] < wealth:
+          retaliators[occupant.tribe] = wealth
+
     var destination = origin
     var bestWelfare = low(float64)
     var bestDistance = high(float64)
     for candidate in candidates:
-      if world.cells[candidate.target].occupantId != EmptyOccupant:
+      let occupantId = world.cells[candidate.target].occupantId
+      var sugarReward = 0.0
+      var spiceReward = 0.0
+      var preyTribe = -1
+      if occupantId != EmptyOccupant:
+        if dead.hasKey(occupantId):
+          continue
+        let prey = world.agents[agentIndexById[occupantId]]
+        if aggression <= 0 or agent.tribe == prey.tribe or
+          agent.sugar + agent.spice < prey.sugar + prey.spice:
+          continue
+        preyTribe = prey.tribe
+        sugarReward = aggression * min(world.maxCombatLoot, prey.sugar)
+        spiceReward = aggression * min(world.maxCombatLoot, prey.spice)
+      let score = welfare(agent, world.cells[candidate.target], sugarReward, spiceReward,
+        effectiveSugarMetabolism, effectiveSpiceMetabolism)
+      if occupantId != EmptyOccupant and retaliators[preyTribe] >
+          agent.sugar + agent.spice + score:
         continue
-      let totalMetabolism = effectiveSugarMetabolism + effectiveSpiceMetabolism
-      let sugarProportion = if totalMetabolism == 0: 0.0 else: effectiveSugarMetabolism / totalMetabolism
-      let spiceProportion = if totalMetabolism == 0: 0.0 else: effectiveSpiceMetabolism / totalMetabolism
-      let adjustedSugar = max(agent.sugar + world.cells[candidate.target].sugar -
-        effectiveSugarMetabolism * agent.lookaheadFactor, 0.0)
-      let adjustedSpice = max(agent.spice + world.cells[candidate.target].spice -
-        effectiveSpiceMetabolism * agent.lookaheadFactor, 0.0)
-      let computedWelfare = pow(adjustedSugar, sugarProportion) *
-        pow(adjustedSpice, spiceProportion)
-      let welfare = if computedWelfare.classify in {fcNan, fcInf, fcNegInf}:
-        0.0
-      else:
-        computedWelfare
-      if welfare > bestWelfare or (welfare == bestWelfare and candidate.distance < bestDistance):
+      if score > bestWelfare or (score == bestWelfare and candidate.distance < bestDistance):
         destination = candidate.target
-        bestWelfare = welfare
+        bestWelfare = score
         bestDistance = candidate.distance
 
+    let preyId = world.cells[destination].occupantId
+    if destination != origin and preyId != EmptyOccupant:
+      let preyIndex = agentIndexById[preyId]
+      var prey = world.agents[preyIndex]
+      let sugarLoot = min(world.maxCombatLoot, prey.sugar)
+      let spiceLoot = min(world.maxCombatLoot, prey.spice)
+      agent.sugar += sugarLoot
+      agent.spice += spiceLoot
+      prey.sugar -= sugarLoot
+      prey.spice -= spiceLoot
+      world.agents[preyIndex] = prey
+      dead[preyId] = Death(id: prey.id, seat: prey.seat, age: prey.age, cause: "combat")
+      world.cells[destination].occupantId = EmptyOccupant
     if destination != origin:
       world.cells[origin].occupantId = EmptyOccupant
       world.cells[destination].occupantId = agent.id
       agent.x = destination div world.height
       agent.y = destination mod world.height
+
     agent.sugar += world.cells[destination].sugar
     agent.spice += world.cells[destination].spice
     world.cells[destination].sugar = 0
@@ -474,35 +585,36 @@ proc stepOne*(world: var World) =
       (effectiveSpiceMetabolism > 0 and agent.spice <= 0):
       cause = "starvation"
     else:
+      if agent.tagging:
+        var neighbors = world.orderedNeighbors[destination]
+        world.rng.pythonShuffle(neighbors)
+        for neighbor in neighbors:
+          let neighborId = world.cells[neighbor].occupantId
+          if neighborId != EmptyOccupant and not dead.hasKey(neighborId):
+            let position = int(world.rng.randBelow(uint64(agent.tags.len)))
+            if neighborId == agent.id:
+              agent.tags[position] = agent.tags[position]
+              world.recomputeTribe(agent)
+            else:
+              let neighborIndex = agentIndexById[neighborId]
+              var target = world.agents[neighborIndex]
+              target.tags[position] = agent.tags[position]
+              world.recomputeTribe(target)
+              world.agents[neighborIndex] = target
       inc agent.age
       if agent.maxAge != -1 and agent.age >= agent.maxAge:
         cause = "aging"
     if cause.len > 0:
       world.cells[destination].occupantId = EmptyOccupant
-      world.deaths.add(Death(id: agent.id, seat: agent.seat, age: agent.age, cause: cause))
+      dead[agent.id] = Death(id: agent.id, seat: agent.seat, age: agent.age, cause: cause)
     world.agents[agentIndex] = agent
 
+  for id in world.liveOrder:
+    if dead.hasKey(id):
+      world.deaths.add(dead[id])
   if world.deaths.len > 0:
-    var survivors = newSeq[Agent]()
-    for agent in world.agents:
-      var died = false
-      for death in world.deaths:
-        if death.id == agent.id:
-          died = true
-          break
-      if not died:
-        survivors.add(agent)
-    world.agents = survivors
-    var survivingOrder = newSeq[int64]()
-    for id in world.liveOrder:
-      var died = false
-      for death in world.deaths:
-        if death.id == id:
-          died = true
-          break
-      if not died:
-        survivingOrder.add(id)
-    world.liveOrder = survivingOrder
+    world.agents.keepItIf(not dead.hasKey(it.id))
+    world.liveOrder.keepItIf(not dead.hasKey(it))
 
 proc step*(world: var World, ticks: int): int {.discardable.} =
   doAssert ticks >= 0, "ticks must be nonnegative"
