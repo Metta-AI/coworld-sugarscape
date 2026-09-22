@@ -99,8 +99,8 @@ ticks/second for the reduced Python oracle and 345,381.9 for Nim. Nim was 8.89×
 faster, and every pair ended in identical state. Trade, disease, reproduction,
 and lending were inactive in this long-running fixture.
 
-A manual seed-1729 run matched the v7 projected physical state after a chained
-1,000-tick native rollout.
+Tracked seed-1729 and seed-1730 tests match the v7 projected state after
+separate chained 1,000-tick native and DTL rollouts.
 
 On the RTX 4090 host, the projected native transition core measured 8,253.54
 aggregate ticks/second across 32 processes. Seeds 1729–1760 requested 32,000

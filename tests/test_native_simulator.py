@@ -7,7 +7,7 @@ import subprocess
 
 import pytest
 
-from coworld.config import build_dtl_config, resolve_episode_config
+from coworld.config import build_dtl_config, resolve_episode_config, ruleset_limits
 from coworld.instrumentation import EpisodeInstrumentation
 from coworld.measurement import RollingMeasurements
 from coworld.native_fixture import (
@@ -36,6 +36,7 @@ from coworld.ruleset import compile_ruleset
 from coworld.seats import parse_trait_ranges
 from coworld.simulation import CoworldSugarscape
 from coworld.targets import load_target_catalog
+from tools.benchmark_native_commonwealth import prepare_commonwealth
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -986,3 +987,25 @@ def test_commonwealth_seed_1729_matches_dtl_through_first_births_and_loan_repaym
                 next_agent_id,
             )
             assert sum(len(agent[62]) for agent in expected.agents) == loans
+
+
+@pytest.mark.parametrize("seed", [1729, 1730])
+def test_native_chained_commonwealth_rollout_matches_dtl(seed: int) -> None:
+    initial, resolved, rulesets = prepare_commonwealth(seed, 1000)
+    world = NativeReferenceWorld(
+        build_dtl_config(resolved),
+        [
+            compile_ruleset(ruleset, limits=ruleset_limits(resolved))
+            for ruleset in rulesets
+        ],
+        parse_trait_ranges(resolved.get("trait_ranges")),
+        instrumentation=EpisodeInstrumentation(enabled=False),
+    )
+    native = step_native(initial, 1000, binary=build_native_simulator())
+
+    for _ in range(1000):
+        if not world.agents and not world.keepAlive:
+            break
+        world.doTimestep()
+
+    assert native == snapshot_world(world)
