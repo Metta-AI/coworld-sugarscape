@@ -1,10 +1,10 @@
-import std/[algorithm, json, monotimes, strutils, tables, times]
+import std/[algorithm, json, math, monotimes, strutils, tables, times]
 
 when isMainModule:
   import std/os
 
 const
-  SchemaVersion = 2
+  SchemaVersion = 3
   SourcePin = "585282e9ce7b22a33b89abb0d777917bd5887d1a"
   MtWords = 624
   EmptyOccupant = -1'i64
@@ -17,6 +17,8 @@ type
   Cell* = object
     sugar*: float64
     maxSugar*: float64
+    spice*: float64
+    maxSpice*: float64
     occupantId*: int64
 
   Agent* = object
@@ -25,8 +27,10 @@ type
     x*: int
     y*: int
     sugar*: float64
+    spice*: float64
     age*: int64
     sugarMetabolism*: float64
+    spiceMetabolism*: float64
     vision*: int
     movement*: int
     maxAge*: int64
@@ -48,6 +52,7 @@ type
     width*: int
     height*: int
     sugarRegrowRate*: float64
+    spiceRegrowRate*: float64
     maxCellDistance*: int
     rng*: PythonMt19937
     liveOrder*: seq[int64]
@@ -149,7 +154,7 @@ proc loadRng*(node: JsonNode): PythonMt19937 =
 
 proc loadWorld*(node: JsonNode): World =
   node.requireFields(
-    ["schemaVersion", "sourcePin", "timestep", "width", "height", "sugarRegrowRate",
+    ["schemaVersion", "sourcePin", "timestep", "width", "height", "sugarRegrowRate", "spiceRegrowRate",
      "maxCellDistance", "rng", "liveOrder", "cells", "agents", "orderedCandidates", "deaths"],
     "snapshot",
   )
@@ -160,10 +165,12 @@ proc loadWorld*(node: JsonNode): World =
   result.width = int(node.readInt("width"))
   result.height = int(node.readInt("height"))
   result.sugarRegrowRate = node.readNumber("sugarRegrowRate")
+  result.spiceRegrowRate = node.readNumber("spiceRegrowRate")
   result.maxCellDistance = int(node.readInt("maxCellDistance"))
   doAssert result.timestep >= 0, "timestep must be nonnegative"
   doAssert result.width > 0 and result.height > 0, "world dimensions must be positive"
-  doAssert result.sugarRegrowRate >= 0, "sugarRegrowRate must be nonnegative"
+  doAssert result.sugarRegrowRate >= 0 and result.spiceRegrowRate >= 0,
+    "resource regrow rates must be nonnegative"
   doAssert result.maxCellDistance >= 0, "maxCellDistance must be nonnegative"
   result.rng = loadRng(node["rng"])
 
@@ -174,7 +181,7 @@ proc loadWorld*(node: JsonNode): World =
   doAssert node["cells"].kind == JArray and node["cells"].len == result.width * result.height,
     "cells must contain width * height entries in x-major order"
   for cellNode in node["cells"].items:
-    cellNode.requireFields(["sugar", "maxSugar", "occupantId"], "cell")
+    cellNode.requireFields(["sugar", "maxSugar", "spice", "maxSpice", "occupantId"], "cell")
     let occupantId = if cellNode["occupantId"].kind == JNull:
       EmptyOccupant
     else:
@@ -182,10 +189,14 @@ proc loadWorld*(node: JsonNode): World =
     let cell = Cell(
       sugar: cellNode.readNumber("sugar"),
       maxSugar: cellNode.readNumber("maxSugar"),
+      spice: cellNode.readNumber("spice"),
+      maxSpice: cellNode.readNumber("maxSpice"),
       occupantId: occupantId,
     )
     doAssert cell.sugar >= 0 and cell.maxSugar >= 0 and cell.sugar <= cell.maxSugar,
       "cell sugar must be between zero and maxSugar"
+    doAssert cell.spice >= 0 and cell.maxSpice >= 0 and cell.spice <= cell.maxSpice,
+      "cell spice must be between zero and maxSpice"
     result.cells.add(cell)
 
   doAssert node["agents"].kind == JArray, "agents must be an array"
@@ -193,8 +204,8 @@ proc loadWorld*(node: JsonNode): World =
   var agentIds = newSeq[int64]()
   for agentNode in node["agents"].items:
     agentNode.requireFields(
-      ["id", "seat", "x", "y", "sugar", "age", "sugarMetabolism", "vision", "movement",
-       "maxAge", "lookaheadFactor"],
+      ["id", "seat", "x", "y", "sugar", "spice", "age", "sugarMetabolism",
+       "spiceMetabolism", "vision", "movement", "maxAge", "lookaheadFactor"],
       "agent",
     )
     let agent = Agent(
@@ -203,8 +214,10 @@ proc loadWorld*(node: JsonNode): World =
       x: int(agentNode.readInt("x")),
       y: int(agentNode.readInt("y")),
       sugar: agentNode.readNumber("sugar"),
+      spice: agentNode.readNumber("spice"),
       age: agentNode.readInt("age"),
       sugarMetabolism: agentNode.readNumber("sugarMetabolism"),
+      spiceMetabolism: agentNode.readNumber("spiceMetabolism"),
       vision: int(agentNode.readInt("vision")),
       movement: int(agentNode.readInt("movement")),
       maxAge: agentNode.readInt("maxAge"),
@@ -213,7 +226,8 @@ proc loadWorld*(node: JsonNode): World =
     doAssert agent.id >= 0 and agent.id > previousId, "agents must be sorted by unique id"
     doAssert agent.seat >= 0 and agent.x >= 0 and agent.x < result.width and
       agent.y >= 0 and agent.y < result.height, "invalid agent identity or position"
-    doAssert agent.sugar >= 0 and agent.age >= 0 and agent.sugarMetabolism >= 0 and
+    doAssert agent.sugar >= 0 and agent.spice >= 0 and agent.age >= 0 and
+      agent.sugarMetabolism >= 0 and agent.spiceMetabolism >= 0 and
       agent.vision >= 0 and agent.movement >= 0 and agent.lookaheadFactor >= 0,
       "agent resources and traits must be nonnegative"
     doAssert agent.maxAge >= -1, "agent maxAge must be -1 or nonnegative"
@@ -291,13 +305,16 @@ proc snapshot*(world: World): JsonNode =
     cells.add(%*{
       "sugar": cell.sugar,
       "maxSugar": cell.maxSugar,
+      "spice": cell.spice,
+      "maxSpice": cell.maxSpice,
       "occupantId": (if cell.occupantId == EmptyOccupant: newJNull() else: %cell.occupantId),
     })
   var agents = newJArray()
   for agent in world.agents:
     agents.add(%*{
       "id": agent.id, "seat": agent.seat, "x": agent.x, "y": agent.y,
-      "sugar": agent.sugar, "age": agent.age, "sugarMetabolism": agent.sugarMetabolism,
+      "sugar": agent.sugar, "spice": agent.spice, "age": agent.age,
+      "sugarMetabolism": agent.sugarMetabolism, "spiceMetabolism": agent.spiceMetabolism,
       "vision": agent.vision, "movement": agent.movement, "maxAge": agent.maxAge,
       "lookaheadFactor": agent.lookaheadFactor,
     })
@@ -313,6 +330,7 @@ proc snapshot*(world: World): JsonNode =
   %*{
     "schemaVersion": SchemaVersion, "sourcePin": world.sourcePin, "timestep": world.timestep,
     "width": world.width, "height": world.height, "sugarRegrowRate": world.sugarRegrowRate,
+    "spiceRegrowRate": world.spiceRegrowRate,
     "maxCellDistance": world.maxCellDistance, "rng": rngJson(world.rng),
     "liveOrder": liveOrder, "cells": cells, "agents": agents,
     "orderedCandidates": orderedCandidates, "deaths": deaths,
@@ -323,6 +341,7 @@ proc stepOne*(world: var World) =
   inc world.timestep
   for cell in world.cells.mitems:
     cell.sugar = min(cell.maxSugar, cell.sugar + world.sugarRegrowRate)
+    cell.spice = min(cell.maxSpice, cell.spice + world.spiceRegrowRate)
 
   world.rng.pythonShuffle(world.liveOrder)
   var agentIndexById = initTable[int64, int]()
@@ -346,11 +365,19 @@ proc stepOne*(world: var World) =
     for candidate in candidates:
       if world.cells[candidate.target].occupantId != EmptyOccupant:
         continue
-      let welfare = if agent.sugarMetabolism == 0:
-        1.0
+      let totalMetabolism = agent.sugarMetabolism + agent.spiceMetabolism
+      let sugarProportion = if totalMetabolism == 0: 0.0 else: agent.sugarMetabolism / totalMetabolism
+      let spiceProportion = if totalMetabolism == 0: 0.0 else: agent.spiceMetabolism / totalMetabolism
+      let adjustedSugar = max(agent.sugar + world.cells[candidate.target].sugar -
+        agent.sugarMetabolism * agent.lookaheadFactor, 0.0)
+      let adjustedSpice = max(agent.spice + world.cells[candidate.target].spice -
+        agent.spiceMetabolism * agent.lookaheadFactor, 0.0)
+      let computedWelfare = pow(adjustedSugar, sugarProportion) *
+        pow(adjustedSpice, spiceProportion)
+      let welfare = if computedWelfare.classify in {fcNan, fcInf, fcNegInf}:
+        0.0
       else:
-        max(agent.sugar + world.cells[candidate.target].sugar -
-          agent.sugarMetabolism * agent.lookaheadFactor, 0.0)
+        computedWelfare
       if welfare > bestWelfare or (welfare == bestWelfare and candidate.distance < bestDistance):
         destination = candidate.target
         bestWelfare = welfare
@@ -362,10 +389,15 @@ proc stepOne*(world: var World) =
       agent.x = destination div world.height
       agent.y = destination mod world.height
     agent.sugar += world.cells[destination].sugar
+    agent.spice += world.cells[destination].spice
     world.cells[destination].sugar = 0
+    world.cells[destination].spice = 0
     agent.sugar -= agent.sugarMetabolism
+    agent.spice -= agent.spiceMetabolism
     var cause = ""
-    if agent.sugarMetabolism > 0 and agent.sugar <= 0:
+    if agent.sugar < 0 or agent.spice < 0 or
+      (agent.sugarMetabolism > 0 and agent.sugar <= 0) or
+      (agent.spiceMetabolism > 0 and agent.spice <= 0):
       cause = "starvation"
     else:
       inc agent.age

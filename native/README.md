@@ -1,9 +1,9 @@
 # Native Sugarscape core
 
-This directory contains the deterministic Nim simulation core. Its v2 wire
-schema supports one resource, starvation, aging, and population decline.
-It remains a pre-Commonwealth parity slice until two-resource welfare and the
-other mechanics listed below are implemented.
+This directory contains the deterministic Nim simulation core. Its v3 wire
+schema supports sugar and spice, Cobb-Douglas welfare, starvation, aging, and
+population decline. It remains a pre-Commonwealth parity slice until the other
+mechanics listed below are implemented.
 
 Build and test it with Nim 2.2 or newer:
 
@@ -31,11 +31,12 @@ Snapshots contain x-major cells, agents sorted by ID, the current shuffled
 Python `random.Random` MT19937 state. Reloading a snapshot continues the same
 random stream.
 
-Cells grow first. The engine shuffles the agent list, then processes each agent
+Both resources grow first. The engine shuffles the agent list, then processes each agent
 sequentially. It shuffles the four cardinal rays within the agent's vision and
 movement range, with toroidal wrapping. The agent selects the cell with the
-most sugar, then the shortest distance. It stays put only when no candidate is
-available. Movement, harvesting, and metabolism update the world immediately.
+Cobb-Douglas welfare, then the shortest distance. It stays put only when no
+candidate is available. Movement, harvesting, and metabolism update the world
+immediately.
 
 `deaths` contains the most recently completed tick's removals in DTL removal
 order. Starvation clears the occupied cell immediately and skips aging. Aging
