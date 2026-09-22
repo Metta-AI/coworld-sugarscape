@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import os
 from pathlib import Path
 import subprocess
+import tempfile
 import time
 from typing import Mapping
 
@@ -14,7 +16,7 @@ from .native_oracle import NativeSnapshot, step_python
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SOURCE = ROOT / "native" / "sugarscape_native.nim"
-DEFAULT_BINARY = ROOT / "native" / "bin" / "sugarscape-native"
+DEFAULT_BINARY_ROOT = Path(tempfile.gettempdir()) / "coworld-sugarscape-native"
 
 
 @dataclass(frozen=True)
@@ -32,13 +34,22 @@ class PythonBenchmark:
 
 
 def build_native_simulator(
-    *, source: Path = DEFAULT_SOURCE, binary: Path = DEFAULT_BINARY
+    *, source: Path = DEFAULT_SOURCE, binary: Path | None = None
 ) -> Path:
     """Compile the checked-in Nim source into a task-owned binary."""
 
+    if binary is None:
+        binary = DEFAULT_BINARY_ROOT / str(os.getpid()) / "simulator"
     binary.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(
-        ["nim", "c", "-d:release", f"-o:{binary}", str(source)],
+        [
+            "nim",
+            "c",
+            "-d:release",
+            f"--nimcache:{binary.parent / 'nimcache'}",
+            f"-o:{binary}",
+            str(source),
+        ],
         check=True,
         cwd=ROOT,
     )
@@ -49,7 +60,7 @@ def step_native(
     snapshot: NativeSnapshot,
     ticks: int,
     *,
-    binary: Path = DEFAULT_BINARY,
+    binary: Path,
 ) -> NativeSnapshot:
     if isinstance(ticks, bool) or not isinstance(ticks, int) or ticks < 0:
         raise ValueError("ticks must be a non-negative integer")
@@ -68,7 +79,7 @@ def benchmark_native(
     snapshot: NativeSnapshot,
     ticks: int,
     *,
-    binary: Path = DEFAULT_BINARY,
+    binary: Path,
 ) -> NativeBenchmark:
     if isinstance(ticks, bool) or not isinstance(ticks, int) or ticks <= 0:
         raise ValueError("ticks must be a positive integer")
