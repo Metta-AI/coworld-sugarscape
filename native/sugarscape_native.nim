@@ -209,6 +209,10 @@ type
     parentChoiceTimestep: int64
     parentChoiceByField: Table[string, bool]
     compiledRulesets: seq[CompiledRuleset]
+    childRngTimestep: int64
+    childTagsRng: PythonMt19937
+    childRacialTagsRng: PythonMt19937
+    childImmuneSystemRng: PythonMt19937
 
 proc twist(rng: var PythonMt19937) =
   const
@@ -465,6 +469,7 @@ proc loadRng*(node: JsonNode): PythonMt19937 =
 proc loadWorld*(node: JsonNode): World =
   result.parentChoiceTimestep = low(int64)
   result.parentChoiceByField = initTable[string, bool]()
+  result.childRngTimestep = low(int64)
   node.requireFields(
     ["schemaVersion", "sourcePin", "configurationSha256", "rulesetSha256", "rulesets",
      "timestep", "worldGini", "worldMeanWealth", "width", "height",
@@ -1505,21 +1510,25 @@ proc createChild(world: var World, firstIndex, secondIndex, cell: int): Agent =
     second.startingSpice / (second.fertilityFactor * 2)
   result.sugar = result.startingSugar
   result.spice = result.startingSpice
-  var local: PythonMt19937
-  local.seedFromMd5("tags", uint64(world.timestep))
+  if world.childRngTimestep != world.timestep:
+    world.childRngTimestep = world.timestep
+    world.childTagsRng.seedFromMd5("tags", uint64(world.timestep))
+    world.childRacialTagsRng.seedFromMd5("racialTags", uint64(world.timestep))
+    world.childImmuneSystemRng.seedFromMd5("immuneSystem", uint64(world.timestep))
+  var local = world.childTagsRng
   result.tags.setLen(0)
   result.hasTags = first.hasTags
   if first.hasTags:
     for index, bit in first.tags:
       result.tags.add(if bit == second.tags[index]: bit else: int(local.randBelow(2)))
-  local.seedFromMd5("racialTags", uint64(world.timestep))
+  local = world.childRacialTagsRng
   result.racialTags.setLen(0)
   result.hasRacialTags = first.hasRacialTags
   if first.hasRacialTags:
     for index, bit in first.racialTags:
       result.racialTags.add(if local.randBelow(2) == 0: bit else: second.racialTags[index])
   result.depressed = local.randomFloat() <= world.depressionPercentage
-  local.seedFromMd5("immuneSystem", uint64(world.timestep))
+  local = world.childImmuneSystemRng
   result.immuneSystem.setLen(0)
   result.hasImmuneSystem = first.hasImmuneSystem
   if first.hasImmuneSystem:
