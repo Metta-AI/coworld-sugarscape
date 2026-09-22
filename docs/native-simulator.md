@@ -1,10 +1,10 @@
 # Native Sugarscape simulator
 
-The Nim simulator implements the first parity slice of the pinned DTL
-Sugarscape engine. It exists to establish correctness and measure the ceiling
-of a native simulation loop before adding the remaining mechanics.
+The Nim simulator implements the canonical Commonwealth transition loop from
+the pinned DTL Sugarscape engine. It provides a deterministic native execution
+path and a closed snapshot contract for parity and throughput measurement.
 
-The current mode is `reduced_two_resource_v7`. It supports sugar and spice,
+Schema v7 supports sugar and spice,
 cardinal movement and vision, toroidal wrapping, sequential turns, welfare
 ranking, harvest, metabolism, growback, tagging, combat, trade, and disease
 progression. It also supports reproduction, lending, children inheritance,
@@ -101,6 +101,14 @@ from seeds 1729–1736. The run completed 8,000 ticks in a 7.882-second shared
 window. This is 29.6× below the 30,000 target. A separate seed-1729 run matched
 the pinned DTL final snapshot after 1,000 ticks.
 
+On the RTX 4090 host, the same canonical configuration measured 2,824.47
+aggregate ticks/second across 32 processes. Seeds 1729–1760 requested 32,000
+ticks and completed 31,391 before one world became extinct. The synchronized
+parent window was 11.114 seconds. This is 12.14× the 232.659-tick/second Python
+DTL baseline and 10.62× below the 30,000 target. The simulator used the host's
+32 logical CPU threads; the reserved RTX 4090 identified the machine class but
+did not execute the CPU simulator.
+
 On the RTX 4090 host CPU, five 10,000,000-tick v5 runs produced a median of
 445,738.5 ticks/second. Results ranged from 427,982.1 to 515,866.8 on the shared
 one-CPU allocation. The GPU identifies the machine class and was reserved but
@@ -109,9 +117,9 @@ and do not qualify Commonwealth.
 
 ## Commonwealth qualification
 
-Reduced-mode throughput does not qualify the complete Commonwealth Coworld for
-the 30,000 whole-world ticks/second target. Qualification requires all of the
-following evidence:
+The native transition loop now runs the canonical Commonwealth configuration,
+but it does not qualify the complete Coworld for the 30,000 whole-world
+ticks/second target. Qualification requires all of the following evidence:
 
 The seed-1729 Commonwealth tick-zero audit has 250 agents, including 25
 depressed agents, 50 infected agents, and 50 agents with active modifiers. Its
@@ -130,7 +138,5 @@ remain outside the native contract, so this is not Commonwealth qualification.
    the current seed-1729, timestep-22 gate.
 3. Multiple fixed seeds match DTL after every tick for state, random state,
    live order, deaths, runtime statistics, happiness, and wellness scoring.
-4. A GPU-host benchmark runs that exact configuration across parallel worlds.
-   It counts actual completed ticks over one shared wall-clock interval.
-5. Simulation throughput reaches 30,000 aggregate world ticks/second. Replay
+4. Simulation throughput reaches 30,000 aggregate world ticks/second. Replay
    capture and compression are measured in a separate result.
