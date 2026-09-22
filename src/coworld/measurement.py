@@ -36,6 +36,34 @@ class AgentWellnessSample:
 
 
 @dataclass(frozen=True, slots=True)
+class MeasurementAgent:
+    agent_id: int
+    seat: int
+    sugar: float
+    spice: float
+    age: float
+    tribe: int
+    sick: bool
+    trade_volume: float
+    sugar_price: float
+    spice_price: float
+    happiness: float
+    wellness_components: tuple[float, float, float, float, float]
+
+
+@dataclass(frozen=True, slots=True)
+class MeasurementDeath:
+    seat: int
+    age: float
+
+
+@dataclass(frozen=True, slots=True)
+class MeasurementTick:
+    agents: tuple[MeasurementAgent, ...]
+    deaths: tuple[MeasurementDeath, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class TickMeasurements:
     global_values: Mapping[str, tuple[float, ...]]
     seat_values: tuple[Mapping[str, tuple[float, ...]], ...]
@@ -69,31 +97,60 @@ class RollingMeasurements:
     def record_tick(self, world: Any) -> None:
         """Measure all variables after one completed DTL tick."""
 
-        agents = list(world.agents)
+        self.record_inputs(
+            MeasurementTick(
+                tuple(
+                    MeasurementAgent(
+                        agent_id=agent.ID,
+                        seat=agent.seat,
+                        sugar=float(agent.sugar),
+                        spice=float(agent.spice),
+                        age=float(agent.age),
+                        tribe=agent.tribe,
+                        sick=agent.isSick(),
+                        trade_volume=float(agent.tradeVolume),
+                        sugar_price=float(agent.sugarPrice),
+                        spice_price=float(agent.spicePrice),
+                        happiness=float(agent.happiness),
+                        wellness_components=(
+                            float(agent.healthHappiness),
+                            float(agent.conflictHappiness),
+                            float(agent.socialHappiness),
+                            float(agent.familyHappiness),
+                            float(agent.wealthHappiness),
+                        ),
+                    )
+                    for agent in world.agents
+                )
+            )
+        )
+
+    def record_inputs(self, tick: MeasurementTick) -> None:
+        """Measure one completed tick from typed simulator-neutral inputs."""
+
+        agents = list(tick.agents)
+        global_deaths = self._pending_global_deaths + [death.age for death in tick.deaths]
+        seat_deaths = [list(deaths) for deaths in self._pending_seat_deaths]
+        for death in tick.deaths:
+            seat_deaths[death.seat].append(death.age)
         by_seat = [
             [agent for agent in agents if agent.seat == seat]
             for seat in range(self.seats)
         ]
-        global_values = self._values_for_agents(agents, self._pending_global_deaths)
+        global_values = self._values_for_agents(agents, global_deaths)
         global_values["population"] = (float(len(agents)),)
         seat_values: list[Mapping[str, tuple[float, ...]]] = []
         for seat, seat_agents in enumerate(by_seat):
             values = self._values_for_agents(
-                seat_agents, self._pending_seat_deaths[seat]
+                seat_agents, seat_deaths[seat]
             )
             values["population"] = (float(len(seat_agents)),)
             seat_values.append(values)
         wellness_by_agent = {
-            agent.ID: AgentWellnessSample(
+            agent.agent_id: AgentWellnessSample(
                 seat=agent.seat,
                 wellness=_normalized_wellness(agent.happiness),
-                components=(
-                    float(agent.healthHappiness),
-                    float(agent.conflictHappiness),
-                    float(agent.socialHappiness),
-                    float(agent.familyHappiness),
-                    float(agent.wealthHappiness),
-                ),
+                components=agent.wellness_components,
             )
             for agent in agents
         }
@@ -193,19 +250,19 @@ class RollingMeasurements:
 
     @staticmethod
     def _values_for_agents(
-        agents: list[Any], deaths: list[float]
+        agents: list[MeasurementAgent], deaths: list[float]
     ) -> dict[str, tuple[float, ...]]:
-        wealth = tuple(float(agent.sugar + agent.spice) for agent in agents)
-        ages = tuple(float(agent.age) for agent in agents)
+        wealth = tuple(agent.sugar + agent.spice for agent in agents)
+        ages = tuple(agent.age for agent in agents)
         if agents:
             tribes = Counter(agent.tribe for agent in agents)
             majority_share = (max(tribes.values()) / len(agents),)
             sick_fraction = (
-                sum(1 for agent in agents if agent.isSick()) / len(agents),
+                sum(1 for agent in agents if agent.sick) / len(agents),
             )
-            traders = [agent for agent in agents if agent.tradeVolume > 0]
+            traders = [agent for agent in agents if agent.trade_volume > 0]
             mean_price = (
-                sum(max(agent.spicePrice, agent.sugarPrice) for agent in traders)
+                sum(max(agent.spice_price, agent.sugar_price) for agent in traders)
                 / len(traders)
                 if traders
                 else 0.0
