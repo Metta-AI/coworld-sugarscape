@@ -24,9 +24,12 @@ from coworld.native_oracle import (
     validate_supported_world,
 )
 from coworld.native_simulator import (
+    NativeEpisodeTerminal,
+    NativeEpisodeTick,
     benchmark_native,
     benchmark_python,
     build_native_simulator,
+    native_episode,
     step_native,
 )
 from coworld.ruleset import compile_ruleset
@@ -639,6 +642,80 @@ def test_native_benchmark_times_only_the_simulation_loop() -> None:
     assert result.ticks == 4
     assert result.elapsed_ns > 0
     assert result.snapshot.timestep == initial.timestep + 4
+
+
+def test_native_episode_stream_emits_validated_ticks_and_terminal() -> None:
+    binary = build_native_simulator()
+    initial = snapshot_world(_world())
+
+    with native_episode(initial, 3, binary=binary) as stream:
+        events = list(stream)
+
+    ticks = [event for event in events if isinstance(event, NativeEpisodeTick)]
+    terminal = events[-1]
+    assert [event.tick for event in ticks] == [1, 2, 3]
+    assert [event.snapshot.timestep for event in ticks] == [1, 2, 3]
+    assert all(
+        event.measurements == event.snapshot.measurement_tick() for event in ticks
+    )
+    assert isinstance(terminal, NativeEpisodeTerminal)
+    assert terminal == NativeEpisodeTerminal("tick_limit", 3, 3, 4)
+    assert ticks[-1].snapshot == step_native(initial, 3, binary=binary)
+
+
+def test_native_episode_stream_reports_extinction_and_cleans_up_early() -> None:
+    binary = build_native_simulator()
+    config = _supported_config()
+    config.update(
+        {
+            "agentStartingSugar": [1, 1],
+            "environmentMaxSugar": 0,
+            "environmentSugarPeaks": [[2, 4, 0], [4, 2, 0]],
+            "environmentSugarRegrowRate": 0,
+        }
+    )
+    with native_episode(snapshot_world(_world(config)), 10, binary=binary) as stream:
+        events = list(stream)
+    assert isinstance(events[0], NativeEpisodeTick)
+    assert events[0].measurements.deaths
+    assert events[1] == NativeEpisodeTerminal("extinct", 1, 1, 0)
+
+    with native_episode(snapshot_world(_world()), 100, binary=binary) as stream:
+        assert isinstance(next(stream), NativeEpisodeTick)
+    assert stream.returncode is not None
+
+
+def test_native_episode_stream_rejects_out_of_sequence_events(tmp_path: Path) -> None:
+    binary = tmp_path / "invalid-native-episode"
+    binary.write_text(
+        "#!/usr/bin/env python3\n"
+        "import sys\n"
+        "sys.stdin.readline()\n"
+        'print(\'{"kind":"tick","tick":2,"snapshot":{}}\', flush=True)\n'
+    )
+    binary.chmod(0o755)
+
+    with native_episode(snapshot_world(_world()), 2, binary=binary) as stream:
+        with pytest.raises(ValueError, match="out of sequence"):
+            next(stream)
+
+
+def test_native_episode_stream_rejects_contract_changes(tmp_path: Path) -> None:
+    binary = tmp_path / "invalid-native-contract"
+    binary.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json\n"
+        "import sys\n"
+        "snapshot = json.loads(sys.stdin.readline())\n"
+        "snapshot['timestep'] += 1\n"
+        "snapshot['configurationSha256'] = '0' * 64\n"
+        "print(json.dumps({'kind': 'tick', 'tick': 1, 'snapshot': snapshot}), flush=True)\n"
+    )
+    binary.chmod(0o755)
+
+    with native_episode(snapshot_world(_world()), 1, binary=binary) as stream:
+        with pytest.raises(ValueError, match="contract changed"):
+            next(stream)
 
 
 def test_python_and_native_benchmarks_run_the_same_contract() -> None:
