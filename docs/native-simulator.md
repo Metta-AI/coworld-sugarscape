@@ -1,8 +1,8 @@
 # Native Sugarscape simulator
 
-The Nim simulator implements the canonical Commonwealth transition loop from
-the pinned DTL Sugarscape engine. It provides a deterministic native execution
-path and a closed snapshot contract for parity and throughput measurement.
+The Nim simulator implements the canonical Commonwealth physical-state subset
+exercised by the bundled `cell.welfare` baseline. It provides a deterministic
+native core and a closed snapshot contract for parity and throughput measurement.
 
 Schema v7 supports sugar and spice,
 cardinal movement and vision, toroidal wrapping, sequential turns, welfare
@@ -41,8 +41,8 @@ survivors, and extinction. A two-resource fixture makes the spice-weighted welfa
 sugar-only winner. Another fixture proves that exact-zero spice causes
 starvation when spice metabolism is positive. Targeted one-tick fixtures compare
 trade metrics, disease progression, inherited debt, births, and loan repayment
-directly with pinned DTL. The Commonwealth seed-1729 gate compares every tick
-through timestep 22, including its first births and loan repayments.
+directly with pinned DTL. The Commonwealth seed-1729 gate compares one-step transitions from each DTL
+state through timestep 22, including its first births and loan repayments.
 
 Build and run the focused checks:
 
@@ -98,16 +98,17 @@ and lending were inactive in this long-running fixture.
 The full canonical configuration measured 1,014.95 aggregate ticks/second on
 the same host with eight worlds and eight workers. Each world ran 1,000 ticks
 from seeds 1729–1736. The run completed 8,000 ticks in a 7.882-second shared
-window. This is 29.6× below the 30,000 target. A separate seed-1729 run matched
-the pinned DTL final snapshot after 1,000 ticks.
+window. This is 29.6× below the 30,000 target. A manual seed-1729 run matched
+the v7 projected physical state after a chained 1,000-tick native rollout.
 
-On the RTX 4090 host, the same canonical configuration measured 2,824.47
+On the RTX 4090 host, the projected native transition core measured 2,824.47
 aggregate ticks/second across 32 processes. Seeds 1729–1760 requested 32,000
 ticks and completed 31,391 before one world became extinct. The synchronized
-parent window was 11.114 seconds. This is 12.14× the 232.659-tick/second Python
-DTL baseline and 10.62× below the 30,000 target. The simulator used the host's
-32 logical CPU threads; the reserved RTX 4090 identified the machine class but
-did not execute the CPU simulator.
+parent window was 11.114 seconds. This is 10.62× below the 30,000 target. The
+full Python DTL loop measured 232.659 ticks/second, but also updates happiness
+and runtime statistics. Its cross-engine ratio is therefore directional. The
+simulator used the host's 32 logical CPU threads; the reserved RTX 4090
+identified the machine class but did not execute the CPU simulator.
 
 On the RTX 4090 host CPU, five 10,000,000-tick v5 runs produced a median of
 445,738.5 ticks/second. Results ranged from 427,982.1 to 515,866.8 on the shared
@@ -117,9 +118,10 @@ and do not qualify Commonwealth.
 
 ## Commonwealth qualification
 
-The native transition loop now runs the canonical Commonwealth configuration,
-but it does not qualify the complete Coworld for the 30,000 whole-world
-ticks/second target. Qualification requires all of the following evidence:
+The native physical-state core now runs the canonical Commonwealth
+configuration for the bundled baseline. It does not qualify the complete
+Coworld for the 30,000 whole-world ticks/second target. Qualification requires
+all of the following evidence:
 
 The seed-1729 Commonwealth tick-zero audit has 250 agents, including 25
 depressed agents, 50 infected agents, and 50 agents with active modifiers. Its
@@ -132,7 +134,8 @@ statistics, happiness, wellness scoring, replay, and broad fixed-seed coverage
 remain outside the native contract, so this is not Commonwealth qualification.
 
 1. The native loader accepts the canonical Commonwealth configuration and its
-   bundled SugarLang policies without reducing features or population.
+   bundled `cell.welfare` policy without reducing physical-state features or
+   population.
 2. Reproduction, trade, lending, disease, tagging, combat, depression, effective
    trait modifiers, and the baseline SugarLang rule have parity tests beyond
    the current seed-1729, timestep-22 gate.
