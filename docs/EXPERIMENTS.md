@@ -86,7 +86,7 @@ PYTHONHASHSEED=0 .venv/bin/python tools/reproduce_blueprints.py \
 This seed is an actual archived seed. All four archived models run, with only
 log destinations and the explicit smoke duration changed. Omit `--timesteps`
 for the paper's full 5,000 ticks, using a fresh output directory. Each model has
-a 300-second subprocess limit; change `--timeout-seconds` explicitly if needed.
+a 3,600-second subprocess limit; change `--timeout-seconds` explicitly if needed.
 The runner checks the exact paper engine revision and refuses local edits or
 nonignored untracked files. It also checks the authors' pinned archive SHA-256
 and verifies the archived configurations request 5,000 ticks.

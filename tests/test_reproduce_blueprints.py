@@ -32,20 +32,22 @@ def archived_experiment(tmp_path, monkeypatch):
     return ["--engine", str(tmp_path), "--archive", str(archive), "--seeds", "7"]
 
 
-def test_preserves_archived_configs_and_records_every_model(archived_experiment, tmp_path, monkeypatch):
+@pytest.mark.parametrize("timeout", [None, 15])
+def test_preserves_archived_configs_and_records_every_model(archived_experiment, tmp_path, monkeypatch, timeout):
     seen = []
 
     def simulate(command, **kwargs):
         config = json.loads(Path(command[-1]).read_text())
         seen.append(config)
-        assert kwargs["timeout"] == 300 and kwargs["check"]
+        assert kwargs["timeout"] == (3600 if timeout is None else timeout) and kwargs["check"]
         Path(config["logfile"]).write_text(json.dumps([
             {"timestep": 0, "population": 250}, {"timestep": 20, "population": 125},
         ]))
 
     monkeypatch.setattr(paper.subprocess, "run", simulate)
     output = tmp_path / "result"
-    assert paper.main(archived_experiment + ["--timesteps", "20", "--out", str(output)]) == 0
+    timeout_args = [] if timeout is None else ["--timeout-seconds", str(timeout)]
+    assert paper.main(archived_experiment + ["--timesteps", "20", "--out", str(output)] + timeout_args) == 0
     assert len(seen) == 4
     report = json.loads((output / "report.json").read_text())
     assert report["duration"] == "shortened smoke"
@@ -71,7 +73,7 @@ def test_timeout_keeps_partial_evidence_without_completed_report(archived_experi
     request = json.loads((output / "request.json").read_text())
     assert request["seeds"] == [7]
     assert request["models"] == list(paper.MODELS)
-    assert request["timeout_seconds_per_model"] == 300
+    assert request["timeout_seconds_per_model"] == 3600
     assert request["timesteps_override"] is None
     assert request["planned_runs"] == 4
     assert not (output / "report.json").exists()

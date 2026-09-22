@@ -27,7 +27,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--archive", type=Path, required=True, help="authors' blueprints-homogeneous.zip")
     parser.add_argument("--seeds", nargs="+", type=int, required=True)
     parser.add_argument("--timesteps", type=int, help="shortened smoke duration; omitted preserves the paper's 5000 ticks")
-    parser.add_argument("--timeout-seconds", type=int, default=300, help="per model subprocess budget")
+    parser.add_argument("--timeout-seconds", type=int, default=3600, help="per model subprocess budget")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
     if os.environ.get("PYTHONHASHSEED") != "0":
