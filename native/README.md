@@ -1,9 +1,10 @@
 # Native Sugarscape core
 
-This directory contains the deterministic Nim simulation core. Its v4 wire
+This directory contains the deterministic Nim simulation core. Its v5 wire
 schema supports sugar and spice, Cobb-Douglas welfare, trait modifiers,
-starvation, aging, and population decline. It remains a pre-Commonwealth parity
-slice until the other mechanics listed below are implemented.
+tagging, combat, starvation, aging, and population decline. It remains a
+pre-Commonwealth parity slice until the other mechanics listed below are
+implemented.
 
 Build and test it with Nim 2.2 or newer:
 
@@ -26,11 +27,13 @@ startup, input parsing, snapshot encoding, and output. `ticks` reports actual
 completed ticks and can be less than requested when the population becomes
 extinct.
 
-Snapshots contain x-major cells, agents sorted by ID, the current shuffled
-`liveOrder`, exact ordered candidate lists exported from DTL, and the complete
-Python `random.Random` MT19937 state. Reloading a snapshot continues the same
-random stream. Canonical configuration and per-seat ruleset hashes bind the
-snapshot to the semantics used to create it.
+Snapshots contain x-major cells, ID-sorted agents, and the current shuffled
+`liveOrder`. They preserve DTL's ordered candidate and neighbor lists. They also
+contain the 624-word Python MT19937 state and its index. The Gaussian cache must
+be empty. Reloading a snapshot continues the same random stream.
+
+Python records canonical configuration and per-seat ruleset hashes. Nim validates
+their format and preserves them. It cannot recompute them from a snapshot.
 
 Both resources grow first. The engine shuffles the agent list, then processes each agent
 sequentially. It shuffles the four cardinal rays within the agent's vision and
@@ -42,14 +45,19 @@ immediately.
 Movement, vision, and both metabolism traits retain their post-depression base
 values and separate signed modifiers. Each action derives the effective value
 as `max(0, base + modifier)`. Disease records and immune state remain outside
-this slice; v4 can resume an already-applied modifier state but does not advance
+this slice; v5 can resume an already-applied modifier state but does not advance
 infection or recovery.
 
 `deaths` contains the most recently completed tick's removals in DTL removal
 order. Starvation clears the occupied cell immediately and skips aging. Aging
 increments age before checking finite `maxAge`.
 
+Tagging shuffles DTL's ordered neighbors, including duplicates on wrapped small
+grids, copies one tag bit per occupied neighbor, and updates tribes immediately.
+Combat applies eligibility, retaliation, capped two-resource loot, immediate
+death, and end-of-tick removal order. Inheritance policy must be `none`.
+
 This slice does not implement replacement, reproduction, trade, lending,
-disease, pollution, seasons, combat, leaders, inheritance, or SugarLang
+disease progression, pollution, seasons, leaders, inheritance, or general SugarLang
 policies. The closed snapshot schema rejects additional fields, RNGs, and
 Gaussian cache state.
