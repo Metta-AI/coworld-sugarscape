@@ -5,7 +5,7 @@ import ../sugarscape_native
 proc initialSnapshot(): JsonNode =
   let fixture = parseFile(currentSourcePath.parentDir / "fixtures" / "python_random_1729.json")
   %*{
-    "schemaVersion": 6,
+    "schemaVersion": 7,
     "sourcePin": "585282e9ce7b22a33b89abb0d777917bd5887d1a",
     "configurationSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "rulesetSha256": [
@@ -21,6 +21,7 @@ proc initialSnapshot(): JsonNode =
     "maxCombatLoot": 0,
     "maxTribes": 1,
     "inheritancePolicy": "none",
+    "nextAgentId": 21, "depressionPercentage": 0,
     "rng": fixture["rng"],
     "liveOrder": [10],
     "cells": [
@@ -44,6 +45,14 @@ proc initialSnapshot(): JsonNode =
         "sugarPrice": 0, "spicePrice": 0, "lastTradeTimestep": -1,
         "lastTradePartners": 0, "diseaseProtectionChance": 0,
         "immuneSystem": newJNull(), "diseases": [],
+        "born": 0, "startingSugar": 5, "startingSpice": 0, "sex": "female",
+        "fertilityAge": 10, "infertilityAge": 20, "inheritancePolicy": "none",
+        "lendingFactor": 0, "baseInterestRate": 0, "loanDuration": 0,
+        "sugarMeanIncome": 1, "spiceMeanIncome": 1,
+        "startingImmuneSystem": newJNull(), "racialTags": newJNull(),
+        "fatherId": newJNull(), "motherId": newJNull(), "childrenIds": [], "mateIds": [],
+        "lastMovedTimestep": -1, "lastReproducedTimestep": -1, "lastMates": 0,
+        "lastLendedTimestep": -1, "lastLoans": 0, "creditorLoans": [], "debtorLoans": [],
       },
     ],
     "orderedCandidates": [
@@ -53,6 +62,7 @@ proc initialSnapshot(): JsonNode =
     ],
     "orderedNeighbors": [[2, 1, 1, 2], [0, 2, 2, 0], [1, 0, 0, 1]],
     "diseases": [], "remainingDiseaseIds": [],
+    "creditorTombstones": [],
     "deaths": [],
   }
 
@@ -65,6 +75,23 @@ suite "native world":
     resumed = loadWorld(resumed.snapshot())
     resumed.step(3)
     check direct.snapshot() == resumed.snapshot()
+
+  test "nullable sex round trips and disables reproduction":
+    var node = initialSnapshot()
+    node["agents"][0]["sex"] = newJNull()
+    let world = loadWorld(node)
+    check not world.agents[0].hasSex
+    check world.snapshot()["agents"][0]["sex"].kind == JNull
+
+  test "relation IDs must be unique and nonnegative":
+    var duplicate = initialSnapshot()
+    duplicate["agents"][0]["childrenIds"] = %*[20, 20]
+    expect AssertionDefect:
+      discard loadWorld(duplicate)
+    var negative = initialSnapshot()
+    negative["agents"][0]["mateIds"] = %*[-1]
+    expect AssertionDefect:
+      discard loadWorld(negative)
 
   test "movement harvest metabolism and growback are deterministic":
     var world = loadWorld(initialSnapshot())
@@ -100,6 +127,14 @@ suite "native world":
         "sugarPrice": 0, "spicePrice": 0, "lastTradeTimestep": -1,
         "lastTradePartners": 0, "diseaseProtectionChance": 0,
         "immuneSystem": newJNull(), "diseases": [],
+        "born": 0, "startingSugar": 5, "startingSpice": 0, "sex": "female",
+        "fertilityAge": 10, "infertilityAge": 20, "inheritancePolicy": "none",
+        "lendingFactor": 0, "baseInterestRate": 0, "loanDuration": 0,
+        "sugarMeanIncome": 1, "spiceMeanIncome": 1,
+        "startingImmuneSystem": newJNull(), "racialTags": newJNull(),
+        "fatherId": newJNull(), "motherId": newJNull(), "childrenIds": [], "mateIds": [],
+        "lastMovedTimestep": -1, "lastReproducedTimestep": -1, "lastMates": 0,
+        "lastLendedTimestep": -1, "lastLoans": 0, "creditorLoans": [], "debtorLoans": [],
       },
       {
         "id": 20, "seat": 1, "x": 1, "y": 0, "sugar": 10, "spice": 0, "age": 2,
@@ -116,6 +151,14 @@ suite "native world":
         "sugarPrice": 0, "spicePrice": 0, "lastTradeTimestep": -1,
         "lastTradePartners": 0, "diseaseProtectionChance": 0,
         "immuneSystem": newJNull(), "diseases": [],
+        "born": 0, "startingSugar": 5, "startingSpice": 0, "sex": "female",
+        "fertilityAge": 10, "infertilityAge": 20, "inheritancePolicy": "none",
+        "lendingFactor": 0, "baseInterestRate": 0, "loanDuration": 0,
+        "sugarMeanIncome": 1, "spiceMeanIncome": 1,
+        "startingImmuneSystem": newJNull(), "racialTags": newJNull(),
+        "fatherId": newJNull(), "motherId": newJNull(), "childrenIds": [], "mateIds": [],
+        "lastMovedTimestep": -1, "lastReproducedTimestep": -1, "lastMates": 0,
+        "lastLendedTimestep": -1, "lastLoans": 0, "creditorLoans": [], "debtorLoans": [],
       },
     ]
     node["orderedCandidates"] = %*[[[1, 1]], [[0, 1]]]
@@ -319,3 +362,184 @@ suite "native world":
     world.stepOne()
     check world.agents[1].tags == @[0]
     check world.agents[1].tribe == 1
+
+  test "reproduction creates and harvests one child with parent costs":
+    var node = initialSnapshot()
+    node["sugarRegrowRate"] = %0
+    node["liveOrder"] = %*[10, 20]
+    node["cells"] = %*[
+      {"sugar": 0, "maxSugar": 0, "spice": 0, "maxSpice": 0, "occupantId": 10},
+      {"sugar": 0, "maxSugar": 0, "spice": 0, "maxSpice": 0, "occupantId": 20},
+      {"sugar": 2, "maxSugar": 2, "spice": 3, "maxSpice": 3, "occupantId": newJNull()},
+    ]
+    var mother = node["agents"][0].copy()
+    mother["movement"] = %0
+    mother["sugarMetabolism"] = %0
+    mother["sugar"] = %10
+    mother["spice"] = %10
+    mother["startingSugar"] = %10
+    mother["startingSpice"] = %10
+    mother["age"] = %10
+    mother["fertilityAge"] = %10
+    mother["infertilityAge"] = %20
+    mother["fertilityFactor"] = %1
+    mother["sex"] = %"female"
+    mother["lastTradePartners"] = %2
+    var father = mother.copy()
+    father["id"] = %20
+    father["seat"] = %1
+    father["x"] = %1
+    father["sex"] = %"male"
+    node["agents"] = %*[mother, father]
+    var world = loadWorld(node)
+    world.stepOne()
+    check world.agents.len == 3
+    check world.nextAgentId == 22
+    check world.agents[2].id == 21
+    check world.agents[2].born == 1
+    check world.agents[2].age == 0
+    check world.agents[2].lastMovedTimestep == 1
+    check world.agents[2].lastTradePartners == 0
+    check world.agents[2].sugar == 12
+    check world.agents[2].spice == 13
+    check world.agents[0].sugar == 5
+    check world.agents[1].sugar == 5
+
+  test "children inheritance clamps and transfers holdings on aging death":
+    var node = initialSnapshot()
+    node["sugarRegrowRate"] = %0
+    node["liveOrder"] = %*[10, 20]
+    node["cells"] = %*[
+      {"sugar": 0, "maxSugar": 0, "spice": 0, "maxSpice": 0, "occupantId": 10},
+      {"sugar": 0, "maxSugar": 0, "spice": 0, "maxSpice": 0, "occupantId": 20},
+      {"sugar": 0, "maxSugar": 0, "spice": 0, "maxSpice": 0, "occupantId": newJNull()},
+    ]
+    var parent = node["agents"][0].copy()
+    parent["movement"] = %0
+    parent["sugarMetabolism"] = %0
+    parent["sugar"] = %8
+    parent["spice"] = %4
+    parent["maxAge"] = %1
+    parent["inheritancePolicy"] = %"children"
+    parent["childrenIds"] = %*[20]
+    var child = parent.copy()
+    child["id"] = %20
+    child["seat"] = %1
+    child["x"] = %1
+    child["sugar"] = %10
+    child["spice"] = %10
+    child["maxAge"] = %(-1)
+    child["inheritancePolicy"] = %"none"
+    child["childrenIds"] = %*[]
+    node["agents"] = %*[parent, child]
+    var world = loadWorld(node)
+    world.stepOne()
+    check world.agents.len == 1
+    check world.agents[0].id == 20
+    check world.agents[0].sugar == 18
+    check world.agents[0].spice == 14
+
+  test "lending originates mirrored interest-bearing records":
+    var node = initialSnapshot()
+    node["sugarRegrowRate"] = %0
+    node["liveOrder"] = %*[10, 20]
+    node["cells"] = %*[
+      {"sugar": 0, "maxSugar": 0, "spice": 0, "maxSpice": 0, "occupantId": 10},
+      {"sugar": 0, "maxSugar": 0, "spice": 0, "maxSpice": 0, "occupantId": 20},
+      {"sugar": 0, "maxSugar": 0, "spice": 0, "maxSpice": 0, "occupantId": newJNull()},
+    ]
+    var lender = node["agents"][0].copy()
+    lender["movement"] = %0
+    lender["sugarMetabolism"] = %0
+    lender["spiceMetabolism"] = %0
+    lender["sugar"] = %20
+    lender["spice"] = %20
+    lender["startingSugar"] = %10
+    lender["startingSpice"] = %10
+    lender["fertilityAge"] = %0
+    lender["infertilityAge"] = %20
+    lender["fertilityFactor"] = %0
+    lender["lendingFactor"] = %1
+    lender["baseInterestRate"] = %0.1
+    lender["loanDuration"] = %5
+    var borrower = lender.copy()
+    borrower["id"] = %20
+    borrower["seat"] = %1
+    borrower["x"] = %1
+    borrower["sugar"] = %5
+    borrower["spice"] = %5
+    borrower["lendingFactor"] = %0
+    borrower["sugarMeanIncome"] = %10
+    borrower["spiceMeanIncome"] = %10
+    node["agents"] = %*[lender, borrower]
+    var world = loadWorld(node)
+    world.stepOne()
+    check world.agents[0].debtorLoans.len == 1
+    check world.agents[1].creditorLoans.len == 1
+    check world.agents[0].debtorLoans[0].sugarLoan == 5.5
+    check world.agents[0].sugar == 15
+    check world.agents[1].sugar == 10
+
+
+    var mismatched = world.snapshot()
+    mismatched["agents"][1]["creditorLoans"].add(
+      mismatched["agents"][1]["creditorLoans"][0].copy())
+    expect AssertionDefect:
+      discard loadWorld(mismatched)
+
+    var negativeLoan = world.snapshot()
+    negativeLoan["agents"][1]["creditorLoans"][0]["sugarLoan"] = %(-1)
+    expect AssertionDefect:
+      discard loadWorld(negativeLoan)
+
+  test "dead creditor debt transfers to living children at maturity":
+    var node = initialSnapshot()
+    node["sugarRegrowRate"] = %0
+    node["liveOrder"] = %*[10, 20]
+    node["cells"] = %*[
+      {"sugar": 0, "maxSugar": 0, "spice": 0, "maxSpice": 0, "occupantId": 10},
+      {"sugar": 0, "maxSugar": 0, "spice": 0, "maxSpice": 0, "occupantId": 20},
+      {"sugar": 0, "maxSugar": 0, "spice": 0, "maxSpice": 0, "occupantId": newJNull()},
+    ]
+    var debtor = node["agents"][0].copy()
+    debtor["movement"] = %0
+    debtor["sugarMetabolism"] = %0
+    debtor["spiceMetabolism"] = %0
+    debtor["lastMovedTimestep"] = %0
+    debtor["creditorLoans"] = %*[
+      {"creditorId": 5, "debtorId": 10, "sugarLoan": 4, "spiceLoan": 2,
+       "loanDuration": 1, "loanOrigin": 0},
+    ]
+    var heir = debtor.copy()
+    heir["id"] = %20
+    heir["seat"] = %1
+    heir["x"] = %1
+    heir["creditorLoans"] = %*[]
+    node["agents"] = %*[debtor, heir]
+    node["creditorTombstones"] = %*[
+      {"id": 5, "inheritancePolicy": "children", "childrenIds": [20]},
+    ]
+    var world = loadWorld(node)
+    world.stepOne()
+    check world.creditorTombstones.len == 0
+    check world.agents[0].creditorLoans.len == 1
+    check world.agents[0].creditorLoans[0].creditorId == 20
+    check world.agents[0].creditorLoans[0].duration == 1
+    check world.agents[1].debtorLoans == world.agents[0].creditorLoans
+
+    node["creditorTombstones"][0]["inheritancePolicy"] = %"none"
+    var cancelled = loadWorld(node)
+    cancelled.stepOne()
+    check cancelled.creditorTombstones.len == 0
+    check cancelled.agents[0].creditorLoans.len == 0
+    check cancelled.agents[1].debtorLoans.len == 0
+
+  test "stale dead-debtor records survive snapshots and are removed":
+    var node = initialSnapshot()
+    node["agents"][0]["debtorLoans"] = %*[
+      {"creditorId": 10, "debtorId": 99, "sugarLoan": 1, "spiceLoan": 1,
+       "loanDuration": 1, "loanOrigin": 0},
+    ]
+    var world = loadWorld(node)
+    world.stepOne()
+    check world.agents[0].debtorLoans.len == 0
