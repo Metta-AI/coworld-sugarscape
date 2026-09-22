@@ -1,4 +1,4 @@
-"""Reference configuration for native v3 parity and throughput measurements."""
+"""Reference configuration for native v4 parity and throughput measurements."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ class NativeReferenceWorld(CoworldSugarscape):
         super().updateRuntimeStats()
 
 
-def native_v3_config(*, seed: int = 1729, timesteps: int = 10_000) -> dict[str, object]:
+def native_v4_config(*, seed: int = 1729, timesteps: int = 10_000) -> dict[str, object]:
     return {
         "seed": seed,
         "seats": 2,
@@ -64,10 +64,10 @@ def native_v3_config(*, seed: int = 1729, timesteps: int = 10_000) -> dict[str, 
     }
 
 
-def build_native_v3_reference_world(
+def build_native_v4_reference_world(
     *, seed: int = 1729, timesteps: int = 10_000
 ) -> CoworldSugarscape:
-    resolved = resolve_episode_config(native_v3_config(seed=seed, timesteps=timesteps))
+    resolved = resolve_episode_config(native_v4_config(seed=seed, timesteps=timesteps))
     return NativeReferenceWorld(
         build_dtl_config(resolved),
         [compile_ruleset(None) for _ in range(int(resolved["seats"]))],

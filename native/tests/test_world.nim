@@ -5,8 +5,13 @@ import ../sugarscape_native
 proc initialSnapshot(): JsonNode =
   let fixture = parseFile(currentSourcePath.parentDir / "fixtures" / "python_random_1729.json")
   %*{
-    "schemaVersion": 3,
+    "schemaVersion": 4,
     "sourcePin": "585282e9ce7b22a33b89abb0d777917bd5887d1a",
+    "configurationSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "rulesetSha256": [
+      "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    ],
     "timestep": 0,
     "width": 3,
     "height": 1,
@@ -23,8 +28,14 @@ proc initialSnapshot(): JsonNode =
     "agents": [
       %*{
         "id": 10, "seat": 0, "x": 0, "y": 0, "sugar": 5, "spice": 0, "age": 0,
-        "sugarMetabolism": 2, "spiceMetabolism": 0, "vision": 1, "movement": 1, "maxAge": -1,
-        "lookaheadFactor": 0,
+        "sugarMetabolism": 2, "spiceMetabolism": 0,
+        "sugarMetabolismModifier": 0, "spiceMetabolismModifier": 0,
+        "vision": 1, "movement": 1, "visionModifier": 0, "movementModifier": 0,
+        "maxAge": -1, "lookaheadFactor": 0,
+        "aggressionFactor": 0, "aggressionFactorModifier": 0,
+        "fertilityFactor": 0, "fertilityFactorModifier": 0,
+        "depressed": false, "happinessUnit": 1, "maxFriends": 0,
+        "friendlinessModifier": 0, "happinessModifier": 0,
       },
     ],
     "orderedCandidates": [
@@ -66,13 +77,25 @@ suite "native world":
     node["agents"] = %*[
       {
         "id": 10, "seat": 0, "x": 0, "y": 0, "sugar": 1, "spice": 0, "age": 4,
-        "sugarMetabolism": 2, "spiceMetabolism": 0, "vision": 1, "movement": 1, "maxAge": -1,
-        "lookaheadFactor": 0,
+        "sugarMetabolism": 2, "spiceMetabolism": 0,
+        "sugarMetabolismModifier": 0, "spiceMetabolismModifier": 0,
+        "vision": 1, "movement": 1, "visionModifier": 0, "movementModifier": 0,
+        "maxAge": -1, "lookaheadFactor": 0,
+        "aggressionFactor": 0, "aggressionFactorModifier": 0,
+        "fertilityFactor": 0, "fertilityFactorModifier": 0,
+        "depressed": false, "happinessUnit": 1, "maxFriends": 0,
+        "friendlinessModifier": 0, "happinessModifier": 0,
       },
       {
         "id": 20, "seat": 1, "x": 1, "y": 0, "sugar": 10, "spice": 0, "age": 2,
-        "sugarMetabolism": 1, "spiceMetabolism": 0, "vision": 1, "movement": 1, "maxAge": -1,
-        "lookaheadFactor": 0,
+        "sugarMetabolism": 1, "spiceMetabolism": 0,
+        "sugarMetabolismModifier": 0, "spiceMetabolismModifier": 0,
+        "vision": 1, "movement": 1, "visionModifier": 0, "movementModifier": 0,
+        "maxAge": -1, "lookaheadFactor": 0,
+        "aggressionFactor": 0, "aggressionFactorModifier": 0,
+        "fertilityFactor": 0, "fertilityFactorModifier": 0,
+        "depressed": false, "happinessUnit": 1, "maxFriends": 0,
+        "friendlinessModifier": 0, "happinessModifier": 0,
       },
     ]
     node["orderedCandidates"] = %*[[[1, 1]], [[0, 1]]]
@@ -166,3 +189,41 @@ suite "native world":
     check world.deaths.len == 1
     check world.deaths[0].cause == "starvation"
     check world.deaths[0].age == 0
+
+  test "post-depression base traits survive snapshot round trips":
+    var node = initialSnapshot()
+    node["agents"][0]["depressed"] = %true
+    node["agents"][0]["movement"] = %4
+    node["agents"][0]["sugarMetabolism"] = %6
+    node["agents"][0]["spiceMetabolism"] = %6
+    node["agents"][0]["aggressionFactor"] = %1.145
+    node["agents"][0]["happinessUnit"] = %0.5763
+    node["agents"][0]["maxFriends"] = %3
+    let world = loadWorld(node)
+    let restored = loadWorld(world.snapshot())
+    check restored.agents[0].depressed
+    check restored.agents[0].movement == 4
+    check restored.agents[0].sugarMetabolism == 6
+    check restored.agents[0].spiceMetabolism == 6
+    check restored.agents[0].aggressionFactor == 1.145
+    check restored.agents[0].happinessUnit == 0.5763
+    check restored.agents[0].maxFriends == 3
+
+  test "infection modifiers clamp effective traits at action time":
+    var node = initialSnapshot()
+    node["sugarRegrowRate"] = %0
+    node["agents"][0]["sugar"] = %5
+    node["agents"][0]["spice"] = %0
+    node["agents"][0]["sugarMetabolism"] = %1
+    node["agents"][0]["sugarMetabolismModifier"] = %2
+    node["agents"][0]["spiceMetabolism"] = %1
+    node["agents"][0]["spiceMetabolismModifier"] = %(-2)
+    node["agents"][0]["movementModifier"] = %(-10)
+    node["agents"][0]["visionModifier"] = %5
+    var world = loadWorld(node)
+    world.stepOne()
+    check world.agents.len == 1
+    check world.agents[0].x == 0
+    check world.agents[0].sugar == 3
+    check world.agents[0].spice == 0
+    check world.agents[0].age == 1

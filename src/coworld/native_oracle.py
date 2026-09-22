@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
+import json
 import math
 import random
 from typing import Mapping
@@ -10,8 +12,9 @@ from typing import Mapping
 from .simulation import CoworldSugarscape
 
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 SOURCE_PIN = "585282e9ce7b22a33b89abb0d777917bd5887d1a"
+_WELFARE_MOVEMENT = [{"score": ["get", "cell.welfare"]}]
 
 
 def _closed(raw: Mapping[str, object], expected: set[str], location: str) -> None:
@@ -36,8 +39,48 @@ def _number(value: object, location: str) -> int | float:
     return value
 
 
+def _signed_number(value: object, location: str) -> int | float:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+    ):
+        raise ValueError(f"{location} must be a finite number")
+    return value
+
+
+def _digest(value: object) -> str:
+    canonical = json.dumps(
+        value,
+        allow_nan=False,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def _sha256(value: object, location: str) -> str:
+    if (
+        not isinstance(value, str)
+        or len(value) != 64
+        or any(character not in "0123456789abcdef" for character in value)
+    ):
+        raise ValueError(f"{location} must be a lowercase SHA-256 digest")
+    return value
+
+
+def _supported_ruleset(ruleset: object) -> bool:
+    if ruleset.is_null:
+        return True
+    normalized = ruleset.normalized
+    return normalized.get("movement", _WELFARE_MOVEMENT) == _WELFARE_MOVEMENT
+
+
 @dataclass(frozen=True)
 class NativeSnapshot:
+    config_sha256: str
+    ruleset_sha256: tuple[str, ...]
     timestep: int
     width: int
     height: int
@@ -61,6 +104,8 @@ class NativeSnapshot:
         keys = {
             "schemaVersion",
             "sourcePin",
+            "configurationSha256",
+            "rulesetSha256",
             "timestep",
             "width",
             "height",
@@ -77,6 +122,17 @@ class NativeSnapshot:
         _closed(raw, keys, "snapshot")
         if raw["schemaVersion"] != SCHEMA_VERSION or raw["sourcePin"] != SOURCE_PIN:
             raise ValueError("snapshot schemaVersion or sourcePin is unsupported")
+        config_sha256 = _sha256(
+            raw["configurationSha256"],
+            "configurationSha256",
+        )
+        raw_ruleset_hashes = raw["rulesetSha256"]
+        if not isinstance(raw_ruleset_hashes, list) or not raw_ruleset_hashes:
+            raise ValueError("rulesetSha256 must be a non-empty array")
+        ruleset_sha256 = tuple(
+            _sha256(value, f"rulesetSha256[{index}]")
+            for index, value in enumerate(raw_ruleset_hashes)
+        )
         width = _int(raw["width"], "width", 1)
         height = _int(raw["height"], "height", 1)
         max_cell_distance = _int(raw["maxCellDistance"], "maxCellDistance")
@@ -156,6 +212,19 @@ class NativeSnapshot:
             "movement",
             "maxAge",
             "lookaheadFactor",
+            "visionModifier",
+            "movementModifier",
+            "sugarMetabolismModifier",
+            "spiceMetabolismModifier",
+            "aggressionFactor",
+            "aggressionFactorModifier",
+            "fertilityFactor",
+            "fertilityFactorModifier",
+            "depressed",
+            "happinessUnit",
+            "maxFriends",
+            "friendlinessModifier",
+            "happinessModifier",
         }
         agents = []
         for index, agent in enumerate(raw_agents):
@@ -179,7 +248,34 @@ class NativeSnapshot:
                 _int(agent["movement"], "agent.movement"),
                 max_age,
                 _number(agent["lookaheadFactor"], "agent.lookaheadFactor"),
+                _int(agent["visionModifier"], "agent.visionModifier", minimum=-2**63),
+                _int(agent["movementModifier"], "agent.movementModifier", minimum=-2**63),
+                _signed_number(
+                    agent["sugarMetabolismModifier"],
+                    "agent.sugarMetabolismModifier",
+                ),
+                _signed_number(
+                    agent["spiceMetabolismModifier"],
+                    "agent.spiceMetabolismModifier",
+                ),
+                _number(agent["aggressionFactor"], "agent.aggressionFactor"),
+                _signed_number(
+                    agent["aggressionFactorModifier"],
+                    "agent.aggressionFactorModifier",
+                ),
+                _number(agent["fertilityFactor"], "agent.fertilityFactor"),
+                _signed_number(
+                    agent["fertilityFactorModifier"],
+                    "agent.fertilityFactorModifier",
+                ),
+                agent["depressed"],
+                _number(agent["happinessUnit"], "agent.happinessUnit"),
+                _int(agent["maxFriends"], "agent.maxFriends"),
+                _signed_number(agent["friendlinessModifier"], "agent.friendlinessModifier"),
+                _signed_number(agent["happinessModifier"], "agent.happinessModifier"),
             )
+            if not isinstance(values[21], bool):
+                raise ValueError("agent.depressed must be a boolean")
             if values[2] >= width or values[3] >= height:
                 raise ValueError("agent position is outside the world")
             agents.append(values)
@@ -234,6 +330,8 @@ class NativeSnapshot:
         if len(set(death_ids)) != len(death_ids) or set(death_ids) & set(ids):
             raise ValueError("death ids must be unique and absent from living agents")
         return cls(
+            config_sha256,
+            ruleset_sha256,
             _int(raw["timestep"], "timestep"),
             width,
             height,
@@ -253,6 +351,8 @@ class NativeSnapshot:
         return {
             "schemaVersion": SCHEMA_VERSION,
             "sourcePin": SOURCE_PIN,
+            "configurationSha256": self.config_sha256,
+            "rulesetSha256": list(self.ruleset_sha256),
             "timestep": self.timestep,
             "width": self.width,
             "height": self.height,
@@ -283,6 +383,12 @@ class NativeSnapshot:
                             "id", "seat", "x", "y", "sugar", "spice", "age",
                             "sugarMetabolism", "spiceMetabolism", "vision",
                             "movement", "maxAge", "lookaheadFactor",
+                            "visionModifier", "movementModifier",
+                            "sugarMetabolismModifier", "spiceMetabolismModifier",
+                            "aggressionFactor", "aggressionFactorModifier",
+                            "fertilityFactor", "fertilityFactorModifier",
+                            "depressed", "happinessUnit", "maxFriends",
+                            "friendlinessModifier", "happinessModifier",
                         ),
                         agent,
                         strict=True,
@@ -299,6 +405,17 @@ class NativeSnapshot:
                 for agent_id, seat, age, cause in self.deaths
             ],
         }
+
+
+@dataclass(frozen=True)
+class NativeCompatibilityAudit:
+    configuration_sha256: str
+    ruleset_sha256: tuple[str, ...]
+    population: int
+    depressed_agents: int
+    infected_agents: int
+    modified_agents: int
+    blockers: tuple[str, ...]
 
 
 def validate_supported_world(world: CoworldSugarscape) -> None:
@@ -333,26 +450,64 @@ def validate_supported_world(world: CoworldSugarscape) -> None:
     for accepted, message in requirements:
         if not accepted:
             raise ValueError(message)
-    welfare_ruleset = {
-        "version": 1,
-        "movement": [{"score": ["get", "cell.welfare"]}],
-    }
-    if any(
-        not ruleset.is_null and ruleset.normalized != welfare_ruleset
-        for ruleset in world.seat_manager.rulesets
-    ):
-        raise ValueError("only null or exact cell.welfare SugarLang rules are supported")
+    if any(not _supported_ruleset(ruleset) for ruleset in world.seat_manager.rulesets):
+        raise ValueError("only null or exact cell.welfare movement rules are supported")
     for index, agent in enumerate(world.agents):
         if not agent.alive or agent.cell is None:
             raise ValueError(f"agents[{index}] must be alive and placed")
         if agent.diseases:
             raise ValueError(f"agents[{index}] disease state is unsupported")
-        if agent.movementModifier != 0 or agent.visionModifier != 0:
-            raise ValueError(f"agents[{index}] movement and vision modifiers are unsupported")
+        if agent.findAggression() != 0 or agent.fertilityFactor + agent.fertilityFactorModifier > 0:
+            raise ValueError(
+                f"agents[{index}] effective aggression and fertility must remain inactive"
+            )
     for column in world.environment.grid:
         for cell in column:
             if cell.pollution != 0:
                 raise ValueError("cell pollution state is unsupported")
+
+
+def audit_snapshot_compatibility(world: CoworldSugarscape) -> NativeCompatibilityAudit:
+    """Describe why a real DTL tick-zero world cannot yet use the native stepper."""
+
+    agents = world.agents
+    blockers = []
+    if any(agent.findAggression() != 0 for agent in agents):
+        blockers.append("combat")
+    if any(agent.tradeFactor != 0 for agent in agents):
+        blockers.append("trade")
+    if any(agent.lendingFactor != 0 for agent in agents):
+        blockers.append("lending")
+    if any(agent.fertilityFactor + agent.fertilityFactorModifier > 0 for agent in agents):
+        blockers.append("reproduction")
+    if any(agent.diseases for agent in agents) or world.configuration["startingDiseases"] > 0:
+        blockers.append("disease_progression")
+    if world.configuration["agentTagging"]:
+        blockers.append("tagging")
+    return NativeCompatibilityAudit(
+        _digest(world.configuration),
+        tuple(_digest(ruleset.normalized) for ruleset in world.seat_manager.rulesets),
+        len(agents),
+        sum(agent.depressed for agent in agents),
+        sum(bool(agent.diseases) for agent in agents),
+        sum(
+            any(
+                modifier != 0
+                for modifier in (
+                    agent.visionModifier,
+                    agent.movementModifier,
+                    agent.sugarMetabolismModifier,
+                    agent.spiceMetabolismModifier,
+                    agent.aggressionFactorModifier,
+                    agent.fertilityFactorModifier,
+                    agent.friendlinessModifier,
+                    agent.happinessModifier,
+                )
+            )
+            for agent in agents
+        ),
+        tuple(blockers),
+    )
 
 
 def snapshot_world(world: CoworldSugarscape) -> NativeSnapshot:
@@ -383,10 +538,23 @@ def snapshot_world(world: CoworldSugarscape) -> NativeSnapshot:
             agent.age,
             agent.sugarMetabolism,
             agent.spiceMetabolism,
-            agent.findVision(),
-            agent.findMovement(),
+            agent.vision,
+            agent.movement,
             agent.maxAge,
             agent.lookaheadFactor,
+            agent.visionModifier,
+            agent.movementModifier,
+            agent.sugarMetabolismModifier,
+            agent.spiceMetabolismModifier,
+            agent.aggressionFactor,
+            agent.aggressionFactorModifier,
+            agent.fertilityFactor,
+            agent.fertilityFactorModifier,
+            agent.depressed,
+            agent.happinessUnit,
+            agent.maxFriends,
+            agent.friendlinessModifier,
+            agent.happinessModifier,
         )
         for agent in sorted(world.agents, key=lambda value: value.ID)
     )
@@ -400,6 +568,8 @@ def snapshot_world(world: CoworldSugarscape) -> NativeSnapshot:
         for cell in column
     )
     return NativeSnapshot(
+        _digest(world.configuration),
+        tuple(_digest(ruleset.normalized) for ruleset in world.seat_manager.rulesets),
         world.timestep,
         environment.width,
         environment.height,
@@ -441,7 +611,15 @@ def step_python(snapshot: NativeSnapshot, ticks: int) -> NativeSnapshot:
         for agent_id in live_order:
             agent = agents[agent_id]
             origin = int(agent[2]) * snapshot.height + int(agent[3])
-            cell_range = min(int(agent[9]), int(agent[10]), snapshot.max_cell_distance)
+            effective_vision = max(0, int(agent[9]) + int(agent[13]))
+            effective_movement = max(0, int(agent[10]) + int(agent[14]))
+            sugar_metabolism = max(0, agent[7] + agent[15])
+            spice_metabolism = max(0, agent[8] + agent[16])
+            cell_range = min(
+                effective_vision,
+                effective_movement,
+                snapshot.max_cell_distance,
+            )
             candidates = [
                 (target, distance)
                 for target, distance in snapshot.ordered_candidates[origin]
@@ -454,14 +632,18 @@ def step_python(snapshot: NativeSnapshot, ticks: int) -> NativeSnapshot:
             for target, distance in candidates:
                 if cells[target][4] is not None:
                     continue
-                total_metabolism = agent[7] + agent[8]
-                sugar_proportion = agent[7] / total_metabolism if total_metabolism else 0
-                spice_proportion = agent[8] / total_metabolism if total_metabolism else 0
+                total_metabolism = sugar_metabolism + spice_metabolism
+                sugar_proportion = (
+                    sugar_metabolism / total_metabolism if total_metabolism else 0
+                )
+                spice_proportion = (
+                    spice_metabolism / total_metabolism if total_metabolism else 0
+                )
                 adjusted_sugar = max(
-                    agent[4] + cells[target][0] - agent[7] * agent[12], 0
+                    agent[4] + cells[target][0] - sugar_metabolism * agent[12], 0
                 )
                 adjusted_spice = max(
-                    agent[5] + cells[target][2] - agent[8] * agent[12], 0
+                    agent[5] + cells[target][2] - spice_metabolism * agent[12], 0
                 )
                 welfare = (adjusted_sugar**sugar_proportion) * (
                     adjusted_spice**spice_proportion
@@ -481,10 +663,14 @@ def step_python(snapshot: NativeSnapshot, ticks: int) -> NativeSnapshot:
             agent[5] += cells[destination][2]
             cells[destination][0] = 0
             cells[destination][2] = 0
-            agent[4] -= agent[7]
-            agent[5] -= agent[8]
-            sugar_starved = agent[4] < 0 or (agent[4] <= 0 and agent[7] > 0)
-            spice_starved = agent[5] < 0 or (agent[5] <= 0 and agent[8] > 0)
+            agent[4] -= sugar_metabolism
+            agent[5] -= spice_metabolism
+            sugar_starved = agent[4] < 0 or (
+                agent[4] <= 0 and sugar_metabolism > 0
+            )
+            spice_starved = agent[5] < 0 or (
+                agent[5] <= 0 and spice_metabolism > 0
+            )
             if sugar_starved or spice_starved:
                 cells[destination][4] = None
                 deaths.append((agent_id, int(agent[1]), int(agent[6]), "starvation"))
@@ -502,6 +688,8 @@ def step_python(snapshot: NativeSnapshot, ticks: int) -> NativeSnapshot:
     if gauss_next is not None:
         raise AssertionError("shuffle cannot populate the Gaussian cache")
     return NativeSnapshot(
+        snapshot.config_sha256,
+        snapshot.ruleset_sha256,
         timestep,
         snapshot.width,
         snapshot.height,

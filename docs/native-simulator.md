@@ -4,19 +4,22 @@ The Nim simulator implements the first parity slice of the pinned DTL
 Sugarscape engine. It exists to establish correctness and measure the ceiling
 of a native simulation loop before adding the remaining mechanics.
 
-The current mode is `reduced_two_resource_v3`. It supports sugar and spice,
+The current mode is `reduced_two_resource_v4`. It supports sugar and spice,
 cardinal movement and vision, toroidal wrapping, sequential turns, welfare
 ranking, harvest, metabolism, growback, starvation, aging, extinction, and
-multiple seats. Policies may be null or the exact unconditional `cell.welfare`
-movement rule. It rejects replacement, reproduction, trade, lending, disease,
-pollution, seasons, combat, trait overrides, and other SugarLang movement.
+multiple seats. Policies may be null or use the exact unconditional
+`cell.welfare` movement rule. Trait rules may initialize agent state. It rejects
+replacement, reproduction, trade, lending, disease progression, pollution,
+seasons, combat, and other SugarLang movement.
 
 The adapter exports every field needed to resume the supported model:
 
 - the pinned DTL commit and full CPython MT19937 state;
 - the shuffled live-agent order;
 - sugar and spice cells in DTL's x-major order, including occupancy;
-- agents sorted by ID, with both metabolisms and every welfare input;
+- agents sorted by ID, with post-depression base traits and separate disease
+  modifiers for movement, vision, metabolism, aggression, and fertility;
+- canonical configuration and seat-ordered ruleset SHA-256 hashes;
 - each origin cell's candidate range in DTL insertion order and distance; and
 - ordered starvation and aging events with agent ID, seat, age, and cause.
 
@@ -40,7 +43,7 @@ Compare Python and Nim implementations of the same reduced contract:
 
 ```sh
 PYTHONHASHSEED=0 .venv/bin/python tools/native_benchmark.py \
-  --ticks 1000000 --repeats 5 --output build/benchmarks/native-v3.json
+  --ticks 1000000 --repeats 5 --output build/benchmarks/native-v4.json
 ```
 
 Both timers cover the same state transition contract and begin after world
@@ -60,11 +63,14 @@ Reduced-mode throughput does not qualify the complete Commonwealth Coworld for
 the 30,000 whole-world ticks/second target. Qualification requires all of the
 following evidence:
 
-The seed-1729 Commonwealth world starts with 250 agents, two resources, 50
-diseases, finite ages, tagging, trade, lending, fertility, and 10% depression.
-Its first tick has 8 starvation deaths, 2 combat deaths, 45 trades, and 12
-disease spreaders. Native v3 covers sugar, spice, welfare, starvation, and
-aging only.
+The seed-1729 Commonwealth tick-zero audit has 250 agents, including 25
+depressed agents, 50 infected agents, and 50 agents with active modifiers. Its
+configuration hash is
+`21d01473529dff583f4c50021bb7e9aac618559c4eafb714ffba056566e3e74c`.
+Its only ruleset hash is
+`f13b0a218f455a9d06fe379d635043c1a5194d905e1dec1ea32f4a2efc671a37`.
+The current blockers are combat, trade, lending, reproduction, disease
+progression, and tagging. The adapter audits this world but rejects stepping it.
 
 1. The native loader accepts the canonical Commonwealth configuration and its
    bundled SugarLang policies without reducing features or population.
