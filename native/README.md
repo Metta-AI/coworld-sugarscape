@@ -21,11 +21,9 @@ snapshot to standard output:
 native/bin/sugarscape-native step --ticks 100 < input.json > output.json
 ```
 
-`bench` uses the same input and returns `ticks`, `elapsedNs`, and the final
-snapshot. Its monotonic timer covers only simulation steps, excluding process
-startup, input parsing, snapshot encoding, and output. `ticks` reports actual
-completed ticks and can be less than requested when the population becomes
-extinct.
+The [canonical Commonwealth benchmark](../docs/native-simulator.md) uses the
+`bench-worker` protocol to count completed ticks across isolated worlds. A
+world can complete fewer ticks than requested when its population becomes extinct.
 
 Snapshots contain x-major cells, ID-sorted agents, and the current shuffled
 `liveOrder`. They preserve DTL's ordered candidate and neighbor lists. They also
