@@ -1912,12 +1912,11 @@ proc stepOne*(world: var World) =
   let worldPopulation = world.agents.len
   template agentIndexById: untyped = world.agentIndexById
   var dead = initTable[int64, Death]()
-  var deadFlags = newSeq[bool](int(world.nextAgentId))
 
   var turnIndex = 0
   while turnIndex < world.liveOrder.len:
     let id = world.liveOrder[turnIndex]
-    if deadFlags[int(id)]:
+    if dead.hasKey(id):
       inc turnIndex
       continue
     let agentIndex = agentIndexById[id]
@@ -1950,7 +1949,7 @@ proc stepOne*(world: var World) =
       retaliators = initTable[int, float64]()
       for candidate in candidates:
         let occupantId = world.cells[candidate.target].occupantId
-        if occupantId != EmptyOccupant and not deadFlags[int(occupantId)]:
+        if occupantId != EmptyOccupant and not dead.hasKey(occupantId):
           let occupant {.cursor.} = world.agents[agentIndexById[occupantId]]
           let wealth = occupant.sugar + occupant.spice
           if not retaliators.hasKey(occupant.tribe) or retaliators[occupant.tribe] < wealth:
@@ -1965,7 +1964,7 @@ proc stepOne*(world: var World) =
       var spiceReward = 0.0
       var preyTribe = -1
       if occupantId != EmptyOccupant:
-        if deadFlags[int(occupantId)]:
+        if dead.hasKey(occupantId):
           continue
         let prey {.cursor.} = world.agents[agentIndexById[occupantId]]
         if aggression <= 0 or world.agents[agentIndex].tribe == prey.tribe or
@@ -1998,7 +1997,6 @@ proc stepOne*(world: var World) =
       world.agents[preyIndex].spice -= spiceLoot
       dead[preyId] = Death(id: preyId, seat: world.agents[preyIndex].seat,
         age: world.agents[preyIndex].age, cause: "combat")
-      deadFlags[int(preyId)] = true
       world.cells[destination].occupantId = EmptyOccupant
       world.doInheritance(preyIndex, agentIndexById, dead)
       world.clearDiseasesOnDeath(preyIndex)
@@ -2010,7 +2008,7 @@ proc stepOne*(world: var World) =
       world.agents[agentIndex].y = destination mod world.height
     for neighborCell in world.orderedNeighbors[destination]:
       let neighborId = world.cells[neighborCell].occupantId
-      if neighborId != EmptyOccupant and not deadFlags[int(neighborId)]:
+      if neighborId != EmptyOccupant and not dead.hasKey(neighborId):
         world.updateFriends(agentIndex, agentIndexById[neighborId])
 
     let sugarCollected = world.cells[destination].sugar
@@ -2037,7 +2035,7 @@ proc stepOne*(world: var World) =
         world.rng.pythonShuffle(neighbors)
         for neighbor in neighbors:
           let neighborId = world.cells[neighbor].occupantId
-          if neighborId != EmptyOccupant and not deadFlags[int(neighborId)]:
+          if neighborId != EmptyOccupant and not dead.hasKey(neighborId):
             let position = int(world.rng.randBelow(uint64(
               world.agents[agentIndex].tags.len)))
             if neighborId == id:
@@ -2049,8 +2047,6 @@ proc stepOne*(world: var World) =
               world.recomputeTribe(world.agents[neighborIndex])
       world.doTrading(id, agentIndexById, dead)
       world.doReproduction(id, agentIndexById, dead)
-      if world.nextAgentId > int64(deadFlags.len):
-        deadFlags.setLen(int(world.nextAgentId))
       world.doLending(id, agentIndexById, dead)
       world.doDisease(id, agentIndexById, dead)
       inc world.agents[agentIndex].age
@@ -2063,7 +2059,6 @@ proc stepOne*(world: var World) =
       world.cells[destination].occupantId = EmptyOccupant
       dead[id] = Death(id: id, seat: world.agents[agentIndex].seat,
         age: world.agents[agentIndex].age, cause: cause)
-      deadFlags[int(id)] = true
     if cause.len > 0:
       world.doInheritance(agentIndex, agentIndexById, dead)
       world.clearDiseasesOnDeath(agentIndex)
