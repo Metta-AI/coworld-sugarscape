@@ -159,3 +159,18 @@ def _random_expression(generator: random.Random, depth: int) -> object:
         return [operator] + [_random_expression(generator, depth + 1) for _ in range(3)]
     arity = generator.randint(2, 4) if operator in {"+", "-", "*", "/", "min", "max", "and", "or"} else 2
     return [operator] + [_random_expression(generator, depth + 1) for _ in range(arity)]
+
+
+def test_compiler_collects_features_from_conditions_and_all_branches() -> None:
+    from coworld.ruleset import FEATURE_INDEX
+
+    compiled = compile_ruleset({"version": 1, "movement": [
+        {"if": [">", ["get", "world.population"], 0],
+         "score": ["if", 1, ["get", "cell.sugar"], ["get", "agent.wealth"]]},
+        {"score": ["get", "cell.welfare"]},
+    ]})
+    assert compiled.feature_indices == frozenset(
+        FEATURE_INDEX[name]
+        for name in ("world.population", "cell.sugar", "agent.wealth", "cell.welfare")
+    )
+    assert compile_ruleset(None).feature_indices == frozenset()
