@@ -11,8 +11,8 @@ from coworld.config import build_dtl_config, resolve_episode_config
 from coworld.instrumentation import EpisodeInstrumentation
 from coworld.native_fixture import (
     NativeReferenceWorld,
-    build_native_v2_reference_world,
-    native_v2_config,
+    build_native_v3_reference_world,
+    native_v3_config,
 )
 from coworld.native_oracle import (
     SOURCE_PIN,
@@ -36,12 +36,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _supported_config() -> dict[str, object]:
-    return native_v2_config(seed=1729, timesteps=8)
+    return native_v3_config(seed=1729, timesteps=8)
 
 
 def _world(config: dict[str, object] | None = None) -> CoworldSugarscape:
     if config is None:
-        return build_native_v2_reference_world(seed=1729, timesteps=8)
+        return build_native_v3_reference_world(seed=1729, timesteps=8)
     resolved = resolve_episode_config(config or _supported_config())
     return NativeReferenceWorld(
         build_dtl_config(resolved),
@@ -81,6 +81,96 @@ def test_native_matches_pinned_dtl_after_each_tick() -> None:
         actual = step_native(snapshot_world(world), 1, binary=binary)
         world.doTimestep()
         assert actual == snapshot_world(world)
+
+
+def test_exact_cell_welfare_ruleset_matches_native() -> None:
+    binary = build_native_simulator()
+    resolved = resolve_episode_config(_supported_config())
+    ruleset = {"version": 1, "movement": [{"score": ["get", "cell.welfare"]}]}
+    world = NativeReferenceWorld(
+        build_dtl_config(resolved),
+        [compile_ruleset(ruleset), compile_ruleset(ruleset)],
+        parse_trait_ranges(resolved.get("trait_ranges")),
+        instrumentation=EpisodeInstrumentation(enabled=False),
+    )
+
+    for _ in range(4):
+        actual = step_native(snapshot_world(world), 1, binary=binary)
+        world.doTimestep()
+        assert actual == snapshot_world(world)
+
+
+def test_two_resource_welfare_can_reverse_the_sugar_only_winner() -> None:
+    binary = build_native_simulator()
+    config = _supported_config()
+    config.update(
+        {
+            "seats": 1,
+            "startingAgents": 1,
+            "agentLookaheadFactor": [0, 0],
+            "agentMovement": [1, 1],
+            "agentVision": [1, 1],
+            "agentSugarMetabolism": [1, 1],
+            "agentSpiceMetabolism": [3, 3],
+            "environmentMaxSugar": 0,
+            "environmentMaxSpice": 0,
+            "environmentSugarPeaks": [[2, 4, 0], [4, 2, 0]],
+            "environmentSpicePeaks": [[2, 2, 0], [4, 4, 0]],
+            "environmentSugarRegrowRate": 0,
+            "environmentSpiceRegrowRate": 0,
+        }
+    )
+    world = _world(config)
+    agent = world.agents[0]
+    agent.sugar = 10
+    agent.spice = 10
+    neighbors = list(agent.cell.ranges[1])
+    sugar_winner, spice_winner = neighbors[:2]
+    sugar_winner.sugar = sugar_winner.maxSugar = 9
+    sugar_winner.spice = sugar_winner.maxSpice = 1
+    spice_winner.sugar = spice_winner.maxSugar = 1
+    spice_winner.spice = spice_winner.maxSpice = 9
+    initial = snapshot_world(world)
+
+    actual = step_native(initial, 1, binary=binary)
+    world.doTimestep()
+
+    assert actual == snapshot_world(world)
+    assert (actual.agents[0][2], actual.agents[0][3]) == (
+        spice_winner.x,
+        spice_winner.y,
+    )
+    assert sugar_winner.sugar > spice_winner.sugar
+
+
+def test_exact_zero_spice_causes_dtl_and_native_starvation() -> None:
+    binary = build_native_simulator()
+    config = _supported_config()
+    config.update(
+        {
+            "seats": 1,
+            "startingAgents": 1,
+            "agentStartingSugar": [100, 100],
+            "agentSugarMetabolism": [0, 0],
+            "agentStartingSpice": [1, 1],
+            "agentSpiceMetabolism": [1, 1],
+            "environmentMaxSugar": 0,
+            "environmentMaxSpice": 0,
+            "environmentSugarPeaks": [[2, 4, 0], [4, 2, 0]],
+            "environmentSpicePeaks": [[2, 2, 0], [4, 4, 0]],
+            "environmentSugarRegrowRate": 0,
+            "environmentSpiceRegrowRate": 0,
+        }
+    )
+    world = _world(config)
+    initial = snapshot_world(world)
+
+    actual = step_native(initial, 1, binary=binary)
+    world.doTimestep()
+
+    assert actual == snapshot_world(world)
+    assert actual.deaths == ((0, 0, 0, "starvation"),)
+    assert all(cell[4] is None for cell in actual.cells)
 
 
 def test_python_contract_matches_native_for_long_resume() -> None:
@@ -124,7 +214,7 @@ def test_native_deaths_match_dtl_removal_order_and_state(
     assert actual.live_order == ()
     assert [death[3] for death in actual.deaths] == [cause] * 4
     assert [death[2] for death in actual.deaths] == [death_age] * 4
-    assert all(occupant is None for _sugar, _maximum, occupant in actual.cells)
+    assert all(cell[4] is None for cell in actual.cells)
 
 
 def test_native_benchmark_times_only_the_simulation_loop() -> None:
@@ -161,6 +251,12 @@ def test_python_and_native_benchmarks_run_the_same_contract() -> None:
             "maxSugar",
         ),
         (
+            lambda raw: raw["cells"][0].__setitem__(
+                "spice", raw["cells"][0]["maxSpice"] + 1
+            ),
+            "maxSpice",
+        ),
+        (
             lambda raw: raw["orderedCandidates"][0][0].__setitem__(1, 0),
             "candidate distance",
         ),
@@ -191,7 +287,7 @@ def test_validator_rejects_unimplemented_mechanics(
         validate_supported_world(_world(config))
 
 
-def test_validator_rejects_sugarlang_rules() -> None:
+def test_validator_rejects_other_sugarlang_rules() -> None:
     resolved = resolve_episode_config(_supported_config())
     ruleset = {"version": 1, "movement": [{"score": ["get", "cell.sugar"]}]}
     world = CoworldSugarscape(
@@ -201,7 +297,7 @@ def test_validator_rejects_sugarlang_rules() -> None:
         instrumentation=EpisodeInstrumentation(enabled=False),
     )
 
-    with pytest.raises(ValueError, match="SugarLang"):
+    with pytest.raises(ValueError, match="cell.welfare SugarLang"):
         validate_supported_world(world)
 
 

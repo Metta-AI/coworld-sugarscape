@@ -10,7 +10,7 @@ from typing import Mapping
 from .simulation import CoworldSugarscape
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 SOURCE_PIN = "585282e9ce7b22a33b89abb0d777917bd5887d1a"
 
 
@@ -42,11 +42,14 @@ class NativeSnapshot:
     width: int
     height: int
     sugar_regrow_rate: int | float
+    spice_regrow_rate: int | float
     max_cell_distance: int
     rng_words: tuple[int, ...]
     rng_index: int
     live_order: tuple[int, ...]
-    cells: tuple[tuple[int | float, int | float, int | None], ...]
+    cells: tuple[
+        tuple[int | float, int | float, int | float, int | float, int | None], ...
+    ]
     agents: tuple[tuple[int | float, ...], ...]
     ordered_candidates: tuple[tuple[tuple[int, int | float], ...], ...]
     deaths: tuple[tuple[int, int, int, str], ...]
@@ -62,6 +65,7 @@ class NativeSnapshot:
             "width",
             "height",
             "sugarRegrowRate",
+            "spiceRegrowRate",
             "maxCellDistance",
             "rng",
             "liveOrder",
@@ -114,16 +118,26 @@ class NativeSnapshot:
         for index, cell in enumerate(raw_cells):
             if not isinstance(cell, Mapping):
                 raise ValueError(f"cells[{index}] must be an object")
-            _closed(cell, {"sugar", "maxSugar", "occupantId"}, f"cells[{index}]")
+            _closed(
+                cell,
+                {"sugar", "maxSugar", "spice", "maxSpice", "occupantId"},
+                f"cells[{index}]",
+            )
             occupant = cell["occupantId"]
             sugar = _number(cell["sugar"], "cell.sugar")
             max_sugar = _number(cell["maxSugar"], "cell.maxSugar")
+            spice = _number(cell["spice"], "cell.spice")
+            max_spice = _number(cell["maxSpice"], "cell.maxSpice")
             if sugar > max_sugar:
                 raise ValueError("cell.sugar must not exceed cell.maxSugar")
+            if spice > max_spice:
+                raise ValueError("cell.spice must not exceed cell.maxSpice")
             cells.append(
                 (
                     sugar,
                     max_sugar,
+                    spice,
+                    max_spice,
                     None if occupant is None else _int(occupant, "cell.occupantId"),
                 )
             )
@@ -134,8 +148,10 @@ class NativeSnapshot:
             "x",
             "y",
             "sugar",
+            "spice",
             "age",
             "sugarMetabolism",
+            "spiceMetabolism",
             "vision",
             "movement",
             "maxAge",
@@ -155,8 +171,10 @@ class NativeSnapshot:
                 _int(agent["x"], "agent.x"),
                 _int(agent["y"], "agent.y"),
                 _number(agent["sugar"], "agent.sugar"),
+                _number(agent["spice"], "agent.spice"),
                 _int(agent["age"], "agent.age"),
                 _number(agent["sugarMetabolism"], "agent.sugarMetabolism"),
+                _number(agent["spiceMetabolism"], "agent.spiceMetabolism"),
                 _int(agent["vision"], "agent.vision"),
                 _int(agent["movement"], "agent.movement"),
                 max_age,
@@ -169,12 +187,12 @@ class NativeSnapshot:
         live_order = tuple(_int(value, "liveOrder") for value in raw_order)
         if ids != sorted(set(ids)) or sorted(live_order) != ids:
             raise ValueError("agents must be ID-sorted and liveOrder must be its permutation")
-        occupants = [occupant for _sugar, _maximum, occupant in cells if occupant is not None]
+        occupants = [cell[4] for cell in cells if cell[4] is not None]
         if sorted(occupants) != ids:
             raise ValueError("cell occupancy must match live agents")
         for agent in agents:
             cell_index = int(agent[2]) * height + int(agent[3])
-            if cells[cell_index][2] != int(agent[0]):
+            if cells[cell_index][4] != int(agent[0]):
                 raise ValueError("cell occupancy disagrees with agent position")
 
         candidates = []
@@ -220,6 +238,7 @@ class NativeSnapshot:
             width,
             height,
             _number(raw["sugarRegrowRate"], "sugarRegrowRate"),
+            _number(raw["spiceRegrowRate"], "spiceRegrowRate"),
             max_cell_distance,
             rng_words,
             rng_index,
@@ -238,6 +257,7 @@ class NativeSnapshot:
             "width": self.width,
             "height": self.height,
             "sugarRegrowRate": self.sugar_regrow_rate,
+            "spiceRegrowRate": self.spice_regrow_rate,
             "maxCellDistance": self.max_cell_distance,
             "rng": {
                 "version": 3,
@@ -247,16 +267,22 @@ class NativeSnapshot:
             },
             "liveOrder": list(self.live_order),
             "cells": [
-                {"sugar": sugar, "maxSugar": maximum, "occupantId": occupant}
-                for sugar, maximum, occupant in self.cells
+                {
+                    "sugar": sugar,
+                    "maxSugar": max_sugar,
+                    "spice": spice,
+                    "maxSpice": max_spice,
+                    "occupantId": occupant,
+                }
+                for sugar, max_sugar, spice, max_spice, occupant in self.cells
             ],
             "agents": [
                 dict(
                     zip(
                         (
-                            "id", "seat", "x", "y", "sugar", "age",
-                            "sugarMetabolism", "vision", "movement", "maxAge",
-                            "lookaheadFactor",
+                            "id", "seat", "x", "y", "sugar", "spice", "age",
+                            "sugarMetabolism", "spiceMetabolism", "vision",
+                            "movement", "maxAge", "lookaheadFactor",
                         ),
                         agent,
                         strict=True,
@@ -290,11 +316,6 @@ def validate_supported_world(world: CoworldSugarscape) -> None:
             config["environmentPollutionDiffusionDelay"] == 0,
             "pollution diffusion is unsupported",
         ),
-        (
-            config["environmentMaxSpice"] == 0
-            and config["environmentSpiceRegrowRate"] == 0,
-            "spice is unsupported",
-        ),
         (config["startingDiseases"] == 0, "disease is unsupported"),
         (config["agentReplacements"] == 0, "replacement is unsupported"),
         (config["agentTagging"] is False, "tagging is unsupported"),
@@ -307,25 +328,31 @@ def validate_supported_world(world: CoworldSugarscape) -> None:
             and config["agentUniversalSpice"] == [0, 0],
             "universal income is unsupported",
         ),
-        (config["agentSpiceMetabolism"] == [0, 0], "spice metabolism is unsupported"),
         (config["agentDecisionModelFactor"] == [0, 0], "ethical decisions are unsupported"),
     )
     for accepted, message in requirements:
         if not accepted:
             raise ValueError(message)
-    if any(not ruleset.is_null for ruleset in world.seat_manager.rulesets):
-        raise ValueError("SugarLang movement and trait overrides are unsupported")
+    welfare_ruleset = {
+        "version": 1,
+        "movement": [{"score": ["get", "cell.welfare"]}],
+    }
+    if any(
+        not ruleset.is_null and ruleset.normalized != welfare_ruleset
+        for ruleset in world.seat_manager.rulesets
+    ):
+        raise ValueError("only null or exact cell.welfare SugarLang rules are supported")
     for index, agent in enumerate(world.agents):
         if not agent.alive or agent.cell is None:
             raise ValueError(f"agents[{index}] must be alive and placed")
-        if agent.diseases or agent.spice != 0 or agent.spiceMetabolism != 0:
-            raise ValueError(f"agents[{index}] disease and spice state is unsupported")
+        if agent.diseases:
+            raise ValueError(f"agents[{index}] disease state is unsupported")
         if agent.movementModifier != 0 or agent.visionModifier != 0:
             raise ValueError(f"agents[{index}] movement and vision modifiers are unsupported")
     for column in world.environment.grid:
         for cell in column:
-            if cell.spice != 0 or cell.maxSpice != 0 or cell.pollution != 0:
-                raise ValueError("cell spice and pollution state is unsupported")
+            if cell.pollution != 0:
+                raise ValueError("cell pollution state is unsupported")
 
 
 def snapshot_world(world: CoworldSugarscape) -> NativeSnapshot:
@@ -335,7 +362,13 @@ def snapshot_world(world: CoworldSugarscape) -> NativeSnapshot:
     if version != 3 or gauss_next is not None:
         raise ValueError("native simulation requires an unbuffered CPython MT19937 state")
     cells = tuple(
-        (cell.sugar, cell.maxSugar, cell.agent.ID if cell.agent is not None else None)
+        (
+            cell.sugar,
+            cell.maxSugar,
+            cell.spice,
+            cell.maxSpice,
+            cell.agent.ID if cell.agent is not None else None,
+        )
         for column in environment.grid
         for cell in column
     )
@@ -346,8 +379,10 @@ def snapshot_world(world: CoworldSugarscape) -> NativeSnapshot:
             agent.cell.x,
             agent.cell.y,
             agent.sugar,
+            agent.spice,
             agent.age,
             agent.sugarMetabolism,
+            agent.spiceMetabolism,
             agent.findVision(),
             agent.findMovement(),
             agent.maxAge,
@@ -369,6 +404,7 @@ def snapshot_world(world: CoworldSugarscape) -> NativeSnapshot:
         environment.width,
         environment.height,
         environment.sugarRegrowRate,
+        environment.spiceRegrowRate,
         environment.maxCellDistance,
         tuple(state[:624]),
         state[624],
@@ -400,11 +436,12 @@ def step_python(snapshot: NativeSnapshot, ticks: int) -> NativeSnapshot:
         timestep += 1
         for cell in cells:
             cell[0] = min(cell[1], cell[0] + snapshot.sugar_regrow_rate)
+            cell[2] = min(cell[3], cell[2] + snapshot.spice_regrow_rate)
         rng.shuffle(live_order)
         for agent_id in live_order:
             agent = agents[agent_id]
             origin = int(agent[2]) * snapshot.height + int(agent[3])
-            cell_range = min(int(agent[7]), int(agent[8]), snapshot.max_cell_distance)
+            cell_range = min(int(agent[9]), int(agent[10]), snapshot.max_cell_distance)
             candidates = [
                 (target, distance)
                 for target, distance in snapshot.ordered_candidates[origin]
@@ -415,15 +452,19 @@ def step_python(snapshot: NativeSnapshot, ticks: int) -> NativeSnapshot:
             best_welfare = float("-inf")
             best_distance = float("inf")
             for target, distance in candidates:
-                if cells[target][2] is not None:
+                if cells[target][4] is not None:
                     continue
-                welfare = (
-                    1
-                    if agent[6] == 0
-                    else max(
-                        agent[4] + cells[target][0] - agent[6] * agent[10],
-                        0,
-                    )
+                total_metabolism = agent[7] + agent[8]
+                sugar_proportion = agent[7] / total_metabolism if total_metabolism else 0
+                spice_proportion = agent[8] / total_metabolism if total_metabolism else 0
+                adjusted_sugar = max(
+                    agent[4] + cells[target][0] - agent[7] * agent[12], 0
+                )
+                adjusted_spice = max(
+                    agent[5] + cells[target][2] - agent[8] * agent[12], 0
+                )
+                welfare = (adjusted_sugar**sugar_proportion) * (
+                    adjusted_spice**spice_proportion
                 )
                 if welfare > best_welfare or (
                     welfare == best_welfare and distance < best_distance
@@ -432,21 +473,26 @@ def step_python(snapshot: NativeSnapshot, ticks: int) -> NativeSnapshot:
                     best_welfare = welfare
                     best_distance = distance
             if destination != origin:
-                cells[origin][2] = None
-                cells[destination][2] = agent_id
+                cells[origin][4] = None
+                cells[destination][4] = agent_id
                 agent[2] = destination // snapshot.height
                 agent[3] = destination % snapshot.height
             agent[4] += cells[destination][0]
+            agent[5] += cells[destination][2]
             cells[destination][0] = 0
-            agent[4] -= agent[6]
-            if agent[6] != 0 and agent[4] <= 0:
-                cells[destination][2] = None
-                deaths.append((agent_id, int(agent[1]), int(agent[5]), "starvation"))
+            cells[destination][2] = 0
+            agent[4] -= agent[7]
+            agent[5] -= agent[8]
+            sugar_starved = agent[4] < 0 or (agent[4] <= 0 and agent[7] > 0)
+            spice_starved = agent[5] < 0 or (agent[5] <= 0 and agent[8] > 0)
+            if sugar_starved or spice_starved:
+                cells[destination][4] = None
+                deaths.append((agent_id, int(agent[1]), int(agent[6]), "starvation"))
                 continue
-            agent[5] += 1
-            if agent[9] != -1 and agent[5] >= agent[9]:
-                cells[destination][2] = None
-                deaths.append((agent_id, int(agent[1]), int(agent[5]), "aging"))
+            agent[6] += 1
+            if agent[11] != -1 and agent[6] >= agent[11]:
+                cells[destination][4] = None
+                deaths.append((agent_id, int(agent[1]), int(agent[6]), "aging"))
         for agent_id, _seat, _age, _cause in deaths:
             agents.pop(agent_id)
         dead_ids = {death[0] for death in deaths}
@@ -460,6 +506,7 @@ def step_python(snapshot: NativeSnapshot, ticks: int) -> NativeSnapshot:
         snapshot.width,
         snapshot.height,
         snapshot.sugar_regrow_rate,
+        snapshot.spice_regrow_rate,
         snapshot.max_cell_distance,
         tuple(state[:624]),
         state[624],

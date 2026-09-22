@@ -1,4 +1,4 @@
-"""Reference configuration for native v2 parity and throughput measurements."""
+"""Reference configuration for native v3 parity and throughput measurements."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ class NativeReferenceWorld(CoworldSugarscape):
         super().updateRuntimeStats()
 
 
-def native_v2_config(*, seed: int = 1729, timesteps: int = 10_000) -> dict[str, object]:
+def native_v3_config(*, seed: int = 1729, timesteps: int = 10_000) -> dict[str, object]:
     return {
         "seed": seed,
         "seats": 2,
@@ -39,8 +39,8 @@ def native_v2_config(*, seed: int = 1729, timesteps: int = 10_000) -> dict[str, 
         "agentMaxAge": [-1, -1],
         "agentMovement": [1, 2],
         "agentRacialTagStringLength": 0,
-        "agentSpiceMetabolism": [0, 0],
-        "agentStartingSpice": [0, 0],
+        "agentSpiceMetabolism": [1, 1],
+        "agentStartingSpice": [100, 100],
         "agentStartingSugar": [100, 100],
         "agentSugarMetabolism": [1, 1],
         "agentTagging": False,
@@ -50,13 +50,13 @@ def native_v2_config(*, seed: int = 1729, timesteps: int = 10_000) -> dict[str, 
         "agentUniversalSugar": [0, 0],
         "agentVision": [1, 2],
         "environmentHeight": 7,
-        "environmentMaxSpice": 0,
+        "environmentMaxSpice": 4,
         "environmentMaxSugar": 4,
         "environmentPollutionDiffusionDelay": 0,
         "environmentPollutionTimeframe": [0, 0],
         "environmentSeasonInterval": 0,
-        "environmentSpicePeaks": [[2, 2, 0], [4, 4, 0]],
-        "environmentSpiceRegrowRate": 0,
+        "environmentSpicePeaks": [[2, 2, 4], [4, 4, 4]],
+        "environmentSpiceRegrowRate": 1,
         "environmentSugarPeaks": [[2, 4, 4], [4, 2, 4]],
         "environmentSugarRegrowRate": 1,
         "environmentWidth": 7,
@@ -64,10 +64,10 @@ def native_v2_config(*, seed: int = 1729, timesteps: int = 10_000) -> dict[str, 
     }
 
 
-def build_native_v2_reference_world(
+def build_native_v3_reference_world(
     *, seed: int = 1729, timesteps: int = 10_000
 ) -> CoworldSugarscape:
-    resolved = resolve_episode_config(native_v2_config(seed=seed, timesteps=timesteps))
+    resolved = resolve_episode_config(native_v3_config(seed=seed, timesteps=timesteps))
     return NativeReferenceWorld(
         build_dtl_config(resolved),
         [compile_ruleset(None) for _ in range(int(resolved["seats"]))],

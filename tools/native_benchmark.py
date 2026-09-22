@@ -15,7 +15,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from coworld.native_fixture import build_native_v2_reference_world  # noqa: E402
+from coworld.native_fixture import build_native_v3_reference_world  # noqa: E402
 from coworld.native_oracle import snapshot_world  # noqa: E402
 from coworld.native_simulator import (  # noqa: E402
     benchmark_native,
@@ -42,7 +42,7 @@ def main() -> None:
 
     binary = build_native_simulator()
     initial = snapshot_world(
-        build_native_v2_reference_world(seed=args.seed, timesteps=args.ticks)
+        build_native_v3_reference_world(seed=args.seed, timesteps=args.ticks)
     )
     benchmark_python(initial, 1)
     benchmark_native(initial, 1, binary=binary)
@@ -60,7 +60,7 @@ def main() -> None:
     python_median = median(python_runs)
     native_median = median(native_runs)
     report = {
-        "mode": "reduced_single_resource_v2",
+        "mode": "reduced_two_resource_v3",
         "scope": "simulation_only",
         "worlds": 1,
         "ticks_per_run": args.ticks,
