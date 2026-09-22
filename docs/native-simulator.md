@@ -4,26 +4,27 @@ The Nim simulator implements the first parity slice of the pinned DTL
 Sugarscape engine. It exists to establish correctness and measure the ceiling
 of a native simulation loop before adding the remaining mechanics.
 
-The current mode is `reduced_fixed_population_v1`. It supports one sugar
+The current mode is `reduced_single_resource_v2`. It supports one sugar
 resource, cardinal movement and vision, toroidal wrapping, sequential turns,
-harvest, metabolism, growback, and multiple seats with null SugarLang rules.
-It rejects spice, death, replacement, reproduction, trade, lending, disease,
-pollution, seasons, combat, finite maximum age, trait overrides, and custom
-SugarLang movement.
+harvest, metabolism, growback, starvation, aging, extinction, and multiple
+seats with null SugarLang rules. It rejects spice, replacement, reproduction,
+trade, lending, disease, pollution, seasons, combat, trait overrides, and
+custom SugarLang movement.
 
 The adapter exports every field needed to resume the supported model:
 
 - the pinned DTL commit and full CPython MT19937 state;
 - the shuffled live-agent order;
 - cells in DTL's x-major order, including occupancy;
-- agents sorted by ID, with movement, vision, age, and welfare inputs; and
-- each origin cell's candidate range in DTL insertion order and distance.
+- agents sorted by ID, with movement, vision, age, and welfare inputs;
+- each origin cell's candidate range in DTL insertion order and distance; and
+- ordered starvation and aging events with agent ID, seat, age, and cause.
 
 Native output is parsed through the same closed schema. Four consecutive
 one-tick tests compare the native result with the pinned Python engine. Each
 boundary compares physical state, occupancy, live order, candidates, and the
-complete random state. This catches latent divergence before a later tick
-makes it visible.
+complete random state. Separate cases force starvation and aging for every
+agent. They compare event order, occupancy clearing, survivors, and extinction.
 
 Build and run the focused checks:
 
@@ -32,24 +33,42 @@ nim c -d:release -o:native/bin/sugarscape-native native/sugarscape_native.nim
 PYTHONHASHSEED=0 .venv/bin/python -m pytest -q tests/test_native_simulator.py
 ```
 
-Measure the native simulation loop:
+Compare Python and Nim implementations of the same reduced contract:
 
 ```sh
 PYTHONHASHSEED=0 .venv/bin/python tools/native_benchmark.py \
-  --ticks 1000000 --output build/benchmarks/native-v1.json
+  --ticks 1000000 --repeats 5 --output build/benchmarks/native-v2.json
 ```
 
-The Nim monotonic timer begins after input parsing and ends before snapshot
-serialization. Process startup, Python setup, replay, compression, observers,
-and result scoring are excluded. The report counts one completed world tick per
-simulation step and reports single-world throughput.
+Both timers cover the same state transition contract and begin after world
+construction. The Nim timer also excludes input parsing and output
+serialization. Process startup, replay, compression, observers, and result
+scoring are excluded. Every measured pair must finish with identical state.
+The report uses actual completed ticks, so extinction cannot inflate throughput.
 
-On the RTX 4090 GPU host, five 10,000,000-tick runs produced a median of
+On the RTX 4090 GPU host, five 10,000,000-tick v1 runs produced a median of
 1,465,047.5 whole-world ticks/second for the 7×7, four-agent reference world.
 The current Nim loop runs on the host CPU; the GPU identifies the target machine
 class and is not used by this reduced simulator.
 
-This reduced result is not evidence that the complete Commonwealth Coworld
-meets the 30,000 whole-world ticks/second target. The full engine must add each
-rejected mechanic with tick-by-tick parity before its throughput can be
-compared with that acceptance target.
+## Commonwealth qualification
+
+Reduced-mode throughput does not qualify the complete Commonwealth Coworld for
+the 30,000 whole-world ticks/second target. Qualification requires all of the
+following evidence:
+
+The seed-1729 Commonwealth world starts with 250 agents, two resources, 50
+diseases, finite ages, tagging, trade, lending, fertility, and 10% depression.
+Its first tick has 8 starvation deaths, 2 combat deaths, 45 trades, and 12
+disease spreaders. Native v2 covers the starvation and aging portions only.
+
+1. The native loader accepts the canonical Commonwealth configuration and its
+   bundled SugarLang policies without reducing features or population.
+2. Spice, reproduction, trade, lending, disease, tagging, combat, depression,
+   effective trait modifiers, and the baseline SugarLang rule have parity tests.
+3. Multiple fixed seeds match DTL after every tick for state, random state,
+   live order, deaths, runtime statistics, happiness, and wellness scoring.
+4. A GPU-host benchmark runs that exact configuration across parallel worlds.
+   It counts actual completed ticks over one shared wall-clock interval.
+5. Simulation throughput reaches 30,000 aggregate world ticks/second. Replay
+   capture and compression are measured in a separate result.
