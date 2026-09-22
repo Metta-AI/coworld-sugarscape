@@ -2,13 +2,15 @@
 
 The acceptance target is 30,000 completed whole-world ticks per wall-clock
 second, summed across parallel environments on one GPU machine. Agent count
-never multiplies this counter. The current Python engine runs on CPUs.
+never multiplies this counter. The target excludes replay recording and
+compression; replay overhead is measured separately. The current Python engine
+runs on CPUs.
 
 Run a bounded batch from the repository root:
 
 ```sh
 PYTHONHASHSEED=0 .venv/bin/python tools/benchmark_world_ticks.py \
-  --variant commonwealth --workers 16 --worlds 32 --timesteps 1000 \
+  --mode simulation --variant commonwealth --workers 16 --worlds 16 --timesteps 1000 \
   --output build/benchmarks/commonwealth-16.json
 ```
 
@@ -17,16 +19,25 @@ The output path must not exist. Each world uses a distinct seed beginning at
 configurations, rulesets, final populations, completed ticks, result/replay
 hashes, source hashes, Python version and CPU metadata.
 
-The denominator includes process startup and shutdown, world construction,
-simulation, statistics, scoring, replay compression and result transfer.
+Simulation mode creates one world per worker before a shared start signal;
+`--worlds` must equal `--workers`. The denominator runs from that signal through
+the last completed tick. It excludes process/world setup, observer measurements,
+scoring, replay, result hashing and transfer. Intrinsic DTL statistics remain
+because subsequent agent decisions consume them. Neither mode includes learning
+or neural-policy inference.
+
+Run the same seeds, worlds and timesteps with `--mode episodes` to measure the
+complete episode path, including setup, observers, scoring and replay. Its
+additional wall time includes all episode overhead, not only replay. Per-worker
+replay phase timings identify capture and serialization costs separately;
+summing those overlapping durations does not yield elapsed wall time.
+
 Counted ticks are actual completions; extinction does not earn unexecuted ticks.
-This is an end-to-end batch measurement, not a warmed simulation-kernel measurement.
-It includes neither learning nor neural-policy inference. Record GPU model,
-allocation, occupancy and CPU affinity alongside reports from GPU machines.
+Record GPU model, allocation, occupancy and CPU affinity alongside host reports.
 
 Processes isolate DTL's global random generator and agent-class substitution.
 Threads cannot provide that isolation. Worker count must not change per-world
-results or replay hashes. Compare identical seed ranges and configurations
+simulation state/RNG hashes, results or replay hashes. Compare identical seed ranges and configurations
 before interpreting throughput differences.
 
 The feature compiler records each ruleset's dependencies. Agent and world

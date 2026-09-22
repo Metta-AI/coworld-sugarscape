@@ -23,9 +23,10 @@ def test_spawned_workers_preserve_world_results_and_replay(tiny_episode_config):
         assert report['backend'] == 'cpu'
 
 
-def test_extinct_world_counts_actual_ticks(tiny_episode_config):
+@pytest.mark.parametrize('mode', ['episodes', 'simulation'])
+def test_extinct_world_counts_actual_ticks(tiny_episode_config, mode):
     config = {**tiny_episode_config, 'startingAgents': 0, 'agentReplacements': 0, 'keepAlive': False}
-    report = benchmark(config, workers=1, worlds=1, seed=17)
+    report = benchmark(config, workers=1, worlds=1, seed=17, mode=mode)
     assert report['completed_world_ticks'] == 0
     assert report['world_ticks_per_second'] == 0
 
@@ -34,3 +35,66 @@ def test_extinct_world_counts_actual_ticks(tiny_episode_config):
 def test_invalid_benchmark_dimensions(workers, worlds, seed):
     with pytest.raises(ValueError):
         benchmark({}, workers=workers, worlds=worlds, seed=seed)
+
+
+def test_simulation_matches_full_episode_each_tick(tiny_episode_config, monkeypatch):
+    import coworld.episode as episode
+    from benchmark_world_ticks import prepare_config, prepare_simulation, state_hash
+    from coworld.simulation import CoworldSugarscape
+
+    observed = []
+
+    class CapturedWorld(CoworldSugarscape):
+        def doTimestep(self):
+            super().doTimestep()
+            observed.append(state_hash(self))
+
+    monkeypatch.setattr(episode, 'CoworldSugarscape', CapturedWorld)
+    config = {**tiny_episode_config, 'timesteps': 20, 'agentReplacements': 8}
+    _, rulesets = prepare_config(config)
+    results, _, _ = episode.run_episode(config, rulesets, emit_timing_logs=False)
+    world, resolved, _ = prepare_simulation(config)
+    assert world.measurements is None
+    assert world.replay_writer is None
+    assert not world.instrumentation.enabled
+    plain = []
+    for _ in range(resolved['timesteps']):
+        if not world.agents and not world.keepAlive:
+            break
+        world.doTimestep()
+        plain.append(state_hash(world))
+    assert plain == observed
+    assert world.timestep == results['timesteps_completed']
+    assert len(world.agents) == results['result.population_final']
+
+
+def test_simulation_parallel_worlds_match_independent_runs(tiny_episode_config):
+    two = benchmark(tiny_episode_config, workers=2, worlds=2, seed=17, mode='simulation')
+    independent = [benchmark(tiny_episode_config, workers=1, worlds=1, seed=seed, mode='simulation')['worlds'][0] for seed in (17, 18)]
+    assert two['worlds'] == independent
+    assert two['completed_world_ticks'] == 8
+    assert not two['replay_enabled']
+    assert not two['measurement_enabled']
+    assert not two['inference_enabled']
+
+
+def test_simulation_requires_one_world_per_worker(tiny_episode_config):
+    with pytest.raises(ValueError, match='worlds == workers'):
+        benchmark(tiny_episode_config, workers=1, worlds=2, seed=17, mode='simulation')
+
+
+def test_simulation_preparation_failure_does_not_hang(tiny_episode_config):
+    import multiprocessing
+    before = {child.pid for child in multiprocessing.active_children()}
+    with pytest.raises((RuntimeError, EOFError)):
+        benchmark({**tiny_episode_config, 'targets': ['missing-target']}, workers=2, worlds=2, seed=17, mode='simulation', timeout=5)
+
+    assert {child.pid for child in multiprocessing.active_children()} == before
+
+
+def test_simulation_timeout_cleans_children(tiny_episode_config):
+    import multiprocessing
+    before = {child.pid for child in multiprocessing.active_children()}
+    with pytest.raises(TimeoutError):
+        benchmark(tiny_episode_config, workers=2, worlds=2, seed=17, mode='simulation', timeout=0.000001)
+    assert {child.pid for child in multiprocessing.active_children()} == before
