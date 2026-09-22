@@ -9,6 +9,7 @@ import pytest
 
 from coworld.config import build_dtl_config, resolve_episode_config
 from coworld.instrumentation import EpisodeInstrumentation
+from coworld.measurement import RollingMeasurements
 from coworld.native_fixture import (
     NativeReferenceWorld,
     build_native_v7_reference_world,
@@ -31,6 +32,7 @@ from coworld.native_simulator import (
 from coworld.ruleset import compile_ruleset
 from coworld.seats import parse_trait_ranges
 from coworld.simulation import CoworldSugarscape
+from coworld.targets import load_target_catalog
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -84,6 +86,61 @@ def test_native_matches_pinned_dtl_after_each_tick() -> None:
         actual = step_native(snapshot_world(world), 1, binary=binary)
         world.doTimestep()
         assert actual == snapshot_world(world)
+
+
+def test_native_tick_measurements_match_dtl_after_each_tick() -> None:
+    binary = build_native_simulator()
+    catalog = load_target_catalog()
+    dtl_measurements = RollingMeasurements(2, 4, catalog)
+    native_measurements = RollingMeasurements(2, 4, catalog)
+    world = _world()
+    world.measurements = dtl_measurements
+    snapshot = snapshot_world(world)
+
+    for _ in range(4):
+        snapshot = step_native(snapshot, 1, binary=binary)
+        native_measurements.record_inputs(snapshot.measurement_tick())
+        world.doTimestep()
+
+        assert native_measurements.all_histograms() == dtl_measurements.all_histograms()
+        native_wellness = native_measurements.wellness_means()
+        dtl_wellness = dtl_measurements.wellness_means()
+        assert [(value.agent_id, value.seat) for value in native_wellness] == [
+            (value.agent_id, value.seat) for value in dtl_wellness
+        ]
+        assert [value.wellness for value in native_wellness] == [
+            value.wellness for value in dtl_wellness
+        ]
+        assert [value.components for value in native_wellness] == [
+            value.components for value in dtl_wellness
+        ]
+
+
+def test_native_tick_measurements_include_dtl_death_ages_by_seat() -> None:
+    binary = build_native_simulator()
+    config = _supported_config()
+    config.update(
+        {
+            "agentStartingSugar": [1, 1],
+            "environmentMaxSugar": 0,
+            "environmentSugarPeaks": [[2, 4, 0], [4, 2, 0]],
+            "environmentSugarRegrowRate": 0,
+        }
+    )
+    catalog = load_target_catalog()
+    dtl_measurements = RollingMeasurements(2, 1, catalog)
+    native_measurements = RollingMeasurements(2, 1, catalog)
+    world = _world(config)
+    world.measurements = dtl_measurements
+
+    snapshot = step_native(snapshot_world(world), 1, binary=binary)
+    native_measurements.record_inputs(snapshot.measurement_tick())
+    world.doTimestep()
+
+    assert native_measurements.all_histograms() == dtl_measurements.all_histograms()
+    assert native_measurements.histogram(
+        "age_at_death", scope="global"
+    ).sample_count == len(snapshot.deaths)
 
 
 def _place_two_agents(world: CoworldSugarscape):

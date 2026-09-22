@@ -10,6 +10,7 @@ import math
 import random
 from typing import Mapping
 
+from .measurement import MeasurementAgent, MeasurementDeath, MeasurementTick
 from .ruleset import evaluate_reference, validate_ruleset
 from .simulation import CoworldSugarscape
 
@@ -100,6 +101,39 @@ class NativeSnapshot:
     diseases: tuple[tuple[object, ...], ...]
     remaining_disease_ids: tuple[int, ...]
     deaths: tuple[tuple[int, int, int, str], ...]
+
+    def measurement_tick(self) -> MeasurementTick:
+        """Convert this completed native tick into simulator-neutral measurements."""
+
+        return MeasurementTick(
+            agents=tuple(
+                MeasurementAgent(
+                    agent_id=int(agent[0]),
+                    seat=int(agent[1]),
+                    sugar=float(agent[4]),
+                    spice=float(agent[5]),
+                    age=float(agent[6]),
+                    tribe=int(agent[27]),
+                    sick=bool(agent[38]),
+                    trade_volume=float(agent[31]),
+                    sugar_price=float(agent[32]),
+                    spice_price=float(agent[33]),
+                    happiness=float(agent[71]),
+                    wellness_components=(
+                        float(agent[68]),
+                        float(agent[66]),
+                        float(agent[69]),
+                        float(agent[67]),
+                        float(agent[70]),
+                    ),
+                )
+                for agent in self.agents
+            ),
+            deaths=tuple(
+                MeasurementDeath(seat=seat, age=float(age))
+                for _agent_id, seat, age, _cause in self.deaths
+            ),
+        )
 
     @classmethod
     def from_json(cls, raw: object) -> NativeSnapshot:
