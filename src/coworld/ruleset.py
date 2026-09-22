@@ -127,6 +127,7 @@ class CompiledRuleset:
     movement: tuple[CompiledMovementRule, ...] | None
     node_count: int
     byte_count: int
+    feature_indices: frozenset[int]
 
     @property
     def is_null(self) -> bool:
@@ -146,10 +147,11 @@ class CompiledRuleset:
 class FeatureContext:
     """Fixed-size feature storage reused across candidate-cell evaluations."""
 
-    __slots__ = ("_values",)
+    __slots__ = ("_values", "_cell_indices")
 
-    def __init__(self) -> None:
+    def __init__(self, feature_indices: frozenset[int] = frozenset(range(len(FEATURE_NAMES)))) -> None:
         self._values = [0.0] * len(FEATURE_NAMES)
+        self._cell_indices = tuple(sorted(index for index in feature_indices if 10 <= index < 17))
 
     def value(self, index: int) -> float:
         """Return a feature by its compiler-resolved index."""
@@ -209,13 +211,9 @@ class FeatureContext:
         """Overwrite the candidate-cell slots before one score evaluation."""
 
         values = self._values
-        values[10] = _finite(sugar)
-        values[11] = _finite(spice)
-        values[12] = _finite(pollution)
-        values[13] = _finite(distance)
-        values[14] = _finite(occupied)
-        values[15] = _finite(prey_wealth)
-        values[16] = _finite(welfare)
+        candidates = (sugar, spice, pollution, distance, occupied, prey_wealth, welfare)
+        for index in self._cell_indices:
+            values[index] = _finite(candidates[index - 10])
 
     def set_world_features(
         self,
@@ -384,7 +382,7 @@ def compile_ruleset(
 
     normalized = result.normalized
     if normalized is None:
-        return CompiledRuleset(None, TraitOverrides(), None, result.node_count, result.byte_count)
+        return CompiledRuleset(None, TraitOverrides(), None, result.node_count, result.byte_count, frozenset())
 
     traits_data = normalized.get("traits", {})
     assert isinstance(traits_data, dict)
@@ -392,18 +390,19 @@ def compile_ruleset(
 
     movement_data = normalized.get("movement")
     movement = None
+    feature_indices: set[int] = set()
     if movement_data is not None:
         assert isinstance(movement_data, list)
         compiled_rules: list[CompiledMovementRule] = []
         for rule in movement_data:
             assert isinstance(rule, dict)
-            condition = CompiledExpression(_compile_expression(rule["if"])) if "if" in rule else None
+            condition = CompiledExpression(_compile_expression(rule["if"], feature_indices)) if "if" in rule else None
             compiled_rules.append(
-                CompiledMovementRule(condition, CompiledExpression(_compile_expression(rule["score"])))
+                CompiledMovementRule(condition, CompiledExpression(_compile_expression(rule["score"], feature_indices)))
             )
         movement = tuple(compiled_rules)
 
-    return CompiledRuleset(normalized, traits, movement, result.node_count, result.byte_count)
+    return CompiledRuleset(normalized, traits, movement, result.node_count, result.byte_count, frozenset(feature_indices))
 
 
 def evaluate_reference(expression: object, features: Mapping[str, float]) -> float:
@@ -488,7 +487,7 @@ def _validate_movement(
         errors.append(ValidationIssue("$.movement[-1]", 'final movement rule must omit "if"'))
 
 
-def _compile_expression(expression: object) -> Evaluator:
+def _compile_expression(expression: object, feature_indices: set[int]) -> Evaluator:
     if _is_number(expression):
         literal = _finite(float(expression))
 
@@ -502,13 +501,14 @@ def _compile_expression(expression: object) -> Evaluator:
     assert isinstance(operator, str)
     if operator == "get":
         index = FEATURE_INDEX[expression[1]]
+        feature_indices.add(index)
 
         def evaluate_feature(context: FeatureContext) -> float:
             return context.value(index)
 
         return evaluate_feature
 
-    compiled_arguments = tuple(_compile_expression(argument) for argument in expression[1:])
+    compiled_arguments = tuple(_compile_expression(argument, feature_indices) for argument in expression[1:])
     if operator == "and":
         def evaluate_and(context: FeatureContext) -> float:
             for argument in compiled_arguments:

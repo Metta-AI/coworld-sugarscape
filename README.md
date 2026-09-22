@@ -49,6 +49,8 @@ identifies the trusted CLI, shared contracts, and delivery code. The
 [rollout checklist](docs/dtl-sync.md#hosted-acceptance-and-week-one-checks) covers
 activation and recovery. CI runs functional tests in parallel and performance
 tests serially to avoid CPU contention in timing assertions.
+See [whole-world throughput](docs/world-tick-throughput.md) for the parallel
+benchmark and the 30,000 world-ticks/sec acceptance target.
 
 New here? Start with [`docs/getting-started.md`](docs/getting-started.md) —
 the game, the three leagues, local runs, the Ruleset Studio, and how to join
