@@ -5,7 +5,7 @@ import ../sugarscape_native
 proc initialSnapshot(): JsonNode =
   let fixture = parseFile(currentSourcePath.parentDir / "fixtures" / "python_random_1729.json")
   %*{
-    "schemaVersion": 5,
+    "schemaVersion": 6,
     "sourcePin": "585282e9ce7b22a33b89abb0d777917bd5887d1a",
     "configurationSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "rulesetSha256": [
@@ -40,6 +40,10 @@ proc initialSnapshot(): JsonNode =
         "depressed": false, "happinessUnit": 1, "maxFriends": 0,
         "friendlinessModifier": 0, "happinessModifier": 0,
         "tags": newJNull(), "tribe": newJNull(), "tagging": false,
+        "tradeFactor": 0, "marginalRateOfSubstitution": 1, "tradeVolume": 0,
+        "sugarPrice": 0, "spicePrice": 0, "lastTradeTimestep": -1,
+        "lastTradePartners": 0, "diseaseProtectionChance": 0,
+        "immuneSystem": newJNull(), "diseases": [],
       },
     ],
     "orderedCandidates": [
@@ -48,6 +52,7 @@ proc initialSnapshot(): JsonNode =
       [[1, 1], [0, 1]],
     ],
     "orderedNeighbors": [[2, 1, 1, 2], [0, 2, 2, 0], [1, 0, 0, 1]],
+    "diseases": [], "remainingDiseaseIds": [],
     "deaths": [],
   }
 
@@ -91,6 +96,10 @@ suite "native world":
         "depressed": false, "happinessUnit": 1, "maxFriends": 0,
         "friendlinessModifier": 0, "happinessModifier": 0,
         "tags": newJNull(), "tribe": newJNull(), "tagging": false,
+        "tradeFactor": 0, "marginalRateOfSubstitution": 1, "tradeVolume": 0,
+        "sugarPrice": 0, "spicePrice": 0, "lastTradeTimestep": -1,
+        "lastTradePartners": 0, "diseaseProtectionChance": 0,
+        "immuneSystem": newJNull(), "diseases": [],
       },
       {
         "id": 20, "seat": 1, "x": 1, "y": 0, "sugar": 10, "spice": 0, "age": 2,
@@ -103,6 +112,10 @@ suite "native world":
         "depressed": false, "happinessUnit": 1, "maxFriends": 0,
         "friendlinessModifier": 0, "happinessModifier": 0,
         "tags": newJNull(), "tribe": newJNull(), "tagging": false,
+        "tradeFactor": 0, "marginalRateOfSubstitution": 1, "tradeVolume": 0,
+        "sugarPrice": 0, "spicePrice": 0, "lastTradeTimestep": -1,
+        "lastTradePartners": 0, "diseaseProtectionChance": 0,
+        "immuneSystem": newJNull(), "diseases": [],
       },
     ]
     node["orderedCandidates"] = %*[[[1, 1]], [[0, 1]]]
