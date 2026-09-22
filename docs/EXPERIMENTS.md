@@ -102,21 +102,3 @@ models at 5,000 ticks during validation. Final populations were 1,219 (altruist)
 Python version and platform differences may also
 prevent exact historical numerical agreement; retain that provenance. Do not
 replace the current Coworld engine pin with the historical release.
-
-Completed paper runs report monotonic wall seconds and world ticks per second.
-Timing covers the historical Python subprocess, including startup and log output.
-A world tick advances the entire society; it is not an individual agent step.
-These CPU measurements do not establish GPU training throughput. Timings vary
-between runs; compare trajectory hashes when checking reproducibility.
-
-## GPU-machine throughput acceptance
-
-The target is sustained throughput of at least 30,000 whole-world ticks per
-second, summed across parallel environments on a GPU machine. Compute the rate
-as total completed world ticks across all environments divided by their shared
-elapsed wall-time window. Each world tick counts once, regardless of agent count.
-
-Record the GPU model, environment configuration, parallel environment count,
-and whether the measured workload includes policy inference or training.
-Hardware and parallelism remain unspecified. The single-environment CPU timings
-above do not validate this aggregate GPU-machine requirement.
