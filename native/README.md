@@ -32,8 +32,9 @@ Snapshots contain x-major cells, ID-sorted agents, and the current shuffled
 contain the 624-word Python MT19937 state and its index. The Gaussian cache must
 be empty. Reloading a snapshot continues the same random stream.
 
-Python records canonical configuration and per-seat ruleset hashes. Nim validates
-their format and preserves them. It cannot recompute them from a snapshot.
+Python records canonical configuration and per-seat ruleset hashes. The snapshot
+also carries each normalized ruleset and prior-tick world statistics. Nim validates
+and preserves this input. It cannot recompute the hashes from a snapshot.
 
 Both resources grow first. The engine shuffles the agent list, then processes
 each agent sequentially. It shuffles the four cardinal rays within the agent's vision and
@@ -66,6 +67,6 @@ Lending preserves ordered loan lists, repayment, refinancing, and children debt
 inheritance. Dead-creditor tombstones retain the relations needed after resume.
 
 This slice does not implement replacement, scheduled disease introduction,
-pollution, seasons, leaders, non-children inheritance, or general SugarLang
-policies. The closed snapshot schema rejects additional fields, RNGs, and
-Gaussian cache state.
+pollution, seasons, leaders, or non-children inheritance. It evaluates the
+complete validated SugarLang movement language carried by the snapshot. The
+closed snapshot schema rejects additional fields, RNGs, and Gaussian cache state.

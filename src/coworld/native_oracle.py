@@ -10,14 +10,12 @@ import math
 import random
 from typing import Mapping
 
+from .ruleset import evaluate_reference, validate_ruleset
 from .simulation import CoworldSugarscape
 
 
 SCHEMA_VERSION = 7
 SOURCE_PIN = "585282e9ce7b22a33b89abb0d777917bd5887d1a"
-_WELFARE_MOVEMENT = [{"score": ["get", "cell.welfare"]}]
-
-
 def _closed(raw: Mapping[str, object], expected: set[str], location: str) -> None:
     if set(raw) != expected:
         raise ValueError(f"{location} fields must be {', '.join(sorted(expected))}")
@@ -71,18 +69,14 @@ def _sha256(value: object, location: str) -> str:
     return value
 
 
-def _supported_ruleset(ruleset: object) -> bool:
-    if ruleset.is_null:
-        return True
-    normalized = ruleset.normalized
-    return normalized.get("movement", _WELFARE_MOVEMENT) == _WELFARE_MOVEMENT
-
-
 @dataclass(frozen=True)
 class NativeSnapshot:
     config_sha256: str
     ruleset_sha256: tuple[str, ...]
+    rulesets: tuple[object, ...]
     timestep: int
+    world_gini: float
+    world_mean_wealth: float
     width: int
     height: int
     sugar_regrow_rate: int | float
@@ -116,7 +110,10 @@ class NativeSnapshot:
             "sourcePin",
             "configurationSha256",
             "rulesetSha256",
+            "rulesets",
             "timestep",
+            "worldGini",
+            "worldMeanWealth",
             "width",
             "height",
             "sugarRegrowRate",
@@ -152,6 +149,23 @@ class NativeSnapshot:
             _sha256(value, f"rulesetSha256[{index}]")
             for index, value in enumerate(raw_ruleset_hashes)
         )
+        raw_rulesets = raw["rulesets"]
+        if not isinstance(raw_rulesets, list) or len(raw_rulesets) != len(
+            ruleset_sha256
+        ):
+            raise ValueError("rulesets must contain one normalized ruleset per hash")
+        rulesets = []
+        for index, value in enumerate(raw_rulesets):
+            validation = validate_ruleset(value)
+            if not validation.valid or validation.normalized != value:
+                raise ValueError(
+                    f"rulesets[{index}] must be a normalized SugarLang ruleset"
+                )
+            if _digest(value) != ruleset_sha256[index]:
+                raise ValueError(
+                    f"rulesets[{index}] does not match rulesetSha256[{index}]"
+                )
+            rulesets.append(value)
         width = _int(raw["width"], "width", 1)
         height = _int(raw["height"], "height", 1)
         max_cell_distance = _int(raw["maxCellDistance"], "maxCellDistance")
@@ -858,7 +872,10 @@ class NativeSnapshot:
         return cls(
             config_sha256,
             ruleset_sha256,
+            tuple(rulesets),
             _int(raw["timestep"], "timestep"),
+            _number(raw["worldGini"], "worldGini"),
+            _number(raw["worldMeanWealth"], "worldMeanWealth"),
             width,
             height,
             _number(raw["sugarRegrowRate"], "sugarRegrowRate"),
@@ -888,7 +905,10 @@ class NativeSnapshot:
             "sourcePin": SOURCE_PIN,
             "configurationSha256": self.config_sha256,
             "rulesetSha256": list(self.ruleset_sha256),
+            "rulesets": list(self.rulesets),
             "timestep": self.timestep,
+            "worldGini": self.world_gini,
+            "worldMeanWealth": self.world_mean_wealth,
             "width": self.width,
             "height": self.height,
             "sugarRegrowRate": self.sugar_regrow_rate,
@@ -1148,8 +1168,6 @@ def validate_supported_world(world: CoworldSugarscape) -> None:
     for accepted, message in requirements:
         if not accepted:
             raise ValueError(message)
-    if any(not _supported_ruleset(ruleset) for ruleset in world.seat_manager.rulesets):
-        raise ValueError("only null or exact cell.welfare movement rules are supported")
     for index, agent in enumerate(world.agents):
         if not agent.alive or agent.cell is None:
             raise ValueError(f"agents[{index}] must be alive and placed")
@@ -1388,7 +1406,10 @@ def snapshot_world(world: CoworldSugarscape) -> NativeSnapshot:
     return NativeSnapshot(
         _digest(world.configuration),
         tuple(_digest(ruleset.normalized) for ruleset in world.seat_manager.rulesets),
+        tuple(ruleset.normalized for ruleset in world.seat_manager.rulesets),
         world.timestep,
+        world.runtimeStats["giniCoefficient"],
+        world.runtimeStats["meanWealth"],
         environment.width,
         environment.height,
         environment.sugarRegrowRate,
@@ -1440,6 +1461,79 @@ def step_python(snapshot: NativeSnapshot, ticks: int) -> NativeSnapshot:
     timestep = snapshot.timestep
     deaths = list(snapshot.deaths)
     next_agent_id = snapshot.next_agent_id
+    world_gini = snapshot.world_gini
+    world_mean_wealth = snapshot.world_mean_wealth
+
+    def movement_score(
+        ruleset: object,
+        agent: list[object],
+        target: int,
+        distance: int | float,
+        welfare: float,
+        population: int,
+    ) -> float:
+        if ruleset is None or "movement" not in ruleset:
+            return welfare
+        sugar_metabolism, spice_metabolism = metabolisms(agent)
+        sugar_need = agent[4] / sugar_metabolism if sugar_metabolism > 0 else 1
+        spice_need = agent[5] / spice_metabolism if spice_metabolism > 0 else 1
+        occupant_id = cells[target][4]
+        prey_wealth = (
+            agents[occupant_id][4] + agents[occupant_id][5]
+            if occupant_id is not None
+            else 0
+        )
+        features = {
+            "agent.sugar": agent[4],
+            "agent.spice": agent[5],
+            "agent.wealth": agent[4] + agent[5],
+            "agent.sugarMetabolism": sugar_metabolism,
+            "agent.spiceMetabolism": spice_metabolism,
+            "agent.vision": max(0, int(agent[9]) + int(agent[13])),
+            "agent.movement": max(0, int(agent[10]) + int(agent[14])),
+            "agent.age": agent[6],
+            "agent.ttl": min(
+                agent[4] / sugar_metabolism if sugar_metabolism > 0 else 2**63 - 1,
+                agent[5] / spice_metabolism if spice_metabolism > 0 else 2**63 - 1,
+            ),
+            "agent.mrs": (
+                agent[29] * (spice_need / sugar_need) if sugar_need != 0 else 0
+            ),
+            "cell.sugar": cells[target][0],
+            "cell.spice": cells[target][2],
+            "cell.pollution": 0,
+            "cell.distance": distance,
+            "cell.occupied": 1 if occupant_id is not None else 0,
+            "cell.preyWealth": prey_wealth,
+            "cell.welfare": welfare,
+            "world.timestep": timestep,
+            "world.population": population,
+            "world.gini": world_gini,
+            "world.meanWealth": world_mean_wealth,
+        }
+        for rule in ruleset["movement"]:
+            if "if" not in rule or evaluate_reference(rule["if"], features) != 0:
+                return evaluate_reference(rule["score"], features)
+        raise AssertionError("normalized movement rules end unconditionally")
+
+    def world_statistics() -> tuple[float, float]:
+        wealths = sorted(agent[4] + agent[5] for agent in agents.values())
+        if not wealths:
+            return 0, 0
+        total = sum(wealths)
+        if total == 0:
+            gini = 1
+        else:
+            cumulative = 0.0
+            area = 0.0
+            for wealth in wealths[:-1]:
+                cumulative += wealth
+                area += cumulative / total
+            cumulative += wealths[-1]
+            area += (cumulative / 2) / total
+            area /= len(wealths)
+            gini = round((0.5 - area) / 0.5, 3)
+        return gini, round(total / len(wealths), 2)
 
     def fertile(agent: list[object]) -> bool:
         return (
@@ -1817,6 +1911,7 @@ def step_python(snapshot: NativeSnapshot, ticks: int) -> NativeSnapshot:
             break
         deaths_by_id: dict[int, tuple[int, int, int, str]] = {}
         timestep += 1
+        world_population = len(agents)
         for cell in cells:
             cell[0] = min(cell[1], cell[0] + snapshot.sugar_regrow_rate)
             cell[2] = min(cell[3], cell[2] + snapshot.spice_regrow_rate)
@@ -1901,11 +1996,19 @@ def step_python(snapshot: NativeSnapshot, ticks: int) -> NativeSnapshot:
                     agent[4] + agent[5] + welfare
                 ):
                     continue
-                if welfare > best_welfare or (
-                    welfare == best_welfare and distance < best_distance
+                score = movement_score(
+                    snapshot.rulesets[int(agent[1])],
+                    agent,
+                    target,
+                    distance,
+                    welfare,
+                    world_population,
+                )
+                if score > best_welfare or (
+                    score == best_welfare and distance < best_distance
                 ):
                     destination = target
-                    best_welfare = welfare
+                    best_welfare = score
                     best_distance = distance
             prey_id = cells[destination][4]
             if destination != origin and prey_id is not None:
@@ -2215,6 +2318,7 @@ def step_python(snapshot: NativeSnapshot, ticks: int) -> NativeSnapshot:
             agents.pop(agent_id)
         dead_ids = {death[0] for death in deaths}
         live_order = [agent_id for agent_id in live_order if agent_id not in dead_ids]
+        world_gini, world_mean_wealth = world_statistics()
 
     _version, state, gauss_next = rng.getstate()
     if gauss_next is not None:
@@ -2222,7 +2326,10 @@ def step_python(snapshot: NativeSnapshot, ticks: int) -> NativeSnapshot:
     return NativeSnapshot(
         snapshot.config_sha256,
         snapshot.ruleset_sha256,
+        snapshot.rulesets,
         timestep,
+        world_gini,
+        world_mean_wealth,
         snapshot.width,
         snapshot.height,
         snapshot.sugar_regrow_rate,

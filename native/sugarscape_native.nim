@@ -143,11 +143,41 @@ type
     age*: int64
     cause*: string
 
+  SugarLangKind = enum
+    slLiteral, slFeature, slAdd, slSubtract, slMultiply, slDivide, slMinimum,
+    slMaximum, slAbsolute, slNegate, slNot, slPower, slLess, slLessEqual,
+    slGreater, slGreaterEqual, slEqual, slNotEqual, slAnd, slOr, slIf
+
+  SugarLangFeature = enum
+    sfAgentSugar, sfAgentSpice, sfAgentWealth, sfAgentSugarMetabolism,
+    sfAgentSpiceMetabolism, sfAgentVision, sfAgentMovement, sfAgentAge,
+    sfAgentTtl, sfAgentMrs, sfCellSugar, sfCellSpice, sfCellPollution,
+    sfCellDistance, sfCellOccupied, sfCellPreyWealth, sfCellWelfare,
+    sfWorldTimestep, sfWorldPopulation, sfWorldGini, sfWorldMeanWealth
+
+  SugarLangExpression = ref object
+    kind: SugarLangKind
+    literal: float64
+    feature: SugarLangFeature
+    operands: seq[SugarLangExpression]
+
+  SugarLangRule = object
+    hasCondition: bool
+    condition: SugarLangExpression
+    score: SugarLangExpression
+
+  CompiledRuleset = object
+    useDefaultMovement: bool
+    movement: seq[SugarLangRule]
+
   World* = object
     sourcePin*: string
     configurationSha256*: string
     rulesetSha256*: seq[string]
+    rulesets*: seq[JsonNode]
     timestep*: int64
+    worldGini*: float64
+    worldMeanWealth*: float64
     width*: int
     height*: int
     sugarRegrowRate*: float64
@@ -168,6 +198,9 @@ type
     diseases*: seq[Disease]
     remainingDiseaseIds*: seq[int]
     deaths*: seq[Death]
+    parentChoiceTimestep: int64
+    parentChoiceByField: Table[string, bool]
+    compiledRulesets: seq[CompiledRuleset]
 
 proc twist(rng: var PythonMt19937) =
   const
@@ -276,10 +309,15 @@ proc seedFromMd5(rng: var PythonMt19937, value: string, addend: uint64) =
     carry = (carry shr 32) + (sum shr 32)
   rng.seedWords(words)
 
-proc chooseParent(first, second: int, field: string, timestep: int64): int =
-  var local: PythonMt19937
-  local.seedFromMd5(field, uint64(timestep))
-  if local.randBelow(2) == 0: first else: second
+proc chooseParent(world: var World, first, second: int, field: string): int =
+  if world.parentChoiceTimestep != world.timestep:
+    world.parentChoiceTimestep = world.timestep
+    world.parentChoiceByField.clear()
+  if not world.parentChoiceByField.hasKey(field):
+    var local: PythonMt19937
+    local.seedFromMd5(field, uint64(world.timestep))
+    world.parentChoiceByField[field] = local.randBelow(2) == 0
+  if world.parentChoiceByField[field]: first else: second
 
 proc requireFields(node: JsonNode, expected: openArray[string], context: string) =
   doAssert node.kind == JObject, context & " must be an object"
@@ -311,6 +349,91 @@ proc isSha256(value: string): bool =
       return false
   true
 
+proc compileSugarLang(expression: JsonNode): SugarLangExpression =
+  if expression.kind in {JInt, JFloat}:
+    return SugarLangExpression(kind: slLiteral, literal: expression.getFloat())
+  doAssert expression.kind == JArray and expression.len > 0 and expression[0].kind == JString,
+    "SugarLang expression must be a number or nonempty operator array"
+  let operator = expression[0].getStr()
+  if operator == "get":
+    doAssert expression.len == 2 and expression[1].kind == JString,
+      "SugarLang get requires one feature name"
+    result = SugarLangExpression(kind: slFeature)
+    result.feature = case expression[1].getStr()
+      of "agent.sugar": sfAgentSugar
+      of "agent.spice": sfAgentSpice
+      of "agent.wealth": sfAgentWealth
+      of "agent.sugarMetabolism": sfAgentSugarMetabolism
+      of "agent.spiceMetabolism": sfAgentSpiceMetabolism
+      of "agent.vision": sfAgentVision
+      of "agent.movement": sfAgentMovement
+      of "agent.age": sfAgentAge
+      of "agent.ttl": sfAgentTtl
+      of "agent.mrs": sfAgentMrs
+      of "cell.sugar": sfCellSugar
+      of "cell.spice": sfCellSpice
+      of "cell.pollution": sfCellPollution
+      of "cell.distance": sfCellDistance
+      of "cell.occupied": sfCellOccupied
+      of "cell.preyWealth": sfCellPreyWealth
+      of "cell.welfare": sfCellWelfare
+      of "world.timestep": sfWorldTimestep
+      of "world.population": sfWorldPopulation
+      of "world.gini": sfWorldGini
+      of "world.meanWealth": sfWorldMeanWealth
+      else: raiseAssert "unknown SugarLang feature " & expression[1].getStr()
+    return
+  result = SugarLangExpression()
+  result.kind = case operator
+    of "+": slAdd
+    of "-": slSubtract
+    of "*": slMultiply
+    of "/": slDivide
+    of "min": slMinimum
+    of "max": slMaximum
+    of "abs": slAbsolute
+    of "neg": slNegate
+    of "not": slNot
+    of "pow": slPower
+    of "<": slLess
+    of "<=": slLessEqual
+    of ">": slGreater
+    of ">=": slGreaterEqual
+    of "==": slEqual
+    of "!=": slNotEqual
+    of "and": slAnd
+    of "or": slOr
+    of "if": slIf
+    else: raiseAssert "unknown SugarLang operator " & operator
+  for index in 1 ..< expression.len:
+    result.operands.add(compileSugarLang(expression[index]))
+  case result.kind
+  of slAdd, slSubtract, slMultiply, slDivide, slMinimum, slMaximum, slAnd, slOr:
+    doAssert result.operands.len >= 2, operator & " requires at least two operands"
+  of slAbsolute, slNegate, slNot:
+    doAssert result.operands.len == 1, operator & " requires one operand"
+  of slPower, slLess, slLessEqual, slGreater, slGreaterEqual, slEqual, slNotEqual:
+    doAssert result.operands.len == 2, operator & " requires two operands"
+  of slIf:
+    doAssert result.operands.len == 3, "if requires three operands"
+  of slLiteral, slFeature:
+    raiseAssert "literal and feature expressions return before arity validation"
+
+proc compileRuleset(ruleset: JsonNode): CompiledRuleset =
+  if ruleset.kind == JNull or not ruleset.hasKey("movement"):
+    result.useDefaultMovement = true
+    return
+  doAssert ruleset["movement"].kind == JArray and ruleset["movement"].len > 0,
+    "SugarLang movement must contain at least one rule"
+  for rule in ruleset["movement"].items:
+    doAssert rule.kind == JObject and rule.hasKey("score"),
+      "SugarLang movement rules require a score"
+    var compiled = SugarLangRule(score: compileSugarLang(rule["score"]))
+    if rule.hasKey("if"):
+      compiled.hasCondition = true
+      compiled.condition = compileSugarLang(rule["if"])
+    result.movement.add(compiled)
+
 proc diseaseIndex(diseases: openArray[Disease], id: int): int =
   for index, disease in diseases:
     if disease.id == id: return index
@@ -332,8 +455,11 @@ proc loadRng*(node: JsonNode): PythonMt19937 =
     inc i
 
 proc loadWorld*(node: JsonNode): World =
+  result.parentChoiceTimestep = low(int64)
+  result.parentChoiceByField = initTable[string, bool]()
   node.requireFields(
-    ["schemaVersion", "sourcePin", "configurationSha256", "rulesetSha256", "timestep", "width", "height",
+    ["schemaVersion", "sourcePin", "configurationSha256", "rulesetSha256", "rulesets",
+     "timestep", "worldGini", "worldMeanWealth", "width", "height",
      "sugarRegrowRate", "spiceRegrowRate",
      "maxCellDistance", "maxCombatLoot", "maxTribes", "inheritancePolicy", "rng",
      "liveOrder", "cells", "agents", "orderedCandidates", "orderedNeighbors", "diseases",
@@ -351,7 +477,16 @@ proc loadWorld*(node: JsonNode): World =
     let digest = digestNode.getStr()
     doAssert digest.isSha256(), "rulesetSha256 entries must be 64 lowercase hexadecimal characters"
     result.rulesetSha256.add(digest)
+  doAssert node["rulesets"].kind == JArray and
+    node["rulesets"].len == result.rulesetSha256.len,
+    "rulesets must contain one normalized ruleset per hash"
+  for ruleset in node["rulesets"].items:
+    doAssert ruleset.kind in {JNull, JObject}, "rulesets entries must be null or objects"
+    result.rulesets.add(ruleset.copy())
+    result.compiledRulesets.add(compileRuleset(ruleset))
   result.timestep = node.readInt("timestep")
+  result.worldGini = node.readNumber("worldGini")
+  result.worldMeanWealth = node.readNumber("worldMeanWealth")
   result.width = int(node.readInt("width"))
   result.height = int(node.readInt("height"))
   result.sugarRegrowRate = node.readNumber("sugarRegrowRate")
@@ -363,6 +498,8 @@ proc loadWorld*(node: JsonNode): World =
   result.nextAgentId = node.readInt("nextAgentId")
   result.depressionPercentage = node.readNumber("depressionPercentage")
   doAssert result.timestep >= 0, "timestep must be nonnegative"
+  doAssert result.worldGini >= 0 and result.worldMeanWealth >= 0,
+    "world statistics must be nonnegative"
   doAssert result.width > 0 and result.height > 0, "world dimensions must be positive"
   doAssert result.sugarRegrowRate >= 0 and result.spiceRegrowRate >= 0,
     "resource regrow rates must be nonnegative"
@@ -483,7 +620,8 @@ proc loadWorld*(node: JsonNode): World =
       lastLoans: int(agentNode.readInt("lastLoans")),
     )
     doAssert agent.id >= 0 and agent.id > previousId, "agents must be sorted by unique id"
-    doAssert agent.seat >= 0 and agent.x >= 0 and agent.x < result.width and
+    doAssert agent.seat >= 0 and agent.seat < result.rulesets.len and
+      agent.x >= 0 and agent.x < result.width and
       agent.y >= 0 and agent.y < result.height, "invalid agent identity or position"
     doAssert agent.sugar >= 0 and agent.spice >= 0 and agent.age >= 0 and
       agent.sugarMetabolism >= 0 and agent.spiceMetabolism >= 0 and
@@ -882,6 +1020,9 @@ proc snapshot*(world: World): JsonNode =
   var rulesetSha256 = newJArray()
   for digest in world.rulesetSha256:
     rulesetSha256.add(%digest)
+  var rulesets = newJArray()
+  for ruleset in world.rulesets:
+    rulesets.add(ruleset.copy())
   var diseases = newJArray()
   for disease in world.diseases:
     diseases.add(%*{
@@ -908,7 +1049,9 @@ proc snapshot*(world: World): JsonNode =
   %*{
     "schemaVersion": SchemaVersion, "sourcePin": world.sourcePin,
     "configurationSha256": world.configurationSha256, "rulesetSha256": rulesetSha256,
+    "rulesets": rulesets,
     "timestep": world.timestep,
+    "worldGini": world.worldGini, "worldMeanWealth": world.worldMeanWealth,
     "width": world.width, "height": world.height, "sugarRegrowRate": world.sugarRegrowRate,
     "spiceRegrowRate": world.spiceRegrowRate,
     "maxCellDistance": world.maxCellDistance, "maxCombatLoot": world.maxCombatLoot,
@@ -933,6 +1076,134 @@ proc welfare(agent: Agent, cell: Cell, sugarReward, spiceReward,
     spiceMetabolism * agent.lookaheadFactor, 0.0)
   let computed = pow(adjustedSugar, sugarProportion) * pow(adjustedSpice, spiceProportion)
   if computed.classify in {fcNan, fcInf, fcNegInf}: 0.0 else: computed
+
+proc finite(value: float64): float64 =
+  if value.classify in {fcNan, fcInf, fcNegInf}: 0.0 else: value
+
+proc sugarLangFeature(world: World, agent: Agent, target: int, distance,
+    baseWelfare: float64, population: int, feature: SugarLangFeature,
+    agentIndexById: Table[int64, int]): float64 =
+  let sugarMetabolism = max(0.0, agent.sugarMetabolism + agent.sugarMetabolismModifier)
+  let spiceMetabolism = max(0.0, agent.spiceMetabolism + agent.spiceMetabolismModifier)
+  let occupantId = world.cells[target].occupantId
+  case feature
+  of sfAgentSugar: agent.sugar
+  of sfAgentSpice: agent.spice
+  of sfAgentWealth: agent.sugar + agent.spice
+  of sfAgentSugarMetabolism: sugarMetabolism
+  of sfAgentSpiceMetabolism: spiceMetabolism
+  of sfAgentVision: float64(max(0, agent.vision + agent.visionModifier))
+  of sfAgentMovement: float64(max(0, agent.movement + agent.movementModifier))
+  of sfAgentAge: float64(agent.age)
+  of sfAgentTtl:
+    let sugarTtl = if sugarMetabolism > 0: agent.sugar / sugarMetabolism else: float64(high(int64))
+    let spiceTtl = if spiceMetabolism > 0: agent.spice / spiceMetabolism else: float64(high(int64))
+    min(sugarTtl, spiceTtl)
+  of sfAgentMrs:
+    let sugarNeed = if sugarMetabolism > 0: agent.sugar / sugarMetabolism else: 1.0
+    let spiceNeed = if spiceMetabolism > 0: agent.spice / spiceMetabolism else: 1.0
+    finite(agent.tradeFactor * (spiceNeed / sugarNeed))
+  of sfCellSugar: world.cells[target].sugar
+  of sfCellSpice: world.cells[target].spice
+  of sfCellPollution: 0.0
+  of sfCellDistance: distance
+  of sfCellOccupied: (if occupantId == EmptyOccupant: 0.0 else: 1.0)
+  of sfCellPreyWealth:
+    if occupantId == EmptyOccupant: 0.0
+    else:
+      let prey {.cursor.} = world.agents[agentIndexById[occupantId]]
+      prey.sugar + prey.spice
+  of sfCellWelfare: baseWelfare
+  of sfWorldTimestep: float64(world.timestep)
+  of sfWorldPopulation: float64(population)
+  of sfWorldGini: world.worldGini
+  of sfWorldMeanWealth: world.worldMeanWealth
+
+proc evalSugarLang(world: World, agent: Agent, target: int, distance,
+    baseWelfare: float64, population: int, expression: SugarLangExpression,
+    agentIndexById: Table[int64, int]): float64 =
+  template evaluate(operand: SugarLangExpression): float64 =
+    world.evalSugarLang(agent, target, distance, baseWelfare, population,
+      operand, agentIndexById)
+  case expression.kind
+  of slLiteral: result = finite(expression.literal)
+  of slFeature:
+    result = world.sugarLangFeature(agent, target, distance, baseWelfare,
+      population, expression.feature, agentIndexById)
+  of slAnd:
+    for operand in expression.operands:
+      if evaluate(operand) == 0: return 0
+    result = 1
+  of slOr:
+    for operand in expression.operands:
+      if evaluate(operand) != 0: return 1
+    result = 0
+  of slIf:
+    result = evaluate(expression.operands[
+      if evaluate(expression.operands[0]) != 0: 1 else: 2])
+  of slAdd, slSubtract, slMultiply, slDivide, slMinimum, slMaximum:
+    result = evaluate(expression.operands[0])
+    for index in 1 ..< expression.operands.len:
+      let value = evaluate(expression.operands[index])
+      case expression.kind
+      of slAdd: result += value
+      of slSubtract: result -= value
+      of slMultiply: result *= value
+      of slDivide:
+        if value == 0: return 0
+        result /= value
+      of slMinimum: result = min(result, value)
+      of slMaximum: result = max(result, value)
+      else: raiseAssert "unreachable fold operator"
+    result = finite(result)
+  of slAbsolute: result = finite(abs(evaluate(expression.operands[0])))
+  of slNegate: result = finite(-evaluate(expression.operands[0]))
+  of slNot: result = float64(evaluate(expression.operands[0]) == 0)
+  of slPower:
+    let computed = pow(max(evaluate(expression.operands[0]), 0.0),
+      max(-8.0, min(8.0, evaluate(expression.operands[1]))))
+    result = finite(computed)
+  of slLess: result = float64(evaluate(expression.operands[0]) < evaluate(expression.operands[1]))
+  of slLessEqual: result = float64(evaluate(expression.operands[0]) <= evaluate(expression.operands[1]))
+  of slGreater: result = float64(evaluate(expression.operands[0]) > evaluate(expression.operands[1]))
+  of slGreaterEqual: result = float64(evaluate(expression.operands[0]) >= evaluate(expression.operands[1]))
+  of slEqual: result = float64(evaluate(expression.operands[0]) == evaluate(expression.operands[1]))
+  of slNotEqual: result = float64(evaluate(expression.operands[0]) != evaluate(expression.operands[1]))
+
+proc movementScore(world: World, agent: Agent, target: int, distance,
+    baseWelfare: float64, population: int,
+    agentIndexById: Table[int64, int]): float64 =
+  let ruleset = world.compiledRulesets[agent.seat]
+  if ruleset.useDefaultMovement:
+    return baseWelfare
+  for rule in ruleset.movement:
+    if not rule.hasCondition or world.evalSugarLang(agent, target, distance,
+        baseWelfare, population, rule.condition, agentIndexById) != 0:
+      return world.evalSugarLang(agent, target, distance, baseWelfare,
+        population, rule.score, agentIndexById)
+  raiseAssert "normalized SugarLang movement must end with an unconditional rule"
+
+proc updateWorldStatistics(world: var World) =
+  if world.agents.len == 0:
+    world.worldGini = 0
+    world.worldMeanWealth = 0
+    return
+  var wealths = world.agents.mapIt(it.sugar + it.spice)
+  wealths.sort()
+  let total = wealths.sum()
+  if total == 0:
+    world.worldGini = 1
+  else:
+    var cumulative = 0.0
+    var area = 0.0
+    for wealth in wealths[0 ..< wealths.high]:
+      cumulative += wealth
+      area += cumulative / total
+    cumulative += wealths[^1]
+    area += (cumulative / 2) / total
+    area /= float64(wealths.len)
+    world.worldGini = round(((0.5 - area) / 0.5) * 1000) / 1000
+  world.worldMeanWealth = round((total / float64(wealths.len)) * 100) / 100
 
 proc recomputeTribe(world: World, agent: var Agent) =
   let zeroes = agent.tags.count(0)
@@ -1167,12 +1438,12 @@ proc emptyNeighborCells(world: World, agent: Agent): seq[int] =
     if world.cells[neighbor].occupantId == EmptyOccupant: result.add(neighbor)
 
 proc createChild(world: var World, firstIndex, secondIndex, cell: int): Agent =
-  let first = world.agents[firstIndex]
-  let second = world.agents[secondIndex]
-  let paired = chooseParent(firstIndex, secondIndex, "decisionModel", world.timestep)
+  let first {.cursor.} = world.agents[firstIndex]
+  let second {.cursor.} = world.agents[secondIndex]
+  let paired = world.chooseParent(firstIndex, secondIndex, "decisionModel")
   result = world.agents[paired]
   template choose(name: string, field: untyped) =
-    result.field = world.agents[chooseParent(firstIndex, secondIndex, name, world.timestep)].field
+    result.field = world.agents[world.chooseParent(firstIndex, secondIndex, name)].field
   choose("aggressionFactor", aggressionFactor)
   choose("baseInterestRate", baseInterestRate)
   choose("diseaseProtectionChance", diseaseProtectionChance)
@@ -1425,7 +1696,7 @@ proc doLending(world: var World, id: int64, agentIndexById: Table[int64, int],
     dead: Table[int64, Death]) =
   let lenderIndex = agentIndexById[id]
   world.updateLoans(lenderIndex, agentIndexById, dead)
-  let lender = world.agents[lenderIndex]
+  let lender {.cursor.} = world.agents[lenderIndex]
   if lender.lendingFactor == 0 or lender.age < lender.fertilityAge or
       (lender.fertile() and
        (lender.sugar <= lender.startingSugar or lender.spice <= lender.startingSpice)):
@@ -1436,7 +1707,7 @@ proc doLending(world: var World, id: int64, agentIndexById: Table[int64, int],
   for neighborCell in world.orderedNeighbors[cell]:
     let borrowerId = world.cells[neighborCell].occupantId
     if borrowerId != EmptyOccupant and not dead.hasKey(borrowerId):
-      let borrower = world.agents[agentIndexById[borrowerId]]
+      let borrower {.cursor.} = world.agents[agentIndexById[borrowerId]]
       if borrower.age >= borrower.fertilityAge and borrower.age < borrower.infertilityAge and
           not borrower.fertile(): borrowers.add(borrowerId)
   world.rng.pythonShuffle(borrowers)
@@ -1494,6 +1765,7 @@ proc stepOne*(world: var World) =
     cell.spice = min(cell.maxSpice, cell.spice + world.spiceRegrowRate)
 
   world.rng.pythonShuffle(world.liveOrder)
+  let worldPopulation = world.agents.len
   var agentIndexById = initTable[int64, int]()
   for index, agent in world.agents:
     agentIndexById[agent.id] = index
@@ -1529,7 +1801,7 @@ proc stepOne*(world: var World) =
     for candidate in candidates:
       let occupantId = world.cells[candidate.target].occupantId
       if occupantId != EmptyOccupant and not dead.hasKey(occupantId):
-        let occupant = world.agents[agentIndexById[occupantId]]
+        let occupant {.cursor.} = world.agents[agentIndexById[occupantId]]
         let wealth = occupant.sugar + occupant.spice
         if not retaliators.hasKey(occupant.tribe) or retaliators[occupant.tribe] < wealth:
           retaliators[occupant.tribe] = wealth
@@ -1545,18 +1817,20 @@ proc stepOne*(world: var World) =
       if occupantId != EmptyOccupant:
         if dead.hasKey(occupantId):
           continue
-        let prey = world.agents[agentIndexById[occupantId]]
+        let prey {.cursor.} = world.agents[agentIndexById[occupantId]]
         if aggression <= 0 or agent.tribe == prey.tribe or
           agent.sugar + agent.spice < prey.sugar + prey.spice:
           continue
         preyTribe = prey.tribe
         sugarReward = aggression * min(world.maxCombatLoot, prey.sugar)
         spiceReward = aggression * min(world.maxCombatLoot, prey.spice)
-      let score = welfare(agent, world.cells[candidate.target], sugarReward, spiceReward,
+      let baseWelfare = welfare(agent, world.cells[candidate.target], sugarReward, spiceReward,
         effectiveSugarMetabolism, effectiveSpiceMetabolism)
       if occupantId != EmptyOccupant and retaliators[preyTribe] >
-          agent.sugar + agent.spice + score:
+          agent.sugar + agent.spice + baseWelfare:
         continue
+      let score = world.movementScore(agent, candidate.target, candidate.distance,
+        baseWelfare, worldPopulation, agentIndexById)
       if score > bestWelfare or (score == bestWelfare and candidate.distance < bestDistance):
         destination = candidate.target
         bestWelfare = score
@@ -1651,7 +1925,7 @@ proc stepOne*(world: var World) =
     if priorIndex >= 0:
       retainedTombstones.add(world.creditorTombstones[priorIndex])
     else:
-      let creditor = world.agents[agentIndexById[creditorId]]
+      let creditor {.cursor.} = world.agents[agentIndexById[creditorId]]
       retainedTombstones.add(CreditorTombstone(
         id: creditor.id, inheritancePolicy: creditor.inheritancePolicy,
         childrenIds: creditor.childrenIds,
@@ -1660,6 +1934,7 @@ proc stepOne*(world: var World) =
   if world.deaths.len > 0:
     world.agents.keepItIf(not dead.hasKey(it.id))
     world.liveOrder.keepItIf(not dead.hasKey(it))
+  world.updateWorldStatistics()
 
 proc step*(world: var World, ticks: int): int {.discardable.} =
   doAssert ticks >= 0, "ticks must be nonnegative"

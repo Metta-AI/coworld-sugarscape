@@ -8,10 +8,10 @@ Schema v7 supports sugar and spice,
 cardinal movement and vision, toroidal wrapping, sequential turns, welfare
 ranking, harvest, metabolism, growback, tagging, combat, trade, and disease
 progression. It also supports reproduction, lending, children inheritance,
-starvation, aging, extinction, and multiple seats. Policies may be null or use
-the exact unconditional `cell.welfare` movement rule. Trait rules may initialize
-agent state. It rejects replacement, scheduled disease introduction, pollution,
-seasons, non-children inheritance, and other SugarLang movement.
+starvation, aging, extinction, and multiple seats. It evaluates the complete
+validated SugarLang movement language and retains normalized policies in each
+snapshot. Trait rules initialize agent state. It rejects replacement, scheduled
+disease introduction, pollution, seasons, and non-children inheritance.
 
 The adapter exports every field needed to resume the supported model:
 
@@ -24,7 +24,8 @@ The adapter exports every field needed to resume the supported model:
   systems, and infected membership;
 - parent, child, mate, and ordered loan relations, including dead-creditor
   tombstones needed to resume inherited debts;
-- canonical configuration and seat-ordered ruleset SHA-256 hashes;
+- canonical configuration hash, seat-ordered normalized rulesets and their
+  SHA-256 hashes, plus prior-tick Gini and mean wealth for world features;
 - each origin cell's candidate range and neighbors in DTL insertion order; and
 - ordered starvation, aging, and combat events with agent ID, seat, age, and cause.
 

@@ -620,6 +620,16 @@ def test_python_and_native_benchmarks_run_the_same_contract() -> None:
             lambda raw: raw.__setitem__("configurationSha256", "A" * 64),
             "configurationSha256",
         ),
+        (
+            lambda raw: raw["rulesets"].__setitem__(
+                0,
+                {
+                    "version": 1,
+                    "movement": [{"score": ["get", "cell.sugar"]}],
+                },
+            ),
+            "does not match rulesetSha256",
+        ),
     ],
 )
 def test_snapshot_parser_rejects_states_the_native_core_rejects(
@@ -649,18 +659,103 @@ def test_validator_rejects_unimplemented_mechanics(
         validate_supported_world(_world(config))
 
 
-def test_validator_rejects_other_sugarlang_rules() -> None:
+@pytest.mark.parametrize(
+    "score",
+    [
+        [
+            "+",
+            ["get", "cell.sugar"],
+            ["*", 2, ["get", "cell.spice"]],
+            ["neg", ["get", "cell.distance"]],
+            ["abs", ["-", ["get", "cell.preyWealth"], 1]],
+            ["min", ["get", "cell.welfare"], 3],
+            ["max", ["get", "cell.pollution"], ["get", "cell.occupied"]],
+        ],
+        [
+            "if",
+            [
+                "and",
+                [">", ["get", "world.population"], 0],
+                [
+                    "or",
+                    ["<=", ["get", "agent.age"], 100],
+                    [
+                        "not",
+                        [
+                            "==",
+                            ["get", "agent.vision"],
+                            ["get", "agent.movement"],
+                        ],
+                    ],
+                ],
+            ],
+            [
+                "+",
+                ["get", "agent.sugar"],
+                ["get", "agent.spice"],
+                ["get", "agent.wealth"],
+                ["get", "agent.sugarMetabolism"],
+                ["get", "agent.spiceMetabolism"],
+                ["get", "agent.ttl"],
+                ["get", "agent.mrs"],
+                ["get", "world.timestep"],
+                ["get", "world.gini"],
+                ["get", "world.meanWealth"],
+            ],
+            0,
+        ],
+        [
+            "+",
+            ["pow", ["get", "cell.sugar"], 2],
+            ["/", ["get", "cell.spice"], 0],
+            ["!=", ["get", "cell.distance"], 1],
+            ["<", ["get", "agent.age"], 5],
+            ["-", ["get", "cell.welfare"], 1, 2],
+        ],
+    ],
+)
+def test_native_matches_dtl_for_closed_sugarlang_movement(score: object) -> None:
     resolved = resolve_episode_config(_supported_config())
-    ruleset = {"version": 1, "movement": [{"score": ["get", "cell.sugar"]}]}
+    ruleset = {"version": 1, "movement": [{"score": score}]}
     world = CoworldSugarscape(
         build_dtl_config(resolved),
-        [compile_ruleset(ruleset), compile_ruleset(None)],
+        [compile_ruleset(ruleset), compile_ruleset(ruleset)],
         parse_trait_ranges(resolved.get("trait_ranges")),
         instrumentation=EpisodeInstrumentation(enabled=False),
     )
+    validate_supported_world(world)
+    binary = build_native_simulator()
 
-    with pytest.raises(ValueError, match="cell.welfare movement"):
-        validate_supported_world(world)
+    for _ in range(4):
+        actual = step_native(snapshot_world(world), 1, binary=binary)
+        world.doTimestep()
+        assert actual == snapshot_world(world)
+
+
+def test_native_matches_dtl_for_conditional_sugarlang_rules() -> None:
+    resolved = resolve_episode_config(_supported_config())
+    ruleset = {
+        "version": 1,
+        "movement": [
+            {
+                "if": [">", ["get", "cell.sugar"], 2],
+                "score": ["get", "cell.spice"],
+            },
+            {"score": ["get", "cell.welfare"]},
+        ],
+    }
+    world = CoworldSugarscape(
+        build_dtl_config(resolved),
+        [compile_ruleset(ruleset), compile_ruleset(ruleset)],
+        parse_trait_ranges(resolved.get("trait_ranges")),
+        instrumentation=EpisodeInstrumentation(enabled=False),
+    )
+    binary = build_native_simulator()
+
+    for _ in range(4):
+        actual = step_native(snapshot_world(world), 1, binary=binary)
+        world.doTimestep()
+        assert actual == snapshot_world(world)
 
 
 def test_validator_accepts_traits_with_cell_welfare_movement() -> None:
