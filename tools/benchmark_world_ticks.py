@@ -76,88 +76,94 @@ def state_hash(world: CoworldSugarscape) -> str:
     return hashlib.sha256(json.dumps(state, sort_keys=True, allow_nan=False).encode()).hexdigest()
 
 
-def run_simulation(config, ready, start, done, collect, output, timeout):
+def receive_command(connection, expected, timeout):
+    if not connection.poll(timeout):
+        raise TimeoutError(f'simulation command {expected} was not received')
+    command = connection.recv()
+    if command != expected:
+        raise RuntimeError(f'expected simulation command {expected}, got {command}')
+
+
+def run_simulation(config, connection, timeout):
     try:
         world, resolved, rulesets = prepare_simulation(config)
-        ready.set()
-        if not start.wait(timeout):
-            raise TimeoutError('simulation start was not released')
+        connection.send(('ready', {}))
+        receive_command(connection, 'start', timeout)
         for _ in range(int(resolved['timesteps'])):
             if not world.agents and not world.keepAlive:
                 break
             world.doTimestep()
         finished = perf_counter()
-        done.set()
-        if not collect.wait(timeout):
-            raise TimeoutError('simulation results were not released')
-        output.send({
+        connection.send(('finished', {'finished_at': finished}))
+        # No hashing until every world has completed its measured ticks.
+        receive_command(connection, 'collect', timeout)
+        connection.send(('result', {
             'seed': resolved['seed'], 'config': resolved, 'rulesets': rulesets,
             'timesteps_completed': world.timestep, 'population_final': len(world.agents),
             'world_width': resolved['environmentWidth'], 'world_height': resolved['environmentHeight'],
             'finished_at': finished, 'state_sha256': state_hash(world),
-        })
+        }))
     finally:
-        output.close()
+        connection.close()
+
+
+def receive_phase(children, expected, timeout):
+    deadline = perf_counter() + timeout
+    pending = list(children)
+    messages = []
+    while pending:
+        for child in pending[:]:
+            process, connection = child
+            if connection.poll():
+                phase, payload = connection.recv()
+                if phase != expected:
+                    raise RuntimeError(f'expected simulation phase {expected}, got {phase}')
+                messages.append(payload)
+                pending.remove(child)
+            elif process.exitcode is not None:
+                raise RuntimeError(f'simulation worker {process.pid} exited during {expected}: {process.exitcode}')
+        if pending:
+            if perf_counter() >= deadline:
+                raise TimeoutError(f'simulation workers did not complete {expected}')
+            sleep(0.01)
+    return messages
 
 
 def simulate_worlds(configs, *, timeout):
     context = multiprocessing.get_context('spawn')
-    start = context.Event()
-    collect = context.Event()
     children = []
     try:
         for config in configs:
-            reader, writer = context.Pipe(duplex=False)
-            ready = context.Event()
-            done = context.Event()
-            process = context.Process(target=run_simulation, args=(config, ready, start, done, collect, writer, timeout))
+            parent, child = context.Pipe(duplex=True)
+            process = context.Process(target=run_simulation, args=(config, child, timeout))
             process.start()
-            writer.close()
-            children.append((process, ready, done, reader))
-        deadline = perf_counter() + timeout
-        while not all(ready.is_set() for _, ready, _, _ in children):
-            for process, _, _, _ in children:
-                if process.exitcode is not None:
-                    raise RuntimeError(f'simulation worker {process.pid} exited during preparation: {process.exitcode}')
-            if perf_counter() >= deadline:
-                raise TimeoutError('simulation workers did not become ready')
-            sleep(0.01)
+            child.close()
+            children.append((process, parent))
+        receive_phase(children, 'ready', timeout)
         started = perf_counter()
-        start.set()
-        while not all(done.is_set() for _, _, done, _ in children):
-            for process, _, _, _ in children:
-                if process.exitcode is not None:
-                    raise RuntimeError(f'simulation worker {process.pid} exited during ticks: {process.exitcode}')
-            if perf_counter() - started >= timeout:
-                raise TimeoutError('simulation workers did not finish ticks')
-            sleep(0.01)
-        collect.set()
-        completed = []
-        pending = list(children)
-        while pending:
-            for child in pending[:]:
-                process, _, _, reader = child
-                if reader.poll():
-                    completed.append(reader.recv())
-                    pending.remove(child)
-                elif process.exitcode is not None:
-                    raise RuntimeError(f'simulation worker {process.pid} exited without results: {process.exitcode}')
-            if perf_counter() - started >= timeout:
-                raise TimeoutError('simulation workers did not finish')
-            if pending:
-                sleep(0.01)
-        elapsed = max(world['finished_at'] for world in completed) - started
+        for _, connection in children:
+            connection.send('start')
+        finished = receive_phase(children, 'finished', timeout)
+        elapsed = max(message['finished_at'] for message in finished) - started
+        for _, connection in children:
+            connection.send('collect')
+        completed = receive_phase(children, 'result', timeout)
+        for process, _ in children:
+            process.join(timeout=5)
+            if process.is_alive():
+                raise TimeoutError(f'simulation worker {process.pid} did not exit after results')
+            if process.exitcode != 0:
+                raise RuntimeError(f'simulation worker {process.pid} exited with code {process.exitcode}')
         return sorted(completed, key=lambda world: world['seed']), elapsed
     finally:
-        for process, _, _, reader in children:
-            process.join(timeout=0.1)
+        for process, connection in children:
             if process.is_alive():
                 process.terminate()
             process.join(timeout=5)
             if process.is_alive():
                 process.kill()
                 process.join()
-            reader.close()
+            connection.close()
 
 def benchmark(config: dict[str, object], *, workers: int, worlds: int, seed: int, mode: str = 'episodes', timeout: float = 600) -> dict[str, object]:
     if workers < 1 or worlds < 1 or seed < 0:
