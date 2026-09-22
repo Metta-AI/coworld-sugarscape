@@ -95,3 +95,9 @@ model, with the pinned upstream source preserved as its behavioral oracle at
 [`archived/v1/reference/dtl-python/`](archived/v1/reference/dtl-python/)
 (full contributor list in its `CREDITS` file). The DTL model itself builds on
 *Growing Artificial Societies* (Epstein & Axtell, 1996).
+
+## Compare ruleset variants
+
+Use the [paired experiment runner](docs/EXPERIMENTS.md) to compare a saved Ruleset
+Studio ruleset against the baseline on identical seeds, with result summaries,
+replays, and source provenance.
