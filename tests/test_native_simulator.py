@@ -11,8 +11,8 @@ from coworld.config import build_dtl_config, resolve_episode_config
 from coworld.instrumentation import EpisodeInstrumentation
 from coworld.native_fixture import (
     NativeReferenceWorld,
-    build_native_v6_reference_world,
-    native_v6_config,
+    build_native_v7_reference_world,
+    native_v7_config,
 )
 from coworld.native_oracle import (
     SOURCE_PIN,
@@ -37,12 +37,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _supported_config() -> dict[str, object]:
-    return native_v6_config(seed=1729, timesteps=8)
+    return native_v7_config(seed=1729, timesteps=8)
 
 
 def _world(config: dict[str, object] | None = None) -> CoworldSugarscape:
     if config is None:
-        return build_native_v6_reference_world(seed=1729, timesteps=8)
+        return build_native_v7_reference_world(seed=1729, timesteps=8)
     resolved = resolve_episode_config(config or _supported_config())
     return NativeReferenceWorld(
         build_dtl_config(resolved),
@@ -55,7 +55,9 @@ def _world(config: dict[str, object] | None = None) -> CoworldSugarscape:
 def test_snapshot_round_trip_preserves_latent_order_rng_and_x_major_grid() -> None:
     snapshot = snapshot_world(_world())
 
-    assert NativeSnapshot.from_json(json.loads(json.dumps(snapshot.as_json()))) == snapshot
+    assert (
+        NativeSnapshot.from_json(json.loads(json.dumps(snapshot.as_json()))) == snapshot
+    )
     assert len(snapshot.cells) == snapshot.width * snapshot.height
     assert len(snapshot.ordered_candidates) == len(snapshot.cells)
     assert len(snapshot.rng_words) == 624
@@ -99,14 +101,16 @@ def _place_two_agents(world: CoworldSugarscape):
 
 def test_native_trade_matches_dtl_cached_mrs_and_metrics() -> None:
     config = _supported_config()
-    config.update({
-        "startingAgents": 2,
-        "agentTradeFactor": [1, 1],
-        "agentAggressionFactor": [0, 0],
-        "agentTagging": False,
-        "agentMovement": [0, 0],
-        "agentVision": [0, 0],
-    })
+    config.update(
+        {
+            "startingAgents": 2,
+            "agentTradeFactor": [1, 1],
+            "agentAggressionFactor": [0, 0],
+            "agentTagging": False,
+            "agentMovement": [0, 0],
+            "agentVision": [0, 0],
+        }
+    )
     world = _world(config)
     first, second = _place_two_agents(world)
     first.sugar, first.spice = 20, 5
@@ -128,12 +132,18 @@ def test_native_trade_matches_dtl_cached_mrs_and_metrics() -> None:
 
 def test_native_rejected_lethal_trade_still_logs_attempted_price() -> None:
     config = _supported_config()
-    config.update({
-        "startingAgents": 2, "agentTradeFactor": [1, 1],
-        "agentAggressionFactor": [0, 0], "agentTagging": False,
-        "agentMovement": [0, 0], "agentVision": [0, 0],
-        "environmentSugarRegrowRate": 0, "environmentSpiceRegrowRate": 0,
-    })
+    config.update(
+        {
+            "startingAgents": 2,
+            "agentTradeFactor": [1, 1],
+            "agentAggressionFactor": [0, 0],
+            "agentTagging": False,
+            "agentMovement": [0, 0],
+            "agentVision": [0, 0],
+            "environmentSugarRegrowRate": 0,
+            "environmentSpiceRegrowRate": 0,
+        }
+    )
     world = _world(config)
     first, second = _place_two_agents(world)
     for agent, trade_factor in ((first, 0.5), (second, 2)):
@@ -156,21 +166,23 @@ def test_native_rejected_lethal_trade_still_logs_attempted_price() -> None:
 
 def test_native_disease_progression_matches_dtl() -> None:
     config = _supported_config()
-    config.update({
-        "startingAgents": 2,
-        "startingDiseases": 1,
-        "startingDiseasesPerAgent": [0, 0],
-        "agentImmuneSystemLength": 3,
-        "agentDiseaseProtectionChance": [0, 0],
-        "diseaseTagStringLength": [1, 1],
-        "diseaseIncubationPeriod": [0, 0],
-        "diseaseTransmissionChance": [1, 1],
-        "diseaseMovementPenalty": [-1, -1],
-        "agentAggressionFactor": [0, 0],
-        "agentTagging": False,
-        "agentMovement": [0, 0],
-        "agentVision": [0, 0],
-    })
+    config.update(
+        {
+            "startingAgents": 2,
+            "startingDiseases": 1,
+            "startingDiseasesPerAgent": [0, 0],
+            "agentImmuneSystemLength": 3,
+            "agentDiseaseProtectionChance": [0, 0],
+            "diseaseTagStringLength": [1, 1],
+            "diseaseIncubationPeriod": [0, 0],
+            "diseaseTransmissionChance": [1, 1],
+            "diseaseMovementPenalty": [-1, -1],
+            "agentAggressionFactor": [0, 0],
+            "agentTagging": False,
+            "agentMovement": [0, 0],
+            "agentVision": [0, 0],
+        }
+    )
     world = _world(config)
     _place_two_agents(world)
     carrier = next(agent for agent in world.agents if agent.diseases)
@@ -189,13 +201,22 @@ def test_native_disease_progression_matches_dtl() -> None:
 
 def test_native_disease_recovery_preserves_repeated_activation_residue() -> None:
     config = _supported_config()
-    config.update({
-        "seats": 1, "startingAgents": 1, "startingDiseases": 1,
-        "startingDiseasesPerAgent": [1, 1], "agentImmuneSystemLength": 3,
-        "diseaseTagStringLength": [1, 1], "diseaseIncubationPeriod": [0, 0],
-        "diseaseMovementPenalty": [-1, -1], "agentAggressionFactor": [0, 0],
-        "agentTagging": False, "agentMovement": [0, 0], "agentVision": [0, 0],
-    })
+    config.update(
+        {
+            "seats": 1,
+            "startingAgents": 1,
+            "startingDiseases": 1,
+            "startingDiseasesPerAgent": [1, 1],
+            "agentImmuneSystemLength": 3,
+            "diseaseTagStringLength": [1, 1],
+            "diseaseIncubationPeriod": [0, 0],
+            "diseaseMovementPenalty": [-1, -1],
+            "agentAggressionFactor": [0, 0],
+            "agentTagging": False,
+            "agentMovement": [0, 0],
+            "agentVision": [0, 0],
+        }
+    )
     world = _world(config)
     agent = world.agents[0]
     record = agent.diseases[0]
@@ -215,13 +236,20 @@ def test_native_disease_recovery_preserves_repeated_activation_residue() -> None
 
 def test_native_disease_recovery_removal_skips_shifted_record() -> None:
     config = _supported_config()
-    config.update({
-        "startingAgents": 2, "startingDiseases": 2,
-        "startingDiseasesPerAgent": [0, 0], "agentImmuneSystemLength": 3,
-        "diseaseTagStringLength": [1, 1], "diseaseIncubationPeriod": [0, 0],
-        "agentAggressionFactor": [0, 0], "agentTagging": False,
-        "agentMovement": [0, 0], "agentVision": [0, 0],
-    })
+    config.update(
+        {
+            "startingAgents": 2,
+            "startingDiseases": 2,
+            "startingDiseasesPerAgent": [0, 0],
+            "agentImmuneSystemLength": 3,
+            "diseaseTagStringLength": [1, 1],
+            "diseaseIncubationPeriod": [0, 0],
+            "agentAggressionFactor": [0, 0],
+            "agentTagging": False,
+            "agentMovement": [0, 0],
+            "agentVision": [0, 0],
+        }
+    )
     world = _world(config)
     _place_two_agents(world)
     agent = max(world.agents, key=lambda value: len(value.diseases))
@@ -247,21 +275,63 @@ def test_native_disease_recovery_removal_skips_shifted_record() -> None:
     assert len(actual.agents[0][38]) == 1
 
 
+def test_dead_creditor_tombstone_transfers_debt_to_living_children() -> None:
+    config = _supported_config()
+    config.update(
+        {
+            "seats": 1,
+            "startingAgents": 3,
+            "agentAggressionFactor": [0, 0],
+            "agentInheritancePolicy": "children",
+            "agentTagging": False,
+            "agentMovement": [0, 0],
+            "agentVision": [0, 0],
+        }
+    )
+    world = _world(config)
+    creditor, debtor, child = sorted(world.agents, key=lambda agent: agent.ID)
+    creditor.socialNetwork["children"].append(child)
+    creditor.addLoanToAgent(debtor, 0, 0, 9, 0, 6, 1)
+    creditor.doDeath("aging")
+    world.removeDeadAgents()
+    initial = snapshot_world(world)
+    world.deadAgents = []
+
+    assert initial.creditor_tombstones == ((creditor.ID, "children", (child.ID,)),)
+
+    native = step_native(initial, 1, binary=build_native_simulator())
+    python = step_python(initial, 1)
+    world.doTimestep()
+    expected = snapshot_world(world)
+
+    assert native == expected
+    assert python == expected
+    assert expected.creditor_tombstones == ()
+    child_state = next(agent for agent in expected.agents if agent[0] == child.ID)
+    debtor_state = next(agent for agent in expected.agents if agent[0] == debtor.ID)
+    assert child_state[63] == debtor_state[62]
+    assert child_state[63][0][4:] == (1, 1)
+
+
 def test_native_accepts_valid_noncontiguous_disease_ids() -> None:
     config = _supported_config()
-    config.update({
-        "seed": 48, "startingAgents": 2, "startingDiseases": 3,
-        "startingDiseasesPerAgent": [3, 3], "agentImmuneSystemLength": 8,
-        "diseaseTagStringLength": [2, 2], "agentAggressionFactor": [0, 0],
-        "agentTagging": False, "agentMovement": [0, 0], "agentVision": [0, 0],
-    })
+    config.update(
+        {
+            "seed": 48,
+            "startingAgents": 2,
+            "startingDiseases": 3,
+            "startingDiseasesPerAgent": [3, 3],
+            "agentImmuneSystemLength": 8,
+            "diseaseTagStringLength": [2, 2],
+            "agentAggressionFactor": [0, 0],
+            "agentTagging": False,
+            "agentMovement": [0, 0],
+            "agentVision": [0, 0],
+        }
+    )
     world = _world(config)
     initial = snapshot_world(world)
     assert [disease[0] for disease in initial.diseases] == [1]
-    invalid = initial.as_json()
-    invalid["diseases"][0]["fertilityPenalty"] = 1
-    with pytest.raises(ValueError, match="fertilityPenalty"):
-        NativeSnapshot.from_json(invalid)
 
     actual = step_native(initial, 1, binary=build_native_simulator())
     world.doTimestep()
@@ -276,30 +346,6 @@ def test_validator_rejects_named_disease_ids() -> None:
 
     with pytest.raises(ValueError, match="named diseases"):
         snapshot_world(_world(config))
-
-
-def test_validator_rejects_incubating_transmissible_fertility_disease() -> None:
-    config = _supported_config()
-    config.update({
-        "startingAgents": 2, "startingDiseases": 1,
-        "startingDiseasesPerAgent": [0, 0], "agentImmuneSystemLength": 3,
-        "diseaseTagStringLength": [1, 1], "diseaseIncubationPeriod": [2, 2],
-        "diseaseTransmissionChance": [1, 1], "diseaseFertilityPenalty": [1, 1],
-        "agentAggressionFactor": [0, 0], "agentTagging": False,
-        "agentMovement": [0, 0], "agentVision": [0, 0],
-    })
-    world = _world(config)
-    _place_two_agents(world)
-    carrier = next(agent for agent in world.agents if agent.diseases)
-    target = next(agent for agent in world.agents if not agent.diseases)
-    record = carrier.diseases[0]
-    target.immuneSystem = [1 - record["disease"].tags[0]] * len(target.immuneSystem)
-    assert record["incubation"] == 2
-    assert record["disease"].transmissionChance == 1
-    assert target.findNearestHammingDistanceInDisease(record["disease"])["distance"] > 0
-
-    with pytest.raises(ValueError, match="fertilityPenalty"):
-        snapshot_world(world)
 
 
 def test_native_combat_matches_dtl_loot_death_and_removal_order() -> None:
@@ -576,7 +622,9 @@ def test_python_and_native_benchmarks_run_the_same_contract() -> None:
         ),
     ],
 )
-def test_snapshot_parser_rejects_states_the_native_core_rejects(mutate, message: str) -> None:
+def test_snapshot_parser_rejects_states_the_native_core_rejects(
+    mutate, message: str
+) -> None:
     raw = snapshot_world(_world()).as_json()
     mutate(raw)
 
@@ -587,10 +635,8 @@ def test_snapshot_parser_rejects_states_the_native_core_rejects(mutate, message:
 @pytest.mark.parametrize(
     ("field", "value", "message"),
     [
-        ("agentLendingFactor", [1, 1], "lending"),
-        ("agentFertilityFactor", [1, 1], "reproduction"),
         ("agentTagPreferences", True, "tag preferences"),
-        ("agentInheritancePolicy", "children", "inheritancePolicy"),
+        ("agentInheritancePolicy", "friends", "inheritancePolicy"),
     ],
 )
 def test_validator_rejects_unimplemented_mechanics(
@@ -634,32 +680,6 @@ def test_validator_accepts_traits_with_cell_welfare_movement() -> None:
     validate_supported_world(world)
 
 
-@pytest.mark.parametrize(
-    ("trait", "message"),
-    [("lending", "lendingFactor")],
-)
-def test_validator_rejects_unsupported_trait_enabled_by_ruleset(
-    trait: str, message: str
-) -> None:
-    resolved = resolve_episode_config(_supported_config())
-    traits = {"aggression": 0, "trade": 0, "lending": 0, "fertility": 0}
-    traits[trait] = 1
-    ruleset = {
-        "version": 1,
-        "traits": traits,
-        "movement": [{"score": ["get", "cell.welfare"]}],
-    }
-    world = CoworldSugarscape(
-        build_dtl_config(resolved),
-        [compile_ruleset(ruleset), compile_ruleset(None)],
-        parse_trait_ranges(resolved.get("trait_ranges")),
-        instrumentation=EpisodeInstrumentation(enabled=False),
-    )
-
-    with pytest.raises(ValueError, match=message):
-        validate_supported_world(world)
-
-
 def test_validator_rejects_a_world_after_death() -> None:
     world = _world()
     world.agents[0].doDeath("starvation")
@@ -668,7 +688,9 @@ def test_validator_rejects_a_world_after_death() -> None:
         validate_supported_world(world)
 
 
-def test_commonwealth_seed_1729_tick_zero_audit_is_bound_and_rejected() -> None:
+def test_commonwealth_seed_1729_matches_dtl_through_first_births_and_loan_repayment() -> (
+    None
+):
     manifest = json.loads((ROOT / "coworld_manifest.json").read_text(encoding="utf-8"))
     config = next(
         variant["game_config"]
@@ -690,17 +712,48 @@ def test_commonwealth_seed_1729_tick_zero_audit_is_bound_and_rejected() -> None:
 
     audit = audit_snapshot_compatibility(world)
 
-    assert audit.configuration_sha256 == "21d01473529dff583f4c50021bb7e9aac618559c4eafb714ffba056566e3e74c"
+    assert (
+        audit.configuration_sha256
+        == "21d01473529dff583f4c50021bb7e9aac618559c4eafb714ffba056566e3e74c"
+    )
     assert audit.ruleset_sha256 == (
         "f13b0a218f455a9d06fe379d635043c1a5194d905e1dec1ea32f4a2efc671a37",
     )
-    assert (audit.population, audit.depressed_agents, audit.infected_agents) == (250, 25, 50)
-    assert audit.modified_agents == 50
-    assert audit.blockers == (
-        "latent_reproduction",
-        "lending",
-        "reproduction",
-        "inheritance",
+    assert (audit.population, audit.depressed_agents, audit.infected_agents) == (
+        250,
+        25,
+        50,
     )
-    with pytest.raises(ValueError, match="lending"):
-        snapshot_world(world)
+    assert audit.modified_agents == 50
+    assert audit.blockers == ()
+
+    binary = build_native_simulator()
+    checkpoints = {
+        1: (240, 250, 0),
+        16: (78, 252, 0),
+        17: (76, 254, 1),
+        22: (65, 254, 3),
+    }
+    for timestep in range(1, 23):
+        initial = snapshot_world(world)
+        native = step_native(initial, 1, binary=binary)
+        python = step_python(initial, 1)
+        world.doTimestep()
+        expected = snapshot_world(world)
+
+        assert native == expected, (
+            timestep,
+            [
+                field
+                for field in initial.__dataclass_fields__
+                if getattr(native, field) != getattr(expected, field)
+            ],
+        )
+        assert python == expected, timestep
+        if timestep in checkpoints:
+            population, next_agent_id, loans = checkpoints[timestep]
+            assert (len(expected.agents), expected.next_agent_id) == (
+                population,
+                next_agent_id,
+            )
+            assert sum(len(agent[62]) for agent in expected.agents) == loans

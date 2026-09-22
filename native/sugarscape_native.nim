@@ -1,10 +1,11 @@
 import std/[algorithm, json, math, monotimes, sequtils, strutils, tables, times]
+import checksums/md5
 
 when isMainModule:
   import std/os
 
 const
-  SchemaVersion = 6
+  SchemaVersion = 7
   SourcePin = "585282e9ce7b22a33b89abb0d777917bd5887d1a"
   MtWords = 624
   EmptyOccupant = -1'i64
@@ -63,6 +64,34 @@ type
     hasImmuneSystem*: bool
     immuneSystem*: seq[int]
     diseases*: seq[Infection]
+    born*: int64
+    startingSugar*: float64
+    startingSpice*: float64
+    sex*: string
+    hasSex*: bool
+    fertilityAge*: int64
+    infertilityAge*: int64
+    inheritancePolicy*: string
+    lendingFactor*: float64
+    baseInterestRate*: float64
+    loanDuration*: int64
+    sugarMeanIncome*: float64
+    spiceMeanIncome*: float64
+    hasStartingImmuneSystem*: bool
+    startingImmuneSystem*: seq[int]
+    hasRacialTags*: bool
+    racialTags*: seq[int]
+    fatherId*: int64
+    motherId*: int64
+    childrenIds*: seq[int64]
+    mateIds*: seq[int64]
+    lastMovedTimestep*: int64
+    lastReproducedTimestep*: int64
+    lastMates*: int
+    lastLendedTimestep*: int64
+    lastLoans*: int
+    creditorLoans*: seq[Loan]
+    debtorLoans*: seq[Loan]
 
   Infection* = object
     diseaseId*: int
@@ -91,6 +120,19 @@ type
     recoverable*: bool
     infectedIds*: seq[int64]
 
+  Loan* = object
+    creditorId*: int64
+    debtorId*: int64
+    sugarLoan*: float64
+    spiceLoan*: float64
+    duration*: int64
+    origin*: int64
+
+  CreditorTombstone* = object
+    id*: int64
+    inheritancePolicy*: string
+    childrenIds*: seq[int64]
+
   Candidate* = object
     target*: int
     distance*: float64
@@ -114,10 +156,13 @@ type
     maxCombatLoot*: float64
     maxTribes*: int
     inheritancePolicy*: string
+    nextAgentId*: int64
+    depressionPercentage*: float64
     rng*: PythonMt19937
     liveOrder*: seq[int64]
     cells*: seq[Cell]
     agents*: seq[Agent]
+    creditorTombstones*: seq[CreditorTombstone]
     orderedCandidates*: seq[seq[Candidate]]
     orderedNeighbors*: seq[seq[int]]
     diseases*: seq[Disease]
@@ -184,6 +229,58 @@ proc randomFloat*(rng: var PythonMt19937): float64 =
   let low = uint64(rng.nextUint32() shr 6)
   float64(high * 67108864'u64 + low) / 9007199254740992.0
 
+proc seedWords(rng: var PythonMt19937, words: openArray[uint32]) =
+  rng.words[0] = 19650218'u32
+  for index in 1 ..< MtWords:
+    let previous = rng.words[index - 1]
+    rng.words[index] = 1812433253'u32 * (previous xor (previous shr 30)) + uint32(index)
+  var stateIndex = 1
+  var wordIndex = 0
+  var remaining = max(MtWords, words.len)
+  while remaining > 0:
+    let previous = rng.words[stateIndex - 1]
+    rng.words[stateIndex] = (rng.words[stateIndex] xor
+      ((previous xor (previous shr 30)) * 1664525'u32)) + words[wordIndex] + uint32(wordIndex)
+    inc stateIndex
+    inc wordIndex
+    if stateIndex >= MtWords:
+      rng.words[0] = rng.words[MtWords - 1]
+      stateIndex = 1
+    if wordIndex >= words.len: wordIndex = 0
+    dec remaining
+  remaining = MtWords - 1
+  while remaining > 0:
+    let previous = rng.words[stateIndex - 1]
+    rng.words[stateIndex] = (rng.words[stateIndex] xor
+      ((previous xor (previous shr 30)) * 1566083941'u32)) - uint32(stateIndex)
+    inc stateIndex
+    if stateIndex >= MtWords:
+      rng.words[0] = rng.words[MtWords - 1]
+      stateIndex = 1
+    dec remaining
+  rng.words[0] = 0x80000000'u32
+  rng.index = MtWords
+
+proc seedFromMd5(rng: var PythonMt19937, value: string, addend: uint64) =
+  let digest = toMD5(value)
+  var words: array[4, uint32]
+  for wordIndex in 0 ..< words.len:
+    let start = 12 - wordIndex * 4
+    words[wordIndex] = (uint32(digest[start]) shl 24) or
+      (uint32(digest[start + 1]) shl 16) or (uint32(digest[start + 2]) shl 8) or
+      uint32(digest[start + 3])
+  var carry = addend
+  for word in words.mitems:
+    let sum = uint64(word) + (carry and 0xffffffff'u64)
+    word = uint32(sum)
+    carry = (carry shr 32) + (sum shr 32)
+  rng.seedWords(words)
+
+proc chooseParent(first, second: int, field: string, timestep: int64): int =
+  var local: PythonMt19937
+  local.seedFromMd5(field, uint64(timestep))
+  if local.randBelow(2) == 0: first else: second
+
 proc requireFields(node: JsonNode, expected: openArray[string], context: string) =
   doAssert node.kind == JObject, context & " must be an object"
   var actual = newSeq[string]()
@@ -240,7 +337,7 @@ proc loadWorld*(node: JsonNode): World =
      "sugarRegrowRate", "spiceRegrowRate",
      "maxCellDistance", "maxCombatLoot", "maxTribes", "inheritancePolicy", "rng",
      "liveOrder", "cells", "agents", "orderedCandidates", "orderedNeighbors", "diseases",
-     "remainingDiseaseIds", "deaths"],
+     "remainingDiseaseIds", "nextAgentId", "depressionPercentage", "creditorTombstones", "deaths"],
     "snapshot",
   )
   doAssert node["schemaVersion"].getInt() == SchemaVersion, "unsupported schema version"
@@ -263,6 +360,8 @@ proc loadWorld*(node: JsonNode): World =
   result.maxCombatLoot = node.readNumber("maxCombatLoot")
   result.maxTribes = int(node.readInt("maxTribes"))
   result.inheritancePolicy = node["inheritancePolicy"].getStr()
+  result.nextAgentId = node.readInt("nextAgentId")
+  result.depressionPercentage = node.readNumber("depressionPercentage")
   doAssert result.timestep >= 0, "timestep must be nonnegative"
   doAssert result.width > 0 and result.height > 0, "world dimensions must be positive"
   doAssert result.sugarRegrowRate >= 0 and result.spiceRegrowRate >= 0,
@@ -270,7 +369,9 @@ proc loadWorld*(node: JsonNode): World =
   doAssert result.maxCellDistance >= 0, "maxCellDistance must be nonnegative"
   doAssert result.maxCombatLoot >= 0, "maxCombatLoot must be nonnegative"
   doAssert result.maxTribes > 0, "maxTribes must be positive"
-  doAssert result.inheritancePolicy == "none", "only inheritancePolicy none is supported"
+  doAssert result.inheritancePolicy in ["none", "children"], "only inheritancePolicy none or children is supported"
+  doAssert result.nextAgentId >= 0 and result.depressionPercentage >= 0 and
+    result.depressionPercentage <= 1, "invalid reproduction world state"
   result.rng = loadRng(node["rng"])
 
   doAssert node["liveOrder"].kind == JArray, "liveOrder must be an array"
@@ -311,7 +412,12 @@ proc loadWorld*(node: JsonNode): World =
        "friendlinessModifier", "happinessModifier", "tags", "tribe", "tagging",
        "tradeFactor", "marginalRateOfSubstitution", "tradeVolume", "sugarPrice",
        "spicePrice", "lastTradeTimestep", "lastTradePartners", "diseaseProtectionChance",
-       "immuneSystem", "diseases"],
+       "immuneSystem", "diseases", "born", "startingSugar", "startingSpice", "sex",
+       "fertilityAge", "infertilityAge", "inheritancePolicy", "lendingFactor",
+       "baseInterestRate", "loanDuration", "sugarMeanIncome", "spiceMeanIncome",
+       "startingImmuneSystem", "racialTags", "fatherId", "motherId", "childrenIds", "mateIds",
+       "lastMovedTimestep", "lastReproducedTimestep", "lastMates", "lastLendedTimestep",
+       "lastLoans", "creditorLoans", "debtorLoans"],
       "agent",
     )
     var agent = Agent(
@@ -353,6 +459,28 @@ proc loadWorld*(node: JsonNode): World =
       lastTradePartners: int(agentNode.readInt("lastTradePartners")),
       diseaseProtectionChance: agentNode.readNumber("diseaseProtectionChance"),
       hasImmuneSystem: agentNode["immuneSystem"].kind != JNull,
+      born: agentNode.readInt("born"),
+      startingSugar: agentNode.readNumber("startingSugar"),
+      startingSpice: agentNode.readNumber("startingSpice"),
+      sex: (if agentNode["sex"].kind == JNull: "" else: agentNode["sex"].getStr()),
+      hasSex: agentNode["sex"].kind != JNull,
+      fertilityAge: agentNode.readInt("fertilityAge"),
+      infertilityAge: agentNode.readInt("infertilityAge"),
+      inheritancePolicy: agentNode["inheritancePolicy"].getStr(),
+      lendingFactor: agentNode.readNumber("lendingFactor"),
+      baseInterestRate: agentNode.readNumber("baseInterestRate"),
+      loanDuration: agentNode.readInt("loanDuration"),
+      sugarMeanIncome: agentNode.readNumber("sugarMeanIncome"),
+      spiceMeanIncome: agentNode.readNumber("spiceMeanIncome"),
+      hasStartingImmuneSystem: agentNode["startingImmuneSystem"].kind != JNull,
+      hasRacialTags: agentNode["racialTags"].kind != JNull,
+      fatherId: (if agentNode["fatherId"].kind == JNull: EmptyOccupant else: agentNode.readInt("fatherId")),
+      motherId: (if agentNode["motherId"].kind == JNull: EmptyOccupant else: agentNode.readInt("motherId")),
+      lastMovedTimestep: agentNode.readInt("lastMovedTimestep"),
+      lastReproducedTimestep: agentNode.readInt("lastReproducedTimestep"),
+      lastMates: int(agentNode.readInt("lastMates")),
+      lastLendedTimestep: agentNode.readInt("lastLendedTimestep"),
+      lastLoans: int(agentNode.readInt("lastLoans")),
     )
     doAssert agent.id >= 0 and agent.id > previousId, "agents must be sorted by unique id"
     doAssert agent.seat >= 0 and agent.x >= 0 and agent.x < result.width and
@@ -368,12 +496,60 @@ proc loadWorld*(node: JsonNode): World =
       agent.spicePrice >= 0 and agent.lastTradePartners >= 0 and
       agent.diseaseProtectionChance >= 0 and agent.diseaseProtectionChance <= 1,
       "agent trade and disease fields are invalid"
+    doAssert agent.born >= 0 and agent.startingSugar >= 0 and agent.startingSpice >= 0 and
+      (not agent.hasSex or agent.sex in ["female", "male"]) and agent.fertilityAge >= 0 and
+      agent.infertilityAge >= agent.fertilityAge and agent.inheritancePolicy in ["none", "children"] and
+      agent.lendingFactor >= 0 and agent.baseInterestRate >= 0 and agent.loanDuration >= 0 and
+      agent.sugarMeanIncome >= 0 and agent.spiceMeanIncome >= 0 and agent.lastMates >= 0 and
+      agent.lastLoans >= 0, "invalid reproduction or lending agent state"
+    for field in ["childrenIds", "mateIds"]:
+      doAssert agentNode[field].kind == JArray, field & " must be an array"
+      for idNode in agentNode[field].items:
+        let relationId = idNode.getBiggestInt()
+        if field == "childrenIds":
+          doAssert relationId >= 0 and relationId notin agent.childrenIds,
+            "childrenIds must contain unique nonnegative IDs"
+          agent.childrenIds.add(relationId)
+        else:
+          doAssert relationId >= 0 and relationId notin agent.mateIds,
+            "mateIds must contain unique nonnegative IDs"
+          agent.mateIds.add(relationId)
+    for field in ["creditorLoans", "debtorLoans"]:
+      doAssert agentNode[field].kind == JArray, field & " must be an array"
+      for loanNode in agentNode[field].items:
+        loanNode.requireFields(["creditorId", "debtorId", "sugarLoan", "spiceLoan",
+          "loanDuration", "loanOrigin"], "loan")
+        let loan = Loan(
+          creditorId: loanNode.readInt("creditorId"), debtorId: loanNode.readInt("debtorId"),
+          sugarLoan: loanNode.readNumber("sugarLoan"), spiceLoan: loanNode.readNumber("spiceLoan"),
+          duration: loanNode.readInt("loanDuration"), origin: loanNode.readInt("loanOrigin"),
+        )
+        doAssert loan.creditorId >= 0 and loan.debtorId >= 0 and loan.sugarLoan >= 0 and
+          loan.spiceLoan >= 0 and loan.duration >= 1 and loan.origin >= 0, "invalid loan"
+        if field == "creditorLoans": agent.creditorLoans.add(loan)
+        else: agent.debtorLoans.add(loan)
+    if agent.hasStartingImmuneSystem:
+      doAssert agentNode["startingImmuneSystem"].kind == JArray,
+        "startingImmuneSystem must be null or a bit array"
+      for bitNode in agentNode["startingImmuneSystem"].items:
+        let bit = bitNode.getInt()
+        doAssert bit in [0, 1], "startingImmuneSystem must contain only 0 or 1"
+        agent.startingImmuneSystem.add(bit)
+    if agent.hasRacialTags:
+      doAssert agentNode["racialTags"].kind == JArray, "racialTags must be null or an array"
+      for tagNode in agentNode["racialTags"].items:
+        let tag = tagNode.getInt()
+        doAssert tag >= 0, "racialTags must be nonnegative integers"
+        agent.racialTags.add(tag)
     if agent.hasImmuneSystem:
       doAssert agentNode["immuneSystem"].kind == JArray, "immuneSystem must be null or a bit array"
       for bitNode in agentNode["immuneSystem"].items:
         let bit = bitNode.getInt()
         doAssert bit in [0, 1], "immuneSystem must contain only 0 or 1"
         agent.immuneSystem.add(bit)
+    doAssert agent.hasStartingImmuneSystem == agent.hasImmuneSystem and
+      (not agent.hasImmuneSystem or agent.startingImmuneSystem.len == agent.immuneSystem.len),
+      "starting and current immune systems must have matching shape"
     doAssert agentNode["diseases"].kind == JArray, "agent diseases must be an array"
     for infectionNode in agentNode["diseases"].items:
       infectionNode.requireFields(["diseaseId", "startIndex", "endIndex", "infectorId", "caught", "incubation"], "infection")
@@ -414,12 +590,62 @@ proc loadWorld*(node: JsonNode): World =
   var orderedIds = result.liveOrder
   orderedIds.sort()
   doAssert orderedIds == agentIds, "liveOrder must contain every agent id exactly once"
+  doAssert agentIds.len == 0 or result.nextAgentId > agentIds[^1],
+    "nextAgentId must exceed every living agent id"
+  doAssert node["creditorTombstones"].kind == JArray,
+    "creditorTombstones must be an array"
+  var previousTombstoneId = EmptyOccupant
+  for tombstoneNode in node["creditorTombstones"].items:
+    tombstoneNode.requireFields(["id", "inheritancePolicy", "childrenIds"],
+      "creditor tombstone")
+    var tombstone = CreditorTombstone(
+      id: tombstoneNode.readInt("id"),
+      inheritancePolicy: tombstoneNode["inheritancePolicy"].getStr(),
+    )
+    doAssert tombstone.id >= 0 and tombstone.id > previousTombstoneId and
+      tombstone.id notin agentIds, "creditor tombstones must have sorted unique dead IDs"
+    doAssert tombstone.inheritancePolicy in ["none", "children"],
+      "invalid creditor tombstone inheritancePolicy"
+    doAssert tombstoneNode["childrenIds"].kind == JArray,
+      "creditor tombstone childrenIds must be an array"
+    for childNode in tombstoneNode["childrenIds"].items:
+      let childId = childNode.getBiggestInt()
+      doAssert childId >= 0 and childId notin tombstone.childrenIds,
+        "creditor tombstone childrenIds must be unique nonnegative IDs"
+      tombstone.childrenIds.add(childId)
+    result.creditorTombstones.add(tombstone)
+    previousTombstoneId = tombstone.id
+  doAssert result.creditorTombstones.len == 0 or
+    result.nextAgentId > result.creditorTombstones[^1].id,
+    "nextAgentId must exceed every creditor tombstone ID"
   let taggingEnabled = result.agents.anyIt(it.tagging)
+  var liveCreditorRecords = newSeq[Loan]()
+  var liveDebtorRecords = newSeq[Loan]()
   for agent in result.agents:
     doAssert not taggingEnabled or agent.hasTags,
       "every agent must have tags when tagging is enabled"
     doAssert max(0.0, agent.aggressionFactor + agent.aggressionFactorModifier) == 0 or
       agent.hasTags, "combat requires agent tags and tribes"
+    for loan in agent.creditorLoans:
+      doAssert loan.debtorId == agent.id, "loan debtorId must match its owner"
+      if loan.creditorId in agentIds:
+        liveCreditorRecords.add(loan)
+      else:
+        doAssert result.creditorTombstones.anyIt(it.id == loan.creditorId),
+          "missing creditor requires a creditor tombstone"
+    for loan in agent.debtorLoans:
+      doAssert loan.creditorId == agent.id, "loan creditorId must match its owner"
+      if loan.debtorId in agentIds:
+        liveDebtorRecords.add(loan)
+  for loan in liveCreditorRecords:
+    doAssert liveCreditorRecords.count(loan) == liveDebtorRecords.count(loan),
+      "live creditor and debtor loan records must be mirrored with equal multiplicity"
+  for loan in liveDebtorRecords:
+    doAssert liveDebtorRecords.count(loan) == liveCreditorRecords.count(loan),
+      "live creditor and debtor loan records must be mirrored with equal multiplicity"
+  for tombstone in result.creditorTombstones:
+    doAssert result.agents.anyIt(it.creditorLoans.anyIt(it.creditorId == tombstone.id)),
+      "creditor tombstone must be referenced by a living debtor"
   for index, cell in result.cells:
     if cell.occupantId != EmptyOccupant:
       doAssert cell.occupantId in agentIds, "cell occupantId does not name an agent"
@@ -493,8 +719,6 @@ proc loadWorld*(node: JsonNode): World =
     doAssert disease.id > previousDiseaseId and disease.incubationPeriod >= 0 and
       disease.startTimestep >= 0 and disease.transmissionChance >= 0 and disease.transmissionChance <= 1,
       "invalid disease definition"
-    doAssert disease.fertilityPenalty <= 0,
-      "positive disease fertilityPenalty can activate unsupported reproduction"
     if disease.hasTags:
       doAssert diseaseNode["tags"].kind == JArray, "disease tags must be null or a bit array"
       for bitNode in diseaseNode["tags"].items:
@@ -613,6 +837,35 @@ proc snapshot*(world: World): JsonNode =
             "caught": infection.caught, "incubation": infection.incubation,
           })
         infections,
+      "born": agent.born, "startingSugar": agent.startingSugar,
+      "startingSpice": agent.startingSpice,
+      "sex": (if agent.hasSex: %agent.sex else: newJNull()),
+      "fertilityAge": agent.fertilityAge, "infertilityAge": agent.infertilityAge,
+      "inheritancePolicy": agent.inheritancePolicy, "lendingFactor": agent.lendingFactor,
+      "baseInterestRate": agent.baseInterestRate, "loanDuration": agent.loanDuration,
+      "sugarMeanIncome": agent.sugarMeanIncome, "spiceMeanIncome": agent.spiceMeanIncome,
+      "startingImmuneSystem": (if agent.hasStartingImmuneSystem: %agent.startingImmuneSystem else: newJNull()),
+      "racialTags": (if agent.hasRacialTags: %agent.racialTags else: newJNull()),
+      "fatherId": (if agent.fatherId == EmptyOccupant: newJNull() else: %agent.fatherId),
+      "motherId": (if agent.motherId == EmptyOccupant: newJNull() else: %agent.motherId),
+      "childrenIds": agent.childrenIds, "mateIds": agent.mateIds,
+      "lastMovedTimestep": agent.lastMovedTimestep,
+      "lastReproducedTimestep": agent.lastReproducedTimestep, "lastMates": agent.lastMates,
+      "lastLendedTimestep": agent.lastLendedTimestep, "lastLoans": agent.lastLoans,
+      "creditorLoans": block:
+        var values = newJArray()
+        for loan in agent.creditorLoans:
+          values.add(%*{"creditorId": loan.creditorId, "debtorId": loan.debtorId,
+            "sugarLoan": loan.sugarLoan, "spiceLoan": loan.spiceLoan,
+            "loanDuration": loan.duration, "loanOrigin": loan.origin})
+        values,
+      "debtorLoans": block:
+        var values = newJArray()
+        for loan in agent.debtorLoans:
+          values.add(%*{"creditorId": loan.creditorId, "debtorId": loan.debtorId,
+            "sugarLoan": loan.sugarLoan, "spiceLoan": loan.spiceLoan,
+            "loanDuration": loan.duration, "loanOrigin": loan.origin})
+        values,
     })
   var orderedCandidates = newJArray()
   for candidates in world.orderedCandidates:
@@ -646,6 +899,12 @@ proc snapshot*(world: World): JsonNode =
       "visionPenalty": disease.visionPenalty, "recoverable": disease.recoverable,
       "infectedIds": disease.infectedIds,
     })
+  var creditorTombstones = newJArray()
+  for tombstone in world.creditorTombstones:
+    creditorTombstones.add(%*{
+      "id": tombstone.id, "inheritancePolicy": tombstone.inheritancePolicy,
+      "childrenIds": tombstone.childrenIds,
+    })
   %*{
     "schemaVersion": SchemaVersion, "sourcePin": world.sourcePin,
     "configurationSha256": world.configurationSha256, "rulesetSha256": rulesetSha256,
@@ -654,10 +913,12 @@ proc snapshot*(world: World): JsonNode =
     "spiceRegrowRate": world.spiceRegrowRate,
     "maxCellDistance": world.maxCellDistance, "maxCombatLoot": world.maxCombatLoot,
     "maxTribes": world.maxTribes, "inheritancePolicy": world.inheritancePolicy,
+    "nextAgentId": world.nextAgentId, "depressionPercentage": world.depressionPercentage,
     "rng": rngJson(world.rng),
     "liveOrder": liveOrder, "cells": cells, "agents": agents,
     "orderedCandidates": orderedCandidates, "orderedNeighbors": orderedNeighbors,
     "diseases": diseases, "remainingDiseaseIds": world.remainingDiseaseIds,
+    "creditorTombstones": creditorTombstones,
     "deaths": deaths,
   }
 
@@ -684,6 +945,13 @@ proc effectiveSugarMetabolism(agent: Agent): float64 =
 
 proc effectiveSpiceMetabolism(agent: Agent): float64 =
   max(0.0, agent.spiceMetabolism + agent.spiceMetabolismModifier)
+
+proc roundedMultiply(left, right: float64): float64 {.noinline.} =
+  left * right
+
+proc updateMeanIncome(previous, collected: float64): float64 =
+  let alpha = 0.05
+  roundedMultiply(alpha, collected) + roundedMultiply(1 - alpha, previous)
 
 proc marginalRate(agent: Agent): float64 =
   let spiceMetabolism = agent.effectiveSpiceMetabolism()
@@ -856,6 +1124,7 @@ proc doDisease(world: var World, id: int64, agentIndexById: Table[int64, int], d
       for offset in 0 ..< responseEnd - infection.startIndex:
         if world.agents[agentIndex].immuneSystem[infection.startIndex + offset] != disease.tags[offset]:
           world.agents[agentIndex].immuneSystem[infection.startIndex + offset] = disease.tags[offset]
+          world.agents[agentIndex].startingImmuneSystem[infection.startIndex + offset] = disease.tags[offset]
           responseMatches = false
           break
       if responseMatches:
@@ -887,6 +1156,336 @@ proc clearDiseasesOnDeath(world: var World, agentIndex: int) =
     if infectedIndex >= 0: world.diseases[definitionIndex].infectedIds.delete(infectedIndex)
   world.agents[agentIndex].diseases.setLen(0)
 
+proc fertile(agent: Agent): bool =
+  agent.sugar >= agent.startingSugar and agent.spice >= agent.startingSpice and
+    agent.age >= agent.fertilityAge and agent.age < agent.infertilityAge and
+    agent.fertilityFactor + agent.fertilityFactorModifier > 0
+
+proc emptyNeighborCells(world: World, agent: Agent): seq[int] =
+  let cell = agent.x * world.height + agent.y
+  for neighbor in world.orderedNeighbors[cell]:
+    if world.cells[neighbor].occupantId == EmptyOccupant: result.add(neighbor)
+
+proc createChild(world: var World, firstIndex, secondIndex, cell: int): Agent =
+  let first = world.agents[firstIndex]
+  let second = world.agents[secondIndex]
+  let paired = chooseParent(firstIndex, secondIndex, "decisionModel", world.timestep)
+  result = world.agents[paired]
+  template choose(name: string, field: untyped) =
+    result.field = world.agents[chooseParent(firstIndex, secondIndex, name, world.timestep)].field
+  choose("aggressionFactor", aggressionFactor)
+  choose("baseInterestRate", baseInterestRate)
+  choose("diseaseProtectionChance", diseaseProtectionChance)
+  choose("fertilityAge", fertilityAge)
+  choose("fertilityFactor", fertilityFactor)
+  choose("infertilityAge", infertilityAge)
+  choose("inheritancePolicy", inheritancePolicy)
+  choose("lendingFactor", lendingFactor)
+  choose("loanDuration", loanDuration)
+  choose("lookaheadFactor", lookaheadFactor)
+  choose("maxAge", maxAge)
+  choose("maxFriends", maxFriends)
+  choose("movement", movement)
+  choose("spiceMetabolism", spiceMetabolism)
+  choose("sugarMetabolism", sugarMetabolism)
+  choose("sex", sex)
+  choose("tradeFactor", tradeFactor)
+  choose("vision", vision)
+  result.startingSugar = first.startingSugar / (first.fertilityFactor * 2) +
+    second.startingSugar / (second.fertilityFactor * 2)
+  result.startingSpice = first.startingSpice / (first.fertilityFactor * 2) +
+    second.startingSpice / (second.fertilityFactor * 2)
+  result.sugar = result.startingSugar
+  result.spice = result.startingSpice
+  var local: PythonMt19937
+  local.seedFromMd5("tags", uint64(world.timestep))
+  result.tags.setLen(0)
+  result.hasTags = first.hasTags
+  if first.hasTags:
+    for index, bit in first.tags:
+      result.tags.add(if bit == second.tags[index]: bit else: int(local.randBelow(2)))
+  local.seedFromMd5("racialTags", uint64(world.timestep))
+  result.racialTags.setLen(0)
+  result.hasRacialTags = first.hasRacialTags
+  if first.hasRacialTags:
+    for index, bit in first.racialTags:
+      result.racialTags.add(if local.randBelow(2) == 0: bit else: second.racialTags[index])
+  result.depressed = local.randomFloat() <= world.depressionPercentage
+  local.seedFromMd5("immuneSystem", uint64(world.timestep))
+  result.immuneSystem.setLen(0)
+  result.hasImmuneSystem = first.hasImmuneSystem
+  if first.hasImmuneSystem:
+    for index, bit in first.startingImmuneSystem:
+      result.immuneSystem.add(if bit == second.startingImmuneSystem[index]: bit else: int(local.randBelow(2)))
+  result.startingImmuneSystem = result.immuneSystem
+  result.hasStartingImmuneSystem = result.hasImmuneSystem
+  result.id = world.nextAgentId
+  inc world.nextAgentId
+  result.seat = if world.rng.randomFloat() < 0.5: first.seat else: second.seat
+  result.born = world.timestep
+  result.x = cell div world.height
+  result.y = cell mod world.height
+  result.age = 0
+  result.fatherId = if first.sex == "male": first.id else: second.id
+  result.motherId = if first.sex == "female": first.id else: second.id
+  result.childrenIds = @[]
+  result.mateIds = @[]
+  result.diseases = @[]
+  result.creditorLoans = @[]
+  result.debtorLoans = @[]
+  result.fertilityFactorModifier = 0
+  result.aggressionFactorModifier = 0
+  result.friendlinessModifier = 0
+  result.happinessModifier = 0
+  result.movementModifier = 0
+  result.visionModifier = 0
+  result.sugarMetabolismModifier = 0
+  result.spiceMetabolismModifier = 0
+  result.happinessUnit = 1
+  result.marginalRateOfSubstitution = 1
+  result.tradeVolume = 0
+  result.sugarPrice = 0
+  result.spicePrice = 0
+  result.lastMovedTimestep = world.timestep
+  result.lastTradeTimestep = -1
+  result.lastTradePartners = 0
+  result.lastReproducedTimestep = -1
+  result.lastMates = 0
+  result.lastLendedTimestep = -1
+  result.lastLoans = 0
+  result.sugarMeanIncome = 1
+  result.spiceMeanIncome = 1
+  if result.depressed:
+    result.aggressionFactor *= 1.145
+    result.maxFriends = int(ceil(float64(result.maxFriends) * 0.6333))
+    result.happinessUnit *= 0.5763
+    result.movement *= int(ceil(float64(result.movement) * 0.429))
+    result.spiceMetabolism *= ceil(result.spiceMetabolism * 1.544)
+    result.sugarMetabolism *= ceil(result.sugarMetabolism * 1.544)
+  if result.hasTags: world.recomputeTribe(result)
+  let sugarCollected = world.cells[cell].sugar
+  let spiceCollected = world.cells[cell].spice
+  result.sugar += sugarCollected
+  result.spice += spiceCollected
+  result.sugarMeanIncome = updateMeanIncome(result.sugarMeanIncome, sugarCollected)
+  result.spiceMeanIncome = updateMeanIncome(result.spiceMeanIncome, spiceCollected)
+  world.cells[cell].sugar = 0
+  world.cells[cell].spice = 0
+  world.cells[cell].occupantId = result.id
+
+proc doReproduction(world: var World, id: int64, agentIndexById: var Table[int64, int],
+    dead: Table[int64, Death]) =
+  let actorIndex = agentIndexById[id]
+  if not world.agents[actorIndex].fertile(): return
+  let origin = world.agents[actorIndex].x * world.height + world.agents[actorIndex].y
+  var neighborCells = world.orderedNeighbors[origin]
+  world.rng.pythonShuffle(neighborCells)
+  let ownEmpty = world.emptyNeighborCells(world.agents[actorIndex])
+  var timestepMates = newSeq[int64]()
+  for neighborCell in neighborCells:
+    let mateId = world.cells[neighborCell].occupantId
+    if mateId == EmptyOccupant or dead.hasKey(mateId): continue
+    let mateIndex = agentIndexById[mateId]
+    let compatible = world.agents[actorIndex].hasSex and world.agents[mateIndex].hasSex and
+      world.agents[mateIndex].fertile() and
+      world.agents[actorIndex].sex != world.agents[mateIndex].sex
+    var emptyCells = ownEmpty & world.emptyNeighborCells(world.agents[mateIndex])
+    world.rng.pythonShuffle(emptyCells)
+    if not world.agents[actorIndex].fertile() or not compatible or emptyCells.len == 0: continue
+    var childCell = emptyCells.pop()
+    while world.cells[childCell].occupantId != EmptyOccupant and emptyCells.len > 0:
+      childCell = emptyCells.pop()
+    if world.cells[childCell].occupantId != EmptyOccupant: continue
+    if mateId notin world.agents[actorIndex].mateIds: world.agents[actorIndex].mateIds.add(mateId)
+    let child = world.createChild(actorIndex, mateIndex, childCell)
+    world.agents[actorIndex].childrenIds.add(child.id)
+    world.agents[actorIndex].sugar -= world.agents[actorIndex].startingSugar /
+      (world.agents[actorIndex].fertilityFactor * 2)
+    world.agents[actorIndex].spice -= world.agents[actorIndex].startingSpice /
+      (world.agents[actorIndex].fertilityFactor * 2)
+    world.agents[mateIndex].sugar -= world.agents[mateIndex].startingSugar /
+      (world.agents[mateIndex].fertilityFactor * 2)
+    world.agents[mateIndex].spice -= world.agents[mateIndex].startingSpice /
+      (world.agents[mateIndex].fertilityFactor * 2)
+    world.agents[actorIndex].lastReproducedTimestep = world.timestep
+    if mateId notin timestepMates: timestepMates.add(mateId)
+    agentIndexById[child.id] = world.agents.len
+    world.agents.add(child)
+    world.liveOrder.add(child.id)
+  world.agents[actorIndex].lastMates = timestepMates.len
+
+proc removeLoan(values: var seq[Loan], loan: Loan) =
+  for index, value in values:
+    if value == loan:
+      values.delete(index)
+      return
+
+proc addLoan(world: var World, creditorIndex, debtorIndex: int, origin: int64,
+    sugarPrincipal, sugarLoan, spicePrincipal, spiceLoan: float64, duration: int64) =
+  let loan = Loan(
+    creditorId: world.agents[creditorIndex].id, debtorId: world.agents[debtorIndex].id,
+    sugarLoan: sugarLoan, spiceLoan: spiceLoan, duration: duration, origin: origin,
+  )
+  world.agents[creditorIndex].debtorLoans.add(loan)
+  world.agents[debtorIndex].creditorLoans.add(loan)
+  world.agents[creditorIndex].sugar -= sugarPrincipal
+  world.agents[creditorIndex].spice -= spicePrincipal
+  world.agents[debtorIndex].sugar += sugarPrincipal
+  world.agents[debtorIndex].spice += spicePrincipal
+
+proc currentDebt(agent: Agent, sugar: bool): float64 =
+  for loan in agent.creditorLoans:
+    if loan.duration != 0:
+      result += (if sugar: loan.sugarLoan else: loan.spiceLoan) / float64(loan.duration)
+
+proc creditWorthy(agent: Agent, sugarLoan, spiceLoan: float64, duration: int64): bool =
+  if duration == 0: return false
+  agent.sugarMeanIncome - agent.effectiveSugarMetabolism() - agent.currentDebt(true) -
+      sugarLoan / float64(duration) >= 0 and
+    agent.spiceMeanIncome - agent.effectiveSpiceMetabolism() - agent.currentDebt(false) -
+      spiceLoan / float64(duration) >= 0
+
+proc payDebt(world: var World, debtorIndex, loanIndex: int,
+    agentIndexById: Table[int64, int], dead: Table[int64, Death]) =
+  let loan = world.agents[debtorIndex].creditorLoans[loanIndex]
+  if not agentIndexById.hasKey(loan.creditorId):
+    let tombstoneIndex = world.creditorTombstones.findIt(it.id == loan.creditorId)
+    doAssert tombstoneIndex >= 0, "missing creditor requires a creditor tombstone"
+    let tombstone = world.creditorTombstones[tombstoneIndex]
+    if tombstone.inheritancePolicy == "children":
+      var heirs = newSeq[int]()
+      for childId in tombstone.childrenIds:
+        if childId != world.agents[debtorIndex].id and agentIndexById.hasKey(childId) and
+            not dead.hasKey(childId):
+          heirs.add(agentIndexById[childId])
+      if heirs.len > 0:
+        for heir in heirs:
+          world.addLoan(heir, debtorIndex, world.agents[debtorIndex].lastMovedTimestep,
+            0, loan.sugarLoan / float64(heirs.len), 0,
+            loan.spiceLoan / float64(heirs.len), 1)
+    world.agents[debtorIndex].creditorLoans.delete(loanIndex)
+    return
+  let creditorIndex = agentIndexById[loan.creditorId]
+  if dead.hasKey(loan.creditorId):
+    # Canonical v7 supports children inheritance only while the creditor remains in this tick.
+    if world.agents[creditorIndex].inheritancePolicy == "children":
+      var heirs = newSeq[int]()
+      for childId in world.agents[creditorIndex].childrenIds:
+        if childId != world.agents[debtorIndex].id and agentIndexById.hasKey(childId) and
+            not dead.hasKey(childId): heirs.add(agentIndexById[childId])
+      if heirs.len > 0:
+        for heir in heirs:
+          world.addLoan(heir, debtorIndex, world.agents[debtorIndex].lastMovedTimestep,
+            0, loan.sugarLoan / float64(heirs.len), 0,
+            loan.spiceLoan / float64(heirs.len), 1)
+    world.agents[debtorIndex].creditorLoans.delete(loanIndex)
+    world.agents[creditorIndex].debtorLoans.removeLoan(loan)
+    return
+  if world.agents[debtorIndex].sugar - loan.sugarLoan > 0 and
+      world.agents[debtorIndex].spice - loan.spiceLoan > 0:
+    world.agents[debtorIndex].sugar -= loan.sugarLoan
+    world.agents[debtorIndex].spice -= loan.spiceLoan
+    world.agents[creditorIndex].sugar += loan.sugarLoan
+    world.agents[creditorIndex].spice += loan.spiceLoan
+    world.agents[debtorIndex].creditorLoans.delete(loanIndex)
+    world.agents[creditorIndex].debtorLoans.removeLoan(loan)
+    return
+  let sugarPayout = world.agents[debtorIndex].sugar / 2
+  let spicePayout = world.agents[debtorIndex].spice / 2
+  let sugarLeft = loan.sugarLoan - sugarPayout
+  let spiceLeft = loan.spiceLoan - spicePayout
+  world.agents[debtorIndex].sugar -= sugarPayout
+  world.agents[debtorIndex].spice -= spicePayout
+  world.agents[creditorIndex].sugar += sugarPayout
+  world.agents[creditorIndex].spice += spicePayout
+  world.agents[debtorIndex].creditorLoans.delete(loanIndex)
+  world.agents[creditorIndex].debtorLoans.removeLoan(loan)
+  let interest = world.agents[creditorIndex].lendingFactor *
+    world.agents[creditorIndex].baseInterestRate
+  world.addLoan(creditorIndex, debtorIndex, world.agents[debtorIndex].lastMovedTimestep,
+    0, sugarLeft + interest * sugarLeft, 0, spiceLeft + interest * spiceLeft,
+    world.agents[creditorIndex].loanDuration)
+
+proc updateLoans(world: var World, agentIndex: int, agentIndexById: Table[int64, int],
+    dead: Table[int64, Death]) =
+  var index = 0
+  while index < world.agents[agentIndex].debtorLoans.len:
+    let debtorId = world.agents[agentIndex].debtorLoans[index].debtorId
+    if not agentIndexById.hasKey(debtorId) or dead.hasKey(debtorId):
+      world.agents[agentIndex].debtorLoans.delete(index)
+    inc index # Preserve Python remove-during-iteration skip.
+  index = 0
+  while index < world.agents[agentIndex].creditorLoans.len:
+    let loan = world.agents[agentIndex].creditorLoans[index]
+    if world.agents[agentIndex].lastMovedTimestep - loan.origin - loan.duration == 0:
+      world.payDebt(agentIndex, index, agentIndexById, dead)
+    inc index # Preserve Python remove-during-iteration skip.
+
+proc doLending(world: var World, id: int64, agentIndexById: Table[int64, int],
+    dead: Table[int64, Death]) =
+  let lenderIndex = agentIndexById[id]
+  world.updateLoans(lenderIndex, agentIndexById, dead)
+  let lender = world.agents[lenderIndex]
+  if lender.lendingFactor == 0 or lender.age < lender.fertilityAge or
+      (lender.fertile() and
+       (lender.sugar <= lender.startingSugar or lender.spice <= lender.startingSpice)):
+    return
+  let rate = min(1.0, lender.lendingFactor * lender.baseInterestRate)
+  let cell = lender.x * world.height + lender.y
+  var borrowers = newSeq[int64]()
+  for neighborCell in world.orderedNeighbors[cell]:
+    let borrowerId = world.cells[neighborCell].occupantId
+    if borrowerId != EmptyOccupant and not dead.hasKey(borrowerId):
+      let borrower = world.agents[agentIndexById[borrowerId]]
+      if borrower.age >= borrower.fertilityAge and borrower.age < borrower.infertilityAge and
+          not borrower.fertile(): borrowers.add(borrowerId)
+  world.rng.pythonShuffle(borrowers)
+  var loans = 0
+  for borrowerId in borrowers:
+    let borrowerIndex = agentIndexById[borrowerId]
+    var maxSugar = world.agents[lenderIndex].sugar / 2
+    var maxSpice = world.agents[lenderIndex].spice / 2
+    if world.agents[lenderIndex].fertile():
+      maxSugar = max(0.0, world.agents[lenderIndex].sugar - world.agents[lenderIndex].startingSugar)
+      maxSpice = max(0.0, world.agents[lenderIndex].spice - world.agents[lenderIndex].startingSpice)
+    if maxSugar == 0 and maxSpice == 0: return
+    let sugarNeed = max(0.0, world.agents[borrowerIndex].startingSugar - world.agents[borrowerIndex].sugar)
+    let spiceNeed = max(0.0, world.agents[borrowerIndex].startingSpice - world.agents[borrowerIndex].spice)
+    let sugarPrincipal = min(maxSugar, sugarNeed)
+    let spicePrincipal = min(maxSpice, spiceNeed)
+    let sugarAmount = sugarPrincipal + sugarPrincipal * rate
+    let spiceAmount = spicePrincipal + spicePrincipal * rate
+    if (sugarNeed == 0 and spiceNeed == 0) or (sugarAmount == 0 and spiceAmount == 0): continue
+    if world.agents[lenderIndex].sugar - sugarPrincipal <= world.agents[lenderIndex].effectiveSugarMetabolism() or
+        world.agents[lenderIndex].spice - spicePrincipal <= world.agents[lenderIndex].effectiveSpiceMetabolism(): continue
+    if not world.agents[borrowerIndex].creditWorthy(sugarAmount, spiceAmount,
+        world.agents[lenderIndex].loanDuration): continue
+    world.addLoan(lenderIndex, borrowerIndex, world.agents[lenderIndex].lastMovedTimestep,
+      sugarPrincipal, sugarAmount, spicePrincipal, spiceAmount,
+      world.agents[lenderIndex].loanDuration)
+    inc loans
+  if loans > 0:
+    world.agents[lenderIndex].lastLendedTimestep = world.timestep
+    world.agents[lenderIndex].lastLoans = loans
+
+proc doInheritance(world: var World, agentIndex: int, agentIndexById: Table[int64, int],
+    dead: Table[int64, Death]) =
+  if world.agents[agentIndex].inheritancePolicy == "none": return
+  world.agents[agentIndex].sugar = max(0.0, world.agents[agentIndex].sugar)
+  world.agents[agentIndex].spice = max(0.0, world.agents[agentIndex].spice)
+  var heirs = newSeq[int]()
+  for childId in world.agents[agentIndex].childrenIds:
+    if agentIndexById.hasKey(childId) and not dead.hasKey(childId):
+      heirs.add(agentIndexById[childId])
+  if heirs.len == 0: return
+  let sugarShare = world.agents[agentIndex].sugar / float64(heirs.len)
+  let spiceShare = world.agents[agentIndex].spice / float64(heirs.len)
+  for heir in heirs:
+    world.agents[heir].sugar += sugarShare
+    world.agents[heir].spice += spiceShare
+    world.agents[agentIndex].sugar -= sugarShare
+    world.agents[agentIndex].spice -= spiceShare
+
 proc stepOne*(world: var World) =
   world.deaths.setLen(0)
   inc world.timestep
@@ -900,11 +1499,17 @@ proc stepOne*(world: var World) =
     agentIndexById[agent.id] = index
   var dead = initTable[int64, Death]()
 
-  for id in world.liveOrder:
+  var turnIndex = 0
+  while turnIndex < world.liveOrder.len:
+    let id = world.liveOrder[turnIndex]
     if dead.hasKey(id):
+      inc turnIndex
       continue
     let agentIndex = agentIndexById[id]
     var agent = world.agents[agentIndex]
+    if agent.lastMovedTimestep == world.timestep:
+      inc turnIndex
+      continue
     let origin = agent.x * world.height + agent.y
     let effectiveVision = max(0, agent.vision + agent.visionModifier)
     let effectiveMovement = max(0, agent.movement + agent.movementModifier)
@@ -970,6 +1575,7 @@ proc stepOne*(world: var World) =
       world.agents[preyIndex] = prey
       dead[preyId] = Death(id: prey.id, seat: prey.seat, age: prey.age, cause: "combat")
       world.cells[destination].occupantId = EmptyOccupant
+      world.doInheritance(preyIndex, agentIndexById, dead)
       world.clearDiseasesOnDeath(preyIndex)
     if destination != origin:
       world.cells[origin].occupantId = EmptyOccupant
@@ -977,12 +1583,17 @@ proc stepOne*(world: var World) =
       agent.x = destination div world.height
       agent.y = destination mod world.height
 
-    agent.sugar += world.cells[destination].sugar
-    agent.spice += world.cells[destination].spice
+    let sugarCollected = world.cells[destination].sugar
+    let spiceCollected = world.cells[destination].spice
+    agent.sugar += sugarCollected
+    agent.spice += spiceCollected
+    agent.sugarMeanIncome = updateMeanIncome(agent.sugarMeanIncome, sugarCollected)
+    agent.spiceMeanIncome = updateMeanIncome(agent.spiceMeanIncome, spiceCollected)
     world.cells[destination].sugar = 0
     world.cells[destination].spice = 0
     agent.sugar -= effectiveSugarMetabolism
     agent.spice -= effectiveSpiceMetabolism
+    agent.lastMovedTimestep = world.timestep
     var cause = ""
     if agent.sugar < 0 or agent.spice < 0 or
       (effectiveSugarMetabolism > 0 and agent.sugar <= 0) or
@@ -1007,6 +1618,8 @@ proc stepOne*(world: var World) =
               world.agents[neighborIndex] = target
       world.agents[agentIndex] = agent
       world.doTrading(agent.id, agentIndexById, dead)
+      world.doReproduction(agent.id, agentIndexById, dead)
+      world.doLending(agent.id, agentIndexById, dead)
       world.doDisease(agent.id, agentIndexById, dead)
       agent = world.agents[agentIndex]
       inc agent.age
@@ -1017,11 +1630,33 @@ proc stepOne*(world: var World) =
       dead[agent.id] = Death(id: agent.id, seat: agent.seat, age: agent.age, cause: cause)
     world.agents[agentIndex] = agent
     if cause.len > 0:
+      world.doInheritance(agentIndex, agentIndexById, dead)
       world.clearDiseasesOnDeath(agentIndex)
+    inc turnIndex
 
   for id in world.liveOrder:
     if dead.hasKey(id):
       world.deaths.add(dead[id])
+  var referencedDeadCreditors = newSeq[int64]()
+  for debtor in world.agents:
+    if not dead.hasKey(debtor.id):
+      for loan in debtor.creditorLoans:
+        if (not agentIndexById.hasKey(loan.creditorId) or dead.hasKey(loan.creditorId)) and
+            loan.creditorId notin referencedDeadCreditors:
+          referencedDeadCreditors.add(loan.creditorId)
+  referencedDeadCreditors.sort()
+  var retainedTombstones = newSeq[CreditorTombstone]()
+  for creditorId in referencedDeadCreditors:
+    let priorIndex = world.creditorTombstones.findIt(it.id == creditorId)
+    if priorIndex >= 0:
+      retainedTombstones.add(world.creditorTombstones[priorIndex])
+    else:
+      let creditor = world.agents[agentIndexById[creditorId]]
+      retainedTombstones.add(CreditorTombstone(
+        id: creditor.id, inheritancePolicy: creditor.inheritancePolicy,
+        childrenIds: creditor.childrenIds,
+      ))
+  world.creditorTombstones = retainedTombstones
   if world.deaths.len > 0:
     world.agents.keepItIf(not dead.hasKey(it.id))
     world.liveOrder.keepItIf(not dead.hasKey(it))
@@ -1036,12 +1671,33 @@ proc step*(world: var World, ticks: int): int {.discardable.} =
 
 when isMainModule:
   proc usage(): string =
-    "usage: sugarscape-native (step|bench) --ticks N < snapshot.json"
+    "usage: sugarscape-native (step|bench|bench-worker) --ticks N < snapshot.json"
+
+  proc writeLine(node: JsonNode) =
+    stdout.write($node & "\n")
+    stdout.flushFile()
 
   let arguments = commandLineParams()
-  doAssert arguments.len == 3 and arguments[0] in ["step", "bench"] and
+  doAssert arguments.len == 3 and arguments[0] in ["step", "bench", "bench-worker"] and
     arguments[1] == "--ticks", usage()
   let ticks = parseInt(arguments[2])
+  if arguments[0] == "bench-worker":
+    var snapshotLine: string
+    doAssert stdin.readLine(snapshotLine), "bench-worker requires one snapshot line"
+    var world = loadWorld(parseJson(snapshotLine))
+    writeLine(%*{"phase": "ready"})
+    var command: string
+    doAssert stdin.readLine(command) and command == "start", "bench-worker expected start"
+    let started = getMonoTime()
+    let completedTicks = world.step(ticks)
+    let elapsedNs = (getMonoTime() - started).inNanoseconds
+    writeLine(%*{
+      "phase": "finished", "ticks": completedTicks, "elapsedNs": elapsedNs,
+    })
+    doAssert stdin.readLine(command) and command == "collect", "bench-worker expected collect"
+    writeLine(%*{"phase": "result", "snapshot": world.snapshot()})
+    quit(0)
+
   var world = loadWorld(parseJson(stdin.readAll()))
   let started = getMonoTime()
   let completedTicks = world.step(ticks)

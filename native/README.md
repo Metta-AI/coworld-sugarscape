@@ -1,9 +1,10 @@
 # Native Sugarscape core
 
-This directory contains the deterministic Nim simulation core. Its v6 wire
+This directory contains the deterministic Nim simulation core. Its v7 wire
 schema supports sugar and spice, Cobb-Douglas welfare, trait modifiers,
-tagging, combat, trade, disease progression, starvation, aging, and population
-decline. It remains a pre-Commonwealth parity slice.
+tagging, combat, trade, disease progression, reproduction, lending, children
+inheritance, starvation, aging, and population change. It remains a
+pre-Commonwealth parity slice.
 
 Build and test it with Nim 2.2 or newer:
 
@@ -54,12 +55,17 @@ increments age before checking finite `maxAge`.
 Tagging shuffles DTL's ordered neighbors, including duplicates on wrapped small
 grids, copies one tag bit per occupied neighbor, and updates tribes immediately.
 Combat applies eligibility, retaliation, capped two-resource loot, immediate
-death, and end-of-tick removal order. Inheritance policy must be `none`.
+death, and end-of-tick removal order. Inheritance may be `none` or `children`.
 
 Trade preserves cached marginal rates of substitution, base-metabolism lethal
 checks, repeated transactions, and DTL attempted-price metrics.
 
-This slice does not implement replacement, reproduction, lending, scheduled
-disease introduction, pollution, seasons, leaders, inheritance, or general
-SugarLang policies. The closed snapshot schema rejects additional fields, RNGs, and
+Reproduction preserves DTL's per-field deterministic inheritance, global seat
+draw, kinship relations, newborn harvest, and birth-tick action suppression.
+Lending preserves ordered loan lists, repayment, refinancing, and children debt
+inheritance. Dead-creditor tombstones retain the relations needed after resume.
+
+This slice does not implement replacement, scheduled disease introduction,
+pollution, seasons, leaders, non-children inheritance, or general SugarLang
+policies. The closed snapshot schema rejects additional fields, RNGs, and
 Gaussian cache state.
