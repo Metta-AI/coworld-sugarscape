@@ -318,6 +318,14 @@ class NativeSnapshot:
             "lastLoans",
             "creditorLoans",
             "debtorLoans",
+            "friends",
+            "lastCombatTimestep",
+            "conflictHappiness",
+            "familyHappiness",
+            "healthHappiness",
+            "socialHappiness",
+            "wealthHappiness",
+            "happiness",
         }
         agents = []
         for index, agent in enumerate(raw_agents):
@@ -427,6 +435,14 @@ class NativeSnapshot:
                 _int(agent["lastLoans"], "agent.lastLoans"),
                 (),
                 (),
+                (),
+                agent["lastCombatTimestep"],
+                _signed_number(agent["conflictHappiness"], "agent.conflictHappiness"),
+                _signed_number(agent["familyHappiness"], "agent.familyHappiness"),
+                _signed_number(agent["healthHappiness"], "agent.healthHappiness"),
+                _signed_number(agent["socialHappiness"], "agent.socialHappiness"),
+                _signed_number(agent["wealthHappiness"], "agent.wealthHappiness"),
+                _signed_number(agent["happiness"], "agent.happiness"),
             )
             if not isinstance(values[21], bool):
                 raise ValueError("agent.depressed must be a boolean")
@@ -546,6 +562,7 @@ class NativeSnapshot:
                 "lastMovedTimestep",
                 "lastReproducedTimestep",
                 "lastLendedTimestep",
+                "lastCombatTimestep",
             ):
                 if isinstance(agent[field], bool) or not isinstance(agent[field], int):
                     raise ValueError(f"agent.{field} must be an integer")
@@ -593,6 +610,22 @@ class NativeSnapshot:
                         )
                     )
                 parsed_loan_lists.append(tuple(parsed_loans))
+            raw_friends = agent["friends"]
+            if not isinstance(raw_friends, list):
+                raise ValueError("agent.friends must be an array")
+            friends = []
+            for friend in raw_friends:
+                if not isinstance(friend, Mapping):
+                    raise ValueError("agent.friends entries must be objects")
+                _closed(friend, {"id", "hammingDistance"}, "agent.friend")
+                friends.append(
+                    (
+                        _int(friend["id"], "agent.friend.id"),
+                        _int(friend["hammingDistance"], "agent.friend.hammingDistance"),
+                    )
+                )
+            if len(friends) > values[23]:
+                raise ValueError("agent.friends must not exceed maxFriends")
             values = (
                 values[:37]
                 + (None if immune is None else tuple(immune), tuple(parsed_infections))
@@ -606,7 +639,8 @@ class NativeSnapshot:
                     relations[1],
                 )
                 + values[57:62]
-                + (parsed_loan_lists[0], parsed_loan_lists[1])
+                + (parsed_loan_lists[0], parsed_loan_lists[1], tuple(friends))
+                + values[65:]
             )
             if values[2] >= width or values[3] >= height:
                 raise ValueError("agent position is outside the world")
@@ -1004,6 +1038,14 @@ class NativeSnapshot:
                             "lastLoans",
                             "creditorLoans",
                             "debtorLoans",
+                            "friends",
+                            "lastCombatTimestep",
+                            "conflictHappiness",
+                            "familyHappiness",
+                            "healthHappiness",
+                            "socialHappiness",
+                            "wealthHappiness",
+                            "happiness",
                         ),
                         agent,
                         strict=True,
@@ -1068,6 +1110,10 @@ class NativeSnapshot:
                             )
                         )
                         for loan in agent[63]
+                    ],
+                    "friends": [
+                        {"id": friend_id, "hammingDistance": distance}
+                        for friend_id, distance in agent[64]
                     ],
                 }
                 for agent in self.agents
@@ -1337,6 +1383,17 @@ def snapshot_world(world: CoworldSugarscape) -> NativeSnapshot:
                 )
                 for loan in agent.socialNetwork["debtors"]
             ),
+            tuple(
+                (friend["friend"].ID, friend["hammingDistance"])
+                for friend in agent.socialNetwork["friends"]
+            ),
+            agent.lastCombatTimestep,
+            agent.conflictHappiness,
+            agent.familyHappiness,
+            agent.healthHappiness,
+            agent.socialHappiness,
+            agent.wealthHappiness,
+            agent.happiness,
         )
         for agent in sorted(world.agents, key=lambda value: value.ID)
     )
@@ -1453,6 +1510,7 @@ def step_python(snapshot: NativeSnapshot, ticks: int) -> NativeSnapshot:
         agent[56] = list(agent[56])
         agent[62] = [list(loan) for loan in agent[62]]
         agent[63] = [list(loan) for loan in agent[63]]
+        agent[64] = [list(friend) for friend in agent[64]]
     diseases = [list(disease) for disease in snapshot.diseases]
     for disease in diseases:
         disease[14] = list(disease[14])
@@ -1534,6 +1592,69 @@ def step_python(snapshot: NativeSnapshot, ticks: int) -> NativeSnapshot:
             area /= len(wealths)
             gini = round((0.5 - area) / 0.5, 3)
         return gini, round(total / len(wealths), 2)
+
+    def update_friends(agent: list[object], neighbor: list[object]) -> None:
+        distance = (
+            0
+            if agent[26] is None
+            else sum(left != right for left, right in zip(agent[26], neighbor[26]))
+        )
+        entry = [neighbor[0], distance]
+        if len(agent[64]) < agent[23]:
+            agent[64].append(entry)
+            return
+        max_distance = 0
+        max_index = None
+        for index, friend in enumerate(agent[64]):
+            if friend[0] == neighbor[0]:
+                agent[64].pop(index)
+                agent[64].append(entry)
+                return
+            if friend[1] > max_distance:
+                max_index = index
+                max_distance = friend[1]
+        if max_distance > distance:
+            assert max_index is not None
+            agent[64].pop(max_index)
+            agent[64].append(entry)
+
+    def update_happiness(
+        agent: list[object], deaths_by_id: dict[int, tuple[int, int, int, str]]
+    ) -> None:
+        unit = agent[22]
+        agent[66] = (
+            (unit if agent[17] + agent[18] > 1 else -unit)
+            if agent[65] == timestep
+            else 0
+        )
+        family = 0.0
+        for relation_id in agent[55]:
+            if relation_id not in agents or relation_id in deaths_by_id:
+                family -= unit
+                continue
+            relation = agents[relation_id]
+            family += unit
+            if relation[38]:
+                family -= unit * 0.5
+            if relation[39] == timestep:
+                family += unit
+        for relation_id in agent[56]:
+            if relation_id not in agents or relation_id in deaths_by_id:
+                family -= unit
+                continue
+            relation = agents[relation_id]
+            family += unit
+            if relation[38]:
+                family -= unit * 0.5
+        agent[67] = math.erf(family)
+        agent[68] = -unit if agent[38] else unit
+        agent[69] = (
+            0
+            if agent[23] == 0
+            else ((len(agent[64]) * (2 / agent[23])) - 1) * unit
+        )
+        agent[70] = math.erf((agent[4] + agent[5] - world_mean_wealth) * unit)
+        agent[71] = agent[66] + agent[67] + agent[68] + agent[69] + agent[70]
 
     def fertile(agent: list[object]) -> bool:
         return (
@@ -1874,6 +1995,9 @@ def step_python(snapshot: NativeSnapshot, ticks: int) -> NativeSnapshot:
         child[39] = timestep
         child[55], child[56] = [], []
         child[38], child[62], child[63] = [], [], []
+        child[64] = []
+        child[65] = -1
+        child[66:72] = [0, 0, 0, 0, 0, 0]
         for index in (13, 14, 15, 16, 18, 20, 24, 25):
             child[index] = 0
         child[22] = 1
@@ -2023,11 +2147,16 @@ def step_python(snapshot: NativeSnapshot, ticks: int) -> NativeSnapshot:
                 distribute_inheritance(prey)
                 clear_diseases(prey)
                 cells[destination][4] = None
+                agent[65] = timestep
             if destination != origin:
                 cells[origin][4] = None
                 cells[destination][4] = agent_id
                 agent[2] = destination // snapshot.height
                 agent[3] = destination % snapshot.height
+            for neighbor_cell in snapshot.ordered_neighbors[destination]:
+                neighbor_id = cells[neighbor_cell][4]
+                if neighbor_id is not None and neighbor_id not in deaths_by_id:
+                    update_friends(agent, agents[neighbor_id])
             agent[57] = timestep
             sugar_collected = cells[destination][0]
             spice_collected = cells[destination][2]
@@ -2290,6 +2419,8 @@ def step_python(snapshot: NativeSnapshot, ticks: int) -> NativeSnapshot:
                 )
                 distribute_inheritance(agent)
                 clear_diseases(agent)
+            else:
+                update_happiness(agent, deaths_by_id)
         deaths = [
             deaths_by_id[agent_id]
             for agent_id in live_order
@@ -2355,6 +2486,8 @@ def step_python(snapshot: NativeSnapshot, ticks: int) -> NativeSnapshot:
                     tuple(tuple(loan) for loan in agent[62]),
                     tuple(tuple(loan) for loan in agent[63]),
                 ]
+                + [tuple(tuple(friend) for friend in agent[64])]
+                + agent[65:]
             )
             for agent_id in sorted(agents)
             for agent in [agents[agent_id]]

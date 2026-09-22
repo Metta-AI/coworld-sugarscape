@@ -56,6 +56,9 @@ proc initialSnapshot(): JsonNode =
         "fatherId": newJNull(), "motherId": newJNull(), "childrenIds": [], "mateIds": [],
         "lastMovedTimestep": -1, "lastReproducedTimestep": -1, "lastMates": 0,
         "lastLendedTimestep": -1, "lastLoans": 0, "creditorLoans": [], "debtorLoans": [],
+        "friends": [], "lastCombatTimestep": -1, "conflictHappiness": 0,
+        "familyHappiness": 0, "healthHappiness": 0, "socialHappiness": 0,
+        "wealthHappiness": 0, "happiness": 0,
       },
     ],
     "orderedCandidates": [
@@ -138,6 +141,9 @@ suite "native world":
         "fatherId": newJNull(), "motherId": newJNull(), "childrenIds": [], "mateIds": [],
         "lastMovedTimestep": -1, "lastReproducedTimestep": -1, "lastMates": 0,
         "lastLendedTimestep": -1, "lastLoans": 0, "creditorLoans": [], "debtorLoans": [],
+        "friends": [], "lastCombatTimestep": -1, "conflictHappiness": 0,
+        "familyHappiness": 0, "healthHappiness": 0, "socialHappiness": 0,
+        "wealthHappiness": 0, "happiness": 0,
       },
       {
         "id": 20, "seat": 1, "x": 1, "y": 0, "sugar": 10, "spice": 0, "age": 2,
@@ -162,6 +168,9 @@ suite "native world":
         "fatherId": newJNull(), "motherId": newJNull(), "childrenIds": [], "mateIds": [],
         "lastMovedTimestep": -1, "lastReproducedTimestep": -1, "lastMates": 0,
         "lastLendedTimestep": -1, "lastLoans": 0, "creditorLoans": [], "debtorLoans": [],
+        "friends": [], "lastCombatTimestep": -1, "conflictHappiness": 0,
+        "familyHappiness": 0, "healthHappiness": 0, "socialHappiness": 0,
+        "wealthHappiness": 0, "happiness": 0,
       },
     ]
     node["orderedCandidates"] = %*[[[1, 1]], [[0, 1]]]
