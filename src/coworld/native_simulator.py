@@ -10,30 +10,15 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
-import time
 from typing import Mapping
 
 from .measurement import MeasurementTick
-from .native_oracle import NativeSnapshot, step_python
+from .native_oracle import NativeSnapshot
 
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SOURCE = ROOT / "native" / "sugarscape_native.nim"
 DEFAULT_BINARY_ROOT = Path(tempfile.gettempdir()) / "coworld-sugarscape-native"
-
-
-@dataclass(frozen=True)
-class NativeBenchmark:
-    ticks: int
-    elapsed_ns: int
-    snapshot: NativeSnapshot
-
-
-@dataclass(frozen=True)
-class PythonBenchmark:
-    ticks: int
-    elapsed_ns: int
-    snapshot: NativeSnapshot
 
 
 @dataclass(frozen=True)
@@ -238,52 +223,3 @@ def step_native(
         text=True,
     )
     return NativeSnapshot.from_json(json.loads(completed.stdout))
-
-
-def benchmark_native(
-    snapshot: NativeSnapshot,
-    ticks: int,
-    *,
-    binary: Path,
-) -> NativeBenchmark:
-    if isinstance(ticks, bool) or not isinstance(ticks, int) or ticks <= 0:
-        raise ValueError("ticks must be a positive integer")
-    completed = subprocess.run(
-        [str(binary), "bench", "--ticks", str(ticks)],
-        check=True,
-        cwd=ROOT,
-        input=json.dumps(snapshot.as_json(), allow_nan=False, separators=(",", ":")),
-        capture_output=True,
-        text=True,
-    )
-    raw = json.loads(completed.stdout)
-    if not isinstance(raw, Mapping) or set(raw) != {"ticks", "elapsedNs", "snapshot"}:
-        raise ValueError("native benchmark result has an invalid schema")
-    completed_ticks = raw["ticks"]
-    if (
-        isinstance(completed_ticks, bool)
-        or not isinstance(completed_ticks, int)
-        or not 0 <= completed_ticks <= ticks
-    ):
-        raise ValueError("native benchmark reported an invalid completed tick count")
-    elapsed_ns = raw["elapsedNs"]
-    if (
-        isinstance(elapsed_ns, bool)
-        or not isinstance(elapsed_ns, int)
-        or elapsed_ns <= 0
-    ):
-        raise ValueError("native benchmark elapsedNs must be a positive integer")
-    return NativeBenchmark(
-        completed_ticks,
-        elapsed_ns,
-        NativeSnapshot.from_json(raw["snapshot"]),
-    )
-
-
-def benchmark_python(snapshot: NativeSnapshot, ticks: int) -> PythonBenchmark:
-    if isinstance(ticks, bool) or not isinstance(ticks, int) or ticks <= 0:
-        raise ValueError("ticks must be a positive integer")
-    started = time.perf_counter_ns()
-    final = step_python(snapshot, ticks)
-    elapsed_ns = time.perf_counter_ns() - started
-    return PythonBenchmark(final.timestep - snapshot.timestep, elapsed_ns, final)

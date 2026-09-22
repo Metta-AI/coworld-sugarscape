@@ -26,8 +26,6 @@ from coworld.native_oracle import (
 from coworld.native_simulator import (
     NativeEpisodeTerminal,
     NativeEpisodeTick,
-    benchmark_native,
-    benchmark_python,
     build_native_simulator,
     native_episode,
     step_native,
@@ -634,17 +632,6 @@ def test_native_deaths_match_dtl_removal_order_and_state(
     assert all(cell[4] is None for cell in actual.cells)
 
 
-def test_native_benchmark_times_only_the_simulation_loop() -> None:
-    binary = build_native_simulator()
-    initial = snapshot_world(_world())
-
-    result = benchmark_native(initial, 4, binary=binary)
-
-    assert result.ticks == 4
-    assert result.elapsed_ns > 0
-    assert result.snapshot.timestep == initial.timestep + 4
-
-
 def test_native_episode_stream_emits_validated_ticks_and_terminal() -> None:
     binary = build_native_simulator()
     initial = snapshot_world(_world())
@@ -717,18 +704,6 @@ def test_native_episode_stream_rejects_contract_changes(tmp_path: Path) -> None:
     with native_episode(snapshot_world(_world()), 1, binary=binary) as stream:
         with pytest.raises(ValueError, match="contract changed"):
             next(stream)
-
-
-def test_python_and_native_benchmarks_run_the_same_contract() -> None:
-    binary = build_native_simulator()
-    initial = snapshot_world(_world())
-
-    python = benchmark_python(initial, 100)
-    native = benchmark_native(initial, 100, binary=binary)
-
-    assert python.ticks == native.ticks == 100
-    assert python.elapsed_ns > 0
-    assert python.snapshot == native.snapshot
 
 
 @pytest.mark.parametrize(

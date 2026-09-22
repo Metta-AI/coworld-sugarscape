@@ -2106,7 +2106,7 @@ proc step*(world: var World, ticks: int): int {.discardable.} =
 
 when isMainModule:
   proc usage(): string =
-    "usage: sugarscape-native (step|bench|bench-worker|episode) --ticks N < snapshot.json"
+    "usage: sugarscape-native (step|bench-worker|episode) --ticks N < snapshot.json"
 
   proc writeLine(node: JsonNode) =
     stdout.write($node & "\n")
@@ -2114,7 +2114,7 @@ when isMainModule:
 
   let arguments = commandLineParams()
   doAssert arguments.len == 3 and
-    arguments[0] in ["step", "bench", "bench-worker", "episode"] and
+    arguments[0] in ["step", "bench-worker", "episode"] and
     arguments[1] == "--ticks", usage()
   let ticks = parseInt(arguments[2])
   if arguments[0] == "episode":
@@ -2154,13 +2154,6 @@ when isMainModule:
     quit(0)
 
   var world = loadWorld(parseJson(stdin.readAll()))
-  let started = getMonoTime()
-  let completedTicks = world.step(ticks)
-  let elapsedNs = (getMonoTime() - started).inNanoseconds
-  if arguments[0] == "bench":
-    stdout.write($(%*{
-      "ticks": completedTicks, "elapsedNs": elapsedNs, "snapshot": world.snapshot(),
-    }))
-  else:
-    stdout.write($world.snapshot())
+  world.step(ticks)
+  stdout.write($world.snapshot())
   stdout.write("\n")

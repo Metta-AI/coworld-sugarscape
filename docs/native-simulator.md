@@ -55,21 +55,6 @@ nim c -d:release -o:native/bin/sugarscape-native native/sugarscape_native.nim
 PYTHONHASHSEED=0 .venv/bin/python -m pytest -q tests/test_native_simulator.py
 ```
 
-Compare Python and Nim implementations of the same reduced contract:
-
-```sh
-PYTHONHASHSEED=0 .venv/bin/python tools/native_benchmark.py \
-  --ticks 1000000 --repeats 5 --output build/benchmarks/native-v7.json
-```
-
-Both timers cover the same state transition contract and begin after world
-construction. The Nim timer also excludes input parsing and output
-serialization. Process startup, replay, compression, observers, and result
-scoring are excluded. Every measured pair must finish with identical state.
-The report uses actual completed ticks, so extinction cannot inflate throughput.
-The one-million-tick parity check compares Nim with the reduced Python oracle,
-not directly with DTL.
-
 Measure the canonical Commonwealth configuration across synchronized native
 processes with:
 
@@ -94,11 +79,6 @@ configuration and ruleset loaders, and baseline player. Host metadata records CP
 affinity, the active Slurm allocation variables, and GPU names and UUIDs reported by
 `nvidia-smi`. GPU inventory is empty when `nvidia-smi` is unavailable.
 
-On an Apple M4 Pro, three paired 1,000,000-tick v7 runs measured 38,842.2
-ticks/second for the reduced Python oracle and 345,381.9 for Nim. Nim was 8.89×
-faster, and every pair ended in identical state. Trade, disease, reproduction,
-and lending were inactive in this long-running fixture.
-
 Tracked seed-1729 and seed-1730 tests match the v7 projected state after
 separate chained 1,000-tick native and DTL rollouts.
 
@@ -116,12 +96,6 @@ index improved the same 32-world workload from 7,270.68 to 8,253.54 ticks/second
 (13.5%). The persistent episode stream added in that commit is outside the timed
 simulation loop. It validates snapshot order, configuration, policies, and
 termination, but complete result and replay integration remains open.
-
-On the RTX 4090 host CPU, five 10,000,000-tick v5 runs produced a median of
-445,738.5 ticks/second. Results ranged from 427,982.1 to 515,866.8 on the shared
-one-CPU allocation. The GPU identifies the machine class and was reserved but
-unused by the simulator. Both results use the 7×7, four-agent reduced fixture
-and do not qualify Commonwealth.
 
 ## Commonwealth qualification
 
