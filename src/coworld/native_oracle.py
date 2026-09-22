@@ -1,0 +1,351 @@
+"""Typed parity snapshot for the pinned Python and native simulators."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+import math
+import random
+from typing import Mapping
+
+from .simulation import CoworldSugarscape
+
+
+SCHEMA_VERSION = 1
+SOURCE_PIN = "585282e9ce7b22a33b89abb0d777917bd5887d1a"
+
+
+def _closed(raw: Mapping[str, object], expected: set[str], location: str) -> None:
+    if set(raw) != expected:
+        raise ValueError(f"{location} fields must be {', '.join(sorted(expected))}")
+
+
+def _int(value: object, location: str, minimum: int = 0) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+        raise ValueError(f"{location} must be an integer >= {minimum}")
+    return value
+
+
+def _number(value: object, location: str) -> int | float:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+        or value < 0
+    ):
+        raise ValueError(f"{location} must be a finite non-negative number")
+    return value
+
+
+@dataclass(frozen=True)
+class NativeSnapshot:
+    timestep: int
+    width: int
+    height: int
+    sugar_regrow_rate: int | float
+    max_cell_distance: int
+    rng_words: tuple[int, ...]
+    rng_index: int
+    live_order: tuple[int, ...]
+    cells: tuple[tuple[int | float, int | float, int | None], ...]
+    agents: tuple[tuple[int | float, ...], ...]
+    ordered_candidates: tuple[tuple[tuple[int, int | float], ...], ...]
+
+    @classmethod
+    def from_json(cls, raw: object) -> NativeSnapshot:
+        if not isinstance(raw, Mapping):
+            raise ValueError("snapshot must be an object")
+        keys = {
+            "schemaVersion",
+            "sourcePin",
+            "timestep",
+            "width",
+            "height",
+            "sugarRegrowRate",
+            "maxCellDistance",
+            "rng",
+            "liveOrder",
+            "cells",
+            "agents",
+            "orderedCandidates",
+        }
+        _closed(raw, keys, "snapshot")
+        if raw["schemaVersion"] != SCHEMA_VERSION or raw["sourcePin"] != SOURCE_PIN:
+            raise ValueError("snapshot schemaVersion or sourcePin is unsupported")
+        width = _int(raw["width"], "width", 1)
+        height = _int(raw["height"], "height", 1)
+        max_cell_distance = _int(raw["maxCellDistance"], "maxCellDistance")
+        rng = raw["rng"]
+        if not isinstance(rng, Mapping):
+            raise ValueError("rng must be an object")
+        _closed(rng, {"version", "words", "index", "gaussNext"}, "rng")
+        words = rng["words"]
+        if (
+            rng["version"] != 3
+            or rng["gaussNext"] is not None
+            or not isinstance(words, list)
+            or len(words) != 624
+        ):
+            raise ValueError("rng must be an unbuffered CPython MT19937 version 3 state")
+        rng_words = tuple(_int(word, "rng.words") for word in words)
+        if any(word > 0xFFFFFFFF for word in rng_words):
+            raise ValueError("rng.words values must fit uint32")
+        rng_index = _int(rng["index"], "rng.index")
+        if rng_index > 624:
+            raise ValueError("rng.index must be <= 624")
+
+        raw_cells = raw["cells"]
+        raw_agents = raw["agents"]
+        raw_order = raw["liveOrder"]
+        raw_candidates = raw["orderedCandidates"]
+        count = width * height
+        if not isinstance(raw_cells, list) or len(raw_cells) != count:
+            raise ValueError("cells must contain width * height entries")
+        if not isinstance(raw_agents, list) or not isinstance(raw_order, list):
+            raise ValueError("agents and liveOrder must be arrays")
+        if not isinstance(raw_candidates, list) or len(raw_candidates) != count:
+            raise ValueError("orderedCandidates must contain width * height arrays")
+
+        cells = []
+        for index, cell in enumerate(raw_cells):
+            if not isinstance(cell, Mapping):
+                raise ValueError(f"cells[{index}] must be an object")
+            _closed(cell, {"sugar", "maxSugar", "occupantId"}, f"cells[{index}]")
+            occupant = cell["occupantId"]
+            sugar = _number(cell["sugar"], "cell.sugar")
+            max_sugar = _number(cell["maxSugar"], "cell.maxSugar")
+            if sugar > max_sugar:
+                raise ValueError("cell.sugar must not exceed cell.maxSugar")
+            cells.append(
+                (
+                    sugar,
+                    max_sugar,
+                    None if occupant is None else _int(occupant, "cell.occupantId"),
+                )
+            )
+
+        agent_keys = {
+            "id",
+            "seat",
+            "x",
+            "y",
+            "sugar",
+            "age",
+            "sugarMetabolism",
+            "vision",
+            "movement",
+            "maxAge",
+            "lookaheadFactor",
+        }
+        agents = []
+        for index, agent in enumerate(raw_agents):
+            if not isinstance(agent, Mapping):
+                raise ValueError(f"agents[{index}] must be an object")
+            _closed(agent, agent_keys, f"agents[{index}]")
+            max_age = agent["maxAge"]
+            if max_age != -1:
+                raise ValueError("agent.maxAge must be -1 in native v1")
+            values = (
+                _int(agent["id"], "agent.id"),
+                _int(agent["seat"], "agent.seat"),
+                _int(agent["x"], "agent.x"),
+                _int(agent["y"], "agent.y"),
+                _number(agent["sugar"], "agent.sugar"),
+                _int(agent["age"], "agent.age"),
+                _number(agent["sugarMetabolism"], "agent.sugarMetabolism"),
+                _int(agent["vision"], "agent.vision"),
+                _int(agent["movement"], "agent.movement"),
+                max_age,
+                _number(agent["lookaheadFactor"], "agent.lookaheadFactor"),
+            )
+            if values[2] >= width or values[3] >= height:
+                raise ValueError("agent position is outside the world")
+            agents.append(values)
+        ids = [int(agent[0]) for agent in agents]
+        live_order = tuple(_int(value, "liveOrder") for value in raw_order)
+        if ids != sorted(set(ids)) or sorted(live_order) != ids:
+            raise ValueError("agents must be ID-sorted and liveOrder must be its permutation")
+        occupants = [occupant for _sugar, _maximum, occupant in cells if occupant is not None]
+        if sorted(occupants) != ids:
+            raise ValueError("cell occupancy must match live agents")
+        for agent in agents:
+            cell_index = int(agent[2]) * height + int(agent[3])
+            if cells[cell_index][2] != int(agent[0]):
+                raise ValueError("cell occupancy disagrees with agent position")
+
+        candidates = []
+        for origin, entries in enumerate(raw_candidates):
+            if not isinstance(entries, list):
+                raise ValueError(f"orderedCandidates[{origin}] must be an array")
+            parsed = []
+            for entry in entries:
+                if not isinstance(entry, list) or len(entry) != 2:
+                    raise ValueError("candidate entries must be [cellIndex, distance]")
+                target = _int(entry[0], "candidate index")
+                if target >= count:
+                    raise ValueError("candidate index is outside the world")
+                distance = _number(entry[1], "candidate distance")
+                if distance == 0 or distance > max_cell_distance:
+                    raise ValueError("candidate distance is outside maxCellDistance")
+                parsed.append((target, distance))
+            targets = [entry[0] for entry in parsed]
+            if len(set(targets)) != len(targets) or origin in targets:
+                raise ValueError("ordered candidates must be unique and exclude their origin")
+            candidates.append(tuple(parsed))
+        return cls(
+            _int(raw["timestep"], "timestep"),
+            width,
+            height,
+            _number(raw["sugarRegrowRate"], "sugarRegrowRate"),
+            max_cell_distance,
+            rng_words,
+            rng_index,
+            live_order,
+            tuple(cells),
+            tuple(agents),
+            tuple(candidates),
+        )
+
+    def as_json(self) -> dict[str, object]:
+        return {
+            "schemaVersion": SCHEMA_VERSION,
+            "sourcePin": SOURCE_PIN,
+            "timestep": self.timestep,
+            "width": self.width,
+            "height": self.height,
+            "sugarRegrowRate": self.sugar_regrow_rate,
+            "maxCellDistance": self.max_cell_distance,
+            "rng": {
+                "version": 3,
+                "words": list(self.rng_words),
+                "index": self.rng_index,
+                "gaussNext": None,
+            },
+            "liveOrder": list(self.live_order),
+            "cells": [
+                {"sugar": sugar, "maxSugar": maximum, "occupantId": occupant}
+                for sugar, maximum, occupant in self.cells
+            ],
+            "agents": [
+                dict(
+                    zip(
+                        (
+                            "id", "seat", "x", "y", "sugar", "age",
+                            "sugarMetabolism", "vision", "movement", "maxAge",
+                            "lookaheadFactor",
+                        ),
+                        agent,
+                        strict=True,
+                    )
+                )
+                for agent in self.agents
+            ],
+            "orderedCandidates": [
+                [list(entry) for entry in entries]
+                for entries in self.ordered_candidates
+            ],
+        }
+
+
+def validate_supported_world(world: CoworldSugarscape) -> None:
+    config = world.configuration
+    requirements = (
+        (
+            config["environmentWraparound"] is True,
+            "environmentWraparound must be true",
+        ),
+        (config["agentMovementMode"] == "cardinal", "agentMovementMode must be cardinal"),
+        (config["agentVisionMode"] == "cardinal", "agentVisionMode must be cardinal"),
+        (config["environmentSeasonInterval"] == 0, "seasons are unsupported"),
+        (config["environmentPollutionTimeframe"] == [0, 0], "pollution is unsupported"),
+        (
+            config["environmentPollutionDiffusionDelay"] == 0,
+            "pollution diffusion is unsupported",
+        ),
+        (
+            config["environmentMaxSpice"] == 0
+            and config["environmentSpiceRegrowRate"] == 0,
+            "spice is unsupported",
+        ),
+        (config["startingDiseases"] == 0, "disease is unsupported"),
+        (config["agentReplacements"] == 0, "replacement is unsupported"),
+        (config["agentTagging"] is False, "tagging is unsupported"),
+        (config["agentTradeFactor"] == [0, 0], "trade is unsupported"),
+        (config["agentLendingFactor"] == [0, 0], "lending is unsupported"),
+        (config["agentFertilityFactor"] == [0, 0], "reproduction is unsupported"),
+        (config["agentAggressionFactor"] == [0, 0], "combat is unsupported"),
+        (config["agentMaxAge"] == [-1, -1], "aging death is unsupported"),
+        (
+            config["agentUniversalSugar"] == [0, 0]
+            and config["agentUniversalSpice"] == [0, 0],
+            "universal income is unsupported",
+        ),
+        (config["agentSpiceMetabolism"] == [0, 0], "spice metabolism is unsupported"),
+        (config["agentDecisionModelFactor"] == [0, 0], "ethical decisions are unsupported"),
+    )
+    for accepted, message in requirements:
+        if not accepted:
+            raise ValueError(message)
+    if any(not ruleset.is_null for ruleset in world.seat_manager.rulesets):
+        raise ValueError("SugarLang movement and trait overrides are unsupported")
+    for index, agent in enumerate(world.agents):
+        if not agent.alive or agent.cell is None:
+            raise ValueError(f"agents[{index}] must be alive and placed")
+        if agent.diseases or agent.spice != 0 or agent.spiceMetabolism != 0:
+            raise ValueError(f"agents[{index}] disease and spice state is unsupported")
+        if agent.movementModifier != 0 or agent.visionModifier != 0:
+            raise ValueError(f"agents[{index}] movement and vision modifiers are unsupported")
+    for column in world.environment.grid:
+        for cell in column:
+            if cell.spice != 0 or cell.maxSpice != 0 or cell.pollution != 0:
+                raise ValueError("cell spice and pollution state is unsupported")
+
+
+def snapshot_world(world: CoworldSugarscape) -> NativeSnapshot:
+    validate_supported_world(world)
+    environment = world.environment
+    version, state, gauss_next = random.getstate()
+    if version != 3 or gauss_next is not None:
+        raise ValueError("native simulation requires an unbuffered CPython MT19937 state")
+    cells = tuple(
+        (cell.sugar, cell.maxSugar, cell.agent.ID if cell.agent is not None else None)
+        for column in environment.grid
+        for cell in column
+    )
+    agents = tuple(
+        (
+            agent.ID,
+            agent.seat,
+            agent.cell.x,
+            agent.cell.y,
+            agent.sugar,
+            agent.age,
+            agent.sugarMetabolism,
+            agent.findVision(),
+            agent.findMovement(),
+            agent.maxAge,
+            agent.lookaheadFactor,
+        )
+        for agent in sorted(world.agents, key=lambda value: value.ID)
+    )
+    candidates = tuple(
+        tuple(
+            (candidate.x * environment.height + candidate.y, distance)
+            for bucket in range(1, environment.maxCellDistance + 1)
+            for candidate, distance in cell.ranges[bucket].items()
+        )
+        for column in environment.grid
+        for cell in column
+    )
+    return NativeSnapshot(
+        world.timestep,
+        environment.width,
+        environment.height,
+        environment.sugarRegrowRate,
+        environment.maxCellDistance,
+        tuple(state[:624]),
+        state[624],
+        tuple(agent.ID for agent in world.agents),
+        cells,
+        agents,
+        candidates,
+    )

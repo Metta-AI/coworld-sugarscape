@@ -13,6 +13,7 @@ ACTION_PINS = {
     "actions/checkout": "3d3c42e5aac5ba805825da76410c181273ba90b1",
     "actions/setup-python": "5fda3b95a4ea91299a34e894583c3862153e4b97",
     "astral-sh/setup-uv": "bec219d24cd3e171d82865faccec33120bb574f4",
+    "jiro4989/setup-nim-action": "189b145833368cc92f1e7b3e166a25a3e057a693",
 }
 ACTIONLINT_CHECKSUM = "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
 
@@ -54,8 +55,10 @@ def test_ci_uses_pinned_tools_and_read_only_checkout() -> None:
     steps = workflow["jobs"]["tests"]["steps"]
     assert steps[0]["with"]["submodules"] == "recursive"
     python = next(step for step in steps if step.get("uses", "").startswith("actions/setup-python@"))
+    nim = next(step for step in steps if step.get("uses", "").startswith("jiro4989/setup-nim-action@"))
     uv = next(step for step in steps if step.get("uses", "").startswith("astral-sh/setup-uv@"))
     assert python["with"]["python-version"] == "3.13.5"
+    assert nim["with"]["nim-version"] == "2.2.6"
     assert uv["with"]["version"] == "0.12.13"
     assert uv["with"]["enable-cache"] is False
 
