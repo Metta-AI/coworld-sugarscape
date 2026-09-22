@@ -4,7 +4,7 @@ when isMainModule:
   import std/os
 
 const
-  SchemaVersion = 1
+  SchemaVersion = 2
   SourcePin = "585282e9ce7b22a33b89abb0d777917bd5887d1a"
   MtWords = 624
   EmptyOccupant = -1'i64
@@ -36,6 +36,12 @@ type
     target*: int
     distance*: float64
 
+  Death* = object
+    id*: int64
+    seat*: int
+    age*: int64
+    cause*: string
+
   World* = object
     sourcePin*: string
     timestep*: int64
@@ -48,6 +54,7 @@ type
     cells*: seq[Cell]
     agents*: seq[Agent]
     orderedCandidates*: seq[seq[Candidate]]
+    deaths*: seq[Death]
 
 proc twist(rng: var PythonMt19937) =
   const
@@ -143,7 +150,7 @@ proc loadRng*(node: JsonNode): PythonMt19937 =
 proc loadWorld*(node: JsonNode): World =
   node.requireFields(
     ["schemaVersion", "sourcePin", "timestep", "width", "height", "sugarRegrowRate",
-     "maxCellDistance", "rng", "liveOrder", "cells", "agents", "orderedCandidates"],
+     "maxCellDistance", "rng", "liveOrder", "cells", "agents", "orderedCandidates", "deaths"],
     "snapshot",
   )
   doAssert node["schemaVersion"].getInt() == SchemaVersion, "unsupported schema version"
@@ -209,7 +216,7 @@ proc loadWorld*(node: JsonNode): World =
     doAssert agent.sugar >= 0 and agent.age >= 0 and agent.sugarMetabolism >= 0 and
       agent.vision >= 0 and agent.movement >= 0 and agent.lookaheadFactor >= 0,
       "agent resources and traits must be nonnegative"
-    doAssert agent.maxAge == -1, "aging death is unsupported"
+    doAssert agent.maxAge >= -1, "agent maxAge must be -1 or nonnegative"
     previousId = agent.id
     agentIds.add(agent.id)
     result.agents.add(agent)
@@ -252,6 +259,23 @@ proc loadWorld*(node: JsonNode): World =
     result.orderedCandidates.add(candidates)
     inc origin
 
+  doAssert node["deaths"].kind == JArray, "deaths must be an array"
+  for deathNode in node["deaths"].items:
+    deathNode.requireFields(["id", "seat", "age", "cause"], "death")
+    let death = Death(
+      id: deathNode.readInt("id"),
+      seat: int(deathNode.readInt("seat")),
+      age: deathNode.readInt("age"),
+      cause: deathNode["cause"].getStr(),
+    )
+    doAssert death.id >= 0 and death.id notin agentIds,
+      "death id must not name a living agent"
+    doAssert death.seat >= 0 and death.age >= 0, "death seat and age must be nonnegative"
+    doAssert death.cause in ["starvation", "aging"], "unsupported death cause"
+    for previous in result.deaths:
+      doAssert previous.id != death.id, "death ids must be unique"
+    result.deaths.add(death)
+
 proc rngJson(rng: PythonMt19937): JsonNode =
   var words = newJArray()
   for word in rng.words:
@@ -283,15 +307,19 @@ proc snapshot*(world: World): JsonNode =
     for candidate in candidates:
       entries.add(%*[candidate.target, candidate.distance])
     orderedCandidates.add(entries)
+  var deaths = newJArray()
+  for death in world.deaths:
+    deaths.add(%*{"id": death.id, "seat": death.seat, "age": death.age, "cause": death.cause})
   %*{
     "schemaVersion": SchemaVersion, "sourcePin": world.sourcePin, "timestep": world.timestep,
     "width": world.width, "height": world.height, "sugarRegrowRate": world.sugarRegrowRate,
     "maxCellDistance": world.maxCellDistance, "rng": rngJson(world.rng),
     "liveOrder": liveOrder, "cells": cells, "agents": agents,
-    "orderedCandidates": orderedCandidates,
+    "orderedCandidates": orderedCandidates, "deaths": deaths,
   }
 
 proc stepOne*(world: var World) =
+  world.deaths.setLen(0)
   inc world.timestep
   for cell in world.cells.mitems:
     cell.sugar = min(cell.maxSugar, cell.sugar + world.sugarRegrowRate)
@@ -336,15 +364,47 @@ proc stepOne*(world: var World) =
     agent.sugar += world.cells[destination].sugar
     world.cells[destination].sugar = 0
     agent.sugar -= agent.sugarMetabolism
-    doAssert agent.sugarMetabolism == 0 or agent.sugar > 0,
-      "agent death is unsupported in fixed-population mode"
-    inc agent.age
+    var cause = ""
+    if agent.sugarMetabolism > 0 and agent.sugar <= 0:
+      cause = "starvation"
+    else:
+      inc agent.age
+      if agent.maxAge != -1 and agent.age >= agent.maxAge:
+        cause = "aging"
+    if cause.len > 0:
+      world.cells[destination].occupantId = EmptyOccupant
+      world.deaths.add(Death(id: agent.id, seat: agent.seat, age: agent.age, cause: cause))
     world.agents[agentIndex] = agent
 
-proc step*(world: var World, ticks: int) =
+  if world.deaths.len > 0:
+    var survivors = newSeq[Agent]()
+    for agent in world.agents:
+      var died = false
+      for death in world.deaths:
+        if death.id == agent.id:
+          died = true
+          break
+      if not died:
+        survivors.add(agent)
+    world.agents = survivors
+    var survivingOrder = newSeq[int64]()
+    for id in world.liveOrder:
+      var died = false
+      for death in world.deaths:
+        if death.id == id:
+          died = true
+          break
+      if not died:
+        survivingOrder.add(id)
+    world.liveOrder = survivingOrder
+
+proc step*(world: var World, ticks: int): int {.discardable.} =
   doAssert ticks >= 0, "ticks must be nonnegative"
   for _ in 0 ..< ticks:
+    if world.liveOrder.len == 0:
+      break
     world.stepOne()
+    inc result
 
 when isMainModule:
   proc usage(): string =
@@ -356,10 +416,12 @@ when isMainModule:
   let ticks = parseInt(arguments[2])
   var world = loadWorld(parseJson(stdin.readAll()))
   let started = getMonoTime()
-  world.step(ticks)
+  let completedTicks = world.step(ticks)
   let elapsedNs = (getMonoTime() - started).inNanoseconds
   if arguments[0] == "bench":
-    stdout.write($(%*{"ticks": ticks, "elapsedNs": elapsedNs, "snapshot": world.snapshot()}))
+    stdout.write($(%*{
+      "ticks": completedTicks, "elapsedNs": elapsedNs, "snapshot": world.snapshot(),
+    }))
   else:
     stdout.write($world.snapshot())
   stdout.write("\n")

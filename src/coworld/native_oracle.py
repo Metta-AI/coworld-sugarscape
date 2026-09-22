@@ -10,7 +10,7 @@ from typing import Mapping
 from .simulation import CoworldSugarscape
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 SOURCE_PIN = "585282e9ce7b22a33b89abb0d777917bd5887d1a"
 
 
@@ -49,6 +49,7 @@ class NativeSnapshot:
     cells: tuple[tuple[int | float, int | float, int | None], ...]
     agents: tuple[tuple[int | float, ...], ...]
     ordered_candidates: tuple[tuple[tuple[int, int | float], ...], ...]
+    deaths: tuple[tuple[int, int, int, str], ...]
 
     @classmethod
     def from_json(cls, raw: object) -> NativeSnapshot:
@@ -67,6 +68,7 @@ class NativeSnapshot:
             "cells",
             "agents",
             "orderedCandidates",
+            "deaths",
         }
         _closed(raw, keys, "snapshot")
         if raw["schemaVersion"] != SCHEMA_VERSION or raw["sourcePin"] != SOURCE_PIN:
@@ -97,6 +99,7 @@ class NativeSnapshot:
         raw_agents = raw["agents"]
         raw_order = raw["liveOrder"]
         raw_candidates = raw["orderedCandidates"]
+        raw_deaths = raw["deaths"]
         count = width * height
         if not isinstance(raw_cells, list) or len(raw_cells) != count:
             raise ValueError("cells must contain width * height entries")
@@ -104,6 +107,8 @@ class NativeSnapshot:
             raise ValueError("agents and liveOrder must be arrays")
         if not isinstance(raw_candidates, list) or len(raw_candidates) != count:
             raise ValueError("orderedCandidates must contain width * height arrays")
+        if not isinstance(raw_deaths, list):
+            raise ValueError("deaths must be an array")
 
         cells = []
         for index, cell in enumerate(raw_cells):
@@ -142,8 +147,8 @@ class NativeSnapshot:
                 raise ValueError(f"agents[{index}] must be an object")
             _closed(agent, agent_keys, f"agents[{index}]")
             max_age = agent["maxAge"]
-            if max_age != -1:
-                raise ValueError("agent.maxAge must be -1 in native v1")
+            if isinstance(max_age, bool) or not isinstance(max_age, int) or max_age < -1:
+                raise ValueError("agent.maxAge must be -1 or a non-negative integer")
             values = (
                 _int(agent["id"], "agent.id"),
                 _int(agent["seat"], "agent.seat"),
@@ -191,6 +196,25 @@ class NativeSnapshot:
             if len(set(targets)) != len(targets) or origin in targets:
                 raise ValueError("ordered candidates must be unique and exclude their origin")
             candidates.append(tuple(parsed))
+        deaths = []
+        for index, death in enumerate(raw_deaths):
+            if not isinstance(death, Mapping):
+                raise ValueError(f"deaths[{index}] must be an object")
+            _closed(death, {"id", "seat", "age", "cause"}, f"deaths[{index}]")
+            cause = death["cause"]
+            if cause not in {"starvation", "aging"}:
+                raise ValueError("death cause must be starvation or aging")
+            deaths.append(
+                (
+                    _int(death["id"], "death.id"),
+                    _int(death["seat"], "death.seat"),
+                    _int(death["age"], "death.age"),
+                    str(cause),
+                )
+            )
+        death_ids = [death[0] for death in deaths]
+        if len(set(death_ids)) != len(death_ids) or set(death_ids) & set(ids):
+            raise ValueError("death ids must be unique and absent from living agents")
         return cls(
             _int(raw["timestep"], "timestep"),
             width,
@@ -203,6 +227,7 @@ class NativeSnapshot:
             tuple(cells),
             tuple(agents),
             tuple(candidates),
+            tuple(deaths),
         )
 
     def as_json(self) -> dict[str, object]:
@@ -243,6 +268,10 @@ class NativeSnapshot:
                 [list(entry) for entry in entries]
                 for entries in self.ordered_candidates
             ],
+            "deaths": [
+                {"id": agent_id, "seat": seat, "age": age, "cause": cause}
+                for agent_id, seat, age, cause in self.deaths
+            ],
         }
 
 
@@ -273,7 +302,6 @@ def validate_supported_world(world: CoworldSugarscape) -> None:
         (config["agentLendingFactor"] == [0, 0], "lending is unsupported"),
         (config["agentFertilityFactor"] == [0, 0], "reproduction is unsupported"),
         (config["agentAggressionFactor"] == [0, 0], "combat is unsupported"),
-        (config["agentMaxAge"] == [-1, -1], "aging death is unsupported"),
         (
             config["agentUniversalSugar"] == [0, 0]
             and config["agentUniversalSpice"] == [0, 0],
@@ -348,4 +376,96 @@ def snapshot_world(world: CoworldSugarscape) -> NativeSnapshot:
         cells,
         agents,
         candidates,
+        tuple(getattr(world, "native_deaths", ())),
+    )
+
+
+def step_python(snapshot: NativeSnapshot, ticks: int) -> NativeSnapshot:
+    """Run the reduced v2 contract in Python from the same wire snapshot."""
+
+    if isinstance(ticks, bool) or not isinstance(ticks, int) or ticks < 0:
+        raise ValueError("ticks must be a non-negative integer")
+    rng = random.Random()
+    rng.setstate((3, snapshot.rng_words + (snapshot.rng_index,), None))
+    cells = [list(cell) for cell in snapshot.cells]
+    agents = {int(agent[0]): list(agent) for agent in snapshot.agents}
+    live_order = list(snapshot.live_order)
+    timestep = snapshot.timestep
+    deaths = list(snapshot.deaths)
+
+    for _ in range(ticks):
+        if not live_order:
+            break
+        deaths = []
+        timestep += 1
+        for cell in cells:
+            cell[0] = min(cell[1], cell[0] + snapshot.sugar_regrow_rate)
+        rng.shuffle(live_order)
+        for agent_id in live_order:
+            agent = agents[agent_id]
+            origin = int(agent[2]) * snapshot.height + int(agent[3])
+            cell_range = min(int(agent[7]), int(agent[8]), snapshot.max_cell_distance)
+            candidates = [
+                (target, distance)
+                for target, distance in snapshot.ordered_candidates[origin]
+                if distance <= cell_range
+            ]
+            rng.shuffle(candidates)
+            destination = origin
+            best_welfare = float("-inf")
+            best_distance = float("inf")
+            for target, distance in candidates:
+                if cells[target][2] is not None:
+                    continue
+                welfare = (
+                    1
+                    if agent[6] == 0
+                    else max(
+                        agent[4] + cells[target][0] - agent[6] * agent[10],
+                        0,
+                    )
+                )
+                if welfare > best_welfare or (
+                    welfare == best_welfare and distance < best_distance
+                ):
+                    destination = target
+                    best_welfare = welfare
+                    best_distance = distance
+            if destination != origin:
+                cells[origin][2] = None
+                cells[destination][2] = agent_id
+                agent[2] = destination // snapshot.height
+                agent[3] = destination % snapshot.height
+            agent[4] += cells[destination][0]
+            cells[destination][0] = 0
+            agent[4] -= agent[6]
+            if agent[6] != 0 and agent[4] <= 0:
+                cells[destination][2] = None
+                deaths.append((agent_id, int(agent[1]), int(agent[5]), "starvation"))
+                continue
+            agent[5] += 1
+            if agent[9] != -1 and agent[5] >= agent[9]:
+                cells[destination][2] = None
+                deaths.append((agent_id, int(agent[1]), int(agent[5]), "aging"))
+        for agent_id, _seat, _age, _cause in deaths:
+            agents.pop(agent_id)
+        dead_ids = {death[0] for death in deaths}
+        live_order = [agent_id for agent_id in live_order if agent_id not in dead_ids]
+
+    _version, state, gauss_next = rng.getstate()
+    if gauss_next is not None:
+        raise AssertionError("shuffle cannot populate the Gaussian cache")
+    return NativeSnapshot(
+        timestep,
+        snapshot.width,
+        snapshot.height,
+        snapshot.sugar_regrow_rate,
+        snapshot.max_cell_distance,
+        tuple(state[:624]),
+        state[624],
+        tuple(live_order),
+        tuple(tuple(cell) for cell in cells),
+        tuple(tuple(agents[agent_id]) for agent_id in sorted(agents)),
+        snapshot.ordered_candidates,
+        tuple(deaths),
     )

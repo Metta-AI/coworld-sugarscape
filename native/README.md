@@ -1,7 +1,9 @@
 # Native Sugarscape core
 
-This directory contains the first deterministic Nim simulation core. Its v1
-wire schema supports a single resource and a fixed population.
+This directory contains the deterministic Nim simulation core. Its v2 wire
+schema supports one resource, starvation, aging, and population decline.
+It remains a pre-Commonwealth parity slice until two-resource welfare and the
+other mechanics listed below are implemented.
 
 Build and test it with Nim 2.2 or newer:
 
@@ -20,7 +22,9 @@ native/bin/sugarscape-native step --ticks 100 < input.json > output.json
 
 `bench` uses the same input and returns `ticks`, `elapsedNs`, and the final
 snapshot. Its monotonic timer covers only simulation steps, excluding process
-startup, input parsing, snapshot encoding, and output.
+startup, input parsing, snapshot encoding, and output. `ticks` reports actual
+completed ticks and can be less than requested when the population becomes
+extinct.
 
 Snapshots contain x-major cells, agents sorted by ID, the current shuffled
 `liveOrder`, exact ordered candidate lists exported from DTL, and the complete
@@ -33,7 +37,11 @@ movement range, with toroidal wrapping. The agent selects the cell with the
 most sugar, then the shortest distance. It stays put only when no candidate is
 available. Movement, harvesting, and metabolism update the world immediately.
 
-This first mode has one resource and a fixed population. It does not implement
-death, replacement, reproduction, trade, lending, disease, pollution, seasons,
-combat, leaders, or SugarLang policies. The closed snapshot schema rejects
-additional fields, modes, RNGs, and Gaussian cache state.
+`deaths` contains the most recently completed tick's removals in DTL removal
+order. Starvation clears the occupied cell immediately and skips aging. Aging
+increments age before checking finite `maxAge`.
+
+This slice does not implement replacement, reproduction, trade, lending,
+disease, pollution, seasons, combat, leaders, inheritance, or SugarLang
+policies. The closed snapshot schema rejects additional fields, RNGs, and
+Gaussian cache state.

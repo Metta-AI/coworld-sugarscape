@@ -1,4 +1,4 @@
-"""Reference configuration for native v1 parity and throughput measurements."""
+"""Reference configuration for native v2 parity and throughput measurements."""
 
 from __future__ import annotations
 
@@ -9,7 +9,20 @@ from .seats import parse_trait_ranges
 from .simulation import CoworldSugarscape
 
 
-def native_v1_config(*, seed: int = 1729, timesteps: int = 10_000) -> dict[str, object]:
+class NativeReferenceWorld(CoworldSugarscape):
+    """Retain DTL death events before its statistics pass clears them."""
+
+    native_deaths: tuple[tuple[int, int, int, str], ...] = ()
+
+    def updateRuntimeStats(self) -> None:
+        self.native_deaths = tuple(
+            (agent.ID, agent.seat, agent.age, agent.causeOfDeath)
+            for agent in self.deadAgents
+        )
+        super().updateRuntimeStats()
+
+
+def native_v2_config(*, seed: int = 1729, timesteps: int = 10_000) -> dict[str, object]:
     return {
         "seed": seed,
         "seats": 2,
@@ -51,11 +64,11 @@ def native_v1_config(*, seed: int = 1729, timesteps: int = 10_000) -> dict[str, 
     }
 
 
-def build_native_v1_reference_world(
+def build_native_v2_reference_world(
     *, seed: int = 1729, timesteps: int = 10_000
 ) -> CoworldSugarscape:
-    resolved = resolve_episode_config(native_v1_config(seed=seed, timesteps=timesteps))
-    return CoworldSugarscape(
+    resolved = resolve_episode_config(native_v2_config(seed=seed, timesteps=timesteps))
+    return NativeReferenceWorld(
         build_dtl_config(resolved),
         [compile_ruleset(None) for _ in range(int(resolved["seats"]))],
         parse_trait_ranges(resolved.get("trait_ranges")),
