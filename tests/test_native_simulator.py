@@ -2,17 +2,22 @@ from __future__ import annotations
 
 from copy import deepcopy
 import json
+from pathlib import Path
+import subprocess
 
 import pytest
 
 from coworld.config import build_dtl_config, resolve_episode_config
 from coworld.instrumentation import EpisodeInstrumentation
 from coworld.native_fixture import build_native_v1_reference_world, native_v1_config
-from coworld.native_oracle import NativeSnapshot, snapshot_world, validate_supported_world
+from coworld.native_oracle import SOURCE_PIN, NativeSnapshot, snapshot_world, validate_supported_world
 from coworld.native_simulator import benchmark_native, build_native_simulator, step_native
 from coworld.ruleset import compile_ruleset
 from coworld.seats import parse_trait_ranges
 from coworld.simulation import CoworldSugarscape
+
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def _supported_config() -> dict[str, object]:
@@ -39,6 +44,18 @@ def test_snapshot_round_trip_preserves_latent_order_rng_and_x_major_grid() -> No
     assert len(snapshot.ordered_candidates) == len(snapshot.cells)
     assert len(snapshot.rng_words) == 624
     assert snapshot.live_order != tuple(sorted(snapshot.live_order))
+
+
+def test_native_schema_pin_matches_the_dtl_submodule() -> None:
+    pinned_commit = subprocess.run(
+        ["git", "rev-parse", "HEAD:src/sugarscape"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+    assert SOURCE_PIN == pinned_commit
 
 
 def test_native_matches_pinned_dtl_after_each_tick() -> None:
