@@ -83,31 +83,42 @@ def test_simulation_requires_one_world_per_worker(tiny_episode_config):
         benchmark(tiny_episode_config, workers=1, worlds=2, seed=17, mode='simulation')
 
 
-def test_simulation_preparation_failure_does_not_hang(tiny_episode_config):
+@pytest.mark.parametrize('mode', ['episodes', 'simulation'])
+def test_preparation_failure_does_not_hang(tiny_episode_config, mode):
     import multiprocessing
     before = {child.pid for child in multiprocessing.active_children()}
     with pytest.raises((RuntimeError, EOFError)):
-        benchmark({**tiny_episode_config, 'targets': ['missing-target']}, workers=2, worlds=2, seed=17, mode='simulation', timeout=5)
+        benchmark({**tiny_episode_config, 'targets': ['missing-target']}, workers=2, worlds=2, seed=17, mode=mode, timeout=5)
 
     assert {child.pid for child in multiprocessing.active_children()} == before
 
 
-def test_simulation_timeout_cleans_children(tiny_episode_config):
+@pytest.mark.parametrize('mode', ['episodes', 'simulation'])
+def test_timeout_cleans_children(tiny_episode_config, mode):
     import multiprocessing
     before = {child.pid for child in multiprocessing.active_children()}
     with pytest.raises(TimeoutError):
-        benchmark(tiny_episode_config, workers=2, worlds=2, seed=17, mode='simulation', timeout=0.000001)
+        benchmark(tiny_episode_config, workers=2, worlds=2, seed=17, mode=mode, timeout=0.000001)
     assert {child.pid for child in multiprocessing.active_children()} == before
 
 
-def test_simulation_cli_exits_without_cleanup_warnings(tmp_path):
+@pytest.mark.parametrize('mode', ['episodes', 'simulation'])
+def test_cli_exits_without_cleanup_warnings(tmp_path, mode):
     import os
     import subprocess
 
     completed = subprocess.run(
-        [sys.executable, str(ROOT / 'tools/benchmark_world_ticks.py'), '--mode', 'simulation',
+        [sys.executable, str(ROOT / 'tools/benchmark_world_ticks.py'), '--mode', mode,
          '--workers', '2', '--worlds', '2', '--timesteps', '1', '--output', str(tmp_path / 'report.json')],
         cwd=ROOT, env={**os.environ, 'PYTHONHASHSEED': '0'},
         capture_output=True, text=True, timeout=30, check=True,
     )
     assert completed.stderr == ''
+
+
+def test_episode_chunks_preserve_uneven_world_assignments(tiny_episode_config):
+    serial = benchmark(tiny_episode_config, workers=1, worlds=3, seed=17)
+    parallel = benchmark(tiny_episode_config, workers=2, worlds=3, seed=17)
+    excess = benchmark(tiny_episode_config, workers=4, worlds=3, seed=17)
+    assert serial['worlds'] == parallel['worlds'] == excess['worlds']
+    assert serial['completed_world_ticks'] == 12

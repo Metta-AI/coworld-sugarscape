@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from concurrent.futures import ProcessPoolExecutor
+from contextlib import contextmanager
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -117,44 +117,37 @@ def receive_phase(children, expected, timeout):
             if connection.poll():
                 phase, payload = connection.recv()
                 if phase != expected:
-                    raise RuntimeError(f'expected simulation phase {expected}, got {phase}')
+                    raise RuntimeError(f'expected benchmark phase {expected}, got {phase}')
                 messages.append(payload)
                 pending.remove(child)
             elif process.exitcode is not None:
-                raise RuntimeError(f'simulation worker {process.pid} exited during {expected}: {process.exitcode}')
+                raise RuntimeError(f'benchmark worker {process.pid} exited during {expected}: {process.exitcode}')
         if pending:
             if perf_counter() >= deadline:
-                raise TimeoutError(f'simulation workers did not complete {expected}')
+                raise TimeoutError(f'benchmark workers did not complete {expected}')
             sleep(0.01)
     return messages
 
 
-def simulate_worlds(configs, *, timeout):
+@contextmanager
+def worker_processes(tasks, target, timeout):
+    """Own spawned workers and pipes through clean exit, or terminate on failure."""
     context = multiprocessing.get_context('spawn')
     children = []
     try:
-        for config in configs:
+        for task in tasks:
             parent, child = context.Pipe(duplex=True)
-            process = context.Process(target=run_simulation, args=(config, child, timeout))
+            process = context.Process(target=target, args=(task, child, timeout))
             process.start()
             child.close()
             children.append((process, parent))
-        receive_phase(children, 'ready', timeout)
-        started = perf_counter()
-        for _, connection in children:
-            connection.send('start')
-        finished = receive_phase(children, 'finished', timeout)
-        elapsed = max(message['finished_at'] for message in finished) - started
-        for _, connection in children:
-            connection.send('collect')
-        completed = receive_phase(children, 'result', timeout)
+        yield children
         for process, _ in children:
             process.join(timeout=5)
             if process.is_alive():
-                raise TimeoutError(f'simulation worker {process.pid} did not exit after results')
+                raise TimeoutError(f'benchmark worker {process.pid} did not exit after results')
             if process.exitcode != 0:
-                raise RuntimeError(f'simulation worker {process.pid} exited with code {process.exitcode}')
-        return sorted(completed, key=lambda world: world['seed']), elapsed
+                raise RuntimeError(f'benchmark worker {process.pid} exited with code {process.exitcode}')
     finally:
         for process, connection in children:
             if process.is_alive():
@@ -164,6 +157,27 @@ def simulate_worlds(configs, *, timeout):
                 process.kill()
                 process.join()
             connection.close()
+
+
+def simulate_worlds(configs, *, timeout):
+    with worker_processes(configs, run_simulation, timeout) as children:
+        receive_phase(children, 'ready', timeout)
+        started = perf_counter()
+        for _, connection in children:
+            connection.send('start')
+        finished = receive_phase(children, 'finished', timeout)
+        elapsed = max(message['finished_at'] for message in finished) - started
+        for _, connection in children:
+            connection.send('collect')
+        completed = receive_phase(children, 'result', timeout)
+    return sorted(completed, key=lambda world: world['seed']), elapsed
+
+
+def run_episodes(configs, connection, timeout):
+    try:
+        connection.send(('result', [run_world(config) for config in configs]))
+    finally:
+        connection.close()
 
 def benchmark(config: dict[str, object], *, workers: int, worlds: int, seed: int, mode: str = 'episodes', timeout: float = 600) -> dict[str, object]:
     if workers < 1 or worlds < 1 or seed < 0:
@@ -179,8 +193,10 @@ def benchmark(config: dict[str, object], *, workers: int, worlds: int, seed: int
         completed, elapsed = simulate_worlds(configs, timeout=timeout)
     else:
         started = perf_counter()
-        with ProcessPoolExecutor(max_workers=workers, mp_context=multiprocessing.get_context('spawn')) as pool:
-            completed = list(pool.map(run_world, configs))
+        chunks = [configs[index::workers] for index in range(min(workers, worlds))]
+        with worker_processes(chunks, run_episodes, timeout) as children:
+            batches = receive_phase(children, 'result', timeout)
+        completed = sorted((world for batch in batches for world in batch), key=lambda world: world['seed'])
         elapsed = perf_counter() - started
     if mode == 'episodes':
         worker_timings = [{'seed': world['seed'], **world.pop('timings')} for world in completed]
