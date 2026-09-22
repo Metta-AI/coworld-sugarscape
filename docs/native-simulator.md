@@ -102,14 +102,20 @@ and lending were inactive in this long-running fixture.
 A manual seed-1729 run matched the v7 projected physical state after a chained
 1,000-tick native rollout.
 
-On the RTX 4090 host, the projected native transition core measured 7,270.68
+On the RTX 4090 host, the projected native transition core measured 8,253.54
 aggregate ticks/second across 32 processes. Seeds 1729–1760 requested 32,000
 ticks and completed 31,391 before one world became extinct. The synchronized
-parent window was 4.317 seconds. This is 4.13× below the 30,000 target. The
+parent window was 3.803 seconds. This is 3.63× below the 30,000 target. The
 full Python DTL loop measured 232.659 ticks/second, but also builds its complete
 runtime-statistics document. Its cross-engine ratio is therefore directional. The
 simulator used the host's 32 logical CPU threads; the reserved RTX 4090
 identified the machine class but did not execute the CPU simulator.
+
+This run used commit `29f68f8` and Slurm job 3979. A runtime-only dense agent-ID
+index improved the same 32-world workload from 7,270.68 to 8,253.54 ticks/second
+(13.5%). The persistent episode stream added in that commit is outside the timed
+simulation loop. It validates snapshot order, configuration, policies, and
+termination, but complete result and replay integration remains open.
 
 On the RTX 4090 host CPU, five 10,000,000-tick v5 runs produced a median of
 445,738.5 ticks/second. Results ranged from 427,982.1 to 515,866.8 on the shared
