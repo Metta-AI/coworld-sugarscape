@@ -1,5 +1,5 @@
 import std/[algorithm, json, math, monotimes, sequtils, strutils, tables, times]
-import checksums/md5
+import std/md5
 
 when isMainModule:
   import std/os
