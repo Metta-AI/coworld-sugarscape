@@ -99,3 +99,9 @@ A one-seed run validates the reproduction path. It does not reproduce the paper'
 aggregate 500-seed findings. Python version and platform differences may also
 prevent exact historical numerical agreement; retain that provenance. Do not
 replace the current Coworld engine pin with the historical release.
+
+Completed paper runs report monotonic wall seconds and world ticks per second.
+Timing covers the historical Python subprocess, including startup and log output.
+A world tick advances the entire society; it is not an individual agent step.
+These CPU measurements do not establish GPU training throughput. Timings vary
+between runs; compare trajectory hashes when checking reproducibility.

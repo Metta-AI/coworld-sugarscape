@@ -35,6 +35,8 @@ def archived_experiment(tmp_path, monkeypatch):
 @pytest.mark.parametrize("timeout", [None, 15])
 def test_preserves_archived_configs_and_records_every_model(archived_experiment, tmp_path, monkeypatch, timeout):
     seen = []
+    clock = iter(range(0, 80, 10))
+    monkeypatch.setattr(paper.time, "perf_counter", lambda: next(clock))
 
     def simulate(command, **kwargs):
         config = json.loads(Path(command[-1]).read_text())
@@ -52,6 +54,9 @@ def test_preserves_archived_configs_and_records_every_model(archived_experiment,
     report = json.loads((output / "report.json").read_text())
     assert report["duration"] == "shortened smoke"
     assert len(report["runs"]) == 4
+    for run in report["runs"]:
+        assert run["wall_seconds"] == 10
+        assert run["world_ticks_per_second"] == 2
     for model in paper.MODELS:
         original = json.loads((output / "7" / model / "archived.config.json").read_text())
         executed = json.loads((output / "7" / model / "run.config.json").read_text())

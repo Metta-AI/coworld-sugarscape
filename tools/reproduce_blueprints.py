@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import time
 from zipfile import ZipFile
 
 ARCHIVE_SHA256 = "319c38c77cdeb9f3bd618ce6c57e14e93c35e2be282c01332d42cff58327f525"
@@ -96,12 +97,14 @@ def main(argv: list[str] | None = None) -> int:
             config["timesteps"] = args.timesteps
         config_path = directory / "run.config.json"
         config_path.write_text(json.dumps(config, indent=2) + "\n")
+        started = time.perf_counter()
         with (directory / "stdout.txt").open("w") as stdout, (directory / "stderr.txt").open("w") as stderr:
             subprocess.run(
                 [sys.executable, str(engine / "sugarscape.py"), "-c", str(config_path)],
                 cwd=engine, env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
                 stdout=stdout, stderr=stderr, check=True, timeout=args.timeout_seconds,
             )
+        elapsed_seconds = time.perf_counter() - started
         trajectory = json.loads((directory / "trajectory.json").read_text())
         final = trajectory[-1]
         if final["timestep"] != config["timesteps"] and final["population"] != 0:
@@ -113,6 +116,8 @@ def main(argv: list[str] | None = None) -> int:
             "model": model,
             "requested_timesteps": config["timesteps"],
             "completed_timesteps": final["timestep"],
+            "wall_seconds": elapsed_seconds,
+            "world_ticks_per_second": (final["timestep"] - trajectory[0]["timestep"]) / elapsed_seconds,
             "population_initial": trajectory[0]["population"],
             "population_final": final["population"],
             "trajectory_sha256": hashlib.sha256((directory / "trajectory.json").read_bytes()).hexdigest(),
