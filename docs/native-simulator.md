@@ -25,6 +25,8 @@ The adapter exports every field needed to resume the supported model:
   systems, and infected membership;
 - parent, child, mate, and ordered loan relations, including dead-creditor
   tombstones needed to resume inherited debts;
+- ordered friends, combat timestamps, and the five per-agent happiness
+  components used by Commonwealth wellness measurement;
 - canonical configuration hash, seat-ordered normalized rulesets and their
   SHA-256 hashes, plus prior-tick Gini and mean wealth for world features;
 - each origin cell's candidate range and neighbors in DTL insertion order; and
@@ -92,20 +94,20 @@ configuration and ruleset loaders, and baseline player. Host metadata records CP
 affinity, the active Slurm allocation variables, and GPU names and UUIDs reported by
 `nvidia-smi`. GPU inventory is empty when `nvidia-smi` is unavailable.
 
-On an Apple M4 Pro, three paired 1,000,000-tick v7 runs measured 43,666.8
-ticks/second for the reduced Python oracle and 325,095.9 for Nim. Nim was 7.44×
+On an Apple M4 Pro, three paired 1,000,000-tick v7 runs measured 38,842.2
+ticks/second for the reduced Python oracle and 345,381.9 for Nim. Nim was 8.89×
 faster, and every pair ended in identical state. Trade, disease, reproduction,
 and lending were inactive in this long-running fixture.
 
 A manual seed-1729 run matched the v7 projected physical state after a chained
 1,000-tick native rollout.
 
-On the RTX 4090 host, the projected native transition core measured 5,235.50
+On the RTX 4090 host, the projected native transition core measured 6,418.79
 aggregate ticks/second across 32 processes. Seeds 1729–1760 requested 32,000
 ticks and completed 31,391 before one world became extinct. The synchronized
-parent window was 5.996 seconds. This is 5.73× below the 30,000 target. The
-full Python DTL loop measured 232.659 ticks/second, but also updates happiness
-and runtime statistics. Its cross-engine ratio is therefore directional. The
+parent window was 4.890 seconds. This is 4.67× below the 30,000 target. The
+full Python DTL loop measured 232.659 ticks/second, but also builds its complete
+runtime-statistics document. Its cross-engine ratio is therefore directional. The
 simulator used the host's 32 logical CPU threads; the reserved RTX 4090
 identified the machine class but did not execute the CPU simulator.
 
@@ -128,9 +130,10 @@ configuration hash is
 `21d01473529dff583f4c50021bb7e9aac618559c4eafb714ffba056566e3e74c`.
 Its only ruleset hash is
 `f13b0a218f455a9d06fe379d635043c1a5194d905e1dec1ea32f4a2efc671a37`.
-Schema v7 accepts the canonical Commonwealth tick-zero world. Complete runtime
-statistics, happiness, wellness scoring, replay, and broad fixed-seed coverage
-remain outside the native contract, so this is not Commonwealth qualification.
+Schema v7 accepts the canonical Commonwealth tick-zero world and preserves its
+per-agent happiness inputs. Complete runtime statistics, rolling wellness
+measurement, scoring, replay, and broad fixed-seed coverage remain outside the
+native contract, so this is not Commonwealth qualification.
 
 1. The native loader accepts the canonical Commonwealth configuration and
    validated SugarLang policies without reducing physical-state features or

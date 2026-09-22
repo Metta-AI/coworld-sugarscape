@@ -3,8 +3,8 @@
 This directory contains the deterministic Nim simulation core. Its v7 wire
 schema supports sugar and spice, Cobb-Douglas welfare, trait modifiers,
 tagging, combat, trade, disease progression, reproduction, lending, children
-inheritance, starvation, aging, and population change. It remains a
-pre-Commonwealth parity slice.
+inheritance, starvation, aging, population change, SugarLang movement, and
+per-agent happiness. Complete episode results and replay remain on Python.
 
 Build and test it with Nim 2.2 or newer:
 
@@ -38,9 +38,9 @@ and preserves this input. It cannot recompute the hashes from a snapshot.
 
 Both resources grow first. The engine shuffles the agent list, then processes
 each agent sequentially. It shuffles the four cardinal rays within the agent's vision and
-movement range, with toroidal wrapping. The agent selects the cell with the
-Cobb-Douglas welfare, then the shortest distance. It stays put only when no
-candidate is available. Movement, harvesting, and metabolism update the world
+movement range, with toroidal wrapping. The agent ranks cells with its submitted
+SugarLang policy, then the shortest distance. Null policies use DTL's stock
+Cobb-Douglas welfare. Movement, harvesting, and metabolism update the world
 immediately.
 
 Movement, vision, and both metabolism traits retain their post-depression base
@@ -65,6 +65,8 @@ Reproduction preserves DTL's per-field deterministic inheritance, global seat
 draw, kinship relations, newborn harvest, and birth-tick action suppression.
 Lending preserves ordered loan lists, repayment, refinancing, and children debt
 inheritance. Dead-creditor tombstones retain the relations needed after resume.
+Ordered friend state and all five happiness components also round-trip and update
+with DTL ordering.
 
 This slice does not implement replacement, scheduled disease introduction,
 pollution, seasons, leaders, or non-children inheritance. It evaluates the
