@@ -4,7 +4,7 @@ when isMainModule:
   import std/os
 
 const
-  SchemaVersion = 3
+  SchemaVersion = 4
   SourcePin = "585282e9ce7b22a33b89abb0d777917bd5887d1a"
   MtWords = 624
   EmptyOccupant = -1'i64
@@ -31,8 +31,21 @@ type
     age*: int64
     sugarMetabolism*: float64
     spiceMetabolism*: float64
+    sugarMetabolismModifier*: float64
+    spiceMetabolismModifier*: float64
     vision*: int
     movement*: int
+    visionModifier*: int
+    movementModifier*: int
+    aggressionFactor*: float64
+    aggressionFactorModifier*: float64
+    fertilityFactor*: float64
+    fertilityFactorModifier*: float64
+    depressed*: bool
+    happinessUnit*: float64
+    maxFriends*: int
+    friendlinessModifier*: float64
+    happinessModifier*: float64
     maxAge*: int64
     lookaheadFactor*: float64
 
@@ -48,6 +61,8 @@ type
 
   World* = object
     sourcePin*: string
+    configurationSha256*: string
+    rulesetSha256*: seq[string]
     timestep*: int64
     width*: int
     height*: int
@@ -137,6 +152,14 @@ proc readNumber(node: JsonNode, field: string): float64 =
   else:
     node[field].getFloat()
 
+proc isSha256(value: string): bool =
+  if value.len != 64:
+    return false
+  for character in value:
+    if character notin {'0' .. '9', 'a' .. 'f'}:
+      return false
+  true
+
 proc loadRng*(node: JsonNode): PythonMt19937 =
   node.requireFields(["version", "words", "index", "gaussNext"], "rng")
   doAssert node["version"].getInt() == 3, "unsupported Python RNG state version"
@@ -154,13 +177,22 @@ proc loadRng*(node: JsonNode): PythonMt19937 =
 
 proc loadWorld*(node: JsonNode): World =
   node.requireFields(
-    ["schemaVersion", "sourcePin", "timestep", "width", "height", "sugarRegrowRate", "spiceRegrowRate",
+    ["schemaVersion", "sourcePin", "configurationSha256", "rulesetSha256", "timestep", "width", "height",
+     "sugarRegrowRate", "spiceRegrowRate",
      "maxCellDistance", "rng", "liveOrder", "cells", "agents", "orderedCandidates", "deaths"],
     "snapshot",
   )
   doAssert node["schemaVersion"].getInt() == SchemaVersion, "unsupported schema version"
   result.sourcePin = node["sourcePin"].getStr()
   doAssert result.sourcePin == SourcePin, "unsupported sourcePin"
+  result.configurationSha256 = node["configurationSha256"].getStr()
+  doAssert result.configurationSha256.isSha256(), "configurationSha256 must be 64 lowercase hexadecimal characters"
+  doAssert node["rulesetSha256"].kind == JArray and node["rulesetSha256"].len > 0,
+    "rulesetSha256 must be a nonempty array"
+  for digestNode in node["rulesetSha256"].items:
+    let digest = digestNode.getStr()
+    doAssert digest.isSha256(), "rulesetSha256 entries must be 64 lowercase hexadecimal characters"
+    result.rulesetSha256.add(digest)
   result.timestep = node.readInt("timestep")
   result.width = int(node.readInt("width"))
   result.height = int(node.readInt("height"))
@@ -205,7 +237,11 @@ proc loadWorld*(node: JsonNode): World =
   for agentNode in node["agents"].items:
     agentNode.requireFields(
       ["id", "seat", "x", "y", "sugar", "spice", "age", "sugarMetabolism",
-       "spiceMetabolism", "vision", "movement", "maxAge", "lookaheadFactor"],
+       "spiceMetabolism", "sugarMetabolismModifier", "spiceMetabolismModifier",
+       "vision", "movement", "visionModifier", "movementModifier", "maxAge", "lookaheadFactor",
+       "aggressionFactor", "aggressionFactorModifier", "fertilityFactor",
+       "fertilityFactorModifier", "depressed", "happinessUnit", "maxFriends",
+       "friendlinessModifier", "happinessModifier"],
       "agent",
     )
     let agent = Agent(
@@ -218,8 +254,21 @@ proc loadWorld*(node: JsonNode): World =
       age: agentNode.readInt("age"),
       sugarMetabolism: agentNode.readNumber("sugarMetabolism"),
       spiceMetabolism: agentNode.readNumber("spiceMetabolism"),
+      sugarMetabolismModifier: agentNode.readNumber("sugarMetabolismModifier"),
+      spiceMetabolismModifier: agentNode.readNumber("spiceMetabolismModifier"),
       vision: int(agentNode.readInt("vision")),
       movement: int(agentNode.readInt("movement")),
+      visionModifier: int(agentNode.readInt("visionModifier")),
+      movementModifier: int(agentNode.readInt("movementModifier")),
+      aggressionFactor: agentNode.readNumber("aggressionFactor"),
+      aggressionFactorModifier: agentNode.readNumber("aggressionFactorModifier"),
+      fertilityFactor: agentNode.readNumber("fertilityFactor"),
+      fertilityFactorModifier: agentNode.readNumber("fertilityFactorModifier"),
+      depressed: agentNode["depressed"].getBool(),
+      happinessUnit: agentNode.readNumber("happinessUnit"),
+      maxFriends: int(agentNode.readInt("maxFriends")),
+      friendlinessModifier: agentNode.readNumber("friendlinessModifier"),
+      happinessModifier: agentNode.readNumber("happinessModifier"),
       maxAge: agentNode.readInt("maxAge"),
       lookaheadFactor: agentNode.readNumber("lookaheadFactor"),
     )
@@ -230,6 +279,9 @@ proc loadWorld*(node: JsonNode): World =
       agent.sugarMetabolism >= 0 and agent.spiceMetabolism >= 0 and
       agent.vision >= 0 and agent.movement >= 0 and agent.lookaheadFactor >= 0,
       "agent resources and traits must be nonnegative"
+    doAssert agent.aggressionFactor >= 0 and agent.fertilityFactor >= 0 and
+      agent.happinessUnit >= 0 and agent.maxFriends >= 0,
+      "agent base social traits must be nonnegative"
     doAssert agent.maxAge >= -1, "agent maxAge must be -1 or nonnegative"
     previousId = agent.id
     agentIds.add(agent.id)
@@ -315,7 +367,18 @@ proc snapshot*(world: World): JsonNode =
       "id": agent.id, "seat": agent.seat, "x": agent.x, "y": agent.y,
       "sugar": agent.sugar, "spice": agent.spice, "age": agent.age,
       "sugarMetabolism": agent.sugarMetabolism, "spiceMetabolism": agent.spiceMetabolism,
-      "vision": agent.vision, "movement": agent.movement, "maxAge": agent.maxAge,
+      "sugarMetabolismModifier": agent.sugarMetabolismModifier,
+      "spiceMetabolismModifier": agent.spiceMetabolismModifier,
+      "vision": agent.vision, "movement": agent.movement,
+      "visionModifier": agent.visionModifier, "movementModifier": agent.movementModifier,
+      "aggressionFactor": agent.aggressionFactor,
+      "aggressionFactorModifier": agent.aggressionFactorModifier,
+      "fertilityFactor": agent.fertilityFactor,
+      "fertilityFactorModifier": agent.fertilityFactorModifier,
+      "depressed": agent.depressed, "happinessUnit": agent.happinessUnit,
+      "maxFriends": agent.maxFriends, "friendlinessModifier": agent.friendlinessModifier,
+      "happinessModifier": agent.happinessModifier,
+      "maxAge": agent.maxAge,
       "lookaheadFactor": agent.lookaheadFactor,
     })
   var orderedCandidates = newJArray()
@@ -327,8 +390,13 @@ proc snapshot*(world: World): JsonNode =
   var deaths = newJArray()
   for death in world.deaths:
     deaths.add(%*{"id": death.id, "seat": death.seat, "age": death.age, "cause": death.cause})
+  var rulesetSha256 = newJArray()
+  for digest in world.rulesetSha256:
+    rulesetSha256.add(%digest)
   %*{
-    "schemaVersion": SchemaVersion, "sourcePin": world.sourcePin, "timestep": world.timestep,
+    "schemaVersion": SchemaVersion, "sourcePin": world.sourcePin,
+    "configurationSha256": world.configurationSha256, "rulesetSha256": rulesetSha256,
+    "timestep": world.timestep,
     "width": world.width, "height": world.height, "sugarRegrowRate": world.sugarRegrowRate,
     "spiceRegrowRate": world.spiceRegrowRate,
     "maxCellDistance": world.maxCellDistance, "rng": rngJson(world.rng),
@@ -352,7 +420,13 @@ proc stepOne*(world: var World) =
     let agentIndex = agentIndexById[id]
     var agent = world.agents[agentIndex]
     let origin = agent.x * world.height + agent.y
-    let cellRange = min(min(agent.vision, agent.movement), world.maxCellDistance)
+    let effectiveVision = max(0, agent.vision + agent.visionModifier)
+    let effectiveMovement = max(0, agent.movement + agent.movementModifier)
+    let effectiveSugarMetabolism = max(0.0,
+      agent.sugarMetabolism + agent.sugarMetabolismModifier)
+    let effectiveSpiceMetabolism = max(0.0,
+      agent.spiceMetabolism + agent.spiceMetabolismModifier)
+    let cellRange = min(min(effectiveVision, effectiveMovement), world.maxCellDistance)
     var candidates = newSeq[Candidate]()
     for candidate in world.orderedCandidates[origin]:
       if candidate.distance <= float64(cellRange):
@@ -365,13 +439,13 @@ proc stepOne*(world: var World) =
     for candidate in candidates:
       if world.cells[candidate.target].occupantId != EmptyOccupant:
         continue
-      let totalMetabolism = agent.sugarMetabolism + agent.spiceMetabolism
-      let sugarProportion = if totalMetabolism == 0: 0.0 else: agent.sugarMetabolism / totalMetabolism
-      let spiceProportion = if totalMetabolism == 0: 0.0 else: agent.spiceMetabolism / totalMetabolism
+      let totalMetabolism = effectiveSugarMetabolism + effectiveSpiceMetabolism
+      let sugarProportion = if totalMetabolism == 0: 0.0 else: effectiveSugarMetabolism / totalMetabolism
+      let spiceProportion = if totalMetabolism == 0: 0.0 else: effectiveSpiceMetabolism / totalMetabolism
       let adjustedSugar = max(agent.sugar + world.cells[candidate.target].sugar -
-        agent.sugarMetabolism * agent.lookaheadFactor, 0.0)
+        effectiveSugarMetabolism * agent.lookaheadFactor, 0.0)
       let adjustedSpice = max(agent.spice + world.cells[candidate.target].spice -
-        agent.spiceMetabolism * agent.lookaheadFactor, 0.0)
+        effectiveSpiceMetabolism * agent.lookaheadFactor, 0.0)
       let computedWelfare = pow(adjustedSugar, sugarProportion) *
         pow(adjustedSpice, spiceProportion)
       let welfare = if computedWelfare.classify in {fcNan, fcInf, fcNegInf}:
@@ -392,12 +466,12 @@ proc stepOne*(world: var World) =
     agent.spice += world.cells[destination].spice
     world.cells[destination].sugar = 0
     world.cells[destination].spice = 0
-    agent.sugar -= agent.sugarMetabolism
-    agent.spice -= agent.spiceMetabolism
+    agent.sugar -= effectiveSugarMetabolism
+    agent.spice -= effectiveSpiceMetabolism
     var cause = ""
     if agent.sugar < 0 or agent.spice < 0 or
-      (agent.sugarMetabolism > 0 and agent.sugar <= 0) or
-      (agent.spiceMetabolism > 0 and agent.spice <= 0):
+      (effectiveSugarMetabolism > 0 and agent.sugar <= 0) or
+      (effectiveSpiceMetabolism > 0 and agent.spice <= 0):
       cause = "starvation"
     else:
       inc agent.age

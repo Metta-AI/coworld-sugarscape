@@ -11,12 +11,13 @@ from coworld.config import build_dtl_config, resolve_episode_config
 from coworld.instrumentation import EpisodeInstrumentation
 from coworld.native_fixture import (
     NativeReferenceWorld,
-    build_native_v3_reference_world,
-    native_v3_config,
+    build_native_v4_reference_world,
+    native_v4_config,
 )
 from coworld.native_oracle import (
     SOURCE_PIN,
     NativeSnapshot,
+    audit_snapshot_compatibility,
     snapshot_world,
     step_python,
     validate_supported_world,
@@ -36,12 +37,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _supported_config() -> dict[str, object]:
-    return native_v3_config(seed=1729, timesteps=8)
+    return native_v4_config(seed=1729, timesteps=8)
 
 
 def _world(config: dict[str, object] | None = None) -> CoworldSugarscape:
     if config is None:
-        return build_native_v3_reference_world(seed=1729, timesteps=8)
+        return build_native_v4_reference_world(seed=1729, timesteps=8)
     resolved = resolve_episode_config(config or _supported_config())
     return NativeReferenceWorld(
         build_dtl_config(resolved),
@@ -98,6 +99,43 @@ def test_exact_cell_welfare_ruleset_matches_native() -> None:
         actual = step_native(snapshot_world(world), 1, binary=binary)
         world.doTimestep()
         assert actual == snapshot_world(world)
+
+
+def test_depressed_bases_and_infection_modifiers_match_native() -> None:
+    binary = build_native_simulator()
+    config = _supported_config()
+    config.update(
+        {
+            "seats": 1,
+            "startingAgents": 1,
+            "agentDepressionPercentage": 1,
+            "agentMovement": [3, 3],
+            "agentVision": [3, 3],
+            "agentSugarMetabolism": [2, 2],
+            "agentSpiceMetabolism": [2, 2],
+        }
+    )
+    world = _world(config)
+    agent = world.agents[0]
+    assert agent.depressed
+    assert agent.movement == 6
+    assert agent.sugarMetabolism == 8
+    assert agent.spiceMetabolism == 8
+    agent.visionModifier = -1
+    agent.movementModifier = -4
+    agent.sugarMetabolismModifier = -6
+    agent.spiceMetabolismModifier = -6
+    agent.findCellsInRange()
+    initial = snapshot_world(world)
+
+    actual = step_native(initial, 1, binary=binary)
+    world.doTimestep()
+
+    assert actual == snapshot_world(world)
+    assert actual.agents[0][10] == 6
+    assert actual.agents[0][14:17] == (-4, -6, -6)
+    assert actual.agents[0][21]
+    assert actual.agents[0][22] == pytest.approx(0.5763)
 
 
 def test_two_resource_welfare_can_reverse_the_sugar_only_winner() -> None:
@@ -260,6 +298,10 @@ def test_python_and_native_benchmarks_run_the_same_contract() -> None:
             lambda raw: raw["orderedCandidates"][0][0].__setitem__(1, 0),
             "candidate distance",
         ),
+        (
+            lambda raw: raw.__setitem__("configurationSha256", "A" * 64),
+            "configurationSha256",
+        ),
     ],
 )
 def test_snapshot_parser_rejects_states_the_native_core_rejects(mutate, message: str) -> None:
@@ -297,8 +339,25 @@ def test_validator_rejects_other_sugarlang_rules() -> None:
         instrumentation=EpisodeInstrumentation(enabled=False),
     )
 
-    with pytest.raises(ValueError, match="cell.welfare SugarLang"):
+    with pytest.raises(ValueError, match="cell.welfare movement"):
         validate_supported_world(world)
+
+
+def test_validator_accepts_traits_with_cell_welfare_movement() -> None:
+    resolved = resolve_episode_config(_supported_config())
+    ruleset = {
+        "version": 1,
+        "traits": {"aggression": 0, "trade": 0, "lending": 0, "fertility": 0},
+        "movement": [{"score": ["get", "cell.welfare"]}],
+    }
+    world = CoworldSugarscape(
+        build_dtl_config(resolved),
+        [compile_ruleset(ruleset), compile_ruleset(None)],
+        parse_trait_ranges(resolved.get("trait_ranges")),
+        instrumentation=EpisodeInstrumentation(enabled=False),
+    )
+
+    validate_supported_world(world)
 
 
 def test_validator_rejects_a_world_after_death() -> None:
@@ -307,3 +366,43 @@ def test_validator_rejects_a_world_after_death() -> None:
 
     with pytest.raises(ValueError, match="alive and placed"):
         validate_supported_world(world)
+
+
+def test_commonwealth_seed_1729_tick_zero_audit_is_bound_and_rejected() -> None:
+    manifest = json.loads((ROOT / "coworld_manifest.json").read_text(encoding="utf-8"))
+    config = next(
+        variant["game_config"]
+        for variant in manifest["variants"]
+        if variant["id"] == "commonwealth"
+    ) | {"seed": 1729}
+    resolved = resolve_episode_config(config)
+    ruleset = {
+        "version": 1,
+        "traits": {"aggression": 0, "trade": 1, "lending": 1, "fertility": 1},
+        "movement": [{"score": ["get", "cell.welfare"]}],
+    }
+    world = NativeReferenceWorld(
+        build_dtl_config(resolved),
+        [compile_ruleset(ruleset)],
+        parse_trait_ranges(resolved.get("trait_ranges")),
+        instrumentation=EpisodeInstrumentation(enabled=False),
+    )
+
+    audit = audit_snapshot_compatibility(world)
+
+    assert audit.configuration_sha256 == "21d01473529dff583f4c50021bb7e9aac618559c4eafb714ffba056566e3e74c"
+    assert audit.ruleset_sha256 == (
+        "f13b0a218f455a9d06fe379d635043c1a5194d905e1dec1ea32f4a2efc671a37",
+    )
+    assert (audit.population, audit.depressed_agents, audit.infected_agents) == (250, 25, 50)
+    assert audit.modified_agents == 50
+    assert audit.blockers == (
+        "combat",
+        "trade",
+        "lending",
+        "reproduction",
+        "disease_progression",
+        "tagging",
+    )
+    with pytest.raises(ValueError, match="disease"):
+        snapshot_world(world)
