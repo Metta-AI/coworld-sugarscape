@@ -92,6 +92,14 @@ type
     lastLoans*: int
     creditorLoans*: seq[Loan]
     debtorLoans*: seq[Loan]
+    friends*: seq[tuple[id: int64, hammingDistance: int]]
+    lastCombatTimestep*: int64
+    conflictHappiness*: float64
+    familyHappiness*: float64
+    healthHappiness*: float64
+    socialHappiness*: float64
+    wealthHappiness*: float64
+    happiness*: float64
 
   Infection* = object
     diseaseId*: int
@@ -554,7 +562,9 @@ proc loadWorld*(node: JsonNode): World =
        "baseInterestRate", "loanDuration", "sugarMeanIncome", "spiceMeanIncome",
        "startingImmuneSystem", "racialTags", "fatherId", "motherId", "childrenIds", "mateIds",
        "lastMovedTimestep", "lastReproducedTimestep", "lastMates", "lastLendedTimestep",
-       "lastLoans", "creditorLoans", "debtorLoans"],
+       "lastLoans", "creditorLoans", "debtorLoans", "friends", "lastCombatTimestep",
+       "conflictHappiness", "familyHappiness", "healthHappiness", "socialHappiness",
+       "wealthHappiness", "happiness"],
       "agent",
     )
     var agent = Agent(
@@ -618,6 +628,13 @@ proc loadWorld*(node: JsonNode): World =
       lastMates: int(agentNode.readInt("lastMates")),
       lastLendedTimestep: agentNode.readInt("lastLendedTimestep"),
       lastLoans: int(agentNode.readInt("lastLoans")),
+      lastCombatTimestep: agentNode.readInt("lastCombatTimestep"),
+      conflictHappiness: agentNode.readNumber("conflictHappiness"),
+      familyHappiness: agentNode.readNumber("familyHappiness"),
+      healthHappiness: agentNode.readNumber("healthHappiness"),
+      socialHappiness: agentNode.readNumber("socialHappiness"),
+      wealthHappiness: agentNode.readNumber("wealthHappiness"),
+      happiness: agentNode.readNumber("happiness"),
     )
     doAssert agent.id >= 0 and agent.id > previousId, "agents must be sorted by unique id"
     doAssert agent.seat >= 0 and agent.seat < result.rulesets.len and
@@ -666,6 +683,14 @@ proc loadWorld*(node: JsonNode): World =
           loan.spiceLoan >= 0 and loan.duration >= 1 and loan.origin >= 0, "invalid loan"
         if field == "creditorLoans": agent.creditorLoans.add(loan)
         else: agent.debtorLoans.add(loan)
+    doAssert agentNode["friends"].kind == JArray, "friends must be an array"
+    doAssert agentNode["friends"].len <= agent.maxFriends, "friends exceeds maxFriends"
+    for friendNode in agentNode["friends"].items:
+      friendNode.requireFields(["id", "hammingDistance"], "friend")
+      let friend = (id: friendNode.readInt("id"),
+        hammingDistance: int(friendNode.readInt("hammingDistance")))
+      doAssert friend.id >= 0 and friend.hammingDistance >= 0, "invalid friend"
+      agent.friends.add(friend)
     if agent.hasStartingImmuneSystem:
       doAssert agentNode["startingImmuneSystem"].kind == JArray,
         "startingImmuneSystem must be null or a bit array"
@@ -1004,6 +1029,18 @@ proc snapshot*(world: World): JsonNode =
             "sugarLoan": loan.sugarLoan, "spiceLoan": loan.spiceLoan,
             "loanDuration": loan.duration, "loanOrigin": loan.origin})
         values,
+      "friends": block:
+        var values = newJArray()
+        for friend in agent.friends:
+          values.add(%*{"id": friend.id, "hammingDistance": friend.hammingDistance})
+        values,
+      "lastCombatTimestep": agent.lastCombatTimestep,
+      "conflictHappiness": agent.conflictHappiness,
+      "familyHappiness": agent.familyHappiness,
+      "healthHappiness": agent.healthHappiness,
+      "socialHappiness": agent.socialHappiness,
+      "wealthHappiness": agent.wealthHappiness,
+      "happiness": agent.happiness,
     })
   var orderedCandidates = newJArray()
   for candidates in world.orderedCandidates:
@@ -1504,6 +1541,14 @@ proc createChild(world: var World, firstIndex, secondIndex, cell: int): Agent =
   result.diseases = @[]
   result.creditorLoans = @[]
   result.debtorLoans = @[]
+  result.friends = @[]
+  result.lastCombatTimestep = -1
+  result.conflictHappiness = 0
+  result.familyHappiness = 0
+  result.healthHappiness = 0
+  result.socialHappiness = 0
+  result.wealthHappiness = 0
+  result.happiness = 0
   result.fertilityFactorModifier = 0
   result.aggressionFactorModifier = 0
   result.friendlinessModifier = 0
@@ -1757,6 +1802,71 @@ proc doInheritance(world: var World, agentIndex: int, agentIndexById: Table[int6
     world.agents[agentIndex].sugar -= sugarShare
     world.agents[agentIndex].spice -= spiceShare
 
+proc updateFriends(world: var World, agentIndex, neighborIndex: int) =
+  let distance = block:
+    var value = 0
+    if world.agents[agentIndex].hasTags:
+      for index, bit in world.agents[agentIndex].tags:
+        if bit != world.agents[neighborIndex].tags[index]: inc value
+    value
+  let friend = (id: world.agents[neighborIndex].id, hammingDistance: distance)
+  if world.agents[agentIndex].friends.len < world.agents[agentIndex].maxFriends:
+    world.agents[agentIndex].friends.add(friend)
+    return
+  var maxDistance = 0
+  var maxIndex = -1
+  for index, existing in world.agents[agentIndex].friends:
+    if existing.id == friend.id:
+      world.agents[agentIndex].friends.delete(index)
+      world.agents[agentIndex].friends.add(friend)
+      return
+    if existing.hammingDistance > maxDistance:
+      maxDistance = existing.hammingDistance
+      maxIndex = index
+  if maxDistance > distance:
+    world.agents[agentIndex].friends.delete(maxIndex)
+    world.agents[agentIndex].friends.add(friend)
+
+proc updateHappiness(world: var World, agentIndex: int,
+    agentIndexById: Table[int64, int], dead: Table[int64, Death]) =
+  let unit = world.agents[agentIndex].happinessUnit
+  world.agents[agentIndex].conflictHappiness =
+    if world.agents[agentIndex].lastCombatTimestep == world.timestep:
+      (if world.agents[agentIndex].aggressionFactor +
+          world.agents[agentIndex].aggressionFactorModifier > 1: unit else: -unit)
+    else: 0
+  var family = 0.0
+  for childId in world.agents[agentIndex].childrenIds:
+    if not agentIndexById.hasKey(childId) or dead.hasKey(childId):
+      family -= unit
+    else:
+      let child {.cursor.} = world.agents[agentIndexById[childId]]
+      family += unit
+      if child.diseases.len > 0: family -= unit * 0.5
+      if child.born == world.timestep: family += unit
+  for mateId in world.agents[agentIndex].mateIds:
+    if not agentIndexById.hasKey(mateId) or dead.hasKey(mateId):
+      family -= unit
+    else:
+      let mate {.cursor.} = world.agents[agentIndexById[mateId]]
+      family += unit
+      if mate.diseases.len > 0: family -= unit * 0.5
+  world.agents[agentIndex].familyHappiness = erf(family)
+  world.agents[agentIndex].healthHappiness =
+    if world.agents[agentIndex].diseases.len > 0: -unit else: unit
+  world.agents[agentIndex].socialHappiness =
+    if world.agents[agentIndex].maxFriends == 0: 0
+    else:
+      let step = 2 / float64(world.agents[agentIndex].maxFriends)
+      roundedMultiply(roundedMultiply(
+        float64(world.agents[agentIndex].friends.len), step) - 1, unit)
+  world.agents[agentIndex].wealthHappiness = erf(
+    (world.agents[agentIndex].sugar + world.agents[agentIndex].spice -
+      world.worldMeanWealth) * unit)
+  world.agents[agentIndex].happiness = world.agents[agentIndex].conflictHappiness +
+    world.agents[agentIndex].familyHappiness + world.agents[agentIndex].healthHappiness +
+    world.agents[agentIndex].socialHappiness + world.agents[agentIndex].wealthHappiness
+
 proc stepOne*(world: var World) =
   world.deaths.setLen(0)
   inc world.timestep
@@ -1778,18 +1888,23 @@ proc stepOne*(world: var World) =
       inc turnIndex
       continue
     let agentIndex = agentIndexById[id]
-    var agent = world.agents[agentIndex]
-    if agent.lastMovedTimestep == world.timestep:
+    if world.agents[agentIndex].lastMovedTimestep == world.timestep:
       inc turnIndex
       continue
-    let origin = agent.x * world.height + agent.y
-    let effectiveVision = max(0, agent.vision + agent.visionModifier)
-    let effectiveMovement = max(0, agent.movement + agent.movementModifier)
+    let origin = world.agents[agentIndex].x * world.height + world.agents[agentIndex].y
+    let effectiveVision = max(0,
+      world.agents[agentIndex].vision + world.agents[agentIndex].visionModifier)
+    let effectiveMovement = max(0,
+      world.agents[agentIndex].movement + world.agents[agentIndex].movementModifier)
     let effectiveSugarMetabolism = max(0.0,
-      agent.sugarMetabolism + agent.sugarMetabolismModifier)
+      world.agents[agentIndex].sugarMetabolism +
+      world.agents[agentIndex].sugarMetabolismModifier)
     let effectiveSpiceMetabolism = max(0.0,
-      agent.spiceMetabolism + agent.spiceMetabolismModifier)
-    let aggression = max(0.0, agent.aggressionFactor + agent.aggressionFactorModifier)
+      world.agents[agentIndex].spiceMetabolism +
+      world.agents[agentIndex].spiceMetabolismModifier)
+    let aggression = max(0.0,
+      world.agents[agentIndex].aggressionFactor +
+      world.agents[agentIndex].aggressionFactorModifier)
     let cellRange = min(min(effectiveVision, effectiveMovement), world.maxCellDistance)
     var candidates = newSeq[Candidate]()
     for candidate in world.orderedCandidates[origin]:
@@ -1797,14 +1912,16 @@ proc stepOne*(world: var World) =
         candidates.add(candidate)
     world.rng.pythonShuffle(candidates)
 
-    var retaliators = initTable[int, float64]()
-    for candidate in candidates:
-      let occupantId = world.cells[candidate.target].occupantId
-      if occupantId != EmptyOccupant and not dead.hasKey(occupantId):
-        let occupant {.cursor.} = world.agents[agentIndexById[occupantId]]
-        let wealth = occupant.sugar + occupant.spice
-        if not retaliators.hasKey(occupant.tribe) or retaliators[occupant.tribe] < wealth:
-          retaliators[occupant.tribe] = wealth
+    var retaliators: Table[int, float64]
+    if aggression > 0:
+      retaliators = initTable[int, float64]()
+      for candidate in candidates:
+        let occupantId = world.cells[candidate.target].occupantId
+        if occupantId != EmptyOccupant and not dead.hasKey(occupantId):
+          let occupant {.cursor.} = world.agents[agentIndexById[occupantId]]
+          let wealth = occupant.sugar + occupant.spice
+          if not retaliators.hasKey(occupant.tribe) or retaliators[occupant.tribe] < wealth:
+            retaliators[occupant.tribe] = wealth
 
     var destination = origin
     var bestWelfare = low(float64)
@@ -1818,19 +1935,20 @@ proc stepOne*(world: var World) =
         if dead.hasKey(occupantId):
           continue
         let prey {.cursor.} = world.agents[agentIndexById[occupantId]]
-        if aggression <= 0 or agent.tribe == prey.tribe or
-          agent.sugar + agent.spice < prey.sugar + prey.spice:
+        if aggression <= 0 or world.agents[agentIndex].tribe == prey.tribe or
+          world.agents[agentIndex].sugar + world.agents[agentIndex].spice <
+            prey.sugar + prey.spice:
           continue
         preyTribe = prey.tribe
         sugarReward = aggression * min(world.maxCombatLoot, prey.sugar)
         spiceReward = aggression * min(world.maxCombatLoot, prey.spice)
-      let baseWelfare = welfare(agent, world.cells[candidate.target], sugarReward, spiceReward,
-        effectiveSugarMetabolism, effectiveSpiceMetabolism)
+      let baseWelfare = welfare(world.agents[agentIndex], world.cells[candidate.target],
+        sugarReward, spiceReward, effectiveSugarMetabolism, effectiveSpiceMetabolism)
       if occupantId != EmptyOccupant and retaliators[preyTribe] >
-          agent.sugar + agent.spice + baseWelfare:
+          world.agents[agentIndex].sugar + world.agents[agentIndex].spice + baseWelfare:
         continue
-      let score = world.movementScore(agent, candidate.target, candidate.distance,
-        baseWelfare, worldPopulation, agentIndexById)
+      let score = world.movementScore(world.agents[agentIndex], candidate.target,
+        candidate.distance, baseWelfare, worldPopulation, agentIndexById)
       if score > bestWelfare or (score == bestWelfare and candidate.distance < bestDistance):
         destination = candidate.target
         bestWelfare = score
@@ -1839,70 +1957,76 @@ proc stepOne*(world: var World) =
     let preyId = world.cells[destination].occupantId
     if destination != origin and preyId != EmptyOccupant:
       let preyIndex = agentIndexById[preyId]
-      var prey = world.agents[preyIndex]
-      let sugarLoot = min(world.maxCombatLoot, prey.sugar)
-      let spiceLoot = min(world.maxCombatLoot, prey.spice)
-      agent.sugar += sugarLoot
-      agent.spice += spiceLoot
-      prey.sugar -= sugarLoot
-      prey.spice -= spiceLoot
-      world.agents[preyIndex] = prey
-      dead[preyId] = Death(id: prey.id, seat: prey.seat, age: prey.age, cause: "combat")
+      let sugarLoot = min(world.maxCombatLoot, world.agents[preyIndex].sugar)
+      let spiceLoot = min(world.maxCombatLoot, world.agents[preyIndex].spice)
+      world.agents[agentIndex].sugar += sugarLoot
+      world.agents[agentIndex].spice += spiceLoot
+      world.agents[preyIndex].sugar -= sugarLoot
+      world.agents[preyIndex].spice -= spiceLoot
+      dead[preyId] = Death(id: preyId, seat: world.agents[preyIndex].seat,
+        age: world.agents[preyIndex].age, cause: "combat")
       world.cells[destination].occupantId = EmptyOccupant
       world.doInheritance(preyIndex, agentIndexById, dead)
       world.clearDiseasesOnDeath(preyIndex)
+      world.agents[agentIndex].lastCombatTimestep = world.timestep
     if destination != origin:
       world.cells[origin].occupantId = EmptyOccupant
-      world.cells[destination].occupantId = agent.id
-      agent.x = destination div world.height
-      agent.y = destination mod world.height
+      world.cells[destination].occupantId = id
+      world.agents[agentIndex].x = destination div world.height
+      world.agents[agentIndex].y = destination mod world.height
+    for neighborCell in world.orderedNeighbors[destination]:
+      let neighborId = world.cells[neighborCell].occupantId
+      if neighborId != EmptyOccupant and not dead.hasKey(neighborId):
+        world.updateFriends(agentIndex, agentIndexById[neighborId])
 
     let sugarCollected = world.cells[destination].sugar
     let spiceCollected = world.cells[destination].spice
-    agent.sugar += sugarCollected
-    agent.spice += spiceCollected
-    agent.sugarMeanIncome = updateMeanIncome(agent.sugarMeanIncome, sugarCollected)
-    agent.spiceMeanIncome = updateMeanIncome(agent.spiceMeanIncome, spiceCollected)
+    world.agents[agentIndex].sugar += sugarCollected
+    world.agents[agentIndex].spice += spiceCollected
+    world.agents[agentIndex].sugarMeanIncome = updateMeanIncome(
+      world.agents[agentIndex].sugarMeanIncome, sugarCollected)
+    world.agents[agentIndex].spiceMeanIncome = updateMeanIncome(
+      world.agents[agentIndex].spiceMeanIncome, spiceCollected)
     world.cells[destination].sugar = 0
     world.cells[destination].spice = 0
-    agent.sugar -= effectiveSugarMetabolism
-    agent.spice -= effectiveSpiceMetabolism
-    agent.lastMovedTimestep = world.timestep
+    world.agents[agentIndex].sugar -= effectiveSugarMetabolism
+    world.agents[agentIndex].spice -= effectiveSpiceMetabolism
+    world.agents[agentIndex].lastMovedTimestep = world.timestep
     var cause = ""
-    if agent.sugar < 0 or agent.spice < 0 or
-      (effectiveSugarMetabolism > 0 and agent.sugar <= 0) or
-      (effectiveSpiceMetabolism > 0 and agent.spice <= 0):
+    if world.agents[agentIndex].sugar < 0 or world.agents[agentIndex].spice < 0 or
+      (effectiveSugarMetabolism > 0 and world.agents[agentIndex].sugar <= 0) or
+      (effectiveSpiceMetabolism > 0 and world.agents[agentIndex].spice <= 0):
       cause = "starvation"
     else:
-      if agent.tagging:
+      if world.agents[agentIndex].tagging:
         var neighbors = world.orderedNeighbors[destination]
         world.rng.pythonShuffle(neighbors)
         for neighbor in neighbors:
           let neighborId = world.cells[neighbor].occupantId
           if neighborId != EmptyOccupant and not dead.hasKey(neighborId):
-            let position = int(world.rng.randBelow(uint64(agent.tags.len)))
-            if neighborId == agent.id:
-              agent.tags[position] = agent.tags[position]
-              world.recomputeTribe(agent)
+            let position = int(world.rng.randBelow(uint64(
+              world.agents[agentIndex].tags.len)))
+            if neighborId == id:
+              world.recomputeTribe(world.agents[agentIndex])
             else:
               let neighborIndex = agentIndexById[neighborId]
-              var target = world.agents[neighborIndex]
-              target.tags[position] = agent.tags[position]
-              world.recomputeTribe(target)
-              world.agents[neighborIndex] = target
-      world.agents[agentIndex] = agent
-      world.doTrading(agent.id, agentIndexById, dead)
-      world.doReproduction(agent.id, agentIndexById, dead)
-      world.doLending(agent.id, agentIndexById, dead)
-      world.doDisease(agent.id, agentIndexById, dead)
-      agent = world.agents[agentIndex]
-      inc agent.age
-      if agent.maxAge != -1 and agent.age >= agent.maxAge:
+              world.agents[neighborIndex].tags[position] =
+                world.agents[agentIndex].tags[position]
+              world.recomputeTribe(world.agents[neighborIndex])
+      world.doTrading(id, agentIndexById, dead)
+      world.doReproduction(id, agentIndexById, dead)
+      world.doLending(id, agentIndexById, dead)
+      world.doDisease(id, agentIndexById, dead)
+      inc world.agents[agentIndex].age
+      if world.agents[agentIndex].maxAge != -1 and
+          world.agents[agentIndex].age >= world.agents[agentIndex].maxAge:
         cause = "aging"
+      else:
+        world.updateHappiness(agentIndex, agentIndexById, dead)
     if cause.len > 0:
       world.cells[destination].occupantId = EmptyOccupant
-      dead[agent.id] = Death(id: agent.id, seat: agent.seat, age: agent.age, cause: cause)
-    world.agents[agentIndex] = agent
+      dead[id] = Death(id: id, seat: world.agents[agentIndex].seat,
+        age: world.agents[agentIndex].age, cause: cause)
     if cause.len > 0:
       world.doInheritance(agentIndex, agentIndexById, dead)
       world.clearDiseasesOnDeath(agentIndex)
