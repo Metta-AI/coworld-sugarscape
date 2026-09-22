@@ -102,10 +102,10 @@ and lending were inactive in this long-running fixture.
 A manual seed-1729 run matched the v7 projected physical state after a chained
 1,000-tick native rollout.
 
-On the RTX 4090 host, the projected native transition core measured 6,418.79
+On the RTX 4090 host, the projected native transition core measured 7,270.68
 aggregate ticks/second across 32 processes. Seeds 1729–1760 requested 32,000
 ticks and completed 31,391 before one world became extinct. The synchronized
-parent window was 4.890 seconds. This is 4.67× below the 30,000 target. The
+parent window was 4.317 seconds. This is 4.13× below the 30,000 target. The
 full Python DTL loop measured 232.659 ticks/second, but also builds its complete
 runtime-statistics document. Its cross-engine ratio is therefore directional. The
 simulator used the host's 32 logical CPU threads; the reserved RTX 4090
@@ -131,9 +131,10 @@ configuration hash is
 Its only ruleset hash is
 `f13b0a218f455a9d06fe379d635043c1a5194d905e1dec1ea32f4a2efc671a37`.
 Schema v7 accepts the canonical Commonwealth tick-zero world and preserves its
-per-agent happiness inputs. Complete runtime statistics, rolling wellness
-measurement, scoring, replay, and broad fixed-seed coverage remain outside the
-native contract, so this is not Commonwealth qualification.
+per-agent happiness inputs. Typed native ticks produce the same rolling
+measurement inputs as DTL. Complete runtime statistics, hosted episode wiring,
+scoring, replay, and broad fixed-seed coverage remain outside the native
+contract, so this is not Commonwealth qualification.
 
 1. The native loader accepts the canonical Commonwealth configuration and
    validated SugarLang policies without reducing physical-state features or
