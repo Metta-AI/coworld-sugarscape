@@ -1,10 +1,9 @@
 # Native Sugarscape core
 
-This directory contains the deterministic Nim simulation core. Its v5 wire
+This directory contains the deterministic Nim simulation core. Its v6 wire
 schema supports sugar and spice, Cobb-Douglas welfare, trait modifiers,
-tagging, combat, starvation, aging, and population decline. It remains a
-pre-Commonwealth parity slice until the other mechanics listed below are
-implemented.
+tagging, combat, trade, disease progression, starvation, aging, and population
+decline. It remains a pre-Commonwealth parity slice.
 
 Build and test it with Nim 2.2 or newer:
 
@@ -35,8 +34,8 @@ be empty. Reloading a snapshot continues the same random stream.
 Python records canonical configuration and per-seat ruleset hashes. Nim validates
 their format and preserves them. It cannot recompute them from a snapshot.
 
-Both resources grow first. The engine shuffles the agent list, then processes each agent
-sequentially. It shuffles the four cardinal rays within the agent's vision and
+Both resources grow first. The engine shuffles the agent list, then processes
+each agent sequentially. It shuffles the four cardinal rays within the agent's vision and
 movement range, with toroidal wrapping. The agent selects the cell with the
 Cobb-Douglas welfare, then the shortest distance. It stays put only when no
 candidate is available. Movement, harvesting, and metabolism update the world
@@ -44,9 +43,9 @@ immediately.
 
 Movement, vision, and both metabolism traits retain their post-depression base
 values and separate signed modifiers. Each action derives the effective value
-as `max(0, base + modifier)`. Disease records and immune state remain outside
-this slice; v5 can resume an already-applied modifier state but does not advance
-infection or recovery.
+as `max(0, base + modifier)`. Disease definitions, ordered infection records,
+immune state, and infected membership round-trip in snapshots. Incubation, repeated activation, immune
+adaptation, recovery, and transmission preserve DTL ordering and RNG draws.
 
 `deaths` contains the most recently completed tick's removals in DTL removal
 order. Starvation clears the occupied cell immediately and skips aging. Aging
@@ -57,7 +56,10 @@ grids, copies one tag bit per occupied neighbor, and updates tribes immediately.
 Combat applies eligibility, retaliation, capped two-resource loot, immediate
 death, and end-of-tick removal order. Inheritance policy must be `none`.
 
-This slice does not implement replacement, reproduction, trade, lending,
-disease progression, pollution, seasons, leaders, inheritance, or general SugarLang
-policies. The closed snapshot schema rejects additional fields, RNGs, and
+Trade preserves cached marginal rates of substitution, base-metabolism lethal
+checks, repeated transactions, and DTL attempted-price metrics.
+
+This slice does not implement replacement, reproduction, lending, scheduled
+disease introduction, pollution, seasons, leaders, inheritance, or general
+SugarLang policies. The closed snapshot schema rejects additional fields, RNGs, and
 Gaussian cache state.

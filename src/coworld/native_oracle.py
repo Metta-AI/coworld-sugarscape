@@ -12,7 +12,7 @@ from typing import Mapping
 from .simulation import CoworldSugarscape
 
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 SOURCE_PIN = "585282e9ce7b22a33b89abb0d777917bd5887d1a"
 _WELFARE_MOVEMENT = [{"score": ["get", "cell.welfare"]}]
 
@@ -99,6 +99,8 @@ class NativeSnapshot:
     agents: tuple[tuple[int | float, ...], ...]
     ordered_candidates: tuple[tuple[tuple[int, int | float], ...], ...]
     ordered_neighbors: tuple[tuple[int, ...], ...]
+    diseases: tuple[tuple[object, ...], ...]
+    remaining_disease_ids: tuple[int, ...]
     deaths: tuple[tuple[int, int, int, str], ...]
 
     @classmethod
@@ -125,6 +127,8 @@ class NativeSnapshot:
             "agents",
             "orderedCandidates",
             "orderedNeighbors",
+            "diseases",
+            "remainingDiseaseIds",
             "deaths",
         }
         _closed(raw, keys, "snapshot")
@@ -173,6 +177,8 @@ class NativeSnapshot:
         raw_candidates = raw["orderedCandidates"]
         raw_neighbors = raw["orderedNeighbors"]
         raw_deaths = raw["deaths"]
+        raw_diseases = raw["diseases"]
+        raw_remaining_diseases = raw["remainingDiseaseIds"]
         count = width * height
         if not isinstance(raw_cells, list) or len(raw_cells) != count:
             raise ValueError("cells must contain width * height entries")
@@ -243,6 +249,16 @@ class NativeSnapshot:
             "tags",
             "tribe",
             "tagging",
+            "tradeFactor",
+            "marginalRateOfSubstitution",
+            "tradeVolume",
+            "sugarPrice",
+            "spicePrice",
+            "lastTradeTimestep",
+            "lastTradePartners",
+            "diseaseProtectionChance",
+            "immuneSystem",
+            "diseases",
         }
         agents = []
         for index, agent in enumerate(raw_agents):
@@ -300,6 +316,16 @@ class NativeSnapshot:
                 parsed_tags,
                 None if agent["tribe"] is None else _int(agent["tribe"], "agent.tribe"),
                 agent["tagging"],
+                _number(agent["tradeFactor"], "agent.tradeFactor"),
+                _number(agent["marginalRateOfSubstitution"], "agent.marginalRateOfSubstitution"),
+                _int(agent["tradeVolume"], "agent.tradeVolume"),
+                _number(agent["sugarPrice"], "agent.sugarPrice"),
+                _number(agent["spicePrice"], "agent.spicePrice"),
+                agent["lastTradeTimestep"],
+                _int(agent["lastTradePartners"], "agent.lastTradePartners"),
+                _number(agent["diseaseProtectionChance"], "agent.diseaseProtectionChance"),
+                None,
+                (),
             )
             if not isinstance(values[21], bool):
                 raise ValueError("agent.depressed must be a boolean")
@@ -315,6 +341,44 @@ class NativeSnapshot:
                     raise ValueError("agent.tribe is inconsistent with tags")
             elif tribe is not None or tagging:
                 raise ValueError("null tags require null tribe and disabled tagging")
+            for field in ("tradeFactor", "marginalRateOfSubstitution", "sugarPrice", "spicePrice", "diseaseProtectionChance"):
+                _number(agent[field], f"agent.{field}")
+            if agent["diseaseProtectionChance"] > 1:
+                raise ValueError("agent.diseaseProtectionChance must be <= 1")
+            for field in ("tradeVolume", "lastTradePartners"):
+                _int(agent[field], f"agent.{field}")
+            if isinstance(agent["lastTradeTimestep"], bool) or not isinstance(agent["lastTradeTimestep"], int):
+                raise ValueError("agent.lastTradeTimestep must be an integer")
+            immune = agent["immuneSystem"]
+            if immune is not None and (not isinstance(immune, list) or any(bit not in (0, 1) for bit in immune)):
+                raise ValueError("agent.immuneSystem must be null or a bit array")
+            infections = agent["diseases"]
+            if not isinstance(infections, list):
+                raise ValueError("agent.diseases must be an array")
+            parsed_infections = []
+            for infection in infections:
+                _closed(infection, {"diseaseId", "startIndex", "endIndex", "infectorId", "caught", "incubation"}, "infection")
+                disease_id = _int(infection["diseaseId"], "infection.diseaseId")
+                start_index = infection["startIndex"]
+                end_index = infection["endIndex"]
+                if (start_index is None) != (end_index is None):
+                    raise ValueError("infection range indices must both be null or integers")
+                if start_index is not None:
+                    start_index = _int(start_index, "infection.startIndex")
+                    end_index = _int(end_index, "infection.endIndex")
+                    if end_index < start_index:
+                        raise ValueError("infection range must be ordered")
+                infector_id = infection["infectorId"]
+                if infector_id is not None:
+                    infector_id = _int(infector_id, "infection.infectorId")
+                parsed_infections.append((
+                    disease_id, start_index, end_index, infector_id,
+                    _int(infection["caught"], "infection.caught"),
+                    _int(infection["incubation"], "infection.incubation"),
+                ))
+            if len({infection[0] for infection in parsed_infections}) != len(parsed_infections):
+                raise ValueError("agent disease IDs must be unique")
+            values = values[:37] + (None if immune is None else tuple(immune), tuple(parsed_infections))
             if values[2] >= width or values[3] >= height:
                 raise ValueError("agent position is outside the world")
             agents.append(values)
@@ -361,6 +425,74 @@ class NativeSnapshot:
             if any(entry >= count for entry in parsed_neighbors):
                 raise ValueError("neighbor index is outside the world")
             neighbors.append(parsed_neighbors)
+        disease_keys = {"id", "aggressionPenalty", "fertilityPenalty", "friendlinessPenalty", "happinessPenalty", "incubationPeriod", "movementPenalty", "spiceMetabolismPenalty", "startTimestep", "sugarMetabolismPenalty", "tags", "transmissionChance", "visionPenalty", "recoverable", "infectedIds"}
+        if not isinstance(raw_diseases, list):
+            raise ValueError("diseases must be an array")
+        for disease in raw_diseases:
+            if not isinstance(disease, Mapping):
+                raise ValueError("disease must be an object")
+            _closed(disease, disease_keys, "disease")
+        # Preserve an explicit stable field order independent of set iteration.
+        disease_fields = ("id", "aggressionPenalty", "fertilityPenalty", "friendlinessPenalty", "happinessPenalty", "incubationPeriod", "movementPenalty", "spiceMetabolismPenalty", "startTimestep", "sugarMetabolismPenalty", "tags", "transmissionChance", "visionPenalty", "recoverable", "infectedIds")
+        diseases = [tuple(None if disease[field] is None else tuple(disease[field]) if field in {"tags", "infectedIds"} else disease[field] for field in disease_fields) for disease in raw_diseases]
+        for disease in raw_diseases:
+            _int(disease["id"], "disease.id")
+        disease_ids = [disease[0] for disease in diseases]
+        if disease_ids != sorted(set(disease_ids)):
+            raise ValueError("disease IDs must be unique and ID-sorted")
+        disease_by_id = {disease[0]: disease for disease in diseases}
+        raw_disease_by_id = {disease["id"]: disease for disease in raw_diseases}
+        for disease in diseases:
+            for index in (1, 2, 3, 4, 7, 9):
+                _signed_number(disease[index], f"disease.{disease_fields[index]}")
+            if disease[2] > 0:
+                raise ValueError(
+                    "positive disease fertilityPenalty can activate unsupported reproduction"
+                )
+            for index in (5, 8):
+                _int(disease[index], f"disease.{disease_fields[index]}")
+            for index in (6, 12):
+                if isinstance(disease[index], bool) or not isinstance(disease[index], int):
+                    raise ValueError(f"disease.{disease_fields[index]} must be an integer")
+            chance = _number(disease[11], "disease.transmissionChance")
+            if chance > 1:
+                raise ValueError("disease.transmissionChance must be <= 1")
+            if disease[10] is not None and (
+                not isinstance(raw_disease_by_id[disease[0]]["tags"], list)
+                or any(bit not in (0, 1) for bit in disease[10])
+            ):
+                raise ValueError("disease tags must be null or a bit array")
+            if not isinstance(disease[13], bool):
+                raise ValueError("disease.recoverable must be a boolean")
+            if not isinstance(raw_disease_by_id[disease[0]]["infectedIds"], list):
+                raise ValueError("disease.infectedIds must be an array")
+            infected_ids = tuple(_int(value, "disease.infectedIds") for value in disease[14])
+            if len(set(infected_ids)) != len(infected_ids):
+                raise ValueError("disease.infectedIds must be unique")
+        recorded_infections: dict[int, set[int]] = {disease_id: set() for disease_id in disease_ids}
+        for agent in agents:
+            for infection in agent[38]:
+                disease_id, start_index, end_index = infection[:3]
+                if disease_id not in disease_by_id:
+                    raise ValueError("infection names an unknown disease")
+                tags = disease_by_id[disease_id][10]
+                if tags is None:
+                    if start_index is not None:
+                        raise ValueError("untagged disease requires a null immune range")
+                elif (
+                    start_index is None
+                    or agent[37] is None
+                    or end_index - start_index + 1 != len(tags)
+                    or end_index >= len(agent[37])
+                ):
+                    raise ValueError("infection immune range must exactly match disease tags")
+                recorded_infections[disease_id].add(int(agent[0]))
+        for disease in diseases:
+            if set(disease[14]) != recorded_infections[disease[0]]:
+                raise ValueError("disease.infectedIds must match agent infection records")
+        remaining_disease_ids = tuple(_int(value, "remainingDiseaseIds") for value in raw_remaining_diseases)
+        if remaining_disease_ids:
+            raise ValueError("scheduled disease introduction is unsupported")
         deaths = []
         for index, death in enumerate(raw_deaths):
             if not isinstance(death, Mapping):
@@ -399,6 +531,8 @@ class NativeSnapshot:
             tuple(agents),
             tuple(candidates),
             tuple(neighbors),
+            tuple(diseases),
+            remaining_disease_ids,
             tuple(deaths),
         )
 
@@ -448,11 +582,19 @@ class NativeSnapshot:
                             "depressed", "happinessUnit", "maxFriends",
                             "friendlinessModifier", "happinessModifier",
                             "tags", "tribe", "tagging",
+                            "tradeFactor", "marginalRateOfSubstitution", "tradeVolume",
+                            "sugarPrice", "spicePrice", "lastTradeTimestep",
+                            "lastTradePartners", "diseaseProtectionChance", "immuneSystem",
+                            "diseases",
                         ),
                         agent,
                         strict=True,
                     )
-                ) | {"tags": None if agent[26] is None else list(agent[26])}
+                ) | {
+                    "tags": None if agent[26] is None else list(agent[26]),
+                    "immuneSystem": None if agent[37] is None else list(agent[37]),
+                    "diseases": [dict(zip(("diseaseId", "startIndex", "endIndex", "infectorId", "caught", "incubation"), infection, strict=True)) for infection in agent[38]],
+                }
                 for agent in self.agents
             ],
             "orderedCandidates": [
@@ -460,6 +602,11 @@ class NativeSnapshot:
                 for entries in self.ordered_candidates
             ],
             "orderedNeighbors": [list(entries) for entries in self.ordered_neighbors],
+            "diseases": [
+                dict(zip(("id", "aggressionPenalty", "fertilityPenalty", "friendlinessPenalty", "happinessPenalty", "incubationPeriod", "movementPenalty", "spiceMetabolismPenalty", "startTimestep", "sugarMetabolismPenalty", "tags", "transmissionChance", "visionPenalty", "recoverable", "infectedIds"), disease, strict=True)) | {"tags": None if disease[10] is None else list(disease[10]), "infectedIds": list(disease[14])}
+                for disease in self.diseases
+            ],
+            "remainingDiseaseIds": list(self.remaining_disease_ids),
             "deaths": [
                 {"id": agent_id, "seat": seat, "age": age, "cause": cause}
                 for agent_id, seat, age, cause in self.deaths
@@ -493,9 +640,8 @@ def validate_supported_world(world: CoworldSugarscape) -> None:
             config["environmentPollutionDiffusionDelay"] == 0,
             "pollution diffusion is unsupported",
         ),
-        (config["startingDiseases"] == 0, "disease is unsupported"),
         (config["agentReplacements"] == 0, "replacement is unsupported"),
-        (config["agentTradeFactor"] == [0, 0], "trade is unsupported"),
+        (not config["diseaseList"], "named diseases are unsupported"),
         (config["agentLendingFactor"] == [0, 0], "lending is unsupported"),
         (config["agentFertilityFactor"] == [0, 0], "reproduction is unsupported"),
         (config["agentTagPreferences"] is False, "tag preferences are unsupported"),
@@ -515,18 +661,23 @@ def validate_supported_world(world: CoworldSugarscape) -> None:
     for index, agent in enumerate(world.agents):
         if not agent.alive or agent.cell is None:
             raise ValueError(f"agents[{index}] must be alive and placed")
-        if agent.diseases:
-            raise ValueError(f"agents[{index}] disease state is unsupported")
         if agent.fertilityFactor + agent.fertilityFactorModifier > 0:
             raise ValueError(
                 f"agents[{index}] effective fertility must remain inactive"
             )
-        if agent.tradeFactor != 0:
-            raise ValueError(f"agents[{index}] effective tradeFactor is unsupported")
         if agent.lendingFactor != 0:
             raise ValueError(f"agents[{index}] effective lendingFactor is unsupported")
         if agent.inheritancePolicy != "none" or agent.socialNetwork["children"]:
             raise ValueError(f"agents[{index}] inheritance state is unsupported")
+    disease_definitions = {
+        disease.ID: disease
+        for disease in (*world.diseases, *world.remainingDiseases)
+        if hasattr(disease, "incubationPeriod")
+    }
+    if any(disease.fertilityPenalty > 0 for disease in disease_definitions.values()):
+        raise ValueError(
+            "positive disease fertilityPenalty can activate unsupported reproduction"
+        )
     for column in world.environment.grid:
         for cell in column:
             if cell.pollution != 0:
@@ -538,14 +689,21 @@ def audit_snapshot_compatibility(world: CoworldSugarscape) -> NativeCompatibilit
 
     agents = world.agents
     blockers = []
-    if any(agent.tradeFactor != 0 for agent in agents):
-        blockers.append("trade")
+    disease_definitions = {
+        disease.ID: disease
+        for disease in (*world.diseases, *world.remainingDiseases)
+        if hasattr(disease, "incubationPeriod")
+    }
+    if world.configuration["diseaseList"]:
+        blockers.append("named_diseases")
+    if world.remainingDiseases:
+        blockers.append("scheduled_disease_introduction")
+    if any(disease.fertilityPenalty > 0 for disease in disease_definitions.values()):
+        blockers.append("latent_reproduction")
     if any(agent.lendingFactor != 0 for agent in agents):
         blockers.append("lending")
     if any(agent.fertilityFactor + agent.fertilityFactorModifier > 0 for agent in agents):
         blockers.append("reproduction")
-    if any(agent.diseases for agent in agents) or world.configuration["startingDiseases"] > 0:
-        blockers.append("disease_progression")
     if world.configuration["agentInheritancePolicy"] != "none":
         blockers.append("inheritance")
     return NativeCompatibilityAudit(
@@ -622,6 +780,23 @@ def snapshot_world(world: CoworldSugarscape) -> NativeSnapshot:
             None if agent.tags is None else tuple(agent.tags),
             agent.tribe,
             agent.tagging,
+            agent.tradeFactor,
+            agent.marginalRateOfSubstitution,
+            agent.tradeVolume,
+            agent.sugarPrice,
+            agent.spicePrice,
+            agent.lastTradeTimestep,
+            agent.lastTradePartners,
+            agent.diseaseProtectionChance,
+            None if agent.immuneSystem is None else tuple(agent.immuneSystem),
+            tuple(
+                (
+                    record["disease"].ID, record["startIndex"], record["endIndex"],
+                    None if record["infector"] is None else record["infector"].ID,
+                    record["caught"], record["incubation"],
+                )
+                for record in agent.diseases
+            ),
         )
         for agent in sorted(world.agents, key=lambda value: value.ID)
     )
@@ -639,6 +814,29 @@ def snapshot_world(world: CoworldSugarscape) -> NativeSnapshot:
         for column in environment.grid
         for cell in column
     )
+    disease_objects = sorted(
+        {
+            disease.ID: disease
+            for disease in (*world.diseases, *world.remainingDiseases)
+            if hasattr(disease, "incubationPeriod")
+        }.values(),
+        key=lambda disease: disease.ID,
+    )
+    diseases = tuple(
+        (
+            disease.ID, disease.aggressionPenalty, disease.fertilityPenalty,
+            disease.friendlinessPenalty, disease.happinessPenalty,
+            disease.incubationPeriod, disease.movementPenalty,
+            disease.spiceMetabolismPenalty, disease.startTimestep,
+            disease.sugarMetabolismPenalty,
+            None if disease.tags is None else tuple(disease.tags),
+            disease.transmissionChance, disease.visionPenalty, disease.recoverable,
+            tuple(agent.ID for agent in disease.infected),
+        )
+        for disease in disease_objects
+    )
+    if world.remainingDiseases:
+        raise ValueError("scheduled disease introduction is unsupported")
     return NativeSnapshot(
         _digest(world.configuration),
         tuple(_digest(ruleset.normalized) for ruleset in world.seat_manager.rulesets),
@@ -658,6 +856,8 @@ def snapshot_world(world: CoworldSugarscape) -> NativeSnapshot:
         agents,
         candidates,
         neighbors,
+        diseases,
+        (),
         tuple(getattr(world, "native_deaths", ())),
     )
 
@@ -671,9 +871,55 @@ def step_python(snapshot: NativeSnapshot, ticks: int) -> NativeSnapshot:
     rng.setstate((3, snapshot.rng_words + (snapshot.rng_index,), None))
     cells = [list(cell) for cell in snapshot.cells]
     agents = {int(agent[0]): list(agent) for agent in snapshot.agents}
+    for agent in agents.values():
+        agent[38] = [list(infection) for infection in agent[38]]
+    diseases = [list(disease) for disease in snapshot.diseases]
+    for disease in diseases:
+        disease[14] = list(disease[14])
+    disease_by_id = {disease[0]: disease for disease in diseases}
     live_order = list(snapshot.live_order)
     timestep = snapshot.timestep
     deaths = list(snapshot.deaths)
+
+    def metabolisms(agent: list[object]) -> tuple[float, float]:
+        return max(0, agent[7] + agent[15]), max(0, agent[8] + agent[16])
+
+    def marginal_rate(agent: list[object], sugar: float | None = None, spice: float | None = None, *, proposed: bool = False) -> float:
+        sugar_metabolism, spice_metabolism = metabolisms(agent)
+        sugar = agent[4] if sugar is None else sugar
+        spice = agent[5] if spice is None else spice
+        spice_need = spice / spice_metabolism if spice_metabolism > 0 else 1
+        sugar_need = sugar / sugar_metabolism if sugar_metabolism > 0 else 1
+        if proposed:
+            if spice_need == sugar_need == 1: return 1
+            if spice_need == 0: return spice_metabolism
+            if sugar_need == 0: return 1 / sugar_metabolism
+            return spice_need / sugar_need
+        return agent[29] * (spice_need / sugar_need)
+
+    def reward_welfare(agent: list[object], sugar_reward: float, spice_reward: float) -> float:
+        sugar_metabolism, spice_metabolism = metabolisms(agent)
+        total = sugar_metabolism + spice_metabolism
+        sugar_power = sugar_metabolism / total if total else 0
+        spice_power = spice_metabolism / total if total else 0
+        return max(0, agent[4] + sugar_reward - sugar_metabolism * agent[12]) ** sugar_power * max(0, agent[5] + spice_reward - spice_metabolism * agent[12]) ** spice_power
+
+    def apply_disease(agent: list[object], disease: list[object], direction: int) -> None:
+        agent[18] += direction * disease[1]
+        agent[20] += direction * disease[2]
+        agent[24] += direction * disease[3]
+        agent[25] += direction * disease[4]
+        agent[14] += direction * disease[6]
+        agent[16] += direction * disease[7]
+        agent[15] += direction * disease[9]
+        agent[13] += direction * disease[12]
+
+    def clear_diseases(agent: list[object]) -> None:
+        for infection in agent[38]:
+            disease = disease_by_id[infection[0]]
+            apply_disease(agent, disease, -1)
+            if agent[0] in disease[14]: disease[14].remove(agent[0])
+        agent[38] = []
 
     for _ in range(ticks):
         if not live_order:
@@ -774,6 +1020,7 @@ def step_python(snapshot: NativeSnapshot, ticks: int) -> NativeSnapshot:
                 deaths_by_id[prey_id] = (
                     prey_id, int(prey[1]), int(prey[6]), "combat"
                 )
+                clear_diseases(prey)
                 cells[destination][4] = None
             if destination != origin:
                 cells[origin][4] = None
@@ -797,6 +1044,7 @@ def step_python(snapshot: NativeSnapshot, ticks: int) -> NativeSnapshot:
                 deaths_by_id[agent_id] = (
                     agent_id, int(agent[1]), int(agent[6]), "starvation"
                 )
+                clear_diseases(agent)
                 continue
             if agent[28]:
                 neighbors = list(snapshot.ordered_neighbors[destination])
@@ -815,12 +1063,101 @@ def step_python(snapshot: NativeSnapshot, ticks: int) -> NativeSnapshot:
                             math.ceil((target[26].count(0) + 1) / tribe_size) - 1,
                             snapshot.max_tribes - 1,
                         )
+            if agent[29] != 0:
+                agent[31:34] = [0, 0, 0]
+                agent[30] = marginal_rate(agent)
+                potential = []
+                for neighbor_cell in snapshot.ordered_neighbors[destination]:
+                    trader_id = cells[neighbor_cell][4]
+                    if trader_id is not None and trader_id not in deaths_by_id and agents[trader_id][30] != agent[30]:
+                        potential.append(trader_id)
+                rng.shuffle(potential)
+                partners = []
+                for trader_id in potential:
+                    trader = agents[trader_id]
+                    spice_seller = sugar_seller = None
+                    sugar_price = spice_price = 0
+                    while True:
+                        first, second = agent[30], trader[30]
+                        if (first >= 1 and second >= 1) or (first < 1 and second < 1) or first == second:
+                            break
+                        spice_seller, sugar_seller = (trader, agent) if second > first else (agent, trader)
+                        spice_mrs, sugar_mrs = spice_seller[30], sugar_seller[30]
+                        if spice_mrs < 0 or sugar_mrs < 0:
+                            spice_seller = sugar_seller = None
+                            break
+                        price = math.sqrt(spice_mrs * sugar_mrs)
+                        spice_price, sugar_price = (1, price) if price < 1 else (price, 1)
+                        if spice_seller[5] - spice_price < spice_seller[8] or sugar_seller[4] - sugar_price < sugar_seller[7]:
+                            break
+                        spice_new = marginal_rate(spice_seller, spice_seller[4] + sugar_price, spice_seller[5] - spice_price, proposed=True)
+                        sugar_new = marginal_rate(sugar_seller, sugar_seller[4] - sugar_price, sugar_seller[5] + spice_price, proposed=True)
+                        spice_better = abs(1 - spice_mrs) > abs(1 - spice_new) or reward_welfare(spice_seller, sugar_price, -spice_price) >= reward_welfare(spice_seller, 0, 0)
+                        sugar_better = abs(1 - sugar_mrs) > abs(1 - sugar_new) or reward_welfare(sugar_seller, -sugar_price, spice_price) >= reward_welfare(sugar_seller, 0, 0)
+                        if not spice_better or not sugar_better or spice_new < sugar_new:
+                            break
+                        spice_seller[4] += sugar_price
+                        spice_seller[5] -= spice_price
+                        sugar_seller[4] -= sugar_price
+                        sugar_seller[5] += spice_price
+                        spice_seller[30] = marginal_rate(spice_seller)
+                        sugar_seller[30] = marginal_rate(sugar_seller)
+                    if spice_seller is not None:
+                        agent[31] += 1
+                        agent[32] += sugar_price
+                        agent[33] += spice_price
+                        agent[34] = timestep
+                        if trader_id not in partners: partners.append(trader_id)
+                if agent[34] == timestep: agent[35] = len(partners)
+            rng.shuffle(agent[38])
+            infection_index = 0
+            while infection_index < len(agent[38]):
+                infection = agent[38][infection_index]
+                disease = disease_by_id[infection[0]]
+                if infection[4] != timestep and infection[5] > 0: infection[5] -= 1
+                if infection[5] == 0: apply_disease(agent, disease, 1)
+                if disease[13] and disease[10] is not None:
+                    response = tuple(agent[37][infection[1]:min(infection[2] + 1, len(agent[37]))])
+                    for offset, bit in enumerate(response):
+                        if bit != disease[10][offset]:
+                            immune = list(agent[37]); immune[infection[1] + offset] = disease[10][offset]; agent[37] = tuple(immune)
+                            break
+                    if tuple(disease[10]) == response:
+                        agent[38].remove(infection)
+                        apply_disease(agent, disease, -1)
+                        disease[14].remove(agent_id)
+                        infection_index += 1
+                        continue
+                infection_index += 1
+            disease_count = len(agent[38])
+            if disease_count:
+                disease_neighbors = [cells[cell][4] for cell in snapshot.ordered_neighbors[destination] if cells[cell][4] is not None and cells[cell][4] not in deaths_by_id]
+                rng.shuffle(disease_neighbors)
+                for neighbor_id in disease_neighbors:
+                    infection = agent[38][rng.randrange(disease_count)]
+                    disease_id = infection[0]
+                    target = agents[neighbor_id]
+                    if any(record[0] == disease_id for record in target[38]):
+                        continue
+                    disease = disease_by_id[disease_id]
+                    start_index, end_index, distance = 0, len(disease[10] or ()) - 1, len(disease[10] or ())
+                    if disease[10] is not None:
+                        for start in range(len(target[37]) - len(disease[10])):
+                            candidate = sum(a != b for a, b in zip(target[37][start:start + len(disease[10])], disease[10], strict=True))
+                            if candidate < distance: distance, start_index, end_index = candidate, start, start + len(disease[10]) - 1
+                        if distance == 0: continue
+                    attack, defense = rng.random(), rng.random()
+                    if disease[11] != 0 and attack <= disease[11] and not (target[36] != 0 and defense <= target[36]):
+                        target[38].append([disease_id, start_index if disease[10] is not None else None, end_index if disease[10] is not None else None, agent_id, timestep, disease[5]])
+                        disease[14].append(neighbor_id)
+                        if disease[5] == 0: apply_disease(target, disease, 1)
             agent[6] += 1
             if agent[11] != -1 and agent[6] >= agent[11]:
                 cells[destination][4] = None
                 deaths_by_id[agent_id] = (
                     agent_id, int(agent[1]), int(agent[6]), "aging"
                 )
+                clear_diseases(agent)
         deaths = [deaths_by_id[agent_id] for agent_id in live_order if agent_id in deaths_by_id]
         for agent_id, _seat, _age, _cause in deaths:
             agents.pop(agent_id)
@@ -846,8 +1183,10 @@ def step_python(snapshot: NativeSnapshot, ticks: int) -> NativeSnapshot:
         state[624],
         tuple(live_order),
         tuple(tuple(cell) for cell in cells),
-        tuple(tuple(agents[agent_id]) for agent_id in sorted(agents)),
+        tuple(tuple(agent[:38] + [tuple(tuple(record) for record in agent[38])]) for agent_id in sorted(agents) for agent in [agents[agent_id]]),
         snapshot.ordered_candidates,
         snapshot.ordered_neighbors,
+        tuple(tuple(disease[:14] + [tuple(disease[14])]) for disease in diseases),
+        snapshot.remaining_disease_ids,
         tuple(deaths),
     )

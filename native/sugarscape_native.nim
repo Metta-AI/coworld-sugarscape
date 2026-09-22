@@ -4,7 +4,7 @@ when isMainModule:
   import std/os
 
 const
-  SchemaVersion = 5
+  SchemaVersion = 6
   SourcePin = "585282e9ce7b22a33b89abb0d777917bd5887d1a"
   MtWords = 624
   EmptyOccupant = -1'i64
@@ -52,6 +52,44 @@ type
     tagging*: bool
     maxAge*: int64
     lookaheadFactor*: float64
+    tradeFactor*: float64
+    marginalRateOfSubstitution*: float64
+    tradeVolume*: int
+    sugarPrice*: float64
+    spicePrice*: float64
+    lastTradeTimestep*: int64
+    lastTradePartners*: int
+    diseaseProtectionChance*: float64
+    hasImmuneSystem*: bool
+    immuneSystem*: seq[int]
+    diseases*: seq[Infection]
+
+  Infection* = object
+    diseaseId*: int
+    hasRange*: bool
+    startIndex*: int
+    endIndex*: int
+    infectorId*: int64
+    caught*: int64
+    incubation*: int
+
+  Disease* = object
+    id*: int
+    aggressionPenalty*: float64
+    fertilityPenalty*: float64
+    friendlinessPenalty*: float64
+    happinessPenalty*: float64
+    incubationPeriod*: int
+    movementPenalty*: int
+    spiceMetabolismPenalty*: float64
+    startTimestep*: int64
+    sugarMetabolismPenalty*: float64
+    hasTags*: bool
+    tags*: seq[int]
+    transmissionChance*: float64
+    visionPenalty*: int
+    recoverable*: bool
+    infectedIds*: seq[int64]
 
   Candidate* = object
     target*: int
@@ -82,6 +120,8 @@ type
     agents*: seq[Agent]
     orderedCandidates*: seq[seq[Candidate]]
     orderedNeighbors*: seq[seq[int]]
+    diseases*: seq[Disease]
+    remainingDiseaseIds*: seq[int]
     deaths*: seq[Death]
 
 proc twist(rng: var PythonMt19937) =
@@ -139,6 +179,11 @@ proc pythonShuffle*[T](rng: var PythonMt19937, values: var seq[T]) =
     let j = int(rng.randBelow(uint64(i + 1)))
     swap(values[i], values[j])
 
+proc randomFloat*(rng: var PythonMt19937): float64 =
+  let high = uint64(rng.nextUint32() shr 5)
+  let low = uint64(rng.nextUint32() shr 6)
+  float64(high * 67108864'u64 + low) / 9007199254740992.0
+
 proc requireFields(node: JsonNode, expected: openArray[string], context: string) =
   doAssert node.kind == JObject, context & " must be an object"
   var actual = newSeq[string]()
@@ -169,6 +214,11 @@ proc isSha256(value: string): bool =
       return false
   true
 
+proc diseaseIndex(diseases: openArray[Disease], id: int): int =
+  for index, disease in diseases:
+    if disease.id == id: return index
+  -1
+
 proc loadRng*(node: JsonNode): PythonMt19937 =
   node.requireFields(["version", "words", "index", "gaussNext"], "rng")
   doAssert node["version"].getInt() == 3, "unsupported Python RNG state version"
@@ -189,7 +239,8 @@ proc loadWorld*(node: JsonNode): World =
     ["schemaVersion", "sourcePin", "configurationSha256", "rulesetSha256", "timestep", "width", "height",
      "sugarRegrowRate", "spiceRegrowRate",
      "maxCellDistance", "maxCombatLoot", "maxTribes", "inheritancePolicy", "rng",
-     "liveOrder", "cells", "agents", "orderedCandidates", "orderedNeighbors", "deaths"],
+     "liveOrder", "cells", "agents", "orderedCandidates", "orderedNeighbors", "diseases",
+     "remainingDiseaseIds", "deaths"],
     "snapshot",
   )
   doAssert node["schemaVersion"].getInt() == SchemaVersion, "unsupported schema version"
@@ -257,7 +308,10 @@ proc loadWorld*(node: JsonNode): World =
        "vision", "movement", "visionModifier", "movementModifier", "maxAge", "lookaheadFactor",
        "aggressionFactor", "aggressionFactorModifier", "fertilityFactor",
        "fertilityFactorModifier", "depressed", "happinessUnit", "maxFriends",
-       "friendlinessModifier", "happinessModifier", "tags", "tribe", "tagging"],
+       "friendlinessModifier", "happinessModifier", "tags", "tribe", "tagging",
+       "tradeFactor", "marginalRateOfSubstitution", "tradeVolume", "sugarPrice",
+       "spicePrice", "lastTradeTimestep", "lastTradePartners", "diseaseProtectionChance",
+       "immuneSystem", "diseases"],
       "agent",
     )
     var agent = Agent(
@@ -290,6 +344,15 @@ proc loadWorld*(node: JsonNode): World =
       tagging: agentNode["tagging"].getBool(),
       maxAge: agentNode.readInt("maxAge"),
       lookaheadFactor: agentNode.readNumber("lookaheadFactor"),
+      tradeFactor: agentNode.readNumber("tradeFactor"),
+      marginalRateOfSubstitution: agentNode.readNumber("marginalRateOfSubstitution"),
+      tradeVolume: int(agentNode.readInt("tradeVolume")),
+      sugarPrice: agentNode.readNumber("sugarPrice"),
+      spicePrice: agentNode.readNumber("spicePrice"),
+      lastTradeTimestep: agentNode.readInt("lastTradeTimestep"),
+      lastTradePartners: int(agentNode.readInt("lastTradePartners")),
+      diseaseProtectionChance: agentNode.readNumber("diseaseProtectionChance"),
+      hasImmuneSystem: agentNode["immuneSystem"].kind != JNull,
     )
     doAssert agent.id >= 0 and agent.id > previousId, "agents must be sorted by unique id"
     doAssert agent.seat >= 0 and agent.x >= 0 and agent.x < result.width and
@@ -301,6 +364,33 @@ proc loadWorld*(node: JsonNode): World =
     doAssert agent.aggressionFactor >= 0 and agent.fertilityFactor >= 0 and
       agent.happinessUnit >= 0 and agent.maxFriends >= 0,
       "agent base social traits must be nonnegative"
+    doAssert agent.tradeFactor >= 0 and agent.tradeVolume >= 0 and agent.sugarPrice >= 0 and
+      agent.spicePrice >= 0 and agent.lastTradePartners >= 0 and
+      agent.diseaseProtectionChance >= 0 and agent.diseaseProtectionChance <= 1,
+      "agent trade and disease fields are invalid"
+    if agent.hasImmuneSystem:
+      doAssert agentNode["immuneSystem"].kind == JArray, "immuneSystem must be null or a bit array"
+      for bitNode in agentNode["immuneSystem"].items:
+        let bit = bitNode.getInt()
+        doAssert bit in [0, 1], "immuneSystem must contain only 0 or 1"
+        agent.immuneSystem.add(bit)
+    doAssert agentNode["diseases"].kind == JArray, "agent diseases must be an array"
+    for infectionNode in agentNode["diseases"].items:
+      infectionNode.requireFields(["diseaseId", "startIndex", "endIndex", "infectorId", "caught", "incubation"], "infection")
+      let hasRange = infectionNode["startIndex"].kind != JNull
+      doAssert hasRange == (infectionNode["endIndex"].kind != JNull),
+        "infection range indices must both be null or integers"
+      let infector = if infectionNode["infectorId"].kind == JNull: EmptyOccupant else: infectionNode.readInt("infectorId")
+      let infection = Infection(
+        diseaseId: int(infectionNode.readInt("diseaseId")), hasRange: hasRange,
+        startIndex: (if hasRange: int(infectionNode.readInt("startIndex")) else: -1),
+        endIndex: (if hasRange: int(infectionNode.readInt("endIndex")) else: -1),
+        infectorId: infector, caught: infectionNode.readInt("caught"),
+        incubation: int(infectionNode.readInt("incubation")),
+      )
+      doAssert infection.diseaseId >= 0 and infection.caught >= 0 and infection.incubation >= 0,
+        "infection fields must be nonnegative"
+      agent.diseases.add(infection)
     doAssert agent.maxAge >= -1, "agent maxAge must be -1 or nonnegative"
     if agent.hasTags:
       doAssert agentNode["tags"].kind == JArray and agentNode["tags"].len > 0,
@@ -378,6 +468,75 @@ proc loadWorld*(node: JsonNode): World =
       neighbors.add(neighbor)
     result.orderedNeighbors.add(neighbors)
 
+  doAssert node["diseases"].kind == JArray, "diseases must be an array"
+  var previousDiseaseId = -1
+  for diseaseNode in node["diseases"].items:
+    diseaseNode.requireFields(["id", "aggressionPenalty", "fertilityPenalty", "friendlinessPenalty",
+      "happinessPenalty", "incubationPeriod", "movementPenalty", "spiceMetabolismPenalty",
+      "startTimestep", "sugarMetabolismPenalty", "tags", "transmissionChance", "visionPenalty",
+      "recoverable", "infectedIds"], "disease")
+    var disease = Disease(
+      id: int(diseaseNode.readInt("id")), aggressionPenalty: diseaseNode.readNumber("aggressionPenalty"),
+      fertilityPenalty: diseaseNode.readNumber("fertilityPenalty"),
+      friendlinessPenalty: diseaseNode.readNumber("friendlinessPenalty"),
+      happinessPenalty: diseaseNode.readNumber("happinessPenalty"),
+      incubationPeriod: int(diseaseNode.readInt("incubationPeriod")),
+      movementPenalty: int(diseaseNode.readInt("movementPenalty")),
+      spiceMetabolismPenalty: diseaseNode.readNumber("spiceMetabolismPenalty"),
+      startTimestep: diseaseNode.readInt("startTimestep"),
+      sugarMetabolismPenalty: diseaseNode.readNumber("sugarMetabolismPenalty"),
+      hasTags: diseaseNode["tags"].kind != JNull,
+      transmissionChance: diseaseNode.readNumber("transmissionChance"),
+      visionPenalty: int(diseaseNode.readInt("visionPenalty")),
+      recoverable: diseaseNode["recoverable"].getBool(),
+    )
+    doAssert disease.id > previousDiseaseId and disease.incubationPeriod >= 0 and
+      disease.startTimestep >= 0 and disease.transmissionChance >= 0 and disease.transmissionChance <= 1,
+      "invalid disease definition"
+    doAssert disease.fertilityPenalty <= 0,
+      "positive disease fertilityPenalty can activate unsupported reproduction"
+    if disease.hasTags:
+      doAssert diseaseNode["tags"].kind == JArray, "disease tags must be null or a bit array"
+      for bitNode in diseaseNode["tags"].items:
+        let bit = bitNode.getInt()
+        doAssert bit in [0, 1], "disease tags must contain only 0 or 1"
+        disease.tags.add(bit)
+    doAssert diseaseNode["infectedIds"].kind == JArray, "infectedIds must be an array"
+    for idNode in diseaseNode["infectedIds"].items:
+      let infectedId = idNode.getBiggestInt()
+      doAssert infectedId >= 0 and infectedId notin disease.infectedIds,
+        "disease infectedIds must be unique nonnegative integers"
+      disease.infectedIds.add(infectedId)
+    result.diseases.add(disease)
+    previousDiseaseId = disease.id
+  doAssert node["remainingDiseaseIds"].kind == JArray, "remainingDiseaseIds must be an array"
+  for idNode in node["remainingDiseaseIds"].items:
+    result.remainingDiseaseIds.add(idNode.getInt())
+  doAssert result.remainingDiseaseIds.len == 0, "scheduled disease introduction is unsupported"
+  for agent in result.agents:
+    var infectionIds = newSeq[int]()
+    for infection in agent.diseases:
+      let definitionIndex = diseaseIndex(result.diseases, infection.diseaseId)
+      doAssert definitionIndex >= 0, "infection names an unknown disease"
+      doAssert infection.diseaseId notin infectionIds, "agent disease IDs must be unique"
+      if infection.hasRange:
+        doAssert result.diseases[definitionIndex].hasTags and agent.hasImmuneSystem and
+          infection.startIndex >= 0 and infection.endIndex >= infection.startIndex and
+          infection.endIndex < agent.immuneSystem.len and
+          infection.endIndex - infection.startIndex + 1 == result.diseases[definitionIndex].tags.len,
+          "infection immune range must exactly match disease tags"
+      else:
+        doAssert not result.diseases[definitionIndex].hasTags, "tagged disease requires an immune range"
+      infectionIds.add(infection.diseaseId)
+  for disease in result.diseases:
+    var recorded = newSeq[int64]()
+    for agent in result.agents:
+      if agent.diseases.anyIt(it.diseaseId == disease.id): recorded.add(agent.id)
+    var declared = disease.infectedIds
+    recorded.sort()
+    declared.sort()
+    doAssert declared == recorded, "disease infectedIds must match agent infection records"
+
   doAssert node["deaths"].kind == JArray, "deaths must be an array"
   for deathNode in node["deaths"].items:
     deathNode.requireFields(["id", "seat", "age", "cause"], "death")
@@ -436,6 +595,24 @@ proc snapshot*(world: World): JsonNode =
       "tagging": agent.tagging,
       "maxAge": agent.maxAge,
       "lookaheadFactor": agent.lookaheadFactor,
+      "tradeFactor": agent.tradeFactor,
+      "marginalRateOfSubstitution": agent.marginalRateOfSubstitution,
+      "tradeVolume": agent.tradeVolume, "sugarPrice": agent.sugarPrice,
+      "spicePrice": agent.spicePrice, "lastTradeTimestep": agent.lastTradeTimestep,
+      "lastTradePartners": agent.lastTradePartners,
+      "diseaseProtectionChance": agent.diseaseProtectionChance,
+      "immuneSystem": (if agent.hasImmuneSystem: %agent.immuneSystem else: newJNull()),
+      "diseases": block:
+        var infections = newJArray()
+        for infection in agent.diseases:
+          infections.add(%*{
+            "diseaseId": infection.diseaseId,
+            "startIndex": (if infection.hasRange: %infection.startIndex else: newJNull()),
+            "endIndex": (if infection.hasRange: %infection.endIndex else: newJNull()),
+            "infectorId": (if infection.infectorId == EmptyOccupant: newJNull() else: %infection.infectorId),
+            "caught": infection.caught, "incubation": infection.incubation,
+          })
+        infections,
     })
   var orderedCandidates = newJArray()
   for candidates in world.orderedCandidates:
@@ -452,6 +629,23 @@ proc snapshot*(world: World): JsonNode =
   var rulesetSha256 = newJArray()
   for digest in world.rulesetSha256:
     rulesetSha256.add(%digest)
+  var diseases = newJArray()
+  for disease in world.diseases:
+    diseases.add(%*{
+      "id": disease.id, "aggressionPenalty": disease.aggressionPenalty,
+      "fertilityPenalty": disease.fertilityPenalty,
+      "friendlinessPenalty": disease.friendlinessPenalty,
+      "happinessPenalty": disease.happinessPenalty,
+      "incubationPeriod": disease.incubationPeriod,
+      "movementPenalty": disease.movementPenalty,
+      "spiceMetabolismPenalty": disease.spiceMetabolismPenalty,
+      "startTimestep": disease.startTimestep,
+      "sugarMetabolismPenalty": disease.sugarMetabolismPenalty,
+      "tags": (if disease.hasTags: %disease.tags else: newJNull()),
+      "transmissionChance": disease.transmissionChance,
+      "visionPenalty": disease.visionPenalty, "recoverable": disease.recoverable,
+      "infectedIds": disease.infectedIds,
+    })
   %*{
     "schemaVersion": SchemaVersion, "sourcePin": world.sourcePin,
     "configurationSha256": world.configurationSha256, "rulesetSha256": rulesetSha256,
@@ -463,6 +657,7 @@ proc snapshot*(world: World): JsonNode =
     "rng": rngJson(world.rng),
     "liveOrder": liveOrder, "cells": cells, "agents": agents,
     "orderedCandidates": orderedCandidates, "orderedNeighbors": orderedNeighbors,
+    "diseases": diseases, "remainingDiseaseIds": world.remainingDiseaseIds,
     "deaths": deaths,
   }
 
@@ -483,6 +678,214 @@ proc recomputeTribe(world: World, agent: var Agent) =
   let tribeSize = float64(agent.tags.len + 1) / float64(world.maxTribes)
   agent.tribe = min(int(ceil(float64(zeroes + 1) / tribeSize)) - 1,
     world.maxTribes - 1)
+
+proc effectiveSugarMetabolism(agent: Agent): float64 =
+  max(0.0, agent.sugarMetabolism + agent.sugarMetabolismModifier)
+
+proc effectiveSpiceMetabolism(agent: Agent): float64 =
+  max(0.0, agent.spiceMetabolism + agent.spiceMetabolismModifier)
+
+proc marginalRate(agent: Agent): float64 =
+  let spiceMetabolism = agent.effectiveSpiceMetabolism()
+  let sugarMetabolism = agent.effectiveSugarMetabolism()
+  let spiceNeed = if spiceMetabolism > 0: agent.spice / spiceMetabolism else: 1.0
+  let sugarNeed = if sugarMetabolism > 0: agent.sugar / sugarMetabolism else: 1.0
+  agent.tradeFactor * (spiceNeed / sugarNeed)
+
+proc newMarginalRate(agent: Agent, sugar, spice: float64): float64 =
+  let spiceMetabolism = agent.effectiveSpiceMetabolism()
+  let sugarMetabolism = agent.effectiveSugarMetabolism()
+  let spiceNeed = if spiceMetabolism > 0: spice / spiceMetabolism else: 1.0
+  let sugarNeed = if sugarMetabolism > 0: sugar / sugarMetabolism else: 1.0
+  if spiceNeed == 1 and sugarNeed == 1: return 1
+  if spiceNeed == 0: return spiceMetabolism
+  if sugarNeed == 0: return 1 / sugarMetabolism
+  spiceNeed / sugarNeed
+
+proc welfareRewards(agent: Agent, sugarReward, spiceReward: float64): float64 =
+  let sugarMetabolism = agent.effectiveSugarMetabolism()
+  let spiceMetabolism = agent.effectiveSpiceMetabolism()
+  let totalMetabolism = sugarMetabolism + spiceMetabolism
+  let sugarProportion = if totalMetabolism == 0: 0.0 else: sugarMetabolism / totalMetabolism
+  let spiceProportion = if totalMetabolism == 0: 0.0 else: spiceMetabolism / totalMetabolism
+  pow(max(0.0, agent.sugar + sugarReward - sugarMetabolism * agent.lookaheadFactor), sugarProportion) *
+    pow(max(0.0, agent.spice + spiceReward - spiceMetabolism * agent.lookaheadFactor), spiceProportion)
+
+proc trigger(agent: var Agent, disease: Disease) =
+  agent.aggressionFactorModifier += disease.aggressionPenalty
+  agent.fertilityFactorModifier += disease.fertilityPenalty
+  agent.friendlinessModifier += disease.friendlinessPenalty
+  agent.happinessModifier += disease.happinessPenalty
+  agent.movementModifier += disease.movementPenalty
+  agent.spiceMetabolismModifier += disease.spiceMetabolismPenalty
+  agent.sugarMetabolismModifier += disease.sugarMetabolismPenalty
+  agent.visionModifier += disease.visionPenalty
+
+proc recover(agent: var Agent, disease: Disease) =
+  agent.aggressionFactorModifier -= disease.aggressionPenalty
+  agent.fertilityFactorModifier -= disease.fertilityPenalty
+  agent.friendlinessModifier -= disease.friendlinessPenalty
+  agent.happinessModifier -= disease.happinessPenalty
+  agent.movementModifier -= disease.movementPenalty
+  agent.spiceMetabolismModifier -= disease.spiceMetabolismPenalty
+  agent.sugarMetabolismModifier -= disease.sugarMetabolismPenalty
+  agent.visionModifier -= disease.visionPenalty
+
+proc nearestImmuneMatch(agent: Agent, disease: Disease): tuple[distance, startIndex, endIndex: int] =
+  result = (disease.tags.len, 0, disease.tags.len - 1)
+  if not disease.hasTags:
+    result.distance = 1
+    return
+  if not agent.hasImmuneSystem:
+    return
+  for startIndex in 0 ..< agent.immuneSystem.len - disease.tags.len:
+    var distance = 0
+    for offset, bit in disease.tags:
+      if agent.immuneSystem[startIndex + offset] != bit: inc distance
+    if distance < result.distance:
+      result = (distance, startIndex, startIndex + disease.tags.len - 1)
+
+proc hasDisease(agent: Agent, diseaseId: int): bool =
+  agent.diseases.anyIt(it.diseaseId == diseaseId)
+
+proc catchDisease(world: var World, agentIndex, diseaseId: int, infectorId = EmptyOccupant,
+    initial = false): bool =
+  if world.agents[agentIndex].hasDisease(diseaseId): return false
+  let definitionIndex = diseaseIndex(world.diseases, diseaseId)
+  doAssert definitionIndex >= 0, "infection names an unknown disease"
+  let disease = world.diseases[definitionIndex]
+  let matched = nearestImmuneMatch(world.agents[agentIndex], disease)
+  if disease.hasTags and matched.distance == 0: return false
+  if not initial:
+    let attack = world.rng.randomFloat()
+    let defense = world.rng.randomFloat()
+    if disease.transmissionChance == 0 or attack > disease.transmissionChance or
+        (world.agents[agentIndex].diseaseProtectionChance != 0 and
+         defense <= world.agents[agentIndex].diseaseProtectionChance):
+      return false
+  let caught = if infectorId == EmptyOccupant: world.timestep else: world.timestep
+  world.agents[agentIndex].diseases.add(Infection(
+    diseaseId: diseaseId, hasRange: disease.hasTags,
+    startIndex: matched.startIndex, endIndex: matched.endIndex,
+    infectorId: infectorId, caught: caught, incubation: disease.incubationPeriod,
+  ))
+  world.diseases[definitionIndex].infectedIds.add(world.agents[agentIndex].id)
+  if disease.incubationPeriod == 0:
+    world.agents[agentIndex].trigger(disease)
+  true
+
+proc doTrading(world: var World, id: int64, agentIndexById: Table[int64, int], dead: Table[int64, Death]) =
+  let actorIndex = agentIndexById[id]
+  if world.agents[actorIndex].tradeFactor == 0: return
+  world.agents[actorIndex].tradeVolume = 0
+  world.agents[actorIndex].sugarPrice = 0
+  world.agents[actorIndex].spicePrice = 0
+  world.agents[actorIndex].marginalRateOfSubstitution = marginalRate(world.agents[actorIndex])
+  let cell = world.agents[actorIndex].x * world.height + world.agents[actorIndex].y
+  var traders = newSeq[int64]()
+  for neighborCell in world.orderedNeighbors[cell]:
+    let traderId = world.cells[neighborCell].occupantId
+    if traderId != EmptyOccupant and not dead.hasKey(traderId) and
+        world.agents[agentIndexById[traderId]].marginalRateOfSubstitution !=
+        world.agents[actorIndex].marginalRateOfSubstitution:
+      traders.add(traderId)
+  world.rng.pythonShuffle(traders)
+  var partners = newSeq[int64]()
+  for traderId in traders:
+    let traderIndex = agentIndexById[traderId]
+    var spiceSeller = -1
+    var sugarSeller = -1
+    var sugarPrice = 0.0
+    var spicePrice = 0.0
+    while true:
+      let first = world.agents[actorIndex].marginalRateOfSubstitution
+      let second = world.agents[traderIndex].marginalRateOfSubstitution
+      if (first >= 1 and second >= 1) or (first < 1 and second < 1) or first == second: break
+      if second > first:
+        spiceSeller = traderIndex; sugarSeller = actorIndex
+      else:
+        spiceSeller = actorIndex; sugarSeller = traderIndex
+      let spiceMRS = world.agents[spiceSeller].marginalRateOfSubstitution
+      let sugarMRS = world.agents[sugarSeller].marginalRateOfSubstitution
+      if spiceMRS < 0 or sugarMRS < 0:
+        spiceSeller = -1; sugarSeller = -1; break
+      let price = sqrt(spiceMRS * sugarMRS)
+      if price < 1: spicePrice = 1; sugarPrice = price
+      else: spicePrice = price; sugarPrice = 1
+      if world.agents[spiceSeller].spice - spicePrice < world.agents[spiceSeller].spiceMetabolism or
+          world.agents[sugarSeller].sugar - sugarPrice < world.agents[sugarSeller].sugarMetabolism: break
+      let spiceNew = newMarginalRate(world.agents[spiceSeller],
+        world.agents[spiceSeller].sugar + sugarPrice, world.agents[spiceSeller].spice - spicePrice)
+      let sugarNew = newMarginalRate(world.agents[sugarSeller],
+        world.agents[sugarSeller].sugar - sugarPrice, world.agents[sugarSeller].spice + spicePrice)
+      let spiceBetter = abs(1 - spiceMRS) > abs(1 - spiceNew) or
+        welfareRewards(world.agents[spiceSeller], sugarPrice, -spicePrice) >= welfareRewards(world.agents[spiceSeller], 0, 0)
+      let sugarBetter = abs(1 - sugarMRS) > abs(1 - sugarNew) or
+        welfareRewards(world.agents[sugarSeller], -sugarPrice, spicePrice) >= welfareRewards(world.agents[sugarSeller], 0, 0)
+      if not spiceBetter or not sugarBetter or spiceNew < sugarNew: break
+      world.agents[spiceSeller].sugar += sugarPrice
+      world.agents[spiceSeller].spice -= spicePrice
+      world.agents[sugarSeller].sugar -= sugarPrice
+      world.agents[sugarSeller].spice += spicePrice
+      world.agents[spiceSeller].marginalRateOfSubstitution = marginalRate(world.agents[spiceSeller])
+      world.agents[sugarSeller].marginalRateOfSubstitution = marginalRate(world.agents[sugarSeller])
+    if spiceSeller >= 0 and sugarSeller >= 0:
+      inc world.agents[actorIndex].tradeVolume
+      world.agents[actorIndex].sugarPrice += sugarPrice
+      world.agents[actorIndex].spicePrice += spicePrice
+      world.agents[actorIndex].lastTradeTimestep = world.timestep
+      if traderId notin partners: partners.add(traderId)
+  if world.agents[actorIndex].lastTradeTimestep == world.timestep:
+    world.agents[actorIndex].lastTradePartners = partners.len
+
+proc doDisease(world: var World, id: int64, agentIndexById: Table[int64, int], dead: Table[int64, Death]) =
+  let agentIndex = agentIndexById[id]
+  world.rng.pythonShuffle(world.agents[agentIndex].diseases)
+  var infectionIndex = 0
+  while infectionIndex < world.agents[agentIndex].diseases.len:
+    var infection = world.agents[agentIndex].diseases[infectionIndex]
+    let definitionIndex = diseaseIndex(world.diseases, infection.diseaseId)
+    let disease = world.diseases[definitionIndex]
+    if infection.caught != world.timestep and infection.incubation > 0:
+      dec infection.incubation
+      world.agents[agentIndex].diseases[infectionIndex].incubation = infection.incubation
+    if infection.incubation == 0: world.agents[agentIndex].trigger(disease)
+    if disease.recoverable and disease.hasTags:
+      let responseEnd = min(infection.endIndex + 1, world.agents[agentIndex].immuneSystem.len)
+      var responseMatches = true
+      for offset in 0 ..< responseEnd - infection.startIndex:
+        if world.agents[agentIndex].immuneSystem[infection.startIndex + offset] != disease.tags[offset]:
+          world.agents[agentIndex].immuneSystem[infection.startIndex + offset] = disease.tags[offset]
+          responseMatches = false
+          break
+      if responseMatches:
+        world.agents[agentIndex].recover(disease)
+        world.agents[agentIndex].diseases.delete(infectionIndex)
+        let infectedIndex = world.diseases[definitionIndex].infectedIds.find(id)
+        if infectedIndex >= 0: world.diseases[definitionIndex].infectedIds.delete(infectedIndex)
+        inc infectionIndex # Preserve DTL remove-during-iteration skip quirk.
+        continue
+    inc infectionIndex
+  let diseaseCount = world.agents[agentIndex].diseases.len
+  if diseaseCount == 0: return
+  let cell = world.agents[agentIndex].x * world.height + world.agents[agentIndex].y
+  var neighbors = newSeq[int64]()
+  for neighborCell in world.orderedNeighbors[cell]:
+    let neighborId = world.cells[neighborCell].occupantId
+    if neighborId != EmptyOccupant and not dead.hasKey(neighborId): neighbors.add(neighborId)
+  world.rng.pythonShuffle(neighbors)
+  for neighborId in neighbors:
+    let infection = world.agents[agentIndex].diseases[int(world.rng.randBelow(uint64(diseaseCount)))]
+    discard world.catchDisease(agentIndexById[neighborId], infection.diseaseId, id)
+
+proc clearDiseasesOnDeath(world: var World, agentIndex: int) =
+  let id = world.agents[agentIndex].id
+  for infection in world.agents[agentIndex].diseases:
+    let definitionIndex = diseaseIndex(world.diseases, infection.diseaseId)
+    world.agents[agentIndex].recover(world.diseases[definitionIndex])
+    let infectedIndex = world.diseases[definitionIndex].infectedIds.find(id)
+    if infectedIndex >= 0: world.diseases[definitionIndex].infectedIds.delete(infectedIndex)
+  world.agents[agentIndex].diseases.setLen(0)
 
 proc stepOne*(world: var World) =
   world.deaths.setLen(0)
@@ -567,6 +970,7 @@ proc stepOne*(world: var World) =
       world.agents[preyIndex] = prey
       dead[preyId] = Death(id: prey.id, seat: prey.seat, age: prey.age, cause: "combat")
       world.cells[destination].occupantId = EmptyOccupant
+      world.clearDiseasesOnDeath(preyIndex)
     if destination != origin:
       world.cells[origin].occupantId = EmptyOccupant
       world.cells[destination].occupantId = agent.id
@@ -601,6 +1005,10 @@ proc stepOne*(world: var World) =
               target.tags[position] = agent.tags[position]
               world.recomputeTribe(target)
               world.agents[neighborIndex] = target
+      world.agents[agentIndex] = agent
+      world.doTrading(agent.id, agentIndexById, dead)
+      world.doDisease(agent.id, agentIndexById, dead)
+      agent = world.agents[agentIndex]
       inc agent.age
       if agent.maxAge != -1 and agent.age >= agent.maxAge:
         cause = "aging"
@@ -608,6 +1016,8 @@ proc stepOne*(world: var World) =
       world.cells[destination].occupantId = EmptyOccupant
       dead[agent.id] = Death(id: agent.id, seat: agent.seat, age: agent.age, cause: cause)
     world.agents[agentIndex] = agent
+    if cause.len > 0:
+      world.clearDiseasesOnDeath(agentIndex)
 
   for id in world.liveOrder:
     if dead.hasKey(id):
