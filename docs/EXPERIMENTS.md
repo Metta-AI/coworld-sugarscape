@@ -109,10 +109,14 @@ A world tick advances the entire society; it is not an individual agent step.
 These CPU measurements do not establish GPU training throughput. Timings vary
 between runs; compare trajectory hashes when checking reproducibility.
 
-## Future GPU training acceptance
+## GPU-machine throughput acceptance
 
-A future GPU-backed Metta training integration must sustain at least 30,000
-aggregate learner-agent steps per second, including rollout, learning, and
-statistics time. GPU model and batch configuration remain unspecified.
-A Metta training adapter is still required for this measurement. The historical
-CPU world-tick timings above are separate and do not validate this requirement.
+The target is sustained throughput of at least 30,000 whole-world ticks per
+second, summed across parallel environments on a GPU machine. Compute the rate
+as total completed world ticks across all environments divided by their shared
+elapsed wall-time window. Each world tick counts once, regardless of agent count.
+
+Record the GPU model, environment configuration, parallel environment count,
+and whether the measured workload includes policy inference or training.
+Hardware and parallelism remain unspecified. The single-environment CPU timings
+above do not validate this aggregate GPU-machine requirement.
