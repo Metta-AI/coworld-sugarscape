@@ -96,7 +96,10 @@ records all planned seeds, models, timeout, and duration override even if a run
 times out. A final `report.json` exists only after every selected run completes.
 
 A one-seed run validates the reproduction path. It does not reproduce the paper's
-aggregate 500-seed findings. Python version and platform differences may also
+aggregate 500-seed findings. Seed `158402133555746433` completed all four
+models at 5,000 ticks during validation. Final populations were 1,219 (altruist),
+478 (utilitarian), 759 (egoist), and 1,118 (raw Sugarscape).
+Python version and platform differences may also
 prevent exact historical numerical agreement; retain that provenance. Do not
 replace the current Coworld engine pin with the historical release.
 
@@ -105,3 +108,11 @@ Timing covers the historical Python subprocess, including startup and log output
 A world tick advances the entire society; it is not an individual agent step.
 These CPU measurements do not establish GPU training throughput. Timings vary
 between runs; compare trajectory hashes when checking reproducibility.
+
+## Future GPU training acceptance
+
+A future GPU-backed Metta training integration must sustain at least 30,000
+aggregate learner-agent steps per second, including rollout, learning, and
+statistics time. GPU model and batch configuration remain unspecified.
+A Metta training adapter is still required for this measurement. The historical
+CPU world-tick timings above are separate and do not validate this requirement.
