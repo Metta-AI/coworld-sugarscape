@@ -178,6 +178,9 @@ type
     useDefaultMovement: bool
     movement: seq[SugarLangRule]
 
+  AgentIndexLookup = object
+    positions: seq[int]
+
   World* = object
     sourcePin*: string
     configurationSha256*: string
@@ -213,6 +216,21 @@ type
     childTagsRng: PythonMt19937
     childRacialTagsRng: PythonMt19937
     childImmuneSystemRng: PythonMt19937
+    agentIndexById: AgentIndexLookup
+
+proc hasKey(lookup: AgentIndexLookup, id: int64): bool =
+  id >= 0 and id < int64(lookup.positions.len) and lookup.positions[int(id)] >= 0
+
+proc `[]`(lookup: AgentIndexLookup, id: int64): int =
+  doAssert lookup.hasKey(id), "agent ID is not live"
+  lookup.positions[int(id)]
+
+proc `[]=`(lookup: var AgentIndexLookup, id: int64, index: int) =
+  doAssert id >= 0 and id <= int64(lookup.positions.len), "agent ID is not dense"
+  if id == int64(lookup.positions.len):
+    lookup.positions.add(index)
+  else:
+    lookup.positions[int(id)] = index
 
 proc twist(rng: var PythonMt19937) =
   const
@@ -945,6 +963,11 @@ proc loadWorld*(node: JsonNode): World =
     for previous in result.deaths:
       doAssert previous.id != death.id, "death ids must be unique"
     result.deaths.add(death)
+  doAssert result.nextAgentId <= int64(high(int)), "nextAgentId exceeds native index capacity"
+  result.agentIndexById.positions = newSeq[int](int(result.nextAgentId))
+  result.agentIndexById.positions.fill(-1)
+  for index, agent in result.agents:
+    result.agentIndexById[agent.id] = index
 
 proc rngJson(rng: PythonMt19937): JsonNode =
   var words = newJArray()
@@ -1124,7 +1147,7 @@ proc finite(value: float64): float64 =
 
 proc sugarLangFeature(world: World, agent: Agent, target: int, distance,
     baseWelfare: float64, population: int, feature: SugarLangFeature,
-    agentIndexById: Table[int64, int]): float64 =
+    agentIndexById: AgentIndexLookup): float64 =
   let sugarMetabolism = max(0.0, agent.sugarMetabolism + agent.sugarMetabolismModifier)
   let spiceMetabolism = max(0.0, agent.spiceMetabolism + agent.spiceMetabolismModifier)
   let occupantId = world.cells[target].occupantId
@@ -1163,7 +1186,7 @@ proc sugarLangFeature(world: World, agent: Agent, target: int, distance,
 
 proc evalSugarLang(world: World, agent: Agent, target: int, distance,
     baseWelfare: float64, population: int, expression: SugarLangExpression,
-    agentIndexById: Table[int64, int]): float64 =
+    agentIndexById: AgentIndexLookup): float64 =
   template evaluate(operand: SugarLangExpression): float64 =
     world.evalSugarLang(agent, target, distance, baseWelfare, population,
       operand, agentIndexById)
@@ -1214,7 +1237,7 @@ proc evalSugarLang(world: World, agent: Agent, target: int, distance,
 
 proc movementScore(world: World, agent: Agent, target: int, distance,
     baseWelfare: float64, population: int,
-    agentIndexById: Table[int64, int]): float64 =
+    agentIndexById: AgentIndexLookup): float64 =
   let ruleset = world.compiledRulesets[agent.seat]
   if ruleset.useDefaultMovement:
     return baseWelfare
@@ -1355,7 +1378,8 @@ proc catchDisease(world: var World, agentIndex, diseaseId: int, infectorId = Emp
     world.agents[agentIndex].trigger(disease)
   true
 
-proc doTrading(world: var World, id: int64, agentIndexById: Table[int64, int], dead: Table[int64, Death]) =
+proc doTrading(world: var World, id: int64, agentIndexById: AgentIndexLookup,
+    dead: Table[int64, Death]) =
   let actorIndex = agentIndexById[id]
   if world.agents[actorIndex].tradeFactor == 0: return
   world.agents[actorIndex].tradeVolume = 0
@@ -1419,7 +1443,8 @@ proc doTrading(world: var World, id: int64, agentIndexById: Table[int64, int], d
   if world.agents[actorIndex].lastTradeTimestep == world.timestep:
     world.agents[actorIndex].lastTradePartners = partners.len
 
-proc doDisease(world: var World, id: int64, agentIndexById: Table[int64, int], dead: Table[int64, Death]) =
+proc doDisease(world: var World, id: int64, agentIndexById: AgentIndexLookup,
+    dead: Table[int64, Death]) =
   let agentIndex = agentIndexById[id]
   world.rng.pythonShuffle(world.agents[agentIndex].diseases)
   var infectionIndex = 0
@@ -1598,7 +1623,7 @@ proc createChild(world: var World, firstIndex, secondIndex, cell: int): Agent =
   world.cells[cell].spice = 0
   world.cells[cell].occupantId = result.id
 
-proc doReproduction(world: var World, id: int64, agentIndexById: var Table[int64, int],
+proc doReproduction(world: var World, id: int64, agentIndexById: var AgentIndexLookup,
     dead: Table[int64, Death]) =
   let actorIndex = agentIndexById[id]
   if not world.agents[actorIndex].fertile(): return
@@ -1671,7 +1696,7 @@ proc creditWorthy(agent: Agent, sugarLoan, spiceLoan: float64, duration: int64):
       spiceLoan / float64(duration) >= 0
 
 proc payDebt(world: var World, debtorIndex, loanIndex: int,
-    agentIndexById: Table[int64, int], dead: Table[int64, Death]) =
+    agentIndexById: AgentIndexLookup, dead: Table[int64, Death]) =
   let loan = world.agents[debtorIndex].creditorLoans[loanIndex]
   if not agentIndexById.hasKey(loan.creditorId):
     let tombstoneIndex = world.creditorTombstones.findIt(it.id == loan.creditorId)
@@ -1731,7 +1756,7 @@ proc payDebt(world: var World, debtorIndex, loanIndex: int,
     0, sugarLeft + interest * sugarLeft, 0, spiceLeft + interest * spiceLeft,
     world.agents[creditorIndex].loanDuration)
 
-proc updateLoans(world: var World, agentIndex: int, agentIndexById: Table[int64, int],
+proc updateLoans(world: var World, agentIndex: int, agentIndexById: AgentIndexLookup,
     dead: Table[int64, Death]) =
   var index = 0
   while index < world.agents[agentIndex].debtorLoans.len:
@@ -1746,7 +1771,7 @@ proc updateLoans(world: var World, agentIndex: int, agentIndexById: Table[int64,
       world.payDebt(agentIndex, index, agentIndexById, dead)
     inc index # Preserve Python remove-during-iteration skip.
 
-proc doLending(world: var World, id: int64, agentIndexById: Table[int64, int],
+proc doLending(world: var World, id: int64, agentIndexById: AgentIndexLookup,
     dead: Table[int64, Death]) =
   let lenderIndex = agentIndexById[id]
   world.updateLoans(lenderIndex, agentIndexById, dead)
@@ -1793,7 +1818,7 @@ proc doLending(world: var World, id: int64, agentIndexById: Table[int64, int],
     world.agents[lenderIndex].lastLendedTimestep = world.timestep
     world.agents[lenderIndex].lastLoans = loans
 
-proc doInheritance(world: var World, agentIndex: int, agentIndexById: Table[int64, int],
+proc doInheritance(world: var World, agentIndex: int, agentIndexById: AgentIndexLookup,
     dead: Table[int64, Death]) =
   if world.agents[agentIndex].inheritancePolicy == "none": return
   world.agents[agentIndex].sugar = max(0.0, world.agents[agentIndex].sugar)
@@ -1837,7 +1862,7 @@ proc updateFriends(world: var World, agentIndex, neighborIndex: int) =
     world.agents[agentIndex].friends.add(friend)
 
 proc updateHappiness(world: var World, agentIndex: int,
-    agentIndexById: Table[int64, int], dead: Table[int64, Death]) =
+    agentIndexById: AgentIndexLookup, dead: Table[int64, Death]) =
   let unit = world.agents[agentIndex].happinessUnit
   world.agents[agentIndex].conflictHappiness =
     if world.agents[agentIndex].lastCombatTimestep == world.timestep:
@@ -1885,9 +1910,7 @@ proc stepOne*(world: var World) =
 
   world.rng.pythonShuffle(world.liveOrder)
   let worldPopulation = world.agents.len
-  var agentIndexById = initTable[int64, int]()
-  for index, agent in world.agents:
-    agentIndexById[agent.id] = index
+  template agentIndexById: untyped = world.agentIndexById
   var dead = initTable[int64, Death]()
 
   var turnIndex = 0
@@ -2067,6 +2090,10 @@ proc stepOne*(world: var World) =
   if world.deaths.len > 0:
     world.agents.keepItIf(not dead.hasKey(it.id))
     world.liveOrder.keepItIf(not dead.hasKey(it))
+    for id in dead.keys:
+      world.agentIndexById.positions[int(id)] = -1
+    for index, agent in world.agents:
+      world.agentIndexById[agent.id] = index
   world.updateWorldStatistics()
 
 proc step*(world: var World, ticks: int): int {.discardable.} =
@@ -2079,16 +2106,36 @@ proc step*(world: var World, ticks: int): int {.discardable.} =
 
 when isMainModule:
   proc usage(): string =
-    "usage: sugarscape-native (step|bench|bench-worker) --ticks N < snapshot.json"
+    "usage: sugarscape-native (step|bench|bench-worker|episode) --ticks N < snapshot.json"
 
   proc writeLine(node: JsonNode) =
     stdout.write($node & "\n")
     stdout.flushFile()
 
   let arguments = commandLineParams()
-  doAssert arguments.len == 3 and arguments[0] in ["step", "bench", "bench-worker"] and
+  doAssert arguments.len == 3 and
+    arguments[0] in ["step", "bench", "bench-worker", "episode"] and
     arguments[1] == "--ticks", usage()
   let ticks = parseInt(arguments[2])
+  if arguments[0] == "episode":
+    var snapshotLine: string
+    doAssert stdin.readLine(snapshotLine), "episode requires one snapshot line"
+    var world = loadWorld(parseJson(snapshotLine))
+    var completedTicks = 0
+    while completedTicks < ticks and world.liveOrder.len > 0:
+      world.stepOne()
+      inc completedTicks
+      writeLine(%*{
+        "kind": "tick", "tick": completedTicks, "snapshot": world.snapshot(),
+      })
+    writeLine(%*{
+      "kind": "terminal",
+      "reason": (if world.liveOrder.len == 0: "extinct" else: "tick_limit"),
+      "ticks": completedTicks,
+      "timestep": world.timestep,
+      "population": world.liveOrder.len,
+    })
+    quit(0)
   if arguments[0] == "bench-worker":
     var snapshotLine: string
     doAssert stdin.readLine(snapshotLine), "bench-worker requires one snapshot line"
