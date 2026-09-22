@@ -33,8 +33,9 @@ without player I/O. Distribution leagues score how closely the measured outcome
 matches the target, while Commonwealth scores the wellness produced by a fixed
 constitution.
 
-CI runs the Python suite and workflow lint on PRs to `main` and main pushes;
-every PR also builds the game image and checks its headless import. See
+CI runs the Python suite and workflow lint on all PRs, including stacked PRs,
+and on pushes to `main`. Every PR also builds the game image and checks its
+headless import. See
 [`docs/dtl-sync.md`](docs/dtl-sync.md) for pinned tools, local checks, and the
 upstream sync implementation status, read-only detection, and disposable
 candidate preparation, and [Docker verification setup](docs/dtl-sync.md#independent-verification).
