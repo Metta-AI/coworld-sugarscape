@@ -90,8 +90,9 @@ target resolver, and scorer without a WebSocket server. It accepts `--variant`
 with `certification` or a manifest variant ID. Each reset uses a deterministic
 seed and one decision per seat. The bridge hides the seed and scenario pool from
 player observations. Omit `--timesteps` for the variant's exact episode length;
-set it for a shorter training curriculum. Full 1,000-tick variants took 29–85
-seconds locally, so use a bridge response deadline of at least 120 seconds.
+set it for a shorter training curriculum. The ladder and Commonwealth variants
+took 29–85 seconds locally, so use a bridge response deadline of at least 120
+seconds.
 
 `--mode choice` exposes seven validated, game-owned baseline rulesets as discrete
 actions, a 66-value target and public-config encoding, and typed candidates.
@@ -120,7 +121,7 @@ uv run --package metta-posttrain metta-posttrain collect-teacher \
   --bridge-command=--mode --bridge-command text \
   --output /tmp/sugarscape-trajectories.jsonl \
   --source-revision "$(git -C "$SUGARSCAPE_ROOT" rev-parse HEAD)" \
-  --episodes 8 --seed-prefix sugarscape --players 1 --game sugarscape \
+  --episodes 16 --seed-prefix sugarscape --players 1 --game sugarscape \
   --action-schema-revision sugarlang-v1 --max-decisions 1
 uv run --package metta-posttrain metta-posttrain export \
   --trajectory /tmp/sugarscape-trajectories.jsonl --output /tmp/sugarscape-dataset
