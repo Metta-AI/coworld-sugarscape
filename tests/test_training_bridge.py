@@ -35,7 +35,7 @@ def test_training_session_completes_real_certification_game(mode: str) -> None:
     assert terminal["kind"] == "terminal"
     assert len(terminal["scores"]) == 2
     assert all(score >= 0 for score in terminal["scores"].values())
-    assert all(0 <= utility <= 1 for utility in terminal["utilities"].values())
+    assert terminal["utilities"] == terminal["scores"]
 
 
 def test_jsonl_bridge_reuses_process_across_seeds() -> None:
@@ -57,3 +57,17 @@ def test_jsonl_bridge_reuses_process_across_seeds() -> None:
         assert observation["decision_id"] == 0
     process.stdin.close()
     assert process.wait(timeout=5) == 0
+
+
+def test_commonwealth_utility_keeps_wellness_signal_bounded() -> None:
+    session = TrainingSession("commonwealth", "choice", 50)
+    observation = session.reset({"seed": "commonwealth-proof", "players": 1})
+    result = session.step(
+        {
+            "decision_id": observation["decision_id"],
+            "response": session.teacher()["response"],
+        }
+    )
+    terminal = result["observation"]
+    assert terminal["scores"][0] > 1
+    assert 0 < terminal["utilities"][0] < 0.1

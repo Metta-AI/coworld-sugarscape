@@ -100,6 +100,8 @@ This is a finite policy curriculum for Metta RL and native PufferLib. It does
 not cover arbitrary SugarLang programs. `--mode text` accepts the full
 `{"ruleset": ...}` submission and retains exact player-visible targets and
 programs for Metta post-training. Both modes return scores from `run_episode`.
+The RL utility uses the distribution score directly or scales Commonwealth's
+summed wellness by the public world area.
 
 From a Metta checkout with the Coworld training stack, set `SUGARSCAPE_ROOT` to
 this checkout and run:

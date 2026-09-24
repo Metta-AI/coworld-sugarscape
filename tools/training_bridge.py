@@ -211,11 +211,17 @@ class TrainingSession:
             scores = {
                 seat: float(score) for seat, score in enumerate(results["scores"])
             }
+            world_area = int(self.resolved["environmentWidth"]) * int(
+                self.resolved["environmentHeight"]
+            )
             observation = {
                 "kind": "terminal",
                 "scores": scores,
                 "utilities": {
-                    seat: score / (1 + abs(score)) for seat, score in scores.items()
+                    seat: score
+                    if self.targets[seat].kind == "distribution"
+                    else score / (world_area + abs(score))
+                    for seat, score in scores.items()
                 },
             }
         return {"kind": "accepted", "action": accepted, "observation": observation}
