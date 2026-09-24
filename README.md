@@ -83,6 +83,52 @@ Reproducibility assumes `PYTHONHASHSEED=0`; both Dockerfiles set it, and the
 server re-executes itself with that value when necessary. A recorded results or
 replay seed reproduces an episode on the pinned interpreter.
 
+## Training
+
+`tools/training_bridge.py` runs the same pinned DTL simulator, SugarLang validator,
+target resolver, and scorer without a WebSocket server. It accepts `--variant`
+with `certification` or a manifest variant ID. Each reset uses a deterministic
+seed and one decision per seat. The bridge hides the seed and scenario pool from
+player observations. Omit `--timesteps` for the variant's exact episode length;
+set it for a shorter training curriculum. Full 1,000-tick variants took 29–85
+seconds locally, so use a bridge response deadline of at least 120 seconds.
+
+`--mode choice` exposes seven validated, game-owned baseline rulesets as discrete
+actions, a 66-value target and public-config encoding, and typed candidates.
+This is a finite policy curriculum for Metta RL and native PufferLib. It does
+not cover arbitrary SugarLang programs. `--mode text` accepts the full
+`{"ruleset": ...}` submission and retains exact player-visible targets and
+programs for Metta post-training. Both modes return scores from `run_episode`.
+
+From a Metta checkout with the Coworld training stack, set `SUGARSCAPE_ROOT` to
+this checkout and run:
+
+```bash
+uv run --group cortex ./tools/run.py train recipes.external.coworld_metta_rl \
+  command="[\"$SUGARSCAPE_ROOT/.venv/bin/python\",\"$SUGARSCAPE_ROOT/tools/training_bridge.py\",\"--variant\",\"solo-ladder\",\"--mode\",\"choice\"]" \
+  players=1 max_decisions=1 response_timeout_seconds=120 \
+  run=sugarscape_rl total_timesteps=128
+uv run ./tools/run.py train recipes.external.coworld \
+  command="[\"$SUGARSCAPE_ROOT/.venv/bin/python\",\"$SUGARSCAPE_ROOT/tools/training_bridge.py\",\"--variant\",\"solo-ladder\",\"--mode\",\"choice\"]" \
+  players=1 max_decisions=1 response_timeout_seconds=120 \
+  run=sugarscape_puffer total_timesteps=128
+uv run --package metta-posttrain metta-posttrain collect-teacher \
+  --bridge "$SUGARSCAPE_ROOT/tools/training_bridge.py" \
+  --bridge-command "$SUGARSCAPE_ROOT/.venv/bin/python" \
+  --bridge-command "$SUGARSCAPE_ROOT/tools/training_bridge.py" \
+  --bridge-command=--variant --bridge-command solo-ladder \
+  --bridge-command=--mode --bridge-command text \
+  --output /tmp/sugarscape-trajectories.jsonl \
+  --source-revision "$(git -C "$SUGARSCAPE_ROOT" rev-parse HEAD)" \
+  --episodes 8 --seed-prefix sugarscape --players 1 --game sugarscape \
+  --action-schema-revision sugarlang-v1 --max-decisions 1
+uv run --package metta-posttrain metta-posttrain export \
+  --trajectory /tmp/sugarscape-trajectories.jsonl --output /tmp/sugarscape-dataset
+```
+
+Use a new output path for each collection. Seed-separated train and validation
+splits require at least one complete episode in each split.
+
 ## Credits
 
 This project is based on the **Digital Terraria Lab (DTL) Sugarscape**
