@@ -96,8 +96,8 @@ seconds.
 
 `--mode choice` exposes seven validated, game-owned baseline rulesets as discrete
 actions, a 66-value target and public-config encoding, and typed candidates.
-This is a finite policy curriculum for Metta RL and native PufferLib. It does
-not cover arbitrary SugarLang programs. `--mode text` accepts the full
+This is a finite policy curriculum for native PufferLib. It does not cover
+arbitrary SugarLang programs. `--mode text` accepts the full
 `{"ruleset": ...}` submission and retains exact player-visible targets and
 programs for Metta post-training. Both modes return scores from `run_episode`.
 The RL utility uses the distribution score directly or scales Commonwealth's
@@ -107,12 +107,20 @@ From a Metta checkout with the Coworld training stack, set `SUGARSCAPE_ROOT` to
 this checkout and run:
 
 ```bash
-uv run --group cortex ./tools/run.py train recipes.external.coworld_metta_rl \
-  command="[\"$SUGARSCAPE_ROOT/.venv/bin/python\",\"$SUGARSCAPE_ROOT/tools/training_bridge.py\",\"--variant\",\"solo-ladder\",\"--mode\",\"choice\"]" \
-  players=1 max_decisions=1 response_timeout_seconds=120 \
-  run=sugarscape_rl total_timesteps=128
+SUGARSCAPE_ASSETS=$(python - "$SUGARSCAPE_ROOT" <<'PY'
+import json, sys
+from pathlib import Path
+root = Path(sys.argv[1])
+assets = [root / "coworld_manifest.json"]
+for directory in ("src/coworld", "src/sugarscape", "targets", "players/baseline"):
+    assets.extend(path for path in (root / directory).rglob("*")
+                  if path.is_file() and path.suffix in {".py", ".json", ".yaml", ".yml"})
+print(json.dumps([str(path.absolute()) for path in sorted(assets)]))
+PY
+)
 uv run ./tools/run.py train recipes.external.coworld \
   command="[\"$SUGARSCAPE_ROOT/.venv/bin/python\",\"$SUGARSCAPE_ROOT/tools/training_bridge.py\",\"--variant\",\"solo-ladder\",\"--mode\",\"choice\"]" \
+  assets="$SUGARSCAPE_ASSETS" \
   players=1 max_decisions=1 response_timeout_seconds=120 \
   run=sugarscape_puffer total_timesteps=128
 uv run --package metta-posttrain metta-posttrain collect-teacher \
@@ -124,10 +132,16 @@ uv run --package metta-posttrain metta-posttrain collect-teacher \
   --output /tmp/sugarscape-trajectories.jsonl \
   --source-revision "$(git -C "$SUGARSCAPE_ROOT" rev-parse HEAD)" \
   --episodes 16 --seed-prefix sugarscape --players 1 --game sugarscape \
-  --action-schema-revision sugarlang-v1 --max-decisions 1
+  --action-schema-revision sugarlang-v1 --max-decisions 1 \
+  --response-timeout-seconds 120
 uv run --package metta-posttrain metta-posttrain export \
   --trajectory /tmp/sugarscape-trajectories.jsonl --output /tmp/sugarscape-dataset
 ```
+
+The numeric command requires a reserved NVIDIA GPU and current Metta setup.
+The declared asset files fingerprint the simulator, target catalog, and
+bridge together. Historical Metta RL proof remains in PR #42; its retired
+`recipes.external.coworld_metta_rl` entry point is not a current command.
 
 Use a new output path for each collection. Seed-separated train and validation
 splits require at least one complete episode in each split.
