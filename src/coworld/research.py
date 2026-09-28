@@ -76,6 +76,22 @@ class ReturnParameters(Parameters):
     period: Literal[5, 6]
 
 
+class ThalerParameters(Parameters):
+    implementation: Literal["seq", "io", "tvar", "tarray"]
+    population: Literal[500, 1000, 1500, 2000, 2500]
+    rebirthing: bool
+    capabilities: Literal[1, 4]
+
+
+class QueraParameters(Parameters):
+    vision_probability: float = Field(ge=0, le=1)
+    metabolism_alpha: float = Field(gt=0, le=20)
+    metabolism_beta: float = Field(gt=0, le=20)
+    wealth_alpha: float = Field(gt=0, le=20)
+    wealth_beta: float = Field(gt=0, le=20)
+    regeneration: float = Field(ge=0, le=10)
+
+
 class ResearchSpec(Parameters):
     study: Literal[
         "mcculloch_2022",
@@ -84,6 +100,9 @@ class ResearchSpec(Parameters):
         "dogan_2026",
         "brearcliffe_2020",
         "oremland_2014",
+        "thaler_2019",
+        "quera_2025",
+        "lima_2024",
     ]
     mode: Literal["reference", "population-calibration"] = "reference"
     parameters: dict[str, object]
@@ -112,8 +131,19 @@ PARAMETER_MODELS = {
     "dogan_2026": DoganParameters,
     "brearcliffe_2020": BrearcliffeParameters,
     "oremland_2014": OremlandParameters,
+    "thaler_2019": ThalerParameters,
+    "quera_2025": QueraParameters,
+    "lima_2024": Parameters,
 }
-PAPER_HORIZONS = {"mcculloch_2022": 100, "carrella_2021": 500, "dogan_2026": 300}
+WORKER_TIMEOUT_SECONDS = {study: 600 for study in PARAMETER_MODELS}
+WORKER_TIMEOUT_SECONDS["lima_2024"] = 3300
+
+PAPER_HORIZONS = {
+    "mcculloch_2022": 100,
+    "carrella_2021": 500,
+    "dogan_2026": 300,
+    "quera_2025": 49,
+}
 
 
 def resolve_config(
@@ -142,6 +172,17 @@ def resolve_config(
         raise ValueError(
             "research horizon exceeds the supported original study horizon"
         )
+    if config.research.study == "lima_2024" and config.timesteps != 1000:
+        raise ValueError(
+            "the native Lima architecture requires both original 1000-step experiments"
+        )
+    if config.research.study == "thaler_2019":
+        if config.timesteps != 1000:
+            raise ValueError(
+                "native Haskell observers require the original 1000-observation invocation"
+            )
+        if parameters.implementation == "seq" and parameters.capabilities != 1:
+            raise ValueError("sequential Haskell supports exactly one capability")
     config.research.parameters = parameters.model_dump()
     if config.seed == -1:
         config.seed = (seed_source or (lambda: secrets.randbits(63)))()
@@ -380,6 +421,18 @@ def run_native_episode(
     if not validation.valid:
         raise ValueError(str(validation.errors))
     parameters = spec.parameters if spec.mode == "reference" else validation.normalized
+    if spec.study == "lima_2024":
+        from .lima_research import run
+
+        return run(resolved, parameters, source_entry(spec.study))
+    if spec.study == "thaler_2019":
+        from .thaler_research import run
+
+        return run(resolved, parameters, source_entry(spec.study))
+    if spec.study == "quera_2025":
+        from .quera_research import run
+
+        return run(resolved, parameters, source_entry(spec.study), SOURCE_ROOT)
     if spec.study in {"brearcliffe_2020", "oremland_2014"}:
         from .netlogo_research import run
 
@@ -603,7 +656,7 @@ def run_episode(config, submissions, *, submitted, frame_sink=None):
             env=environment,
             stdout=log,
             stderr=subprocess.STDOUT,
-            timeout=600,
+            timeout=WORKER_TIMEOUT_SECONDS[config["research"]["study"]],
         )
     if result.returncode != 0:
         raise RuntimeError(

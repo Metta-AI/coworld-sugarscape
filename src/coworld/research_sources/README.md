@@ -28,3 +28,16 @@ The NetLogo runtime archives are official distributions pinned by `netlogo-runti
 Build-time setup verifies complete archive hashes before extraction and retains distribution notices under `app/`.
 Per-episode checks verify every runtime jar and compiled recorder/extension file against the build qualification.
 These third-party notices and terms are not replaced by the research fork's root license.
+
+Thaler retains the original Haskell kernels at commit `f5851488bf2369e2bbdc3f2499ed69c142de9fec`.
+The unchanged qualified study preparer replaces Criterion dispatch with one original `initSim`, forces its complete result, and then exports returned population observations.
+It does not change initialization, model loops, randomness or instrumentation. Per-implementation licenses are retained.
+The compiled bundle carries GHC 8.4.3, original/prepared source hashes, binary/library hashes and runtime dependency notices.
+Quera retains the author's MIT-licensed DiffABM.jl source at commit `9178eccd56dd352e3515e276239654239f8d3b41`.
+`Manifest.toml` is the qualified study's forward dependency lock, not an author-supplied historical lockfile.
+The adapter executes only forward dynamics; BlackBIRDS, flow fitting and the 5,000-epoch campaign remain external research.
+
+Lima retains the author's original shared files at `3838dad156f62484d0e664b49ffc4e05ac077280`.
+Its qualified study auditors verify complete native trajectories, incoming attributes and identity-conserving routing.
+Original NetLogo/JaCaMo model and middleware sources are unchanged. Their embedded notices remain intact.
+Private loopback deployment and qualified current Python dependencies do not establish historical runtime equivalence.
