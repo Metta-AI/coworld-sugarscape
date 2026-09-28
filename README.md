@@ -86,6 +86,12 @@ Reproducibility assumes `PYTHONHASHSEED=0`; both Dockerfiles set it, and the
 server re-executes itself with that value when necessary. A recorded results or
 replay seed reproduces an episode on the pinned interpreter.
 
+## Replicated research worlds
+
+The [research variant design](docs/designs/2026-10-20-replication-variants.md) maps ten completed Sugarscape method studies into a common Coworld collection.
+It distinguishes native paper engines from DTL adaptations, identifies resource constraints, and defines the first adapter and acceptance checks.
+These research variants are planned; the five existing variants remain the currently implemented collection.
+
 ## Training
 
 `tools/training_bridge.py` runs the same pinned DTL simulator, SugarLang validator,
