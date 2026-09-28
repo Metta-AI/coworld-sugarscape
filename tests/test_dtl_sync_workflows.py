@@ -30,10 +30,10 @@ def _check_action_pins(workflow: dict) -> None:
                 assert revision == ACTION_PINS[action], step["uses"]
 
 
-def test_ci_events_are_pr_to_main_and_push_to_main() -> None:
+def test_ci_events_cover_stacked_prs_and_main_pushes() -> None:
     workflow = _workflow()
     assert workflow["on"] == {
-        "pull_request": {"branches": ["main"]},
+        "pull_request": None,
         "push": {"branches": ["main"]},
     }
     assert set(workflow["jobs"]) == {"tests", "workflow-lint", "image-smoke"}

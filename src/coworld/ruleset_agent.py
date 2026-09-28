@@ -18,7 +18,9 @@ class RulesetAgent(Agent):
         self.seat = world.seat_manager.seat_for_spawn(configuration)
         super().__init__(agentID, birthday, cell, configuration)
         self.ruleset = world.seat_manager.ruleset(self.seat)
-        self._feature_context = FeatureContext()
+        self._feature_context = FeatureContext(self.ruleset.feature_indices)
+        self._uses_agent_features = any(index < 10 for index in self.ruleset.feature_indices)
+        self._uses_world_features = any(index >= 17 for index in self.ruleset.feature_indices)
         self._apply_trait_overrides(world.seat_manager.trait_ranges)
 
     def findChildEndowment(self, mate: Agent) -> dict[str, Any]:
@@ -100,27 +102,31 @@ class RulesetAgent(Agent):
                 setattr(self, attribute, trait_ranges[name].clamp(value))
 
     def _set_agent_and_world_features(self, context: FeatureContext) -> None:
-        sugar_metabolism = self.findSugarMetabolism()
-        spice_metabolism = self.findSpiceMetabolism()
-        sugar_need = self.sugar / sugar_metabolism if sugar_metabolism > 0 else 1
-        spice_need = self.spice / spice_metabolism if spice_metabolism > 0 else 1
-        mrs = self.tradeFactor * (spice_need / sugar_need) if sugar_need != 0 else 0
-        context.set_agent_features(
-            sugar=self.sugar,
-            spice=self.spice,
-            wealth=self.sugar + self.spice,
-            sugar_metabolism=sugar_metabolism,
-            spice_metabolism=spice_metabolism,
-            vision=self.findVision(),
-            movement=self.findMovement(),
-            age=self.age,
-            ttl=self.findTimeToLive(),
-            mrs=mrs,
-        )
-        cache = self.cell.environment.sugarscape.world_features
-        context.set_world_features(
-            timestep=cache.timestep,
-            population=cache.population,
-            gini=cache.gini,
-            mean_wealth=cache.mean_wealth,
-        )
+        # DTL also stores this value on the agent; preserve that state update.
+        ttl = self.findTimeToLive()
+        if self._uses_agent_features:
+            sugar_metabolism = self.findSugarMetabolism()
+            spice_metabolism = self.findSpiceMetabolism()
+            sugar_need = self.sugar / sugar_metabolism if sugar_metabolism > 0 else 1
+            spice_need = self.spice / spice_metabolism if spice_metabolism > 0 else 1
+            mrs = self.tradeFactor * (spice_need / sugar_need) if sugar_need != 0 else 0
+            context.set_agent_features(
+                sugar=self.sugar,
+                spice=self.spice,
+                wealth=self.sugar + self.spice,
+                sugar_metabolism=sugar_metabolism,
+                spice_metabolism=spice_metabolism,
+                vision=self.findVision(),
+                movement=self.findMovement(),
+                age=self.age,
+                ttl=ttl,
+                mrs=mrs,
+            )
+        if self._uses_world_features:
+            cache = self.cell.environment.sugarscape.world_features
+            context.set_world_features(
+                timestep=cache.timestep,
+                population=cache.population,
+                gini=cache.gini,
+                mean_wealth=cache.mean_wealth,
+            )

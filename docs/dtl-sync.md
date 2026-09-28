@@ -9,8 +9,8 @@ The intended system is described in the
 
 ## CI
 
-[ci.yml](../.github/workflows/ci.yml) runs on pull requests targeting `main`
-and pushes to `main`. It declares read-only repository permissions, persists
+[ci.yml](../.github/workflows/ci.yml) runs on all pull requests, including stacked
+branches, and pushes to `main`. It declares read-only repository permissions, persists
 no checkout credentials, and uses pinned action commits. It does not publish
 images or request service secrets.
 

@@ -207,3 +207,84 @@ def test_null_rulesets_match_stock_dtl_trajectory(tiny_episode_config: dict[str,
         coworld_trajectory.append(_snapshot(coworld))
 
     assert coworld_trajectory == stock_trajectory
+
+
+def test_feature_dependency_optimization_preserves_every_frame_and_rng(
+    tiny_episode_config: dict[str, object], monkeypatch,
+) -> None:
+    from coworld.episode import canonical_results_payload, run_episode
+
+    rulesets = [
+        {"version": 1, "movement": [{"score": ["get", "cell.welfare"]}]},
+        {"version": 1, "movement": [
+            {"if": [">", ["get", "world.population"], 0],
+             "score": ["+", ["get", "cell.sugar"], ["get", "agent.wealth"]]},
+            {"score": 0},
+        ]},
+    ]
+    optimized_states = []
+    optimized, replay, _ = run_episode(
+        tiny_episode_config, rulesets, emit_timing_logs=False,
+        frame_sink=lambda frame: optimized_states.append((frame, random.getstate())),
+    )
+    populate = RulesetAgent._set_agent_and_world_features
+
+    def populate_all(self, context):
+        self._uses_agent_features = True
+        self._uses_world_features = True
+        context._cell_indices = tuple(range(10, 17))
+        populate(self, context)
+
+    monkeypatch.setattr(RulesetAgent, "_set_agent_and_world_features", populate_all)
+    reference_states = []
+    reference, reference_replay, _ = run_episode(
+        tiny_episode_config, rulesets, emit_timing_logs=False,
+        frame_sink=lambda frame: reference_states.append((frame, random.getstate())),
+    )
+    assert optimized_states == reference_states
+    assert replay == reference_replay
+    assert canonical_results_payload(optimized) == canonical_results_payload(reference)
+
+
+def test_cell_only_rules_preserve_dtl_time_to_live_update(tiny_episode_config: dict[str, object]) -> None:
+    movement = {"version": 1, "movement": [{"score": ["get", "cell.welfare"]}]}
+    world = _world(tiny_episode_config, [movement, None])
+    agent = next(agent for agent in world.agents if agent.seat == 0)
+    expected = agent.findTimeToLive()
+    agent.timeToLive = -123
+    agent.sortCellsByWealth([{"cell": agent.cell, "wealth": 1, "range": 0}])
+    assert agent.timeToLive == expected
+
+
+def test_feature_optimization_preserves_agent_runtime_stats_each_tick(
+    tiny_episode_config: dict[str, object], monkeypatch,
+) -> None:
+    from copy import deepcopy
+
+    movement = {"version": 1, "movement": [{"score": ["get", "cell.welfare"]}]}
+    trajectories = []
+    populate = RulesetAgent._set_agent_and_world_features
+
+    def populate_all(self, context):
+        self._uses_agent_features = True
+        self._uses_world_features = True
+        context._cell_indices = tuple(range(10, 17))
+        populate(self, context)
+
+    for reference in (False, True):
+        if reference:
+            monkeypatch.setattr(RulesetAgent, "_set_agent_and_world_features", populate_all)
+        world = _world(tiny_episode_config, [movement, movement])
+        world.updateRuntimeStats()
+        trajectory = []
+        for _ in range(int(tiny_episode_config["timesteps"])):
+            world.doTimestep()
+            trajectory.append((
+                _snapshot(world), random.getstate(),
+                deepcopy(sorted((
+                    agent.ID, agent.timeToLive, agent.lastTimeToLive,
+                    agent.runtimeStats, [neighbor.ID for neighbor in agent.neighbors],
+                ) for agent in world.agents)),
+            ))
+        trajectories.append(trajectory)
+    assert trajectories[0] == trajectories[1]
