@@ -33,6 +33,9 @@ without player I/O. Distribution leagues score how closely the measured outcome
 matches the target, while Commonwealth scores the wellness produced by a fixed
 constitution.
 
+The [experimental Nim core](native/README.md) measures parity and throughput.
+Hosted episodes still use the Python DTL simulation.
+
 CI runs the Python suite and workflow lint on all PRs, including stacked PRs,
 and on pushes to `main`. Every PR also builds the game image and checks its
 headless import. See

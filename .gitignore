@@ -44,6 +44,7 @@ coverage.xml
 .build/
 .nimcache/
 .nimble/
+native/bin/
 node_modules/
 nim.cfg
 nimbledeps/
