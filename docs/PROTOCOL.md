@@ -148,3 +148,25 @@ wealth is rounded to 50-unit display buckets to keep long episodes compact;
 measurement histograms and scores retain full simulation precision.
 Periodic Commonwealth frames carry the running wellness sum, survivor count,
 mean wellness, and component means instead of a distribution match overlay.
+
+## Native research variants
+
+Variants with a `research` configuration use `sugarscape-research/1` and one controller seat.
+They run the pinned study implementation rather than compiling a SugarLang ruleset.
+The observation includes `study`, `mode`, `parameter_schema` and `reference_parameters`.
+A reference controller submits `{"type":"action","parameters":{}}`.
+Calibration controllers submit the closed parameter object described by the observation.
+Seeds and authentication tokens are withheld from player observations.
+
+`/global` sends research `status`, `frame` and `result` messages with the same protocol identifier.
+Status reports the study, mode, submission count and phase.
+The server publishes recorded aggregate frames after native execution finishes.
+These messages are not spatial live animation; complete recorded states remain in the research replay.
+`/client/global` displays this native status and the terminal measurements.
+A `failure` message identifies an unsuccessful execution; it never substitutes a zero-score completed reference.
+
+Research replay format `sugarscape.research-replay/1` contains `details`, `players` and `frames`.
+Each frame retains its recorded measurements and state/observation hash.
+Available grids and agents are displayed; aggregate-only recorders retain empty spatial arrays and null unreported Gini.
+Reference episodes score zero. Parameter-selection scores are explicitly named Coworld adaptations.
+See [the research guide](RESEARCH.md) for engine versions, scientific boundaries, parameters and prospective trials.

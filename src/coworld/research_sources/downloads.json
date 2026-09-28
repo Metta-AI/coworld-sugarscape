@@ -1,0 +1,52 @@
+{
+  "mcculloch_2022": {
+    "files": {
+      "independent.py": "https://raw.githubusercontent.com/Metta-AI/sugarscape/960e703f24da4f498ca423bdaa5537c3200e5c8c/replications/mcculloch_2022/independent.py",
+      "sugarscape_cg/sugar-map.txt": "https://raw.githubusercontent.com/Metta-AI/sugarscape/960e703f24da4f498ca423bdaa5537c3200e5c8c/replications/mcculloch_2022/sugarscape_cg/sugar-map.txt",
+      "sugarscape_cg/LICENSE.uncertainty": "https://raw.githubusercontent.com/Metta-AI/sugarscape/960e703f24da4f498ca423bdaa5537c3200e5c8c/replications/mcculloch_2022/sugarscape_cg/LICENSE.uncertainty"
+    }
+  },
+  "carrella_2021": {
+    "files": {
+      "model.py": "https://raw.githubusercontent.com/Metta-AI/sugarscape/bc33bd58e92914ce1652f2c15ccd77d99dc1895b/replications/carrella_2021/model.py"
+    }
+  },
+  "izquierdo_2009": {
+    "files": {
+      "model.py": "https://raw.githubusercontent.com/Metta-AI/sugarscape/91441ad4115b0c351a654127acc29cc16ab3ea0c/replications/izquierdo_2009/model.py",
+      "results/full-model-return-2026-10-17/capacity.csv": "https://raw.githubusercontent.com/Metta-AI/sugarscape/91441ad4115b0c351a654127acc29cc16ab3ea0c/replications/izquierdo_2009/results/full-model-return-2026-10-17/capacity.csv"
+    }
+  },
+  "dogan_2026": {
+    "files": {
+      "LICENSE": "https://raw.githubusercontent.com/Metta-AI/sugarscape/82cb45f731d76c985209fac842b857db305320ae/replications/dogan_2026/vendor/LICENSE",
+      "LICENSES/Apache-2.0.txt": "https://raw.githubusercontent.com/Metta-AI/sugarscape/82cb45f731d76c985209fac842b857db305320ae/replications/dogan_2026/vendor/LICENSES/Apache-2.0.txt",
+      "NOTICE": "https://raw.githubusercontent.com/Metta-AI/sugarscape/82cb45f731d76c985209fac842b857db305320ae/replications/dogan_2026/vendor/NOTICE",
+      "sugarscape_ai_tax/__init__.py": "https://raw.githubusercontent.com/Metta-AI/sugarscape/82cb45f731d76c985209fac842b857db305320ae/replications/dogan_2026/vendor/sugarscape_ai_tax/__init__.py",
+      "sugarscape_ai_tax/agents.py": "https://raw.githubusercontent.com/Metta-AI/sugarscape/82cb45f731d76c985209fac842b857db305320ae/replications/dogan_2026/vendor/sugarscape_ai_tax/agents.py",
+      "sugarscape_ai_tax/model.py": "https://raw.githubusercontent.com/Metta-AI/sugarscape/82cb45f731d76c985209fac842b857db305320ae/replications/dogan_2026/vendor/sugarscape_ai_tax/model.py",
+      "sugarscape_ai_tax/sugar-map.txt": "https://raw.githubusercontent.com/Metta-AI/sugarscape/82cb45f731d76c985209fac842b857db305320ae/replications/dogan_2026/vendor/sugarscape_ai_tax/sugar-map.txt"
+    }
+  },
+  "brearcliffe_2020": {
+    "files": {
+      "Replay.java": "https://raw.githubusercontent.com/Metta-AI/sugarscape/b64684cbe24b2b17f5cb32819040db4581fe7e25/replications/brearcliffe_2020/Replay.java"
+    },
+    "archive": {
+      "url": "https://www.comses.net/codebases/ffb52fc3-69e1-4bbd-b5d7-fa460617f74e/releases/1.0.0/download/",
+      "sha256": "38a7938cdfc03e74e103b9bb55f272aa61986d42fc0e464ed1d164a7bfcd5f38",
+      "files": {
+        "model.nlogo": "code/Creating_Intelligent_Agents.nlogo",
+        "LICENSE.author": "LICENSE",
+        "symmetric-sugar-map.txt": "data/symmetric-sugar-map.txt"
+      }
+    }
+  },
+  "oremland_2014": {
+    "files": {
+      "RunPolicyBatch.java": "https://raw.githubusercontent.com/Metta-AI/sugarscape/c1ad995a3e8c6dc7b91686e30fd772c4876cdd18/replications/oremland_2014/RunPolicyBatch.java",
+      "model.nlogo": "https://raw.githubusercontent.com/Metta-AI/sugarscape/c1ad995a3e8c6dc7b91686e30fd772c4876cdd18/replications/oremland_2014/results/policy-indexing-2026-10-18/oremland.nlogo",
+      "sugar-map.txt": "https://raw.githubusercontent.com/Metta-AI/sugarscape/c1ad995a3e8c6dc7b91686e30fd772c4876cdd18/replications/oremland_2014/results/policy-indexing-2026-10-18/sugar-map.txt"
+    }
+  }
+}

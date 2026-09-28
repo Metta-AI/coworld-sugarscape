@@ -126,7 +126,7 @@ def build() -> str:
     # merging the two would kill the CSS build on {{SETTLERS}}.
     tokens = build_sprites()
     tokens.update(build_targets())
-    script = substitute((SOURCE / "broadcast.js").read_text(), tokens)
+    script = (SOURCE / "research.js").read_text() + "\n" + substitute((SOURCE / "broadcast.js").read_text(), tokens)
     document = substitute(
         (SOURCE / "broadcast.html").read_text(),
         {"STYLE": css, "SCRIPT": script},

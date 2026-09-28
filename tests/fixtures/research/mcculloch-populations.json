@@ -1,0 +1,30 @@
+{
+  "source": "Metta-AI/sugarscape@960e703f24da4f498ca423bdaa5537c3200e5c8c",
+  "source_file_sha256": "7b237883033253a3b323904fa8a15821ff6b90dd7ffc736189c80b0d35511316",
+  "runs": [
+    {
+      "engine": "author-mesa",
+      "seed": 0,
+      "max_metabolism": 1,
+      "max_vision": 1,
+      "observations": 101,
+      "population_sha256": "4b70395c9c1d5ac71c06e512d3469603aaa4d9a403ce013c65889ba5dd6c8db3"
+    },
+    {
+      "engine": "author-mesa",
+      "seed": 0,
+      "max_metabolism": 2,
+      "max_vision": 10,
+      "observations": 101,
+      "population_sha256": "16e2d189f3f405df7c3a30cd032324e3fb422b3e043431b3aa1aeb70dbe450a7"
+    },
+    {
+      "engine": "author-mesa",
+      "seed": 0,
+      "max_metabolism": 4,
+      "max_vision": 7,
+      "observations": 101,
+      "population_sha256": "bf15712769d9534c24ddf18376509ebf684881818812244ff1bbbecf3bd4d716"
+    }
+  ]
+}
