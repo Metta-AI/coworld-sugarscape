@@ -12,7 +12,7 @@ Two independent corrected runs per seed matched complete replay bytes and canoni
 The reference is `82cc74246c3f58628072f878cdc551d335aa0ae8`, correction `c90e717f67042daf276f60db4ebdafc6732dc4d1`, upstream `d0b0e95ef58f191e32d832a661831f4314df2d64`.
 Copied, unused legacy fields in the original attempt were erroneous; its immutable input manifest establishes the consumed source.
 
-The [full original receipt](https://github.com/Metta-AI/coworld-sugarscape/blob/883f2b8a28f9b38c7b7c96814470b2e378b2f92d/docs/disease-activation-evidence.json)
+The [full original receipt](https://github.com/softmax-universe/coworld-sugarscape/blob/883f2b8a28f9b38c7b7c96814470b2e378b2f92d/docs/disease-activation-evidence.json)
 retains every source cohort, replay/artifact hash, failed attempt and recovery record.
 Its SHA-256 is `265094195da747d5bbfd55734a32021bda23b8aae1103024483288fe8360956b`.
 The original PR reported 44 CPU test passes; the same four-file scope currently collects and passes 22 tests. The historical count is not reproduced.

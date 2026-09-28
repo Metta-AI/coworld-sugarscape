@@ -65,7 +65,7 @@
     "original/shared_volume/sugar-map.txt": "cd9b4661c8813d3e268995676d5ba84394ee813986adb0d657dc9be4a1fab675"
   },
   "measurement_auditor": {
-    "repository": "https://github.com/Metta-AI/sugarscape",
+    "repository": "https://github.com/softmax-universe/sugarscape",
     "revision": "363175bde20af32cda1530af8f95bf7809f57c43",
     "files": [
       "audit_snapshot.py",

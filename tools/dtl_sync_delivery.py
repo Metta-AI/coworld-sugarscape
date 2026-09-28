@@ -224,7 +224,7 @@ def render_pr_body(report: Report | None, state: PublicationState, run_url: str,
     return human + "\n\n" + block
 
 
-ALERT_USER_AGENT = "DiscordBot (https://github.com/Metta-AI/coworld-sugarscape, 1.0) dtl-sync"
+ALERT_USER_AGENT = "DiscordBot (https://github.com/softmax-universe/coworld-sugarscape, 1.0) dtl-sync"
 
 
 class NoAlertRedirect(HTTPRedirectHandler):

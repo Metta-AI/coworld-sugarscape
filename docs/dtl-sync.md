@@ -108,7 +108,7 @@ mkdir -p build/dtl-sync
   --checkout "$PWD" \
   --scratch build/dtl-sync/detect-123-1 \
   --output build/dtl-sync/meta.json \
-  --repository Metta-AI/coworld-sugarscape \
+  --repository softmax-universe/coworld-sugarscape \
   --app-login 'YOUR-SYNC-APP[bot]' \
   --run-id 123 --run-attempt 1
 ```
