@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import signal
 import subprocess
 import sys
@@ -70,6 +71,8 @@ def qualify(root: Path, game_image: str, player_image: str) -> None:
         docker(
             "run",
             "--detach",
+            "--user",
+            f"{os.getuid()}:{os.getgid()}",
             "--name",
             container,
             "--network",
@@ -179,6 +182,8 @@ def qualify(root: Path, game_image: str, player_image: str) -> None:
         docker(
             "run",
             "--detach",
+            "--user",
+            f"{os.getuid()}:{os.getgid()}",
             "--name",
             oracle_name,
             "--network",
