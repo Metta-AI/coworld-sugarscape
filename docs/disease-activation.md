@@ -91,4 +91,5 @@ The invalid-token probe returned 403, and invalid configuration exited 1 without
 The first attempt passed game and image checks but failed final packaging because root-owned replay files were mode 0600.
 Its original failure and recovered artifacts remain separate.
 The corrected owning-user attempt completed publication without that failure.
-The fixture and workflow now exercise the ordinary path instead of treating an engine import as complete image acceptance.
+The fixture and maintained harness exercise the ordinary path.
+CI’s existing import smoke check remains separate; its workflow is owned by the active native-simulator change.

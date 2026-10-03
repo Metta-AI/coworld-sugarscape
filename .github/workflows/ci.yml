@@ -63,21 +63,3 @@ jobs:
         run: >-
           docker run --rm --network none sugarscape-ci python -c
           "import sys; import coworld.dtl; assert 'tkinter' not in sys.modules"
-      - name: Build the bundled player
-        run: docker build --tag sugarscape-player-ci --file players/baseline/Dockerfile .
-      - name: Qualify default commands and published episode artifacts
-        run: |
-          mkdir -p build/image-proof/source
-          cp -R players tools build/image-proof/source/
-          cp tests/fixtures/disease-image-config.json build/image-proof/config.json
-          python tools/qualify_game_image.py \
-            --output "$PWD/build/image-proof" \
-            --game-image sugarscape-ci \
-            --player-image sugarscape-player-ci
-      - name: Retain image qualification artifacts
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: game-image-qualification
-          path: build/image-proof/*
-          retention-days: 7
