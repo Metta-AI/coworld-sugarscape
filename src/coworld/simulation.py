@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import random
-from typing import Sequence
+from collections.abc import Sequence
+from dataclasses import dataclass
 
 from . import dtl
+from .disease import Disease, ZombieVirus
 from .instrumentation import EpisodeInstrumentation, timed_subphase
 from .measurement import RollingMeasurements
 from .ruleset import CompiledRuleset
@@ -46,10 +47,12 @@ class CoworldSugarscape(dtl.Sugarscape):
         self.measurements = measurements
         self.replay_writer = None
         self.world_features = WorldFeatureCache()
-        self.seat_manager = SeatManager(len(compiled_rulesets), compiled_rulesets, trait_ranges)
+        self.seat_manager = SeatManager(
+            len(compiled_rulesets), compiled_rulesets, trait_ranges
+        )
         # This is the single seed point for the process-global DTL RNG stream.
         random.seed(configuration["seed"])
-        with dtl.agent_class(RulesetAgent):
+        with dtl.agent_class(RulesetAgent), dtl.disease_classes(Disease, ZombieVirus):
             super().__init__(configuration)
         self._environment_timestep = self.environment.doTimestep
         self.environment.doTimestep = self._timed_environment_timestep
@@ -64,7 +67,10 @@ class CoworldSugarscape(dtl.Sugarscape):
         self.world_features.mean_wealth = self.runtimeStats["meanWealth"]
         started = self.instrumentation.begin_tick(next_tick)
         try:
-            with dtl.agent_class(RulesetAgent):
+            with (
+                dtl.agent_class(RulesetAgent),
+                dtl.disease_classes(Disease, ZombieVirus),
+            ):
                 super().doTimestep()
             if self.measurements is not None:
                 with timed_subphase(self.instrumentation, "measurement"):
@@ -85,10 +91,12 @@ class CoworldSugarscape(dtl.Sugarscape):
     def replaceDeadAgents(self) -> None:
         """Queue the first K dead seats before DTL creates replacements."""
 
-        replacement_count = max(0, self.configuration["agentReplacements"] - len(self.agents))
+        replacement_count = max(
+            0, self.configuration["agentReplacements"] - len(self.agents)
+        )
         if replacement_count:
             self.seat_manager.queue_replacements(self.deadAgents, replacement_count)
-        with dtl.agent_class(RulesetAgent):
+        with dtl.agent_class(RulesetAgent), dtl.disease_classes(Disease, ZombieVirus):
             super().replaceDeadAgents()
 
     def updateRuntimeStats(self) -> None:

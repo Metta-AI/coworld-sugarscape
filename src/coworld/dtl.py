@@ -19,10 +19,10 @@ Bump the pin with ``git -C src/sugarscape checkout <commit>`` followed by
 
 from __future__ import annotations
 
+import sys
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-import sys
-from typing import Iterator
 
 DTL_ROOT = Path(__file__).resolve().parents[1] / "sugarscape"
 
@@ -35,8 +35,10 @@ if not (DTL_ROOT / "sugarscape.py").is_file():
 if str(DTL_ROOT) not in sys.path:
     sys.path.append(str(DTL_ROOT))
 
-import agent as agent_module  # noqa: E402
-import sugarscape as sugarscape_module  # noqa: E402
+import agent as agent_module
+import condition as condition_module
+
+import sugarscape as sugarscape_module
 
 Agent = agent_module.Agent
 Sugarscape = sugarscape_module.Sugarscape
@@ -54,3 +56,17 @@ def agent_class(cls: type[Agent]) -> Iterator[None]:
         yield
     finally:
         agent_module.Agent = previous
+
+
+@contextmanager
+def disease_classes(
+    disease: type[condition_module.Disease], zombie: type[condition_module.ZombieVirus]
+) -> Iterator[None]:
+    """Scope the two upstream infection factories to the Coworld lifecycle."""
+
+    previous = condition_module.Disease, condition_module.ZombieVirus
+    condition_module.Disease, condition_module.ZombieVirus = disease, zombie
+    try:
+        yield
+    finally:
+        condition_module.Disease, condition_module.ZombieVirus = previous
