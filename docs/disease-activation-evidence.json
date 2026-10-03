@@ -1,0 +1,347 @@
+{
+  "native_comparison": {
+    "all_input_source_files_match_published_pins": true,
+    "source_files": 75,
+    "source_pins": {
+      "reference": "82cc74246c3f58628072f878cdc551d335aa0ae8",
+      "candidate": "c90e717f67042daf276f60db4ebdafc6732dc4d1",
+      "upstream": "d0b0e95ef58f191e32d832a661831f4314df2d64"
+    },
+    "six_raw_replays_results_initial_state_controls_verified": true,
+    "rows": [
+      {
+        "seed": 114126312,
+        "arm": "reference",
+        "repeat": 1,
+        "ticks": 109,
+        "score": 0.0,
+        "replay_sha256": "1c6c2268b74f38c9c21468d28793a03fc6ed450262a0501b22c5d1e01abe8d27"
+      },
+      {
+        "seed": 114126312,
+        "arm": "candidate",
+        "repeat": 1,
+        "ticks": 97,
+        "score": 0.0,
+        "replay_sha256": "15c17fe776f132b941cbadbca0f42d1d948f8c778aba2e528f04f3bb357b150f"
+      },
+      {
+        "seed": 114126312,
+        "arm": "candidate",
+        "repeat": 2,
+        "ticks": 97,
+        "score": 0.0,
+        "replay_sha256": "15c17fe776f132b941cbadbca0f42d1d948f8c778aba2e528f04f3bb357b150f"
+      },
+      {
+        "seed": 114126317,
+        "arm": "reference",
+        "repeat": 1,
+        "ticks": 96,
+        "score": 0.0,
+        "replay_sha256": "443c48f4ee87c4a28bc7a4ea301c99ec344a2c0ddc28472e480c1b45873561c1"
+      },
+      {
+        "seed": 114126317,
+        "arm": "candidate",
+        "repeat": 1,
+        "ticks": 144,
+        "score": 0.0,
+        "replay_sha256": "a5acd1f24eeb0f80f3377753d915302c3de215a052adac3b7394a252980b0171"
+      },
+      {
+        "seed": 114126317,
+        "arm": "candidate",
+        "repeat": 2,
+        "ticks": 144,
+        "score": 0.0,
+        "replay_sha256": "a5acd1f24eeb0f80f3377753d915302c3de215a052adac3b7394a252980b0171"
+      }
+    ],
+    "result_archive_sha256": "6f300fb665650eb69571ae22dd38ccd09ff00931000e507280620417eb40e6a7",
+    "result_full_get_verified": true,
+    "legacy_attempt_manifest_correction": "Original attempt.source_sha256/runner_sha256 inherited an unused old helper source. Input archive source-pins.json is authoritative and every consumed runtime/target/upstream byte matches82cc/c90/D0. Preserve original attempt unchanged; future emitter corrected. This is metadata error, not a different source or new experiment.",
+    "original_attempt_sha256": "52fa8a5234dd96f63781175aef56289b074a193289ca5a0e59f4232724e6bff4",
+    "policy_improvement_decision": "not established: both reference/fixed scores0, all extinct",
+    "promotion_authorized": false
+  },
+  "ordinary_image_qualification": {
+    "attempt": "102c78152b69481fb8686eaa4f553598",
+    "readiness": {
+      "task": 17,
+      "host": "titan",
+      "source_pins": {
+        "base": "82cc74246c3f58628072f878cdc551d335aa0ae8",
+        "candidate": "dc9ea5da3ddb941172215ac267f03b6972f834c3",
+        "upstream": "d0b0e95ef58f191e32d832a661831f4314df2d64"
+      },
+      "input_sha256": "accf8b66eaffe0eaf0decfeaeda0bd5a83ab4ffcd25f7669b37853d072c29af3",
+      "worker_sha256": "fec605c527adf5e18f9c15332cbb6845e432536a1c00991bf9e5d91d4d7c1528",
+      "prefix": "relh/october-20261002-engines-policy-cleanup-17/current-game-images/102c78152b69481fb8686eaa4f553598",
+      "resources": {
+        "gpu": 0,
+        "cpu_limit": 1,
+        "builder_memory_gib": 1,
+        "game_and_player_memory_mib": 640,
+        "finite_outer_seconds": 1800
+      },
+      "local_tests": "28 focused PASS; Ruff format/lint PASS; 4 harness + 7 worker lifecycle/image reuse controls PASS",
+      "reused_image_source": "7d751b155d1b63f327b386917d8383710e289dc9",
+      "runtime_source_unchanged": true,
+      "images": "current repo Dockerfiles Python3.13.5/websockets17.0.1; no copied env",
+      "decision": "default commands/token+config refusal/full game oracle/export+full GET/reload exact images; no policy improvement or hosted adoption claim",
+      "slurm": "none; future Nice2147483645/Priority1",
+      "paid_cost_usd": 0
+    },
+    "receipt": {
+      "exit_code": 0,
+      "elapsed_seconds": 106.51051509700483,
+      "source_pins": {
+        "base": "82cc74246c3f58628072f878cdc551d335aa0ae8",
+        "candidate": "dc9ea5da3ddb941172215ac267f03b6972f834c3",
+        "upstream": "d0b0e95ef58f191e32d832a661831f4314df2d64"
+      },
+      "cpu_limit": 1,
+      "gpu": 0,
+      "host": "titan",
+      "owned_builder_removed": false,
+      "scratch_retained": true
+    },
+    "acceptance": {
+      "default_game_and_player_commands": true,
+      "invalid_token_status": 403,
+      "invalid_config_refused_without_results": true,
+      "oracle": {
+        "canonical_results_equal": true,
+        "all_gameplay_frames_equal": true,
+        "ticks": 144,
+        "scores": [
+          0.0
+        ],
+        "python": "3.13.5 (main, Jul 22 2025, 01:46:07) [GCC 12.2.0]",
+        "replay_sha256": "cd11dc86c1c8b55f21585f9e9c30a64fb5120480a1078969cc61c3d776e0c447"
+      }
+    },
+    "image_publication": {
+      "ids": {
+        "game": "sha256:3fad950570e5ee7ad9fb654db500d1e8fbb81446aad47037a32a4d6e95e47c6f",
+        "player": "sha256:262f26b06d8c4b421932960ea3dd830686c686b3badc4b327200dd4d78121bae"
+      },
+      "tags": {
+        "game": "relh-53-disease-game:102c78152b69481fb8686eaa4f553598",
+        "player": "relh-53-disease-player:102c78152b69481fb8686eaa4f553598"
+      },
+      "archive_sha256": "fd364b53ebe21b720132d835eabdb4bbae3a8691c8e20902745dbf702d2053c4",
+      "archive_bytes": 48380416,
+      "s3_key": "relh/october-20261002-engines-policy-cleanup-17/current-game-images/102c78152b69481fb8686eaa4f553598/images.tar",
+      "full_get_equal": true,
+      "removed_only_owned_tags_after_safe_upload": true,
+      "reloaded_identity_and_native_oracle_equal": true
+    },
+    "result_archive_sha256": "8013d87dd3c3e8a754192f6208e37ba46ac1c047d506daea7e27a8b8d3e04c44",
+    "all4container_uid_gid": "1000:1000",
+    "full_get_verified": true,
+    "runtime_and_image_files_unchanged_from_7d_source": true,
+    "first_failed_attempt": {
+      "id": "63bfca52240d49868ffb724ac6301274",
+      "controller_exit": 1,
+      "cause": "root default user wrote0600 replay; final archive PermissionError",
+      "recovered_existing_evidence_sha256": "f7e58f8c94d0de2b8670be163173d568505e5151cb839048c2dcc8fbec55ebbc",
+      "game_and_image_checks_had_passed": true,
+      "root_cause_fixed": "allqualificationcontainersrunasownerUID:GID"
+    }
+  },
+  "completion_scope": "engine lifecycle correction only; no hosted adoption or per-league policy improvement",
+  "local_controls": {
+    "harness": {
+      "source_sha256": "fc6a53c0662f4a7e004b407d10575b5157e1b2c0d2f7c8f9037ae405140ea235",
+      "rows": [
+        {
+          "case": "success",
+          "exit": 0,
+          "all_owned_containers_stopped_waited_removed_before_network_cleanup": true,
+          "fixture_not_gameplay": true,
+          "events": [
+            "NETWORK_create",
+            "START_game",
+            "START_player",
+            "JOIN_player",
+            "JOIN_game",
+            "START_oracle",
+            "JOIN_oracle",
+            "START_invalid",
+            "JOIN_invalid",
+            "STOP_game",
+            "JOIN_game",
+            "REMOVE_game",
+            "STOP_player",
+            "JOIN_player",
+            "REMOVE_player",
+            "STOP_oracle",
+            "JOIN_oracle",
+            "REMOVE_oracle",
+            "STOP_invalid",
+            "JOIN_invalid",
+            "REMOVE_invalid",
+            "NETWORK_rm"
+          ]
+        },
+        {
+          "case": "failure",
+          "exit": 1,
+          "all_owned_containers_stopped_waited_removed_before_network_cleanup": true,
+          "fixture_not_gameplay": true,
+          "events": [
+            "NETWORK_create",
+            "START_game",
+            "STOP_game",
+            "JOIN_game",
+            "REMOVE_game",
+            "NETWORK_rm"
+          ]
+        },
+        {
+          "case": "timeout",
+          "exit": 1,
+          "all_owned_containers_stopped_waited_removed_before_network_cleanup": true,
+          "fixture_not_gameplay": true,
+          "events": [
+            "NETWORK_create",
+            "START_game",
+            "START_player",
+            "STOP_game",
+            "JOIN_game",
+            "REMOVE_game",
+            "STOP_player",
+            "JOIN_player",
+            "JOIN_player",
+            "REMOVE_player",
+            "NETWORK_rm"
+          ]
+        },
+        {
+          "case": "signal",
+          "exit": 143,
+          "all_owned_containers_stopped_waited_removed_before_network_cleanup": true,
+          "fixture_not_gameplay": true,
+          "events": [
+            "NETWORK_create",
+            "START_game",
+            "START_player",
+            "STOP_game",
+            "JOIN_game",
+            "REMOVE_game",
+            "STOP_player",
+            "JOIN_player",
+            "JOIN_player",
+            "REMOVE_player",
+            "NETWORK_rm"
+          ]
+        }
+      ]
+    },
+    "worker": {
+      "source_sha256": "fec605c527adf5e18f9c15332cbb6845e432536a1c00991bf9e5d91d4d7c1528",
+      "cases": [
+        {
+          "case": "success",
+          "exit": 0,
+          "owned_step_joined_before_builder_stop_and_final_upload": true,
+          "partial_archive_retained": true,
+          "events": [
+            "STEP_START",
+            "STEP_JOINED",
+            "STEP_START",
+            "STEP_JOINED",
+            "RELOAD_JOINED",
+            "BUILDER_STOP",
+            "BUILDER_REMOVED",
+            "FINAL_UPLOAD"
+          ],
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "case": "failure",
+          "exit": 1,
+          "owned_step_joined_before_builder_stop_and_final_upload": true,
+          "partial_archive_retained": true,
+          "events": [
+            "STEP_START",
+            "STEP_JOINED",
+            "BUILDER_STOP",
+            "BUILDER_REMOVED",
+            "FINAL_UPLOAD"
+          ],
+          "stderr_sha256": "85502752ed42aead0eacf578fd03dc56ba975e23b8ad84353782cab6f1781975"
+        },
+        {
+          "case": "timeout",
+          "exit": 1,
+          "owned_step_joined_before_builder_stop_and_final_upload": true,
+          "partial_archive_retained": true,
+          "events": [
+            "STEP_START",
+            "STEP_JOINED",
+            "BUILDER_STOP",
+            "BUILDER_REMOVED",
+            "FINAL_UPLOAD"
+          ],
+          "stderr_sha256": "c0bdf397335b8bd94cc3d2d2d2a053c948c191100f0459f86b46e8289552405e"
+        },
+        {
+          "case": "signal",
+          "exit": 143,
+          "owned_step_joined_before_builder_stop_and_final_upload": true,
+          "partial_archive_retained": true,
+          "events": [
+            "STEP_START",
+            "STEP_JOINED",
+            "BUILDER_STOP",
+            "BUILDER_REMOVED",
+            "FINAL_UPLOAD"
+          ],
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "case": "upload-failure",
+          "exit": 1,
+          "owned_step_joined_before_builder_stop_and_final_upload": true,
+          "partial_archive_retained": true,
+          "events": [
+            "STEP_START",
+            "STEP_JOINED",
+            "STEP_START",
+            "STEP_JOINED",
+            "RELOAD_JOINED",
+            "BUILDER_STOP",
+            "BUILDER_REMOVED",
+            "FINAL_UPLOAD"
+          ],
+          "stderr_sha256": "10caf3cffba86367963f1f10663802b0ce4df7536cb97f6df43d8d2e632b7c5d"
+        },
+        {
+          "case": "reuse-valid",
+          "exit": 0,
+          "owned_step_joined_before_builder_stop_and_final_upload": true,
+          "partial_archive_retained": true,
+          "events": [
+            "RELOAD_JOINED",
+            "FINAL_UPLOAD"
+          ],
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "case": "reuse-invalid",
+          "exit": 1,
+          "owned_step_joined_before_builder_stop_and_final_upload": true,
+          "partial_archive_retained": true,
+          "events": [
+            "FINAL_UPLOAD"
+          ],
+          "stderr_sha256": "3b27a8697133ca416a862b16c181dfa2b5a79912041b1c4aa37364a17144fe84"
+        }
+      ],
+      "scope": "real processes/signals; mocked Docker/S3, not real image acceptance"
+    }
+  }
+}
