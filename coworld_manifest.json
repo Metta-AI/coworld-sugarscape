@@ -4,7 +4,7 @@
   "tags": ["agent-based-model", "economics", "generative-social-science"],
   "game": {
     "name": "sugarscape",
-    "description": "Grow a target social distribution by submitting one declarative SugarLang ruleset.",
+    "description": "Explore Sugarscape with declarative rulesets and a collection of native paper-model research variants.",
     "owner": "Metta-AI",
     "config_schema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",

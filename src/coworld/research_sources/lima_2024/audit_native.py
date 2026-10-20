@@ -81,7 +81,9 @@ left = Counter(
 )
 assert not left - entered
 active = entered - left
-assert active.total() == 1
+# The original checker admits one agent only when its native slot is empty.
+# Between a return and its next poll, zero active transferred agents is valid.
+assert active.total() <= 1
 locations.update(queued)
 locations.update(active)
 assert locations == initial, {

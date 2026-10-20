@@ -22,6 +22,9 @@ Its logical frame indices 1–1,000 correspond to native times 0–999.
 The native kernels retain fixed seed 42; the episode seed is not substituted into them.
 
 Lima preserves original model, AgentSpeak, API and router source bytes.
+Its measurement auditor accepts zero or one active transferred JaCaMo agent.
+The original single-slot checker can be empty between a return and its next poll.
+Full identity conservation and native log/SQL reconstruction remain required; population is never forced.
 Its native models keep separate clocks and unseeded random streams; the episode seed does not replace them.
 The native services share one game container instead of the paper's multi-container deployment.
 API and SQL bind to private loopback; the game maps their original hostnames locally.
