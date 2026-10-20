@@ -54,7 +54,7 @@ jobs:
   image-smoke:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -91,3 +91,7 @@ jobs:
         run: >-
           docker run --rm --network none -v "$PWD/tests:/qualification:ro"
           sugarscape-ci python /qualification/verify_quera_system.py /tmp/quera-proof
+      - name: Qualify the complete native two-NetLogo and JaCaMo architecture
+        run: >-
+          docker run --rm --network none -v "$PWD/tests:/qualification:ro"
+          sugarscape-ci python /qualification/verify_lima_system.py /tmp/lima-proof

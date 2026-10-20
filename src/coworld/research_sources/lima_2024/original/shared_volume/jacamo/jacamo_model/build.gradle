@@ -1,0 +1,86 @@
+/*
+   Application Hello World
+
+   Gradle build file for JaCaMo Application
+*/
+
+defaultTasks 'run'
+
+apply plugin: 'java'
+apply plugin: 'eclipse'
+
+version '1.0'
+group   'org.jacamo'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(15)
+    }
+}
+
+repositories {
+    mavenCentral()
+
+    //maven { url "http://jacamo.sourceforge.net/maven2" }
+    maven { url "https://raw.github.com/jacamo-lang/mvn-repo/master" }
+    maven { url "https://repo.gradle.org/gradle/libs-releases-local" }
+    //maven { url "https://jade.tilab.com/maven/" }
+
+    flatDir {
+       dirs 'lib'
+    }
+}
+
+dependencies {
+    // compile group: 'org.jacamo',     name: 'jacamo' ,   version: '1.0'
+    // compile name: 'search'
+    // compile 'org.twitter4j:twitter4j-async:4.0.7'
+    // compile 'org.twitter4j:twitter4j-stream:4.0.7'
+
+
+    // https://mvnrepository.com/artifact/org.twitter4j/twitter4j-async
+    implementation group: 'org.twitter4j', name: 'twitter4j-async', version: '4.0.7'
+
+    // https://mvnrepository.com/artifact/org.twitter4j/twitter4j-stream
+    implementation group: 'org.twitter4j', name: 'twitter4j-stream', version: '4.0.7'
+
+
+    implementation group: 'org.jacamo', name: 'jacamo', version: '1.0'
+
+    implementation group: 'search', name: 'search'
+
+    //implementation group: 'org.jacamo', name: 'jacamo', version: '1.0'
+    implementation group: 'com.googlecode.json-simple', name: 'json-simple', version: '1.1.1'
+    implementation group: 'org.apache.httpcomponents', name: 'httpclient', version: '4.5.13'
+}
+
+sourceSets {
+    main {
+        java {
+            srcDir 'src/env'
+            srcDir 'src/agt'
+            srcDir 'src/org'
+            srcDir 'src/int'
+            srcDir 'src/java'
+        }
+        resources {
+            srcDir 'src/resources'
+        }
+    }
+}
+
+task run (type: JavaExec, dependsOn: 'classes') {
+    description 'runs the application'
+    group ' JaCaMo'
+    doFirst {
+        mkdir 'log'
+    }
+    main = 'jacamo.infra.JaCaMoLauncher'
+    args 'gold_miners.jcm'
+    classpath sourceSets.main.runtimeClasspath
+}
+
+clean {
+    delete 'bin'
+    delete 'build'
+}

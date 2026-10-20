@@ -102,6 +102,7 @@ class ResearchSpec(Parameters):
         "oremland_2014",
         "thaler_2019",
         "quera_2025",
+        "lima_2024",
         "richmond_2023",
     ]
     mode: Literal["reference", "population-calibration"] = "reference"
@@ -133,9 +134,11 @@ PARAMETER_MODELS = {
     "oremland_2014": OremlandParameters,
     "thaler_2019": ThalerParameters,
     "quera_2025": QueraParameters,
+    "lima_2024": Parameters,
     "richmond_2023": Parameters,
 }
 WORKER_TIMEOUT_SECONDS = {study: 600 for study in PARAMETER_MODELS}
+WORKER_TIMEOUT_SECONDS["lima_2024"] = 3300
 WORKER_TIMEOUT_SECONDS["richmond_2023"] = 1800
 
 PAPER_HORIZONS = {
@@ -176,10 +179,14 @@ def resolve_config(
         raise ValueError(
             "the original 84-case GPU benchmark requires its fixed 100/3-step condition horizons"
         )
+    if config.research.study == "lima_2024" and config.timesteps != 1000:
+        raise ValueError(
+            "the native Lima architecture requires both original 1000-step experiments"
+        )
     if config.research.study == "thaler_2019":
         if config.timesteps != 1000:
             raise ValueError(
-                "native Haskell observers require the original1000-observation invocation"
+                "native Haskell observers require the original 1000-observation invocation"
             )
         if parameters.implementation == "seq" and parameters.capabilities != 1:
             raise ValueError("sequential Haskell supports exactly one capability")
@@ -425,6 +432,10 @@ def run_native_episode(
         from .richmond_research import run
 
         return run(resolved, parameters, source_entry(spec.study), SOURCE_ROOT)
+    if spec.study == "lima_2024":
+        from .lima_research import run
+
+        return run(resolved, parameters, source_entry(spec.study))
     if spec.study == "thaler_2019":
         from .thaler_research import run
 

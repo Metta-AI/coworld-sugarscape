@@ -1,0 +1,2 @@
+FROM gradle:7.4.2-jdk18
+WORKDIR /home/gradle/project
