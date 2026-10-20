@@ -44,7 +44,7 @@ def test_manifest_config_and_results_schemas_cover_platform_traps() -> None:
     }
     assert required_results <= set(results_schema["required"])
     assert results_schema["properties"]["score_method"] == {
-        "enum": ["w1-hyperbolic/1", "wellness-sum/1"]
+        "enum": ["w1-hyperbolic/1", "wellness-sum/1", "research-reference/1", "research-population-calibration/1"]
     }
 
 
@@ -56,7 +56,17 @@ def test_variants_and_certification_are_token_free_and_fixture_lengths_match() -
         "duo-ladder",
         "duel-4seat",
         "commonwealth",
-    }
+        "paper-mcculloch-1-1",
+        "paper-mcculloch-2-10",
+        "paper-mcculloch-4-7",
+        "calibrate-mcculloch",
+        "paper-carrella",
+        "paper-dogan-slow",
+        "paper-dogan-balanced",
+        "paper-dogan-fast",
+        "paper-izquierdo-return-5",
+        "paper-izquierdo-return-6",
+    } | {f"paper-brearcliffe-{kind}-{a}-{b}" for kind in ["released-code", "paper-table"] for a in ["rule-m", "ec", "q-learning", "sarsa"] for b in ["rule-m", "ec", "q-learning", "sarsa"]} | {f"paper-oremland-phase-{phase}-{treatment}" for phase in [0,4] for treatment in ["clipped", "unclipped"]}
     for variant in manifest["variants"]:
         assert "tokens" not in variant["game_config"]
     certification = manifest["certification"]

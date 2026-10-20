@@ -43,7 +43,35 @@
         "trait_ranges": {"type": "object"},
         "ruleset_limits": {"type": "object"},
         "scenario_pool": {"type": "array", "minItems": 1},
-        "player_connect_timeout_seconds": {"type": "number", "minimum": 0, "default": 180}
+        "player_connect_timeout_seconds": {"type": "number", "minimum": 0, "default": 180},
+        "research": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "study",
+            "mode",
+            "parameters"
+          ],
+          "properties": {
+            "study": {
+              "enum": ["mcculloch_2022", "carrella_2021", "izquierdo_2009", "dogan_2026", "brearcliffe_2020", "oremland_2014"]
+            },
+            "mode": {
+              "enum": [
+                "reference",
+                "population-calibration"
+              ]
+            },
+            "parameters": {
+              "type": "object"
+            },
+            "target_population": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2500
+            }
+          }
+        }
       }
     },
     "results_schema": {
@@ -64,7 +92,7 @@
         "rulesets_identical"
       ],
       "properties": {
-        "score_method": {"enum": ["w1-hyperbolic/1", "wellness-sum/1"]},
+        "score_method": {"enum": ["w1-hyperbolic/1", "wellness-sum/1", "research-reference/1", "research-population-calibration/1"]},
         "scores": {"type": "array", "minItems": 1, "maxItems": 4, "items": {"type": "number", "minimum": 0}},
         "details": {"type": "array", "minItems": 1, "maxItems": 4, "items": {"type": "object"}},
         "histograms": {"type": "object"},
@@ -72,7 +100,7 @@
         "score.match_mean": {"type": "number", "minimum": 0},
         "score.match_min": {"type": "number", "minimum": 0},
         "result.population_final": {"type": "integer", "minimum": 0},
-        "result.gini_final": {"type": "number", "minimum": 0, "maximum": 1},
+        "result.gini_final": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
         "result.extinct": {"type": "boolean"},
         "rulesets_identical": {"type": "boolean"},
         "result.timesteps_completed": {"type": "integer", "minimum": 0},
@@ -6846,6 +6874,1862 @@
         "environmentSugarProductionPollutionFactor": 0,
         "environmentSpiceConsumptionPollutionFactor": 0,
         "environmentSpiceProductionPollutionFactor": 0
+      }
+    },
+    {
+      "id": "paper-mcculloch-1-1",
+      "name": "McCulloch reference (1, 1)",
+      "description": "Fixed released-model semantics and prospective seed; one100-transition run, not the full paper ensemble. Noncompetitive score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 100,
+        "research": {
+          "study": "mcculloch_2022",
+          "mode": "reference",
+          "parameters": {
+            "max_metabolism": 1,
+            "max_vision": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-mcculloch-2-10",
+      "name": "McCulloch reference (2, 10)",
+      "description": "Fixed released-model semantics and prospective seed; one100-transition run, not the full paper ensemble. Noncompetitive score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 100,
+        "research": {
+          "study": "mcculloch_2022",
+          "mode": "reference",
+          "parameters": {
+            "max_metabolism": 2,
+            "max_vision": 10
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-mcculloch-4-7",
+      "name": "McCulloch reference (4, 7)",
+      "description": "Fixed released-model semantics and prospective seed; one100-transition run, not the full paper ensemble. Noncompetitive score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 100,
+        "research": {
+          "study": "mcculloch_2022",
+          "mode": "reference",
+          "parameters": {
+            "max_metabolism": 4,
+            "max_vision": 7
+          }
+        }
+      }
+    },
+    {
+      "id": "calibrate-mcculloch",
+      "name": "McCulloch population calibration",
+      "description": "Select maximum metabolism1–4 and vision1–16 before a100-transition native run. Score1/(1+absolute final-population error against target30). Coworld adaptation of the calibration task.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 100,
+        "research": {
+          "study": "mcculloch_2022",
+          "mode": "population-calibration",
+          "parameters": {
+            "max_metabolism": 4,
+            "max_vision": 7
+          },
+          "target_population": 30
+        }
+      }
+    },
+    {
+      "id": "paper-carrella",
+      "name": "Carrella reference model",
+      "description": "Five-hundred-transition study-owned reconstruction. Python stochastic stream differs from NetLogo. This one parameter case is not the full estimator experiment. Noncompetitive score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 500,
+        "research": {
+          "study": "carrella_2021",
+          "mode": "reference",
+          "parameters": {
+            "population": 50,
+            "mutation": 0.05,
+            "maximum_sugar": 40,
+            "maximum_spice": 40,
+            "reproduction": 50.0
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-izquierdo-return-5",
+      "name": "Izquierdo 5-step return witness",
+      "description": "Controlled positive-probability return path with250agents. This is a constructive proof witness, not an unbiased stochastic sample. Noncompetitive score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 5,
+        "research": {
+          "study": "izquierdo_2009",
+          "mode": "reference",
+          "parameters": {
+            "period": 5
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-izquierdo-return-6",
+      "name": "Izquierdo 6-step return witness",
+      "description": "Controlled positive-probability return path with250agents. This is a constructive proof witness, not an unbiased stochastic sample. Noncompetitive score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 6,
+        "research": {
+          "study": "izquierdo_2009",
+          "mode": "reference",
+          "parameters": {
+            "period": 6
+          }
+        }
+      }
+    }
+  ,
+    {
+      "id": "paper-dogan-slow",
+      "name": "Dogan slow automation reference",
+      "description": "Original working-paper tax model, baseline policy, original seed42 threshold calibration and300steps. Retains original levy semantics. One condition does not reproduce the full campaign; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 300,
+        "research": {
+          "study": "dogan_2026",
+          "mode": "reference",
+          "parameters": {
+            "speed": "slow",
+            "policy": "baseline"
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-dogan-balanced",
+      "name": "Dogan balanced automation reference",
+      "description": "Original working-paper tax model, baseline policy, original seed42 threshold calibration and300steps. Retains original levy semantics. One condition does not reproduce the full campaign; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 300,
+        "research": {
+          "study": "dogan_2026",
+          "mode": "reference",
+          "parameters": {
+            "speed": "balanced",
+            "policy": "baseline"
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-dogan-fast",
+      "name": "Dogan fast automation reference",
+      "description": "Original working-paper tax model, baseline policy, original seed42 threshold calibration and300steps. Retains original levy semantics. One condition does not reproduce the full campaign; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 300,
+        "research": {
+          "study": "dogan_2026",
+          "mode": "reference",
+          "parameters": {
+            "speed": "fast",
+            "policy": "baseline"
+          }
+        }
+      }
+    }
+  ,
+    {
+      "id": "paper-brearcliffe-released-code-rule-m-rule-m",
+      "name": "Brearcliffe Rule M / Rule M (released-code)",
+      "description": "One20000-transition NetLogo6.1.1 reference run with qualified measurement randomness. Original400agents perbreed and both documented hyperparameter interpretations. Aggregate replay only; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 20000,
+        "research": {
+          "study": "brearcliffe_2020",
+          "mode": "reference",
+          "parameters": {
+            "group_a": "Rule M",
+            "group_b": "Rule M",
+            "interpretation": "released-code"
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-brearcliffe-released-code-rule-m-ec",
+      "name": "Brearcliffe Rule M / EC (released-code)",
+      "description": "One20000-transition NetLogo6.1.1 reference run with qualified measurement randomness. Original400agents perbreed and both documented hyperparameter interpretations. Aggregate replay only; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 20000,
+        "research": {
+          "study": "brearcliffe_2020",
+          "mode": "reference",
+          "parameters": {
+            "group_a": "Rule M",
+            "group_b": "EC",
+            "interpretation": "released-code"
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-brearcliffe-released-code-rule-m-q-learning",
+      "name": "Brearcliffe Rule M / Q-Learning (released-code)",
+      "description": "One20000-transition NetLogo6.1.1 reference run with qualified measurement randomness. Original400agents perbreed and both documented hyperparameter interpretations. Aggregate replay only; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 20000,
+        "research": {
+          "study": "brearcliffe_2020",
+          "mode": "reference",
+          "parameters": {
+            "group_a": "Rule M",
+            "group_b": "Q-Learning",
+            "interpretation": "released-code"
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-brearcliffe-released-code-rule-m-sarsa",
+      "name": "Brearcliffe Rule M / SARSA (released-code)",
+      "description": "One20000-transition NetLogo6.1.1 reference run with qualified measurement randomness. Original400agents perbreed and both documented hyperparameter interpretations. Aggregate replay only; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 20000,
+        "research": {
+          "study": "brearcliffe_2020",
+          "mode": "reference",
+          "parameters": {
+            "group_a": "Rule M",
+            "group_b": "SARSA",
+            "interpretation": "released-code"
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-brearcliffe-released-code-ec-rule-m",
+      "name": "Brearcliffe EC / Rule M (released-code)",
+      "description": "One20000-transition NetLogo6.1.1 reference run with qualified measurement randomness. Original400agents perbreed and both documented hyperparameter interpretations. Aggregate replay only; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 20000,
+        "research": {
+          "study": "brearcliffe_2020",
+          "mode": "reference",
+          "parameters": {
+            "group_a": "EC",
+            "group_b": "Rule M",
+            "interpretation": "released-code"
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-brearcliffe-released-code-ec-ec",
+      "name": "Brearcliffe EC / EC (released-code)",
+      "description": "One20000-transition NetLogo6.1.1 reference run with qualified measurement randomness. Original400agents perbreed and both documented hyperparameter interpretations. Aggregate replay only; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 20000,
+        "research": {
+          "study": "brearcliffe_2020",
+          "mode": "reference",
+          "parameters": {
+            "group_a": "EC",
+            "group_b": "EC",
+            "interpretation": "released-code"
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-brearcliffe-released-code-ec-q-learning",
+      "name": "Brearcliffe EC / Q-Learning (released-code)",
+      "description": "One20000-transition NetLogo6.1.1 reference run with qualified measurement randomness. Original400agents perbreed and both documented hyperparameter interpretations. Aggregate replay only; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 20000,
+        "research": {
+          "study": "brearcliffe_2020",
+          "mode": "reference",
+          "parameters": {
+            "group_a": "EC",
+            "group_b": "Q-Learning",
+            "interpretation": "released-code"
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-brearcliffe-released-code-ec-sarsa",
+      "name": "Brearcliffe EC / SARSA (released-code)",
+      "description": "One20000-transition NetLogo6.1.1 reference run with qualified measurement randomness. Original400agents perbreed and both documented hyperparameter interpretations. Aggregate replay only; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 20000,
+        "research": {
+          "study": "brearcliffe_2020",
+          "mode": "reference",
+          "parameters": {
+            "group_a": "EC",
+            "group_b": "SARSA",
+            "interpretation": "released-code"
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-brearcliffe-released-code-q-learning-rule-m",
+      "name": "Brearcliffe Q-Learning / Rule M (released-code)",
+      "description": "One20000-transition NetLogo6.1.1 reference run with qualified measurement randomness. Original400agents perbreed and both documented hyperparameter interpretations. Aggregate replay only; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 20000,
+        "research": {
+          "study": "brearcliffe_2020",
+          "mode": "reference",
+          "parameters": {
+            "group_a": "Q-Learning",
+            "group_b": "Rule M",
+            "interpretation": "released-code"
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-brearcliffe-released-code-q-learning-ec",
+      "name": "Brearcliffe Q-Learning / EC (released-code)",
+      "description": "One20000-transition NetLogo6.1.1 reference run with qualified measurement randomness. Original400agents perbreed and both documented hyperparameter interpretations. Aggregate replay only; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 20000,
+        "research": {
+          "study": "brearcliffe_2020",
+          "mode": "reference",
+          "parameters": {
+            "group_a": "Q-Learning",
+            "group_b": "EC",
+            "interpretation": "released-code"
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-brearcliffe-released-code-q-learning-q-learning",
+      "name": "Brearcliffe Q-Learning / Q-Learning (released-code)",
+      "description": "One20000-transition NetLogo6.1.1 reference run with qualified measurement randomness. Original400agents perbreed and both documented hyperparameter interpretations. Aggregate replay only; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 20000,
+        "research": {
+          "study": "brearcliffe_2020",
+          "mode": "reference",
+          "parameters": {
+            "group_a": "Q-Learning",
+            "group_b": "Q-Learning",
+            "interpretation": "released-code"
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-brearcliffe-released-code-q-learning-sarsa",
+      "name": "Brearcliffe Q-Learning / SARSA (released-code)",
+      "description": "One20000-transition NetLogo6.1.1 reference run with qualified measurement randomness. Original400agents perbreed and both documented hyperparameter interpretations. Aggregate replay only; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 20000,
+        "research": {
+          "study": "brearcliffe_2020",
+          "mode": "reference",
+          "parameters": {
+            "group_a": "Q-Learning",
+            "group_b": "SARSA",
+            "interpretation": "released-code"
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-brearcliffe-released-code-sarsa-rule-m",
+      "name": "Brearcliffe SARSA / Rule M (released-code)",
+      "description": "One20000-transition NetLogo6.1.1 reference run with qualified measurement randomness. Original400agents perbreed and both documented hyperparameter interpretations. Aggregate replay only; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 20000,
+        "research": {
+          "study": "brearcliffe_2020",
+          "mode": "reference",
+          "parameters": {
+            "group_a": "SARSA",
+            "group_b": "Rule M",
+            "interpretation": "released-code"
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-brearcliffe-released-code-sarsa-ec",
+      "name": "Brearcliffe SARSA / EC (released-code)",
+      "description": "One20000-transition NetLogo6.1.1 reference run with qualified measurement randomness. Original400agents perbreed and both documented hyperparameter interpretations. Aggregate replay only; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 20000,
+        "research": {
+          "study": "brearcliffe_2020",
+          "mode": "reference",
+          "parameters": {
+            "group_a": "SARSA",
+            "group_b": "EC",
+            "interpretation": "released-code"
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-brearcliffe-released-code-sarsa-q-learning",
+      "name": "Brearcliffe SARSA / Q-Learning (released-code)",
+      "description": "One20000-transition NetLogo6.1.1 reference run with qualified measurement randomness. Original400agents perbreed and both documented hyperparameter interpretations. Aggregate replay only; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 20000,
+        "research": {
+          "study": "brearcliffe_2020",
+          "mode": "reference",
+          "parameters": {
+            "group_a": "SARSA",
+            "group_b": "Q-Learning",
+            "interpretation": "released-code"
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-brearcliffe-released-code-sarsa-sarsa",
+      "name": "Brearcliffe SARSA / SARSA (released-code)",
+      "description": "One20000-transition NetLogo6.1.1 reference run with qualified measurement randomness. Original400agents perbreed and both documented hyperparameter interpretations. Aggregate replay only; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 20000,
+        "research": {
+          "study": "brearcliffe_2020",
+          "mode": "reference",
+          "parameters": {
+            "group_a": "SARSA",
+            "group_b": "SARSA",
+            "interpretation": "released-code"
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-brearcliffe-paper-table-rule-m-rule-m",
+      "name": "Brearcliffe Rule M / Rule M (paper-table)",
+      "description": "One20000-transition NetLogo6.1.1 reference run with qualified measurement randomness. Original400agents perbreed and both documented hyperparameter interpretations. Aggregate replay only; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 20000,
+        "research": {
+          "study": "brearcliffe_2020",
+          "mode": "reference",
+          "parameters": {
+            "group_a": "Rule M",
+            "group_b": "Rule M",
+            "interpretation": "paper-table"
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-brearcliffe-paper-table-rule-m-ec",
+      "name": "Brearcliffe Rule M / EC (paper-table)",
+      "description": "One20000-transition NetLogo6.1.1 reference run with qualified measurement randomness. Original400agents perbreed and both documented hyperparameter interpretations. Aggregate replay only; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 20000,
+        "research": {
+          "study": "brearcliffe_2020",
+          "mode": "reference",
+          "parameters": {
+            "group_a": "Rule M",
+            "group_b": "EC",
+            "interpretation": "paper-table"
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-brearcliffe-paper-table-rule-m-q-learning",
+      "name": "Brearcliffe Rule M / Q-Learning (paper-table)",
+      "description": "One20000-transition NetLogo6.1.1 reference run with qualified measurement randomness. Original400agents perbreed and both documented hyperparameter interpretations. Aggregate replay only; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 20000,
+        "research": {
+          "study": "brearcliffe_2020",
+          "mode": "reference",
+          "parameters": {
+            "group_a": "Rule M",
+            "group_b": "Q-Learning",
+            "interpretation": "paper-table"
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-brearcliffe-paper-table-rule-m-sarsa",
+      "name": "Brearcliffe Rule M / SARSA (paper-table)",
+      "description": "One20000-transition NetLogo6.1.1 reference run with qualified measurement randomness. Original400agents perbreed and both documented hyperparameter interpretations. Aggregate replay only; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 20000,
+        "research": {
+          "study": "brearcliffe_2020",
+          "mode": "reference",
+          "parameters": {
+            "group_a": "Rule M",
+            "group_b": "SARSA",
+            "interpretation": "paper-table"
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-brearcliffe-paper-table-ec-rule-m",
+      "name": "Brearcliffe EC / Rule M (paper-table)",
+      "description": "One20000-transition NetLogo6.1.1 reference run with qualified measurement randomness. Original400agents perbreed and both documented hyperparameter interpretations. Aggregate replay only; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 20000,
+        "research": {
+          "study": "brearcliffe_2020",
+          "mode": "reference",
+          "parameters": {
+            "group_a": "EC",
+            "group_b": "Rule M",
+            "interpretation": "paper-table"
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-brearcliffe-paper-table-ec-ec",
+      "name": "Brearcliffe EC / EC (paper-table)",
+      "description": "One20000-transition NetLogo6.1.1 reference run with qualified measurement randomness. Original400agents perbreed and both documented hyperparameter interpretations. Aggregate replay only; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 20000,
+        "research": {
+          "study": "brearcliffe_2020",
+          "mode": "reference",
+          "parameters": {
+            "group_a": "EC",
+            "group_b": "EC",
+            "interpretation": "paper-table"
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-brearcliffe-paper-table-ec-q-learning",
+      "name": "Brearcliffe EC / Q-Learning (paper-table)",
+      "description": "One20000-transition NetLogo6.1.1 reference run with qualified measurement randomness. Original400agents perbreed and both documented hyperparameter interpretations. Aggregate replay only; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 20000,
+        "research": {
+          "study": "brearcliffe_2020",
+          "mode": "reference",
+          "parameters": {
+            "group_a": "EC",
+            "group_b": "Q-Learning",
+            "interpretation": "paper-table"
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-brearcliffe-paper-table-ec-sarsa",
+      "name": "Brearcliffe EC / SARSA (paper-table)",
+      "description": "One20000-transition NetLogo6.1.1 reference run with qualified measurement randomness. Original400agents perbreed and both documented hyperparameter interpretations. Aggregate replay only; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 20000,
+        "research": {
+          "study": "brearcliffe_2020",
+          "mode": "reference",
+          "parameters": {
+            "group_a": "EC",
+            "group_b": "SARSA",
+            "interpretation": "paper-table"
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-brearcliffe-paper-table-q-learning-rule-m",
+      "name": "Brearcliffe Q-Learning / Rule M (paper-table)",
+      "description": "One20000-transition NetLogo6.1.1 reference run with qualified measurement randomness. Original400agents perbreed and both documented hyperparameter interpretations. Aggregate replay only; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 20000,
+        "research": {
+          "study": "brearcliffe_2020",
+          "mode": "reference",
+          "parameters": {
+            "group_a": "Q-Learning",
+            "group_b": "Rule M",
+            "interpretation": "paper-table"
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-brearcliffe-paper-table-q-learning-ec",
+      "name": "Brearcliffe Q-Learning / EC (paper-table)",
+      "description": "One20000-transition NetLogo6.1.1 reference run with qualified measurement randomness. Original400agents perbreed and both documented hyperparameter interpretations. Aggregate replay only; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 20000,
+        "research": {
+          "study": "brearcliffe_2020",
+          "mode": "reference",
+          "parameters": {
+            "group_a": "Q-Learning",
+            "group_b": "EC",
+            "interpretation": "paper-table"
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-brearcliffe-paper-table-q-learning-q-learning",
+      "name": "Brearcliffe Q-Learning / Q-Learning (paper-table)",
+      "description": "One20000-transition NetLogo6.1.1 reference run with qualified measurement randomness. Original400agents perbreed and both documented hyperparameter interpretations. Aggregate replay only; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 20000,
+        "research": {
+          "study": "brearcliffe_2020",
+          "mode": "reference",
+          "parameters": {
+            "group_a": "Q-Learning",
+            "group_b": "Q-Learning",
+            "interpretation": "paper-table"
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-brearcliffe-paper-table-q-learning-sarsa",
+      "name": "Brearcliffe Q-Learning / SARSA (paper-table)",
+      "description": "One20000-transition NetLogo6.1.1 reference run with qualified measurement randomness. Original400agents perbreed and both documented hyperparameter interpretations. Aggregate replay only; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 20000,
+        "research": {
+          "study": "brearcliffe_2020",
+          "mode": "reference",
+          "parameters": {
+            "group_a": "Q-Learning",
+            "group_b": "SARSA",
+            "interpretation": "paper-table"
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-brearcliffe-paper-table-sarsa-rule-m",
+      "name": "Brearcliffe SARSA / Rule M (paper-table)",
+      "description": "One20000-transition NetLogo6.1.1 reference run with qualified measurement randomness. Original400agents perbreed and both documented hyperparameter interpretations. Aggregate replay only; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 20000,
+        "research": {
+          "study": "brearcliffe_2020",
+          "mode": "reference",
+          "parameters": {
+            "group_a": "SARSA",
+            "group_b": "Rule M",
+            "interpretation": "paper-table"
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-brearcliffe-paper-table-sarsa-ec",
+      "name": "Brearcliffe SARSA / EC (paper-table)",
+      "description": "One20000-transition NetLogo6.1.1 reference run with qualified measurement randomness. Original400agents perbreed and both documented hyperparameter interpretations. Aggregate replay only; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 20000,
+        "research": {
+          "study": "brearcliffe_2020",
+          "mode": "reference",
+          "parameters": {
+            "group_a": "SARSA",
+            "group_b": "EC",
+            "interpretation": "paper-table"
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-brearcliffe-paper-table-sarsa-q-learning",
+      "name": "Brearcliffe SARSA / Q-Learning (paper-table)",
+      "description": "One20000-transition NetLogo6.1.1 reference run with qualified measurement randomness. Original400agents perbreed and both documented hyperparameter interpretations. Aggregate replay only; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 20000,
+        "research": {
+          "study": "brearcliffe_2020",
+          "mode": "reference",
+          "parameters": {
+            "group_a": "SARSA",
+            "group_b": "Q-Learning",
+            "interpretation": "paper-table"
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-brearcliffe-paper-table-sarsa-sarsa",
+      "name": "Brearcliffe SARSA / SARSA (paper-table)",
+      "description": "One20000-transition NetLogo6.1.1 reference run with qualified measurement randomness. Original400agents perbreed and both documented hyperparameter interpretations. Aggregate replay only; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 20000,
+        "research": {
+          "study": "brearcliffe_2020",
+          "mode": "reference",
+          "parameters": {
+            "group_a": "SARSA",
+            "group_b": "SARSA",
+            "interpretation": "paper-table"
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-oremland-phase-0-unclipped",
+      "name": "Oremland phase0, unclipped",
+      "description": "One native50-transition NetLogo5.3.1 reconstruction with a uniform25%tax policy. Endpoint recorder retains survivor-state hash. Historical settings and clock/payment interpretations remain explicit; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 50,
+        "research": {
+          "study": "oremland_2014",
+          "mode": "reference",
+          "parameters": {
+            "rates": [
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25
+            ],
+            "phase": 0,
+            "clipped": false
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-oremland-phase-0-clipped",
+      "name": "Oremland phase0, clipped",
+      "description": "One native50-transition NetLogo5.3.1 reconstruction with a uniform25%tax policy. Endpoint recorder retains survivor-state hash. Historical settings and clock/payment interpretations remain explicit; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 50,
+        "research": {
+          "study": "oremland_2014",
+          "mode": "reference",
+          "parameters": {
+            "rates": [
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25
+            ],
+            "phase": 0,
+            "clipped": true
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-oremland-phase-4-unclipped",
+      "name": "Oremland phase4, unclipped",
+      "description": "One native50-transition NetLogo5.3.1 reconstruction with a uniform25%tax policy. Endpoint recorder retains survivor-state hash. Historical settings and clock/payment interpretations remain explicit; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 50,
+        "research": {
+          "study": "oremland_2014",
+          "mode": "reference",
+          "parameters": {
+            "rates": [
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25
+            ],
+            "phase": 4,
+            "clipped": false
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-oremland-phase-4-clipped",
+      "name": "Oremland phase4, clipped",
+      "description": "One native50-transition NetLogo5.3.1 reconstruction with a uniform25%tax policy. Endpoint recorder retains survivor-state hash. Historical settings and clock/payment interpretations remain explicit; score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 50,
+        "research": {
+          "study": "oremland_2014",
+          "mode": "reference",
+          "parameters": {
+            "rates": [
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25,
+              0.25
+            ],
+            "phase": 4,
+            "clipped": true
+          }
+        }
       }
     }
   ],

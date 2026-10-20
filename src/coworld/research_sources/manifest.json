@@ -1,0 +1,76 @@
+[
+  {
+    "study": "mcculloch_2022",
+    "repository": "https://github.com/Metta-AI/sugarscape",
+    "revision": "960e703f24da4f498ca423bdaa5537c3200e5c8c",
+    "files_sha256": {
+      "independent.py": "03e093abd71d949c778e2f65f94b9a554fa36ee62fae59b49eca3a18a6358945",
+      "sugarscape_cg/sugar-map.txt": "cd9b4661c8813d3e268995676d5ba84394ee813986adb0d657dc9be4a1fab675",
+      "sugarscape_cg/LICENSE.uncertainty": "8abd7b03cd2715c97e807ffda71b9f94a055141da5a44d6f65e7e1295da32fab"
+    },
+    "entrypoint": "independent.py",
+    "engine": "study-independent-python"
+  },
+  {
+    "study": "carrella_2021",
+    "repository": "https://github.com/Metta-AI/sugarscape",
+    "revision": "bc33bd58e92914ce1652f2c15ccd77d99dc1895b",
+    "files_sha256": {
+      "model.py": "23d73549848eadf237d38534a5cdae71c240c03cc9ef0fed4655cabb615ad36a"
+    },
+    "entrypoint": "model.py",
+    "engine": "study-independent-python"
+  },
+  {
+    "study": "izquierdo_2009",
+    "repository": "https://github.com/Metta-AI/sugarscape",
+    "revision": "91441ad4115b0c351a654127acc29cc16ab3ea0c",
+    "files_sha256": {
+      "model.py": "233dc44d6f176ef65e91d944ba728e8bb3968b57a0004b39810e11dbb6d1f1d6",
+      "results/full-model-return-2026-10-17/capacity.csv": "55f911e1fa16c9ad1ba1be69cf122e7b2ab7cf5e4aef0131d46bd6963262ad3e"
+    },
+    "entrypoint": "model.py",
+    "engine": "study-independent-python"
+  },
+  {
+    "study": "dogan_2026",
+    "repository": "https://github.com/Metta-AI/sugarscape",
+    "revision": "82cb45f731d76c985209fac842b857db305320ae",
+    "entrypoint": "sugarscape_ai_tax/model.py",
+    "files_sha256": {
+      "LICENSE": "fd2bf4171e6420277195c12c128a16ba75915dcf1456313eb52f291eab61d687",
+      "LICENSES/Apache-2.0.txt": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "NOTICE": "bc3c5519e25dafd89f886e5b50e1eef1594aa665ff522a2ab54592673e811c79",
+      "sugarscape_ai_tax/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sugarscape_ai_tax/agents.py": "eeb906b822bf9198e3842fee40eb95f6dc3cc1da22c05f804905c2628384d3bb",
+      "sugarscape_ai_tax/model.py": "a3e264cb1640691451b2936cd85a17f21bc8b17f5a2f36977dc8ee1db698ed24",
+      "sugarscape_ai_tax/sugar-map.txt": "cd9b4661c8813d3e268995676d5ba84394ee813986adb0d657dc9be4a1fab675"
+    },
+    "engine": "author-python"
+  },
+  {
+    "study": "brearcliffe_2020",
+    "repository": "https://github.com/Metta-AI/sugarscape",
+    "revision": "b64684cbe24b2b17f5cb32819040db4581fe7e25",
+    "entrypoint": "model.nlogo",
+    "files_sha256": {
+      "Replay.java": "c5d65cea521caccff3f4c7bc29f3fd98e3fabe8834b001b432cffb219454e4c0",
+      "model.nlogo": "fff5aa29aed92ee4ae04978b643e46d8316e26ca08771adb00c73ee5f2f9b28a",
+      "LICENSE.author": "600ca4e25fe11762b75a97e714707fab48bb778374e92d24c6ca068791661c11",
+      "symmetric-sugar-map.txt": "b36a8a31d804198683d30a29217d1e08830bd04ac539fa2c7250bb3168d3ba9a"
+    },
+    "engine": "native-netlogo"
+  },
+  {
+    "study": "oremland_2014",
+    "repository": "https://github.com/Metta-AI/sugarscape",
+    "revision": "c1ad995a3e8c6dc7b91686e30fd772c4876cdd18",
+    "entrypoint": "model.nlogo",
+    "files_sha256": {
+      "RunPolicyBatch.java": "c6ef0db7bb9528b2ea49b9110c3cf17c260abeb9f9af5f255d0f983033f88e1c",
+      "model.nlogo": "1cc6ee9db0852ea2a071004aa31eb797a06131b434cffc82f697993057aca816",
+      "sugar-map.txt": "cd9b4661c8813d3e268995676d5ba84394ee813986adb0d657dc9be4a1fab675"
+    },
+    "engine": "native-netlogo"
+  }
+]

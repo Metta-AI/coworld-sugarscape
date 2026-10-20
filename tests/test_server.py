@@ -456,14 +456,13 @@ def test_global_answers_a_ping_after_the_episode_has_finished(
         # `type: action` with a null ruleset is the documented "no ruleset"
         # submission the other tests use; it closes the window and runs the world.
         player.send(json.dumps({"type": "action", "ruleset": None}))
-        deadline = time.time() + 60
-        while time.time() < deadline and not results_path.exists():
-            time.sleep(0.2)
-        player.close()
+        assert json.loads(player.recv(timeout=10))["type"] == "ack"
+        assert json.loads(player.recv(timeout=60))["type"] == "result"
         assert results_path.exists(), "the episode never wrote its results"
 
         # Reproduce the certifier's established-but-delayed Ping lifecycle.
         spectator = connect(f"ws://127.0.0.1:{port}/global", proxy=None)
+        player.close()
         try:
             assert json.loads(spectator.recv(timeout=10))["type"] in {"status", "result"}
             time.sleep(0.3)

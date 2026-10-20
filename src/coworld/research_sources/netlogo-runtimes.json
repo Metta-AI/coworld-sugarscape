@@ -1,0 +1,12 @@
+{
+  "5.3.1": {
+    "url": "https://downloads.netlogo.org/5.3.1/NetLogo-5.3.1-64.tgz",
+    "archive_sha256": "07a626e486606f3d92fd39f7986641fb3f6bb8a00828f583b3b1804446a1c87c",
+    "archive_bytes": 171412876
+  },
+  "6.1.1": {
+    "url": "https://downloads.netlogo.org/6.1.1/NetLogo-6.1.1-64.tgz",
+    "archive_sha256": "972ea6e0e9f04988c86a92d6bae305f824487832a3fd5b27eeefbd8b8c6b08c8",
+    "archive_bytes": 210136630
+  }
+}
