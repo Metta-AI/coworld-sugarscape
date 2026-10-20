@@ -43,9 +43,9 @@ def test_ci_uses_pinned_tools_and_read_only_checkout() -> None:
     workflow = _workflow()
     _check_action_pins(workflow)
     assert workflow["permissions"] == {"contents": "read"}
-    for job in workflow["jobs"].values():
+    for name, job in workflow["jobs"].items():
         assert job["runs-on"] == "ubuntu-24.04"
-        assert 0 < job["timeout-minutes"] <= 30
+        assert 0 < job["timeout-minutes"] <= (60 if name == "image-smoke" else 30)
         assert "permissions" not in job
         assert "secrets." not in str(job)
         checkout = job["steps"][0]

@@ -14,6 +14,14 @@ COPY src/coworld/research_sources /app/src/coworld/research_sources
 RUN python tools/setup_netlogo_research.py --javac /opt/java/openjdk/bin/javac \
     && rm build/research-runtimes/*.tgz
 
+FROM ubuntu:22.04 AS thaler
+ENV DEBIAN_FRONTEND=noninteractive STACK_ROOT=/opt/thaler-stack
+RUN apt-get update && apt-get install -y --no-install-recommends haskell-stack git curl ca-certificates gcc libc6-dev make libgmp-dev libtinfo5 freeglut3-dev python3 \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY tools/setup_thaler_research.py /app/tools/setup_thaler_research.py
+COPY src/coworld/research_sources/thaler_2019 /app/src/coworld/research_sources/thaler_2019
+RUN --mount=type=cache,id=sugarscape-thaler-ghc843,target=/opt/thaler-stack python3 tools/setup_thaler_research.py /opt/thaler
 FROM julia:1.11.3-bookworm AS quera
 ENV JULIA_DEPOT_PATH=/opt/julia-depot JULIA_NUM_THREADS=1 JULIA_NUM_PRECOMPILE_TASKS=1 JULIA_PKG_PRECOMPILE_AUTO=0 JULIA_CPU_TARGET=generic OPENBLAS_NUM_THREADS=1
 WORKDIR /app
@@ -30,6 +38,10 @@ COPY --from=research /usr/local /opt/research-python
 COPY --from=dogan /usr/local /opt/dogan-python
 COPY --from=java /opt/java/openjdk /opt/java/openjdk
 COPY --from=netlogo /app/build/research-runtimes /opt/research-runtimes
+COPY --from=thaler /opt/thaler/bin /opt/thaler/bin
+COPY --from=thaler /opt/thaler/lib /opt/thaler/lib
+COPY --from=thaler /opt/thaler/licenses /opt/thaler/licenses
+COPY --from=thaler /opt/thaler/qualification.json /opt/thaler/qualification.json
 COPY --from=quera /usr/local/julia /usr/local/julia
 COPY --from=quera /opt/julia-depot /opt/julia-depot
 WORKDIR /app
@@ -40,6 +52,7 @@ COPY players/baseline /app/players/baseline
 COPY tools/research_experiments.py /app/tools/research_experiments.py
 COPY coworld_manifest.json /app/coworld_manifest.json
 
+ENV COWORLD_THALER=/opt/thaler
 ENV COWORLD_JULIA=/usr/local/julia/bin/julia
 ENV COWORLD_JULIA_DEPOT=/opt/julia-depot
 ENV JULIA_CPU_TARGET=generic

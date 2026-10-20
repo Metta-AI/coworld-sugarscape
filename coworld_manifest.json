@@ -54,7 +54,7 @@
           ],
           "properties": {
             "study": {
-              "enum": ["mcculloch_2022", "carrella_2021", "izquierdo_2009", "dogan_2026", "brearcliffe_2020", "oremland_2014", "quera_2025"]
+              "enum": ["mcculloch_2022", "carrella_2021", "izquierdo_2009", "dogan_2026", "brearcliffe_2020", "oremland_2014", "thaler_2019", "quera_2025"]
             },
             "mode": {
               "enum": [
@@ -8728,6 +8728,198 @@
             ],
             "phase": 4,
             "clipped": true
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-thaler-seq-baseline",
+      "name": "Thaler SEQ / baseline",
+      "description": "Original Haskell kernel, 500initial agents, one capability and 1000returned observations at native times0\u2013999. Author seed42 remains fixed; concurrent scheduling is nondeterministic. No historical timing claim. Noncompetitive score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 1000,
+        "research": {
+          "study": "thaler_2019",
+          "mode": "reference",
+          "parameters": {
+            "implementation": "seq",
+            "population": 500,
+            "rebirthing": false,
+            "capabilities": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-thaler-seq-rebirth",
+      "name": "Thaler SEQ / rebirth",
+      "description": "Original Haskell kernel, 500initial agents, one capability and 1000returned observations at native times0\u2013999. Author seed42 remains fixed; concurrent scheduling is nondeterministic. No historical timing claim. Noncompetitive score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 1000,
+        "research": {
+          "study": "thaler_2019",
+          "mode": "reference",
+          "parameters": {
+            "implementation": "seq",
+            "population": 500,
+            "rebirthing": true,
+            "capabilities": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-thaler-io-baseline",
+      "name": "Thaler IO / baseline",
+      "description": "Original Haskell kernel, 500initial agents, one capability and 1000returned observations at native times0\u2013999. Author seed42 remains fixed; concurrent scheduling is nondeterministic. No historical timing claim. Noncompetitive score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 1000,
+        "research": {
+          "study": "thaler_2019",
+          "mode": "reference",
+          "parameters": {
+            "implementation": "io",
+            "population": 500,
+            "rebirthing": false,
+            "capabilities": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-thaler-io-rebirth",
+      "name": "Thaler IO / rebirth",
+      "description": "Original Haskell kernel, 500initial agents, one capability and 1000returned observations at native times0\u2013999. Author seed42 remains fixed; concurrent scheduling is nondeterministic. No historical timing claim. Noncompetitive score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 1000,
+        "research": {
+          "study": "thaler_2019",
+          "mode": "reference",
+          "parameters": {
+            "implementation": "io",
+            "population": 500,
+            "rebirthing": true,
+            "capabilities": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-thaler-tvar-baseline",
+      "name": "Thaler TVAR / baseline",
+      "description": "Original Haskell kernel, 500initial agents, one capability and 1000returned observations at native times0\u2013999. Author seed42 remains fixed; concurrent scheduling is nondeterministic. No historical timing claim. Noncompetitive score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 1000,
+        "research": {
+          "study": "thaler_2019",
+          "mode": "reference",
+          "parameters": {
+            "implementation": "tvar",
+            "population": 500,
+            "rebirthing": false,
+            "capabilities": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-thaler-tvar-rebirth",
+      "name": "Thaler TVAR / rebirth",
+      "description": "Original Haskell kernel, 500initial agents, one capability and 1000returned observations at native times0\u2013999. Author seed42 remains fixed; concurrent scheduling is nondeterministic. No historical timing claim. Noncompetitive score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 1000,
+        "research": {
+          "study": "thaler_2019",
+          "mode": "reference",
+          "parameters": {
+            "implementation": "tvar",
+            "population": 500,
+            "rebirthing": true,
+            "capabilities": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-thaler-tarray-baseline",
+      "name": "Thaler TARRAY / baseline",
+      "description": "Original Haskell kernel, 500initial agents, one capability and 1000returned observations at native times0\u2013999. Author seed42 remains fixed; concurrent scheduling is nondeterministic. No historical timing claim. Noncompetitive score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 1000,
+        "research": {
+          "study": "thaler_2019",
+          "mode": "reference",
+          "parameters": {
+            "implementation": "tarray",
+            "population": 500,
+            "rebirthing": false,
+            "capabilities": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-thaler-tarray-rebirth",
+      "name": "Thaler TARRAY / rebirth",
+      "description": "Original Haskell kernel, 500initial agents, one capability and 1000returned observations at native times0\u2013999. Author seed42 remains fixed; concurrent scheduling is nondeterministic. No historical timing claim. Noncompetitive score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 1000,
+        "research": {
+          "study": "thaler_2019",
+          "mode": "reference",
+          "parameters": {
+            "implementation": "tarray",
+            "population": 500,
+            "rebirthing": true,
+            "capabilities": 1
           }
         }
       }
