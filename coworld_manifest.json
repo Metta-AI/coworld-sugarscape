@@ -113,7 +113,7 @@
       "image": "{{GAME_IMAGE}}",
       "run": ["python", "-m", "coworld.server"],
       "env": {"PYTHONHASHSEED": "0"},
-      "resources": {"requests": {"cpu": "2", "memory": "4Gi", "ephemeral-storage": "20Gi"}, "limits": {"cpu": "2", "memory": "6Gi"}},
+      "resources": {"requests": {"cpu": "2", "memory": "4Gi", "ephemeral-storage": "15Gi"}, "limits": {"cpu": "2", "memory": "6Gi"}},
       "source_url": "https://github.com/Metta-AI/coworld-sugarscape/tree/main"
     },
     "replay_viewer": {"bundle": "build/replay-viewer", "replay_compression": "gzip"},
