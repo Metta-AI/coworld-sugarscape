@@ -188,6 +188,9 @@ docker run --rm --network none --gpus device=0 \
 
 The packaged runtime uses CUDA 11.8 and compiles for A10, L4 and Hopper (`sm_86`, `sm_89`, `sm_90`).
 Its real device probe requires exactly one allocated compatible GPU before the original binary starts.
+The hosted manifest requests `g6.2xlarge` to select an L4 within that compiled architecture set.
+It preserves the platform's workload and egress placement constraints; no new node pool is required.
+Provider H100 qualification does not establish hosted L4 or Kubernetes execution.
 Use the qualified GPU image with `coworld build --compose compose.research-gpu.yaml --template coworld_manifest.gpu.json`.
 The fast certification fixture exercises the ordinary DTL container contract; it does not qualify the GPU paper method.
 The separate full native system workflow above supplies that proof.

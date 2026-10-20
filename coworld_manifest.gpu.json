@@ -234,6 +234,7 @@
       "resources": {
         "requests": {
           "gpu": 1,
+          "instance-type": "g6.2xlarge",
           "cpu": "4",
           "memory": "4Gi",
           "ephemeral-storage": "15Gi"
