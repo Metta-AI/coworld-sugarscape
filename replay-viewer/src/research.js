@@ -89,7 +89,10 @@ function showResearchReplay(replay) {
       context.arc((agent[1] + 0.5) * cellWidth, (agent[2] + 0.5) * cellHeight, Math.max(2, cellWidth * 0.28), 0, Math.PI * 2);
       context.fill();
     }
-    readings.textContent = Object.entries(frame.measurements).map(([name, value]) => `${name}: ${typeof value === "number" && !Number.isInteger(value) ? value.toFixed(6) : value}`).join("\n");
+    readings.textContent = Object.entries(frame.measurements).map(([name, value]) => {
+      const display = typeof value === "number" && !Number.isInteger(value) ? value.toFixed(6) : typeof value === "object" ? JSON.stringify(value) : value;
+      return `${name}: ${display}`;
+    }).join("\n");
     readings.textContent += "\n\nNative state SHA-256:\n" + frame.native_state_sha256;
     if (replay.details.study === "mcculloch_2022") readings.textContent += "\n\nBlue dots are scheduled agents. Physical occupancy also includes inactive collision occupants, as in the released model.";
     if (replay.details.study === "dogan_2026") readings.textContent += "\n\nOwners are off-grid accounting identities. Population, wealth and Gini include owners; the board shows on-grid agents.";
