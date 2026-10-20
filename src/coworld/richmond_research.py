@@ -38,9 +38,12 @@ def run(config, parameters, source, source_root):
             [str(runtime / "bin/gpu-probe")], env=environment, text=True, timeout=30
         )
     )
-    if hardware["device_count"] != 1 or hardware["compute_capability"] < 90:
+    if (
+        hardware["device_count"] != 1
+        or hardware["compute_capability"] not in qualification["architectures"]
+    ):
         raise ValueError(
-            "the packaged CUDA sm_90 runtime requires one compatible allocated GPU"
+            "the packaged CUDA runtime requires one allocated A10, L4 or Hopper GPU"
         )
     hardware["driver_and_clocks"] = subprocess.check_output(
         [

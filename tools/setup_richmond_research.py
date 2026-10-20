@@ -36,7 +36,7 @@ subprocess.run(
         "-B",
         str(root / "build"),
         "-DCMAKE_BUILD_TYPE=Release",
-        "-DCMAKE_CUDA_ARCHITECTURES=90",
+        "-DCMAKE_CUDA_ARCHITECTURES=86;89;90",
         "-DFLAMEGPU_ROOT=" + str(root / "engine"),
         "-DFLAMEGPU_SEATBELTS=OFF",
         "-DFLAMEGPU_SHARE_USAGE_STATISTICS=OFF",
@@ -77,7 +77,7 @@ qualification = {
     "cuda": subprocess.check_output(["nvcc", "--version"], text=True),
     "compiler": subprocess.check_output(["g++", "--version"], text=True),
     "cmake_cache": (root / "build/CMakeCache.txt").read_text(),
-    "architecture": 90,
+    "architectures": [86, 89, 90],
     "seatbelts": False,
     "model_source_changes": [],
     "files_sha256": {

@@ -183,7 +183,7 @@ docker run --rm --network none --gpus device=0 \
   python /qualification/verify_richmond_system.py /evidence
 ```
 
-The packaged runtime uses CUDA 11.8 and compiles for Hopper (`sm_90`).
+The packaged runtime uses CUDA 11.8 and compiles for A10, L4 and Hopper (`sm_86`, `sm_89`, `sm_90`).
 Its real device probe requires exactly one allocated compatible GPU before the original binary starts.
 Use the qualified GPU image with `coworld build --compose compose.research-gpu.yaml --template coworld_manifest.gpu.json`.
 The fast certification fixture exercises the ordinary DTL container contract; it does not qualify the GPU paper method.
