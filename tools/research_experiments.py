@@ -13,6 +13,8 @@ import subprocess
 import sys
 import time
 
+from websockets.sync.client import connect
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 from coworld.config import resolve_episode_config  # noqa: E402
@@ -93,21 +95,49 @@ def run_variant(variant, seed: int, output: Path, timesteps: int | None):
                 if time.monotonic() >= deadline:
                     raise TimeoutError("game readiness deadline exceeded")
                 time.sleep(0.05)
-            player_environment = {
-                **environment,
-                "COWORLD_PLAYER_WS_URL": f"ws://127.0.0.1:{port}/player?slot=0&token=local-research-controller",
-            }
-            with (output / "player.log").open("x") as player_log:
-                player = subprocess.run(
-                    [sys.executable, "-m", "players.baseline.player"],
-                    cwd=ROOT,
-                    env=player_environment,
-                    stdout=player_log,
-                    stderr=subprocess.STDOUT,
-                    timeout=30,
-                )
-            if player.returncode != 0:
-                raise RuntimeError(f"baseline player failed: {output / 'player.log'}")
+            with (
+                connect(
+                    f"ws://127.0.0.1:{port}/global", open_timeout=10, close_timeout=2
+                ) as observer,
+                (output / "global.jsonl").open("x") as stream,
+            ):
+                status = json.loads(observer.recv(timeout=10))
+                if (
+                    status["type"] != "status"
+                    or status["protocol"] != "sugarscape-research/1"
+                ):
+                    raise ValueError("invalid research spectator greeting")
+                stream.write(json.dumps(status) + "\n")
+                player_environment = {
+                    **environment,
+                    "COWORLD_PLAYER_WS_URL": f"ws://127.0.0.1:{port}/player?slot=0&token=local-research-controller",
+                }
+                with (output / "player.log").open("x") as player_log:
+                    player = subprocess.run(
+                        [sys.executable, "-m", "players.baseline.player"],
+                        cwd=ROOT,
+                        env=player_environment,
+                        stdout=player_log,
+                        stderr=subprocess.STDOUT,
+                        timeout=30,
+                    )
+                if player.returncode != 0:
+                    raise RuntimeError(
+                        f"baseline player failed: {output / 'player.log'}"
+                    )
+                if not observer.ping().wait(timeout=3):
+                    raise TimeoutError("research global endpoint did not answer Ping")
+                while True:
+                    message = json.loads(observer.recv(timeout=600))
+                    stream.write(json.dumps(message) + "\n")
+                    if message["type"] in {"failure", "server_closed"}:
+                        raise RuntimeError(
+                            "research execution closed without a completed result"
+                        )
+                    if message["protocol"] != "sugarscape-research/1":
+                        raise ValueError("inconsistent research spectator protocol")
+                    if message["type"] == "result":
+                        break
             code = server.wait(timeout=600)
             if code != 0:
                 raise RuntimeError(f"native episode failed: {output / 'game.log'}")

@@ -1,3 +1,24 @@
+const hiddenForResearch = new Map();
+
+function mountResearchPanel(panel) {
+  for (const previous of document.querySelectorAll("#research-replay, #research-live")) previous.remove();
+  if (hiddenForResearch.size === 0) {
+    for (const previous of document.body.children) {
+      if (previous.tagName === "SCRIPT") continue;
+      hiddenForResearch.set(previous, previous.hidden);
+      previous.hidden = true;
+    }
+  }
+  document.body.append(panel);
+}
+
+function leaveResearchView() {
+  for (const panel of document.querySelectorAll("#research-replay, #research-live")) panel.remove();
+  for (const [previous, hidden] of hiddenForResearch) previous.hidden = hidden;
+  hiddenForResearch.clear();
+  researchLive = null;
+}
+
 /** Research snapshots retain their own semantics; the DTL replay reader is unchanged. */
 function showResearchReplay(replay) {
   if (!Array.isArray(replay.frames) || replay.frames.length === 0 || !replay.details) {
@@ -43,8 +64,7 @@ function showResearchReplay(replay) {
   source.textContent = JSON.stringify(replay.details, null, 2);
   provenance.append(summary, source);
   panel.append(title, qualification, controls, row, provenance);
-  for (const previous of document.body.children) if (previous.tagName !== "SCRIPT") previous.hidden = true;
-  document.body.append(panel);
+  mountResearchPanel(panel);
   let index = 0;
   let playing = true;
   const context = board.getContext("2d");
@@ -86,4 +106,55 @@ function showResearchReplay(replay) {
     if (!panel.isConnected) { clearInterval(timer); return; }
     if (playing) { index = (index + 1) % replay.frames.length; render(); }
   }, 120);
+}
+
+let researchLive = null;
+
+/** Native workers publish recorded observations after bounded execution. */
+function showResearchLive(message) {
+  if (!researchLive) {
+    stopPaintLoop();
+    state.playing = false;
+    const panel = document.createElement("section");
+    panel.id = "research-live";
+    panel.style.cssText = "position:fixed;inset:0;z-index:100;background:#14100a;color:#f6ead2;padding:20px;overflow:auto;font:16px system-ui;box-sizing:border-box";
+    const title = document.createElement("h1");
+    const phase = document.createElement("p");
+    const readings = document.createElement("pre");
+    readings.style.cssText = "white-space:pre-wrap;overflow-wrap:anywhere;font:15px ui-monospace,monospace";
+    const provenance = document.createElement("details");
+    const summary = document.createElement("summary");
+    summary.textContent = "Source and parameter provenance";
+    const source = document.createElement("pre");
+    source.style.cssText = "white-space:pre-wrap;overflow-wrap:anywhere";
+    provenance.append(summary, source);
+    provenance.hidden = true;
+    panel.append(title, phase, readings, provenance);
+    mountResearchPanel(panel);
+    researchLive = { panel, title, phase, readings, provenance, source, terminal: "waiting" };
+    requestAnimationFrame(() => tellHost({ type: "ready" }));
+  }
+  if (message.type === "status") {
+    researchLive.title.textContent = message.study.replaceAll("_", " ");
+    researchLive.phase.textContent = "Native experiment in progress. Recorded observations arrive after execution; this is not a spatial live stream.";
+    researchLive.readings.textContent = `Phase: ${message.phase}\nControllers submitted: ${message.submitted} / ${message.seats}`;
+  } else if (message.type === "frame") {
+    researchLive.phase.textContent = `Receiving recorded observations · tick ${message.timestep}`;
+    researchLive.readings.textContent = JSON.stringify(message.measurements, null, 2);
+  } else if (message.type === "result") {
+    researchLive.terminal = "completed";
+    researchLive.phase.textContent = "Native episode completed. Open the completed replay for spatial playback where recorded. Reference scores are noncompetitive; calibration scoring is a Coworld adaptation.";
+    researchLive.readings.textContent = JSON.stringify({ score_method: message.score_method, scores: message.scores, measurements: message.details[0].measurements }, null, 2);
+    researchLive.source.textContent = JSON.stringify(message.details, null, 2);
+    researchLive.provenance.hidden = false;
+  } else if (message.type === "failure") {
+    researchLive.terminal = "failed";
+    researchLive.phase.textContent = message.message;
+  }
+}
+
+function closeResearchLive() {
+  if (researchLive.terminal === "waiting") {
+    researchLive.phase.textContent = "The stream closed without a completed result. Inspect the episode game and player logs.";
+  }
 }

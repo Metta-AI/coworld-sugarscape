@@ -5462,6 +5462,8 @@ function socketUrl() {
 }
 
 function connect() {
+  leaveResearchView();
+  let researchStream = false;
   let socket;
   try {
     socket = new WebSocket(socketUrl());
@@ -5526,6 +5528,11 @@ function connect() {
     // comment on isRenderableFrame claims this was fixed; it was not, only
     // delayed.
     clearTimeout(silence);
+    if (frame.protocol === "sugarscape-research/1") {
+      researchStream = true;
+      showResearchLive(frame);
+      return;
+    }
     if (!isRenderableFrame(frame)) return;
     if (frameCount() === 0) { state.live = true; ready(); }
     recordFrame(frame);
@@ -5544,6 +5551,7 @@ function connect() {
   socket.addEventListener("close", () => {
     clearTimeout(idleTimer);
     clearTimeout(silence);
+    if (researchStream) { if (researchLive) closeResearchLive(); return; }
     if (frameCount() === 0) {
       fail("The episode stream closed before sending any frames.");
       return;
@@ -5551,6 +5559,7 @@ function connect() {
     markFinished();
   });
   socket.addEventListener("error", () => {
+    if (researchStream) { if (researchLive) closeResearchLive(); return; }
     if (frameCount() === 0) {
       fail("Could not reach the episode stream for this replay.");
     }
@@ -5750,6 +5759,7 @@ async function adoptReplay(payload, url) {
     showResearchReplay(payload);
     return;
   }
+  leaveResearchView();
   if (payload instanceof FrameStore) {
     if (payload.count === 0) {
       fail("This replay recorded no frames.");

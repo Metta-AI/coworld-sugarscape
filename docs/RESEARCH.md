@@ -72,6 +72,8 @@ coworld run-episode dist/coworld_manifest.json \
 The game image contains the separate qualified Python workers both NetLogo runtimes and the Julia forward environment.
 The bundled baseline recognizes the observed research protocol; other players must implement `sugarscape-research/1`.
 The Ruleset Studio remains a SugarLang authoring surface and lists only compatible variants.
+The live viewer reports execution status and recorded aggregate observations.
+Native snapshots are published after bounded execution, not as spatial live animation.
 The static replay viewer displays native cells and agents when recorded.
 Brearcliffe displays aggregates; Oremland displays its native endpoint. Neither receives invented spatial animation or Gini.
 
@@ -101,7 +103,8 @@ The current platform supports either Eval (`round_trigger: "new_policy"`) or con
 ```
 
 This is the `settings.ladder` fragment, not a complete league-creation request.
-The owner supplies the league/division identity and admission settings.
+A Softmax teammate sets the ranking and ladder document with elevated privileges.
+The owner supplies the league/division identity and can rotate an existing variant pool.
 Use repeated prospective seeds when evaluating policy quality; a single grade has sampling uncertainty.
 Do not mix reference-zero and calibration scores into one leaderboard.
 No game-owned commissioner or Conductor integration is required.

@@ -35,6 +35,7 @@ COPY --from=quera /opt/julia-depot /opt/julia-depot
 WORKDIR /app
 COPY src /app/src
 COPY targets /app/targets
+COPY replay-viewer/index.html /app/replay-viewer/index.html
 COPY players/baseline /app/players/baseline
 COPY tools/research_experiments.py /app/tools/research_experiments.py
 COPY coworld_manifest.json /app/coworld_manifest.json
