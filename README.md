@@ -174,3 +174,5 @@ model, with the pinned upstream source preserved as its behavioral oracle at
 Use the [paired experiment runner](docs/EXPERIMENTS.md) to compare a saved Ruleset
 Studio ruleset against the baseline on identical seeds, with result summaries,
 replays, and source provenance.
+
+The Richmond CUDA reference is packaged separately in `coworld_manifest.gpu.json`; see [native research methods](docs/RESEARCH.md#richmond-gpu-companion).

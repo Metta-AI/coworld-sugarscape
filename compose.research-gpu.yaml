@@ -1,0 +1,13 @@
+services:
+  game:
+    image: sugarscape-research-gpu
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile.research-gpu
+  baseline:
+    image: sugarscape-research-gpu-baseline
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: players/baseline/Dockerfile
