@@ -154,13 +154,45 @@ Relevant merged work: [scenario pool](https://app.graphite.dev/github/pr/Metta-A
 [experiment runners](https://app.graphite.dev/github/pr/Metta-AI/coworld-sugarscape/39),
 [Eval ladders](https://app.graphite.dev/github/pr/Metta-AI/metta/27935).
 
-## Remaining native engines
+## Richmond GPU companion
 
-Richmond requires native CUDA. The platform currently rejects GPU requests from game runnables.
-A linked GPU companion needs qualified game GPU dispatch support before hosted execution.
-Richmond is not registered or represented as a completed hosted Coworld adapter.
+`coworld_manifest.gpu.json` defines `sugarscape-research-gpu`, with one `paper-richmond-full` reference variant.
+The CPU collection remains one world with nine native adapters.
+A GPU request applies to the entire game runnable, so the separate companion avoids reserving GPUs for CPU variants.
+Both use the same research protocol, replay viewer and experiment runner.
+
+Richmond runs the unchanged released benchmark v1 at `290702073492677f2fc9164419e9d5900d119e02`,
+with FLAME GPU 2.0.0-rc at `19136c18629af0a52ac4355ff705596b22bedac1`.
+Its original fixed seeds 0–2 execute all 84 conditions: 48 scaling, 18 occupation and 18 resolution cases.
+Scaling and occupation retain 100 steps each; resolution retains three steps and nine recorded bins.
+The endpoint contains all 6,600 population records, 162 resolution rows and original aggregate CSVs.
+It does not invent a shared grid, hidden cell state or Gini.
+
+The released initialization, native counters, agent ordering and transfer behavior remain unchanged.
+Earlier scientific controls distinguish those released behaviors from corrected-model interpretations.
+No historical V100 timing, corrected-model result, or independently seeded episode claim is made.
+Non-timing rows are compared against the retained V100 archive diagnostically; a discrepancy is retained and investigated.
+Reference score is zero.
+
+Build and run the complete public game/player/spectator workflow on one compatible NVIDIA GPU:
+
+```bash
+docker build --platform linux/amd64 -f Dockerfile.research-gpu -t sugarscape-research-gpu .
+docker run --rm --network none --gpus device=0 \
+  -v /absolute/new-evidence:/evidence sugarscape-research-gpu \
+  python /qualification/verify_richmond_system.py /evidence
+```
+
+The packaged runtime uses CUDA 11.8 and compiles for Hopper (`sm_90`).
+Its real device probe requires exactly one allocated compatible GPU before the original binary starts.
+Use the qualified GPU image with `coworld build --compose compose.research-gpu.yaml --template coworld_manifest.gpu.json`.
+The fast certification fixture exercises the ordinary DTL container contract; it does not qualify the GPU paper method.
+The separate full native system workflow above supplies that proof.
+
+Hosted game GPU support is a separate platform change. The current deployed platform rejects game GPU requests.
+Do not infer hosted Kubernetes readiness from Docker or provider GPU qualification.
 The ten-paper replication evidence remains in [Metta-AI/sugarscape](https://app.graphite.dev/github/pr/Metta-AI/sugarscape/1).
 
-The scientific evidence for a registered adapter must distinguish source equivalence, local protocol execution,
+Scientific evidence distinguishes source equivalence, public protocol execution,
 container execution, hosted certification and full campaign completion.
 A passed stage does not imply the others passed.
