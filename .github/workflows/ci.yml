@@ -83,3 +83,7 @@ jobs:
           python tools/research_experiments.py --out /tmp/brearcliffe-smoke
           --variant paper-brearcliffe-released-code-rule-m-ec
           --seeds 20261019 --timesteps 100
+      - name: Qualify native Julia forward history over the public protocol
+        run: >-
+          docker run --rm --network none -v "$PWD/tests:/qualification:ro"
+          sugarscape-ci python /qualification/verify_quera_system.py /tmp/quera-proof
