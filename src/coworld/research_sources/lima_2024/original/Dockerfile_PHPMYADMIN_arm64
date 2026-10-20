@@ -1,0 +1,1 @@
+FROM arm64v8/phpmyadmin:5.2.1

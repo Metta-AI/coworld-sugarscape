@@ -1,7 +1,7 @@
 # Native research variants
 
 The research collection runs reviewed study implementations alongside the existing DTL worlds.
-It currently exposes eight engines through 55 named research variants.
+It currently exposes nine engines through 56 named research variants.
 A research controller submits one parameter object, then the native model runs to its declared horizon.
 The simulation's agents retain their original behavior.
 
@@ -15,10 +15,23 @@ The simulation's agents retain their original behavior.
 | Oremland 2014 | Two tax-clock phases crossed with clipped/unclipped payments | Study NetLogo 5.3.1 reconstruction and original batch recorder | Reconstructed method; 200-entry uniform 25% policy, 50 transitions, endpoint measurements only. |
 | Thaler 2019 | Four implementations crossed with baseline/rebirth | Original Haskell kernels, GHC 8.4.3 | 1,000 returned observations. Fixed author seed 42. Concurrent schedules differ; shared hosted timings are not historical scaling evidence. |
 | Quera 2025 | One forward reference | Author Julia 1.11.3 model and qualified dependency lock | 50 native stored states, 49 transitions; preserve native survival and occupancy. No training/gradient claim. |
+| Lima 2024 | One container-scenario reference | Original two NetLogo 6.0.4 worlds, JaCaMo and MySQL 5.7 | Both 1,000-step models, native routing and identity accounting. Colocated native processes; no original host-GUI or spontaneous AgentSpeak re-entry claim. |
 
 Thaler records returned observable-agent counts, not an independent reconstruction of live internal state.
 Its logical frame indices 1–1,000 correspond to native times 0–999.
 The native kernels retain fixed seed 42; the episode seed is not substituted into them.
+
+Lima preserves original model, AgentSpeak, API and router source bytes.
+Its native models keep separate clocks and unseeded random streams; the episode seed does not replace them.
+The native services share one game container instead of the paper's multi-container deployment.
+API and SQL bind to private loopback; the game maps their original hostnames locally.
+The wrapper disables Flask's development reloader and relocates MySQL data, socket, PID and export directories.
+The original PHP dashboards remain preserved source; Coworld uses its own replay viewer.
+Neither this deployment nor its CPU quota establishes historical performance equivalence.
+The reference retains both complete native logs, a quiescent SQL snapshot and exported AgentSpeak files.
+Its population metric counts agents loaded in native models; queued identities are recorded separately.
+No shared spatial timeline, unreported sugar state or Gini is reconstructed.
+
 
 Each replay records the source commit and file hashes, resolved parameters, seed, engine and interpreter.
 Julia frames retain all six native arrays, including dead agent slots and occupancy flags.
@@ -60,6 +73,27 @@ JULIA_DEPOT_PATH="$COWORLD_JULIA_DEPOT" JULIA_NUM_PRECOMPILE_TASKS=1 JULIA_PKG_P
 
 The packaged game performs this setup at build time and executes offline.
 
+For the isolated Lima runtime and its native architecture qualification:
+
+```bash
+docker build --platform linux/amd64 --target lima -t sugarscape-lima-runtime .
+# Use a new evidence directory for every run.
+docker run --rm --network none --cpus 2 --memory 4g \
+  -v /absolute/new-evidence:/evidence sugarscape-lima-runtime \
+  python /opt/lima/lima_runner.py /evidence/native
+```
+
+The packaged public-protocol qualification runs:
+
+```bash
+docker run --rm --network none -v "$PWD/tests:/qualification:ro" GAME_IMAGE \
+  python /qualification/verify_lima_system.py /tmp/new-lima-proof
+```
+
+The research runner accepts `--timeout-seconds 3300` for this complete native architecture.
+The native models still execute their full 1,000-step horizons; this option only bounds waiting.
+
+
 The runner uses separate real game and baseline-player processes over the public WebSocket protocol.
 It retains requests, configs, game/player logs, results, replay and a summary with replay hashes.
 Existing output directories and repeated variant/seed selections are rejected.
@@ -74,7 +108,7 @@ coworld run-episode dist/coworld_manifest.json \
   --variant paper-mcculloch-4-7 --output-dir /path/to/new-container-evidence
 ```
 
-The game image contains qualified Python workers, both NetLogo runtimes, Haskell executables and the Julia forward environment.
+The game image contains qualified Python workers, both NetLogo runtimes, Haskell executables, the Julia forward environment and Lima's native process stack.
 The bundled baseline recognizes the observed research protocol; other players must implement `sugarscape-research/1`.
 The Ruleset Studio remains a SugarLang authoring surface and lists only compatible variants.
 The live viewer reports execution status and recorded aggregate observations.
@@ -122,11 +156,9 @@ Relevant merged work: [scenario pool](https://app.graphite.dev/github/pr/Metta-A
 
 ## Remaining native engines
 
-Lima requires the native two-NetLogo/JaCaMo/database routing workflow, including saved-state behavior.
-A single in-memory substitute would change that method.
 Richmond requires native CUDA. The platform currently rejects GPU requests from game runnables.
 A linked GPU companion needs qualified game GPU dispatch support before hosted execution.
-These two studies are not registered or represented as completed Coworld adapters.
+Richmond is not registered or represented as a completed hosted Coworld adapter.
 The ten-paper replication evidence remains in [Metta-AI/sugarscape](https://app.graphite.dev/github/pr/Metta-AI/sugarscape/1).
 
 The scientific evidence for a registered adapter must distinguish source equivalence, local protocol execution,

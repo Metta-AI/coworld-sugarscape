@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>shared_volume package &mdash; OMAS_Docker 1.0 documentation</title>
+      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/sphinx_highlight.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="shared_volume" href="modules.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            OMAS_Docker
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="modules.html">shared_volume</a><ul class="current">
+<li class="toctree-l2 current"><a class="current reference internal" href="#">shared_volume package</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#submodules">Submodules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#module-access_api">access_api module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#access_api.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#module-api">shared_volume.api module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#api.check_new_agentss"><code class="docutils literal notranslate"><span class="pre">check_new_agentss()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#api.check_new_agentss_1"><code class="docutils literal notranslate"><span class="pre">check_new_agentss_1()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#api.connect_to_db"><code class="docutils literal notranslate"><span class="pre">connect_to_db()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#api.model_to_alive"><code class="docutils literal notranslate"><span class="pre">model_to_alive()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#api.model_to_alive_single"><code class="docutils literal notranslate"><span class="pre">model_to_alive_single()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#api.output_php"><code class="docutils literal notranslate"><span class="pre">output_php()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#api.page_not_found"><code class="docutils literal notranslate"><span class="pre">page_not_found()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#api.process_agents_on_router"><code class="docutils literal notranslate"><span class="pre">process_agents_on_router()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#api.register_agents_on_platform"><code class="docutils literal notranslate"><span class="pre">register_agents_on_platform()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#api.request_to_register"><code class="docutils literal notranslate"><span class="pre">request_to_register()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#api.sanity_test"><code class="docutils literal notranslate"><span class="pre">sanity_test()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#api.sanity_test_agent_path_history"><code class="docutils literal notranslate"><span class="pre">sanity_test_agent_path_history()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#api.sanity_test_agent_to_jacamo_without_asl_file"><code class="docutils literal notranslate"><span class="pre">sanity_test_agent_to_jacamo_without_asl_file()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#api.sanity_test_list"><code class="docutils literal notranslate"><span class="pre">sanity_test_list()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#api.sanity_test_recheck_agent_path"><code class="docutils literal notranslate"><span class="pre">sanity_test_recheck_agent_path()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#api.serve_sphinx_docs"><code class="docutils literal notranslate"><span class="pre">serve_sphinx_docs()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#api.testing_sending"><code class="docutils literal notranslate"><span class="pre">testing_sending()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#module-api_working">shared_volume.api_working module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#api_working.check_new_agentss"><code class="docutils literal notranslate"><span class="pre">check_new_agentss()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#api_working.check_new_agentss_1"><code class="docutils literal notranslate"><span class="pre">check_new_agentss_1()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#api_working.connect_to_db"><code class="docutils literal notranslate"><span class="pre">connect_to_db()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#api_working.model_to_alive"><code class="docutils literal notranslate"><span class="pre">model_to_alive()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#api_working.model_to_alive_single"><code class="docutils literal notranslate"><span class="pre">model_to_alive_single()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#api_working.output_php"><code class="docutils literal notranslate"><span class="pre">output_php()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#api_working.page_not_found"><code class="docutils literal notranslate"><span class="pre">page_not_found()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#api_working.process_agents_on_router"><code class="docutils literal notranslate"><span class="pre">process_agents_on_router()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#api_working.register_agents_on_platform"><code class="docutils literal notranslate"><span class="pre">register_agents_on_platform()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#api_working.request_to_register"><code class="docutils literal notranslate"><span class="pre">request_to_register()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#api_working.sanity_test"><code class="docutils literal notranslate"><span class="pre">sanity_test()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#api_working.sanity_test_agent_path_history"><code class="docutils literal notranslate"><span class="pre">sanity_test_agent_path_history()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#api_working.testing_sending"><code class="docutils literal notranslate"><span class="pre">testing_sending()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#module-clean_simulation_files">shared_volume.clean_simulation_files module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#clean_simulation_files.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#module-db_python_netlogo">shared_volume.db_python_netlogo module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#db_python_netlogo.host_port"><code class="docutils literal notranslate"><span class="pre">host_port()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#db_python_netlogo.receiving_agents"><code class="docutils literal notranslate"><span class="pre">receiving_agents()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#db_python_netlogo.request_to_register"><code class="docutils literal notranslate"><span class="pre">request_to_register()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#db_python_netlogo.send_agent_to_alive"><code class="docutils literal notranslate"><span class="pre">send_agent_to_alive()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#db_python_netlogo.send_agent_to_router"><code class="docutils literal notranslate"><span class="pre">send_agent_to_router()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#db_python_netlogo.testing_exception"><code class="docutils literal notranslate"><span class="pre">testing_exception()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#module-initialize_db">shared_volume.initialize_db module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#initialize_db.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#module-python_execute_netlogo">shared_volume.python_execute_netlogo module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#python_execute_netlogo.execute_model"><code class="docutils literal notranslate"><span class="pre">execute_model()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#module-register">shared_volume.register module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#register.request_to_register"><code class="docutils literal notranslate"><span class="pre">request_to_register()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#module-router">shared_volume.router module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#router.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">shared_volume package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#module-access_api">access_api module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#access_api.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#module-api">shared_volume.api module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#api.check_new_agentss"><code class="docutils literal notranslate"><span class="pre">check_new_agentss()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#api.check_new_agentss_1"><code class="docutils literal notranslate"><span class="pre">check_new_agentss_1()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#api.connect_to_db"><code class="docutils literal notranslate"><span class="pre">connect_to_db()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#api.model_to_alive"><code class="docutils literal notranslate"><span class="pre">model_to_alive()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#api.model_to_alive_single"><code class="docutils literal notranslate"><span class="pre">model_to_alive_single()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#api.output_php"><code class="docutils literal notranslate"><span class="pre">output_php()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#api.page_not_found"><code class="docutils literal notranslate"><span class="pre">page_not_found()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#api.process_agents_on_router"><code class="docutils literal notranslate"><span class="pre">process_agents_on_router()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#api.register_agents_on_platform"><code class="docutils literal notranslate"><span class="pre">register_agents_on_platform()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#api.request_to_register"><code class="docutils literal notranslate"><span class="pre">request_to_register()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#api.sanity_test"><code class="docutils literal notranslate"><span class="pre">sanity_test()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#api.sanity_test_agent_path_history"><code class="docutils literal notranslate"><span class="pre">sanity_test_agent_path_history()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#api.sanity_test_agent_to_jacamo_without_asl_file"><code class="docutils literal notranslate"><span class="pre">sanity_test_agent_to_jacamo_without_asl_file()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#api.sanity_test_list"><code class="docutils literal notranslate"><span class="pre">sanity_test_list()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#api.sanity_test_recheck_agent_path"><code class="docutils literal notranslate"><span class="pre">sanity_test_recheck_agent_path()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#api.serve_sphinx_docs"><code class="docutils literal notranslate"><span class="pre">serve_sphinx_docs()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#api.testing_sending"><code class="docutils literal notranslate"><span class="pre">testing_sending()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#module-api_working">shared_volume.api_working module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#api_working.check_new_agentss"><code class="docutils literal notranslate"><span class="pre">check_new_agentss()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#api_working.check_new_agentss_1"><code class="docutils literal notranslate"><span class="pre">check_new_agentss_1()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#api_working.connect_to_db"><code class="docutils literal notranslate"><span class="pre">connect_to_db()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#api_working.model_to_alive"><code class="docutils literal notranslate"><span class="pre">model_to_alive()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#api_working.model_to_alive_single"><code class="docutils literal notranslate"><span class="pre">model_to_alive_single()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#api_working.output_php"><code class="docutils literal notranslate"><span class="pre">output_php()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#api_working.page_not_found"><code class="docutils literal notranslate"><span class="pre">page_not_found()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#api_working.process_agents_on_router"><code class="docutils literal notranslate"><span class="pre">process_agents_on_router()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#api_working.register_agents_on_platform"><code class="docutils literal notranslate"><span class="pre">register_agents_on_platform()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#api_working.request_to_register"><code class="docutils literal notranslate"><span class="pre">request_to_register()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#api_working.sanity_test"><code class="docutils literal notranslate"><span class="pre">sanity_test()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#api_working.sanity_test_agent_path_history"><code class="docutils literal notranslate"><span class="pre">sanity_test_agent_path_history()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#api_working.testing_sending"><code class="docutils literal notranslate"><span class="pre">testing_sending()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#module-clean_simulation_files">shared_volume.clean_simulation_files module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#clean_simulation_files.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#module-db_python_netlogo">shared_volume.db_python_netlogo module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#db_python_netlogo.host_port"><code class="docutils literal notranslate"><span class="pre">host_port()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#db_python_netlogo.receiving_agents"><code class="docutils literal notranslate"><span class="pre">receiving_agents()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#db_python_netlogo.request_to_register"><code class="docutils literal notranslate"><span class="pre">request_to_register()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#db_python_netlogo.send_agent_to_alive"><code class="docutils literal notranslate"><span class="pre">send_agent_to_alive()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#db_python_netlogo.send_agent_to_router"><code class="docutils literal notranslate"><span class="pre">send_agent_to_router()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#db_python_netlogo.testing_exception"><code class="docutils literal notranslate"><span class="pre">testing_exception()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#module-initialize_db">shared_volume.initialize_db module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#initialize_db.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#module-python_execute_netlogo">shared_volume.python_execute_netlogo module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#python_execute_netlogo.execute_model"><code class="docutils literal notranslate"><span class="pre">execute_model()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#module-register">shared_volume.register module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#register.request_to_register"><code class="docutils literal notranslate"><span class="pre">request_to_register()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#module-router">shared_volume.router module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#router.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">OMAS_Docker</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="modules.html">shared_volume</a></li>
+      <li class="breadcrumb-item active">shared_volume package</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/shared_volume.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="shared-volume-package">
+<h1>shared_volume package<a class="headerlink" href="#shared-volume-package" title="Permalink to this heading"></a></h1>
+<section id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this heading"></a></h2>
+</section>
+<section id="module-access_api">
+<span id="access-api-module"></span><h2>access_api module<a class="headerlink" href="#module-access_api" title="Permalink to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="access_api.main">
+<span class="sig-prename descclassname"><span class="pre">access_api.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#access_api.main" title="Permalink to this definition"></a></dt>
+<dd><p>Python code used by NetLogo to access the API</p>
+</dd></dl>
+
+</section>
+<section id="module-api">
+<span id="shared-volume-api-module"></span><h2>shared_volume.api module<a class="headerlink" href="#module-api" title="Permalink to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="api.check_new_agentss">
+<span class="sig-prename descclassname"><span class="pre">api.</span></span><span class="sig-name descname"><span class="pre">check_new_agentss</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#api.check_new_agentss" title="Permalink to this definition"></a></dt>
+<dd><p>Checks if there is any new agent to insert in the simulation. Return multiple agents (all available at the moment)</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="api.check_new_agentss_1">
+<span class="sig-prename descclassname"><span class="pre">api.</span></span><span class="sig-name descname"><span class="pre">check_new_agentss_1</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#api.check_new_agentss_1" title="Permalink to this definition"></a></dt>
+<dd><p>Checks if there is any new agent to insert in the simulation. Return a single agent</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="api.connect_to_db">
+<span class="sig-prename descclassname"><span class="pre">api.</span></span><span class="sig-name descname"><span class="pre">connect_to_db</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#api.connect_to_db" title="Permalink to this definition"></a></dt>
+<dd><p>Function used to let the API connect to DB</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="api.model_to_alive">
+<span class="sig-prename descclassname"><span class="pre">api.</span></span><span class="sig-name descname"><span class="pre">model_to_alive</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#api.model_to_alive" title="Permalink to this definition"></a></dt>
+<dd><p>At the end of simulation, receives all agents from a model and inserts it into the alive_agent table</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="api.model_to_alive_single">
+<span class="sig-prename descclassname"><span class="pre">api.</span></span><span class="sig-name descname"><span class="pre">model_to_alive_single</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#api.model_to_alive_single" title="Permalink to this definition"></a></dt>
+<dd><p>At the end of simulation, receives a single agent from a model and inserts it into the alive_agent table</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="api.output_php">
+<span class="sig-prename descclassname"><span class="pre">api.</span></span><span class="sig-name descname"><span class="pre">output_php</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#api.output_php" title="Permalink to this definition"></a></dt>
+<dd><p>Function that sends to the PHP code the data to create the list of agents of the simulation</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="api.page_not_found">
+<span class="sig-prename descclassname"><span class="pre">api.</span></span><span class="sig-name descname"><span class="pre">page_not_found</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">e</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#api.page_not_found" title="Permalink to this definition"></a></dt>
+<dd><p>Function that handles 404 requests to the API</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="api.process_agents_on_router">
+<span class="sig-prename descclassname"><span class="pre">api.</span></span><span class="sig-name descname"><span class="pre">process_agents_on_router</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#api.process_agents_on_router" title="Permalink to this definition"></a></dt>
+<dd><p>Function used by the router, that removes an agent from router and inserts it in a simulation, accordingly to the router type</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="api.register_agents_on_platform">
+<span class="sig-prename descclassname"><span class="pre">api.</span></span><span class="sig-name descname"><span class="pre">register_agents_on_platform</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#api.register_agents_on_platform" title="Permalink to this definition"></a></dt>
+<dd><p>Route used to register agents on the platform (performed by register)</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="api.request_to_register">
+<span class="sig-prename descclassname"><span class="pre">api.</span></span><span class="sig-name descname"><span class="pre">request_to_register</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#api.request_to_register" title="Permalink to this definition"></a></dt>
+<dd><p>Route used to register agents on the platform (performed by register)</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="api.sanity_test">
+<span class="sig-prename descclassname"><span class="pre">api.</span></span><span class="sig-name descname"><span class="pre">sanity_test</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#api.sanity_test" title="Permalink to this definition"></a></dt>
+<dd><p>Sanity test that tests if every agent (at the moment, from 1 to 799):
+(i) appears in the following situations:
+- all models table, where processed = 0
+- alive agents table, from every model
+- last one from m3 (current alive agent in JaCaMo)
+- in router table (router queue)
+(ii) appears in the previous scenario just once
+(iii) if every agent from m3 (except for the alive) has a .asl file</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="api.sanity_test_agent_path_history">
+<span class="sig-prename descclassname"><span class="pre">api.</span></span><span class="sig-name descname"><span class="pre">sanity_test_agent_path_history</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#api.sanity_test_agent_path_history" title="Permalink to this definition"></a></dt>
+<dd><p>Sanity test: tests the path from a single agent</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="api.sanity_test_agent_to_jacamo_without_asl_file">
+<span class="sig-prename descclassname"><span class="pre">api.</span></span><span class="sig-name descname"><span class="pre">sanity_test_agent_to_jacamo_without_asl_file</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#api.sanity_test_agent_to_jacamo_without_asl_file" title="Permalink to this definition"></a></dt>
+<dd><p>Sanity test: tests if every agent from router, already processed, has a .asl file</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="api.sanity_test_list">
+<span class="sig-prename descclassname"><span class="pre">api.</span></span><span class="sig-name descname"><span class="pre">sanity_test_list</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#api.sanity_test_list" title="Permalink to this definition"></a></dt>
+<dd><p>Sanity test: call all previous sanity test in a single route</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="api.sanity_test_recheck_agent_path">
+<span class="sig-prename descclassname"><span class="pre">api.</span></span><span class="sig-name descname"><span class="pre">sanity_test_recheck_agent_path</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#api.sanity_test_recheck_agent_path" title="Permalink to this definition"></a></dt>
+<dd><p>Sanity test: for every agent in m1, m2 and m3, tests if the path has a continous cycle</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="api.serve_sphinx_docs">
+<span class="sig-prename descclassname"><span class="pre">api.</span></span><span class="sig-name descname"><span class="pre">serve_sphinx_docs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'index.html'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#api.serve_sphinx_docs" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="api.testing_sending">
+<span class="sig-prename descclassname"><span class="pre">api.</span></span><span class="sig-name descname"><span class="pre">testing_sending</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#api.testing_sending" title="Permalink to this definition"></a></dt>
+<dd><p>Receive an agent, from a model, and inserts it into the router table</p>
+</dd></dl>
+
+</section>
+<section id="module-api_working">
+<span id="shared-volume-api-working-module"></span><h2>shared_volume.api_working module<a class="headerlink" href="#module-api_working" title="Permalink to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="api_working.check_new_agentss">
+<span class="sig-prename descclassname"><span class="pre">api_working.</span></span><span class="sig-name descname"><span class="pre">check_new_agentss</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#api_working.check_new_agentss" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="api_working.check_new_agentss_1">
+<span class="sig-prename descclassname"><span class="pre">api_working.</span></span><span class="sig-name descname"><span class="pre">check_new_agentss_1</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#api_working.check_new_agentss_1" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="api_working.connect_to_db">
+<span class="sig-prename descclassname"><span class="pre">api_working.</span></span><span class="sig-name descname"><span class="pre">connect_to_db</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#api_working.connect_to_db" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="api_working.model_to_alive">
+<span class="sig-prename descclassname"><span class="pre">api_working.</span></span><span class="sig-name descname"><span class="pre">model_to_alive</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#api_working.model_to_alive" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="api_working.model_to_alive_single">
+<span class="sig-prename descclassname"><span class="pre">api_working.</span></span><span class="sig-name descname"><span class="pre">model_to_alive_single</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#api_working.model_to_alive_single" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="api_working.output_php">
+<span class="sig-prename descclassname"><span class="pre">api_working.</span></span><span class="sig-name descname"><span class="pre">output_php</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#api_working.output_php" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="api_working.page_not_found">
+<span class="sig-prename descclassname"><span class="pre">api_working.</span></span><span class="sig-name descname"><span class="pre">page_not_found</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">e</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#api_working.page_not_found" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="api_working.process_agents_on_router">
+<span class="sig-prename descclassname"><span class="pre">api_working.</span></span><span class="sig-name descname"><span class="pre">process_agents_on_router</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#api_working.process_agents_on_router" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="api_working.register_agents_on_platform">
+<span class="sig-prename descclassname"><span class="pre">api_working.</span></span><span class="sig-name descname"><span class="pre">register_agents_on_platform</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#api_working.register_agents_on_platform" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="api_working.request_to_register">
+<span class="sig-prename descclassname"><span class="pre">api_working.</span></span><span class="sig-name descname"><span class="pre">request_to_register</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#api_working.request_to_register" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="api_working.sanity_test">
+<span class="sig-prename descclassname"><span class="pre">api_working.</span></span><span class="sig-name descname"><span class="pre">sanity_test</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#api_working.sanity_test" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="api_working.sanity_test_agent_path_history">
+<span class="sig-prename descclassname"><span class="pre">api_working.</span></span><span class="sig-name descname"><span class="pre">sanity_test_agent_path_history</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#api_working.sanity_test_agent_path_history" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="api_working.testing_sending">
+<span class="sig-prename descclassname"><span class="pre">api_working.</span></span><span class="sig-name descname"><span class="pre">testing_sending</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#api_working.testing_sending" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+</section>
+<section id="module-clean_simulation_files">
+<span id="shared-volume-clean-simulation-files-module"></span><h2>shared_volume.clean_simulation_files module<a class="headerlink" href="#module-clean_simulation_files" title="Permalink to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="clean_simulation_files.main">
+<span class="sig-prename descclassname"><span class="pre">clean_simulation_files.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#clean_simulation_files.main" title="Permalink to this definition"></a></dt>
+<dd><p>Code used to clear simulation files. At this moment, clears output and alive txt files from every NetLogo’s models</p>
+</dd></dl>
+
+</section>
+<section id="module-db_python_netlogo">
+<span id="shared-volume-db-python-netlogo-module"></span><h2>shared_volume.db_python_netlogo module<a class="headerlink" href="#module-db_python_netlogo" title="Permalink to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="db_python_netlogo.host_port">
+<span class="sig-prename descclassname"><span class="pre">db_python_netlogo.</span></span><span class="sig-name descname"><span class="pre">host_port</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#db_python_netlogo.host_port" title="Permalink to this definition"></a></dt>
+<dd><p>Internal function, to inform host and port to access the API</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="db_python_netlogo.receiving_agents">
+<span class="sig-prename descclassname"><span class="pre">db_python_netlogo.</span></span><span class="sig-name descname"><span class="pre">receiving_agents</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">modelo</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#db_python_netlogo.receiving_agents" title="Permalink to this definition"></a></dt>
+<dd><p>Function used by NetLogo to receive agents from the platform. It receives an agent from the API and inserts it into the simulation. Calls the check_new_agents endpoint on API</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="db_python_netlogo.request_to_register">
+<span class="sig-prename descclassname"><span class="pre">db_python_netlogo.</span></span><span class="sig-name descname"><span class="pre">request_to_register</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#db_python_netlogo.request_to_register" title="Permalink to this definition"></a></dt>
+<dd><p>Function that requests to register to create a certain amount of agents. Asked by NetLogo. Calls the register_agents_on_platform endpoint on API</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="db_python_netlogo.send_agent_to_alive">
+<span class="sig-prename descclassname"><span class="pre">db_python_netlogo.</span></span><span class="sig-name descname"><span class="pre">send_agent_to_alive</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">agent_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#db_python_netlogo.send_agent_to_alive" title="Permalink to this definition"></a></dt>
+<dd><p>Function used by NetLogo, when the simulation is over. It removes an agent from the simulation and sends it to the API (to be inserted in alive_agents table). Calls the model_to_alive endpoint on API</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="db_python_netlogo.send_agent_to_router">
+<span class="sig-prename descclassname"><span class="pre">db_python_netlogo.</span></span><span class="sig-name descname"><span class="pre">send_agent_to_router</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">agent_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#db_python_netlogo.send_agent_to_router" title="Permalink to this definition"></a></dt>
+<dd><p>Function used by NetLogo, to send agents to the platform. It removes an agent from the simulation and sends it to the API (to be inserted in the router table). Calls the model_to_router endpoint on API</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="db_python_netlogo.testing_exception">
+<span class="sig-prename descclassname"><span class="pre">db_python_netlogo.</span></span><span class="sig-name descname"><span class="pre">testing_exception</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">error</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#db_python_netlogo.testing_exception" title="Permalink to this definition"></a></dt>
+<dd><p>Function create for testing only, testing the creation of a custom exception</p>
+</dd></dl>
+
+</section>
+<section id="module-initialize_db">
+<span id="shared-volume-initialize-db-module"></span><h2>shared_volume.initialize_db module<a class="headerlink" href="#module-initialize_db" title="Permalink to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="initialize_db.main">
+<span class="sig-prename descclassname"><span class="pre">initialize_db.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#initialize_db.main" title="Permalink to this definition"></a></dt>
+<dd><p>Python function to create manually the Databased (not used anymore, the db comes in a .sql file)</p>
+</dd></dl>
+
+</section>
+<section id="module-python_execute_netlogo">
+<span id="shared-volume-python-execute-netlogo-module"></span><h2>shared_volume.python_execute_netlogo module<a class="headerlink" href="#module-python_execute_netlogo" title="Permalink to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="python_execute_netlogo.execute_model">
+<span class="sig-prename descclassname"><span class="pre">python_execute_netlogo.</span></span><span class="sig-name descname"><span class="pre">execute_model</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#python_execute_netlogo.execute_model" title="Permalink to this definition"></a></dt>
+<dd><p>Function that executes the NetLogo model</p>
+</dd></dl>
+
+</section>
+<section id="module-register">
+<span id="shared-volume-register-module"></span><h2>shared_volume.register module<a class="headerlink" href="#module-register" title="Permalink to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="register.request_to_register">
+<span class="sig-prename descclassname"><span class="pre">register.</span></span><span class="sig-name descname"><span class="pre">request_to_register</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">qtd</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#register.request_to_register" title="Permalink to this definition"></a></dt>
+<dd><p>Python code that requests the register to insert a certain amount of new agents in the simulation</p>
+</dd></dl>
+
+</section>
+<section id="module-router">
+<span id="shared-volume-router-module"></span><h2>shared_volume.router module<a class="headerlink" href="#module-router" title="Permalink to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="router.main">
+<span class="sig-prename descclassname"><span class="pre">router.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#router.main" title="Permalink to this definition"></a></dt>
+<dd><p>Loop function that receives and process agents in the router</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="modules.html" class="btn btn-neutral float-left" title="shared_volume" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023, Gustavo.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
