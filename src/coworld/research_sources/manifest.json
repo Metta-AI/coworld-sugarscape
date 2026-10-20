@@ -196,7 +196,7 @@
     "engine": "author-netlogo-jacamo-mysql",
     "selection": "Last pre-acceptance commit; exact experiment revision unknown. Colocated native processes are a Coworld deployment adaptation.",
     "files_sha256": {
-      "audit_native.py": "c404234775dc71d87cb547ca8ed9053e2d3ad51cc6d22d77c9c858c9ea715b6e",
+      "audit_native.py": "a6db227f28010f940f63330094b323b89270a8545a669abbc841269eaf2fc1b5",
       "audit_snapshot.py": "dbfb265885401c04c4fb3a93340782b4b981c246295904b74bea372b5ed5ad30",
       "original/Dockerfile_GRADLE": "f8273d2b13c8fa442924e9311ea7aa68a4a456e532d971696abcb30200730bf2",
       "original/Dockerfile_GRADLE_arm64": "955097cb518594cc7a88edaa88c2f02836bc9aa6af41721167b7da5fea3df932",
@@ -345,6 +345,9 @@
       "files": [
         "audit_snapshot.py",
         "audit_native.py"
+      ],
+      "coworld_changes": [
+        "Accept zero or one active transferred JaCaMo agent, as permitted by the original single-slot checker and its polling interval. Preserve full identity conservation and every native log/SQL reconstruction check."
       ]
     }
   }
