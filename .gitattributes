@@ -4,3 +4,5 @@ tests/fixtures/research/*.csv -text whitespace=cr-at-eol
 
 # Preserve author whitespace in the hash-pinned Haskell sources.
 src/coworld/research_sources/thaler_2019/original/** -whitespace
+# Preserve author whitespace in the hash-pinned Julia sources.
+src/coworld/research_sources/quera_2025/** -whitespace

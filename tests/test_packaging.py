@@ -74,6 +74,7 @@ def test_variants_and_certification_are_token_free_and_fixture_lengths_match() -
         "paper-thaler-tvar-rebirth",
         "paper-thaler-tarray-baseline",
         "paper-thaler-tarray-rebirth",
+        "paper-quera-forward",
         "paper-dogan-slow",
         "paper-dogan-balanced",
         "paper-dogan-fast",

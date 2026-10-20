@@ -80,6 +80,18 @@ def test_mcculloch_public_episodes_reproduce_released_model_trajectories(
         ]
         assert [f["timestep"] for f in replay["frames"]] == list(range(101))
         assert replay["details"]["duration_override"] is False
+        messages = [
+            json.loads(line)
+            for line in (folder / "global.jsonl").read_text().splitlines()
+        ]
+        assert (
+            messages[0]["type"] == "status" and messages[0]["study"] == "mcculloch_2022"
+        )
+        assert messages[-1]["type"] == "result" and messages[-1]["scores"] == [0]
+        assert all(
+            message["protocol"] == "sugarscape-research/1" for message in messages
+        )
+
         assert json.loads((folder / "results.json").read_bytes())["scores"] == [0]
 
 
