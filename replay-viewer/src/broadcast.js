@@ -5746,6 +5746,10 @@ async function loadArtifact(url) {
  *  the fetch path and the postMessage path cannot drift in their validation —
  *  the socket path's guards were once missing from the artifact path entirely. */
 async function adoptReplay(payload, url) {
+  if (payload?.format === "sugarscape.research-replay/1") {
+    showResearchReplay(payload);
+    return;
+  }
   if (payload instanceof FrameStore) {
     if (payload.count === 0) {
       fail("This replay recorded no frames.");

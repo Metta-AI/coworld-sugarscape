@@ -37,6 +37,7 @@ from websockets.http11 import Request, Response
 
 from .config import resolve_episode_config, ruleset_limits
 from .episode import run_episode
+from . import research
 from .ruleset import validate_ruleset
 from .targets import load_target_catalog, resolve_seat_targets
 
@@ -642,13 +643,16 @@ class SugarscapeServer:
         self._submitted = [False] * seats
         self._rulesets = [None] * seats
         self._seat_timings = [SeatTransitTiming() for _ in range(seats)]
-        catalog = load_target_catalog()
-        self._targets = resolve_seat_targets(
-            self.config.get("targets"),
-            seats=seats,
-            measurement_window=int(self.config["measurement_window"]),
-            catalog=catalog,
-        )
+        if "research" in self.config:
+            self._targets = ()
+        else:
+            catalog = load_target_catalog()
+            self._targets = resolve_seat_targets(
+                self.config.get("targets"),
+                seats=seats,
+                measurement_window=int(self.config["measurement_window"]),
+                catalog=catalog,
+            )
 
     async def serve(self) -> None:
         """Serve the submission window, run the episode, publish artifacts, exit."""
@@ -666,9 +670,14 @@ class SugarscapeServer:
             timeout = float(self.config.get("player_connect_timeout_seconds", 180))
             self._deadline = loop.time() + timeout
             _log("server_ready", host=self.host, port=self.bound_port, timeout_seconds=timeout)
-            await self._submission_window()
-            await self._execute_episode(loop)
-            await self._wait_for_terminal_delivery()
+            try:
+                await self._submission_window()
+                await self._execute_episode(loop)
+                await self._wait_for_terminal_delivery()
+            finally:
+                # Release protocol handlers on native failure as well as success.
+                self._result_ready.set()
+                self._fan_out(_json_message({"type": "server_closed"}))
 
     def _process_request(self, connection: ServerConnection, request: Request) -> Response | None:
         parsed = urlsplit(request.path)
@@ -726,7 +735,8 @@ class SugarscapeServer:
             observation_sent_ns = perf_counter_ns()
             await self._action_loop(connection, slot, timing, observation_sent_ns)
             await self._result_ready.wait()
-            await connection.send(self._result_message)
+            if self._result_message:
+                await connection.send(self._result_message)
         except ConnectionClosed:
             _log("player_disconnected", seat=slot, close_code=connection.close_code)
         finally:
@@ -742,6 +752,7 @@ class SugarscapeServer:
         observation_sent_ns: int,
     ) -> None:
         loop = asyncio.get_running_loop()
+        is_research = "research" in self.config
         limits = ruleset_limits(self.config)
         while not self._window_closed and not self._submitted[slot]:
             remaining = self._deadline - loop.time()
@@ -754,9 +765,11 @@ class SugarscapeServer:
             if loop.time() > self._deadline:
                 return
             timing.action_transit_ns += perf_counter_ns() - observation_sent_ns
-            action, envelope_errors = _parse_action(message)
+            action, envelope_errors = _parse_action(message, field="parameters" if is_research else "ruleset")
             started = perf_counter_ns()
-            validation = validate_ruleset(action, limits=limits) if not envelope_errors else None
+            validation = None
+            if not envelope_errors:
+                validation = research.validate_action(self.config, action) if is_research else validate_ruleset(action, limits=limits)
             timing.validation_ns += perf_counter_ns() - started
             errors = envelope_errors
             if validation is not None:
@@ -812,6 +825,8 @@ class SugarscapeServer:
             while True:
                 message = await queue.get()
                 message_type = json.loads(message).get("type")
+                if message_type == "server_closed":
+                    return
                 if message_type == "frame" and not stream_started:
                     delay = float(
                         self.config.get(
@@ -845,11 +860,17 @@ class SugarscapeServer:
         )
 
     async def _execute_episode(self, loop: asyncio.AbstractEventLoop) -> None:
+        if "research" in self.config and not all(self._submitted):
+            failure = {"failed_policy_index": 0, "message": "Research controller did not submit a valid action before its deadline"}
+            await asyncio.to_thread(atomic_write_uri, os.environ["COGAME_PLAYER_FAILURE_URI"], _json_message(failure).encode())
+            self._fan_out(_json_message({"type": "failure", **failure}))
+            return
+
         def frame_sink(frame: dict[str, object]) -> None:
             loop.call_soon_threadsafe(self._fan_out, _json_message(frame))
 
         results, replay, timings = await asyncio.to_thread(
-            run_episode,
+            research.run_episode if "research" in self.config else run_episode,
             self.config,
             self._rulesets,
             submitted=self._submitted,
@@ -970,6 +991,8 @@ class SugarscapeServer:
             queue.put_nowait(message)
 
     def _observation(self, slot: int) -> dict[str, object]:
+        if "research" in self.config:
+            return research.observation(self.config, slot)
         limits = ruleset_limits(self.config)
         return {
             "type": "observation",
@@ -1123,7 +1146,7 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def _parse_action(message: str | bytes) -> tuple[object, list[dict[str, str]]]:
+def _parse_action(message: str | bytes, *, field: str = "ruleset") -> tuple[object, list[dict[str, str]]]:
     try:
         if isinstance(message, bytes):
             message = message.decode("utf-8")
@@ -1134,9 +1157,9 @@ def _parse_action(message: str | bytes) -> tuple[object, list[dict[str, str]]]:
         return None, [{"path": "$", "message": "action must be an object"}]
     if value.get("type") != "action":
         return None, [{"path": "$.type", "message": 'expected "action"'}]
-    if "ruleset" not in value:
-        return None, [{"path": "$.ruleset", "message": "field is required"}]
-    return value["ruleset"], []
+    if field not in value:
+        return None, [{"path": "$." + field, "message": "field is required"}]
+    return value[field], []
 
 
 def _http_response(status: int, body: str, content_type: str) -> Response:

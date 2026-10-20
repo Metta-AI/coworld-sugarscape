@@ -90,3 +90,7 @@ zippy/
 *.swp
 *.swo
 .DS_Store
+
+# Qualified native study interpreter environments
+.research-venv/
+.dogan-venv/

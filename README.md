@@ -86,6 +86,13 @@ Reproducibility assumes `PYTHONHASHSEED=0`; both Dockerfiles set it, and the
 server re-executes itself with that value when necessary. A recorded results or
 replay seed reproduces an episode on the pinned interpreter.
 
+## Research worlds
+
+The [native research collection](docs/RESEARCH.md) exposes six study engines as
+46 named variants with pinned sources, parameter protocols and research replays.
+Reference experiments and the McCulloch calibration challenge have separate score semantics.
+The guide includes native setup, prospective comparisons, league settings and remaining engines.
+
 ## Training
 
 `tools/training_bridge.py` runs the same pinned DTL simulator, SugarLang validator,
