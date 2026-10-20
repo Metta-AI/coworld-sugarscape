@@ -12,6 +12,8 @@ output = (
     if "GMN_OUTPUT_DIR" in os.environ
     else Path(sys.argv[1]).resolve()
 )
+native = output / "native"
+native.mkdir(exist_ok=False)
 subprocess.run(
     [
         sys.executable,
@@ -26,6 +28,7 @@ subprocess.run(
         str(output / "episode"),
     ],
     check=True,
+    env={**os.environ, "COWORLD_RICHMOND_EVIDENCE_DIR": str(native)},
     timeout=1850,
 )
 episode = output / "episode/paper-richmond-full/1729"

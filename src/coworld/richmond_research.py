@@ -23,7 +23,17 @@ def run(config, parameters, source, source_root):
     for name, digest in qualification["files_sha256"].items():
         if hashlib.sha256((runtime / name).read_bytes()).hexdigest() != digest:
             raise ValueError("Richmond native runtime mismatch: " + name)
-    directory = Path(tempfile.mkdtemp(prefix="sugarscape-richmond-"))
+    directory = Path(
+        tempfile.mkdtemp(
+            prefix="sugarscape-richmond-",
+            dir=os.environ["COWORLD_RICHMOND_EVIDENCE_DIR"],
+        )
+        if "COWORLD_RICHMOND_EVIDENCE_DIR" in os.environ
+        else tempfile.mkdtemp(prefix="sugarscape-richmond-")
+    )
+    (directory / "runtime-qualification.json").write_text(
+        json.dumps(qualification, indent=2) + "\n"
+    )
     run_dir = directory / "run"
     run_dir.mkdir()
     environment = {
@@ -55,6 +65,7 @@ def run(config, parameters, source, source_root):
         text=True,
         timeout=30,
     )
+    (directory / "hardware.json").write_text(json.dumps(hardware, indent=2) + "\n")
     with (
         (run_dir / "stdout.log").open("x") as stdout,
         (run_dir / "stderr.log").open("x") as stderr,
