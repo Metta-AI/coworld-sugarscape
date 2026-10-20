@@ -6,3 +6,6 @@ tests/fixtures/research/*.csv -text whitespace=cr-at-eol
 src/coworld/research_sources/thaler_2019/original/** -whitespace
 # Preserve author whitespace in the hash-pinned Julia sources.
 src/coworld/research_sources/quera_2025/** -whitespace
+
+# Preserve the released CUDA simulation source.
+src/coworld/research_sources/richmond_2023/main.cu -whitespace
