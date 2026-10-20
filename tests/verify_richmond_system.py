@@ -13,7 +13,7 @@ output = (
     else Path(sys.argv[1]).resolve()
 )
 native = output / "native"
-native.mkdir(exist_ok=False)
+native.mkdir(parents=True, exist_ok=False)
 subprocess.run(
     [
         sys.executable,
