@@ -94,3 +94,6 @@ zippy/
 # Qualified native study interpreter environments
 .research-venv/
 .dogan-venv/
+
+# Immutable author dependencies belong to the qualified Lima source snapshot.
+!/src/coworld/research_sources/lima_2024/original/shared_volume/jacamo/jacamo_model/lib/
