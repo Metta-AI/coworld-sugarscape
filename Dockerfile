@@ -14,6 +14,12 @@ COPY src/coworld/research_sources /app/src/coworld/research_sources
 RUN python tools/setup_netlogo_research.py --javac /opt/java/openjdk/bin/javac \
     && rm build/research-runtimes/*.tgz
 
+FROM julia:1.11.3-bookworm AS quera
+ENV JULIA_DEPOT_PATH=/opt/julia-depot JULIA_NUM_THREADS=1 JULIA_NUM_PRECOMPILE_TASKS=1 JULIA_PKG_PRECOMPILE_AUTO=0 JULIA_CPU_TARGET=generic OPENBLAS_NUM_THREADS=1
+WORKDIR /app
+COPY src/coworld/research_sources/quera_2025 /app/src/coworld/research_sources/quera_2025
+RUN julia --startup-file=no --project=/app/src/coworld/research_sources/quera_2025 -e 'using SHA; p="/app/src/coworld/research_sources/quera_2025/Manifest.toml"; h=bytes2hex(sha256(read(p))); @assert h=="3b1cdef37a183be5822a4e3032fa3125ad3dee70ec231c387791c036bdbd2f81"; using Pkg; Pkg.instantiate(); using DiffABM, Images; @assert bytes2hex(sha256(read(p)))==h'
+
 FROM python:3.13.5-slim-bookworm
 
 RUN apt-get update && apt-get install -y --no-install-recommends libfreetype6 fontconfig \
@@ -24,6 +30,8 @@ COPY --from=research /usr/local /opt/research-python
 COPY --from=dogan /usr/local /opt/dogan-python
 COPY --from=java /opt/java/openjdk /opt/java/openjdk
 COPY --from=netlogo /app/build/research-runtimes /opt/research-runtimes
+COPY --from=quera /usr/local/julia /usr/local/julia
+COPY --from=quera /opt/julia-depot /opt/julia-depot
 WORKDIR /app
 COPY src /app/src
 COPY targets /app/targets
@@ -32,6 +40,9 @@ COPY players/baseline /app/players/baseline
 COPY tools/research_experiments.py /app/tools/research_experiments.py
 COPY coworld_manifest.json /app/coworld_manifest.json
 
+ENV COWORLD_JULIA=/usr/local/julia/bin/julia
+ENV COWORLD_JULIA_DEPOT=/opt/julia-depot
+ENV JULIA_CPU_TARGET=generic
 ENV COWORLD_JAVA=/opt/java/openjdk/bin/java
 ENV COWORLD_NETLOGO_5=/opt/research-runtimes/netlogo-5.3.1
 ENV COWORLD_NETLOGO_6=/opt/research-runtimes/netlogo-6.1.1
