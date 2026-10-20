@@ -91,3 +91,7 @@ jobs:
         run: >-
           docker run --rm --network none -v "$PWD/tests:/qualification:ro"
           sugarscape-ci python /qualification/verify_quera_system.py /tmp/quera-proof
+      - name: Qualify the complete native two-NetLogo and JaCaMo architecture
+        run: >-
+          docker run --rm --network none -v "$PWD/tests:/qualification:ro"
+          sugarscape-ci python /qualification/verify_lima_system.py /tmp/lima-proof

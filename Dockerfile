@@ -28,6 +28,48 @@ WORKDIR /app
 COPY src/coworld/research_sources/quera_2025 /app/src/coworld/research_sources/quera_2025
 RUN julia --startup-file=no --project=/app/src/coworld/research_sources/quera_2025 -e 'using SHA; p="/app/src/coworld/research_sources/quera_2025/Manifest.toml"; h=bytes2hex(sha256(read(p))); @assert h=="3b1cdef37a183be5822a4e3032fa3125ad3dee70ec231c387791c036bdbd2f81"; using Pkg; Pkg.instantiate(); using DiffABM, Images; @assert bytes2hex(sha256(read(p)))==h'
 
+FROM mysql:5.7@sha256:4bc6bc963e6d8443453676cae56536f4b8156d78bae03c0145cbe47c2aad73bb AS lima_database
+USER root
+RUN mkdir -p /opt/lima/mysql/bin /opt/lima/mysql/lib \
+    && cp /usr/sbin/mysqld /opt/lima/mysql/bin/ \
+    && ldd /usr/sbin/mysqld | awk '{for(i=1;i<=NF;i++) if ($i ~ /^\//) print $i}' | xargs -I '{}' cp -L '{}' /opt/lima/mysql/lib/ \
+    && cp -a /usr/share/mysql /opt/lima/mysql/share
+
+FROM gradle:7.4.2-jdk18@sha256:d0d756611201a1c54c0c31b28e28f6d083bdfacd656f9d1fe418264a0d258383 AS lima_jacamo
+USER root
+RUN curl -fL 'https://github.com/AdoptOpenJDK/openjdk15-binaries/releases/download/jdk-15.0.2%2B7/OpenJDK15U-jdk_x64_linux_hotspot_15.0.2_7.tar.gz' -o /tmp/java15.tgz \
+    && echo '94f20ca8ea97773571492e622563883b8869438a015d02df6028180dd9acc24d  /tmp/java15.tgz' | sha256sum -c - \
+    && mkdir /opt/java15 && tar xzf /tmp/java15.tgz --strip-components=1 -C /opt/java15
+ENV JAVA_HOME=/opt/java15
+COPY src/coworld/research_sources/lima_2024/original/shared_volume/jacamo/jacamo_model /opt/lima/jacamo_model
+COPY tools/setup_lima_jacamo.gradle /tmp/setup.gradle
+WORKDIR /opt/lima/jacamo_model
+RUN --mount=type=cache,id=sugarscape-lima-gradle742,target=/home/gradle/.gradle \
+    gradle --no-daemon --no-watch-fs --console=plain -I /tmp/setup.gradle dependencies --configuration compileClasspath \
+    && \
+    gradle --no-daemon --no-watch-fs --console=plain -I /tmp/setup.gradle \
+    -Dorg.gradle.java.installations.paths=/opt/java15 -Dorg.gradle.java.installations.auto-download=false \
+    classes coworldRuntime
+
+FROM eclipse-temurin:8-jdk-jammy@sha256:44ab6db1a674bf1a4af11dd208c92130d61b78d34b3efffc566926c808c3c1d3 AS lima_netlogo
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && curl -fL -A coworld-sugarscape/1.0 https://downloads.netlogo.org/6.0.4/NetLogo-6.0.4-64.tgz -o /tmp/netlogo.tgz \
+    && echo '0dcd9df4dfb218826a74f9df42163fa588908a1dfe58864106936f8dfb76acec  /tmp/netlogo.tgz' | sha256sum -c - \
+    && mkdir -p /opt/lima/netlogo && tar xzf /tmp/netlogo.tgz --strip-components=1 -C /opt/lima/netlogo
+
+FROM python:3.11.14-slim-bookworm AS lima
+RUN pip install --no-cache-dir pydantic==2.12.3 flask==3.1.2 mysql-connector-python==9.5.0 requests==2.32.5
+COPY --from=lima_database /opt/lima/mysql /opt/lima/mysql
+COPY --from=lima_jacamo /opt/java15 /opt/lima/java15
+COPY --from=lima_jacamo /opt/lima/jacamo_model/coworld-runtime /opt/lima/jacamo
+COPY --from=lima_netlogo /opt/java/openjdk /opt/lima/java8
+COPY --from=lima_netlogo /opt/lima/netlogo /opt/lima/netlogo
+COPY src/coworld/research_sources/lima_2024 /opt/lima/source
+COPY src/coworld/lima_runner.py src/coworld/lima_api.py /opt/lima/
+COPY tools/qualify_lima_runtime.py /tmp/qualify_lima_runtime.py
+RUN python /tmp/qualify_lima_runtime.py
+ENV COWORLD_LIMA=/opt/lima PYTHONUNBUFFERED=1
+
 FROM python:3.13.5-slim-bookworm
 
 RUN apt-get update && apt-get install -y --no-install-recommends libfreetype6 fontconfig \
@@ -44,6 +86,8 @@ COPY --from=thaler /opt/thaler/licenses /opt/thaler/licenses
 COPY --from=thaler /opt/thaler/qualification.json /opt/thaler/qualification.json
 COPY --from=quera /usr/local/julia /usr/local/julia
 COPY --from=quera /opt/julia-depot /opt/julia-depot
+COPY --from=lima /opt/lima /opt/lima
+COPY --from=lima /usr/local /opt/lima-python
 WORKDIR /app
 COPY src /app/src
 COPY targets /app/targets
@@ -52,6 +96,8 @@ COPY players/baseline /app/players/baseline
 COPY tools/research_experiments.py /app/tools/research_experiments.py
 COPY coworld_manifest.json /app/coworld_manifest.json
 
+ENV COWORLD_LIMA=/opt/lima
+ENV COWORLD_LIMA_PYTHON_PREFIX=/opt/lima-python
 ENV COWORLD_THALER=/opt/thaler
 ENV COWORLD_JULIA=/usr/local/julia/bin/julia
 ENV COWORLD_JULIA_DEPOT=/opt/julia-depot

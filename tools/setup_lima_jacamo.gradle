@@ -1,0 +1,14 @@
+// Package the original Gradle project's resolved runtime without changing its sources.
+allprojects {
+    tasks.register('coworldRuntime', Copy) {
+        dependsOn classes
+        from sourceSets.main.output
+        into 'coworld-runtime/classes'
+        doLast {
+            copy {
+                from configurations.runtimeClasspath
+                into 'coworld-runtime/lib'
+            }
+        }
+    }
+}
