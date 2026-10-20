@@ -1,3 +1,6 @@
 # Pinned native sources and retained observations must keep their original bytes.
 src/coworld/research_sources/** -text whitespace=cr-at-eol
 tests/fixtures/research/*.csv -text whitespace=cr-at-eol
+
+# Preserve author whitespace in the hash-pinned Haskell sources.
+src/coworld/research_sources/thaler_2019/original/** -whitespace
