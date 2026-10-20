@@ -629,8 +629,10 @@ class SugarscapeServer:
     _result_message: str = field(init=False, default="")
     _seat_timings: list[SeatTransitTiming] = field(init=False)
     _targets: tuple[Any, ...] = field(init=False)
+    _protocol: str = field(init=False)
 
     def __post_init__(self) -> None:
+        self._protocol = research.PROTOCOL if "research" in self.config else PROTOCOL
         seats = int(self.config["seats"])
         tokens = self.config.get("tokens")
         players = self.config.get("players")
@@ -675,6 +677,12 @@ class SugarscapeServer:
                 await self._execute_episode(loop)
                 await self._wait_for_terminal_delivery()
             finally:
+                if failure := sys.exception():
+                    _log("episode_failed", error=str(failure))
+                    self._fan_out(_json_message({
+                        "type": "failure", "protocol": self._protocol,
+                        "kind": "game_execution", "message": "Episode execution failed; inspect the game logs",
+                    }))
                 # Release protocol handlers on native failure as well as success.
                 self._result_ready.set()
                 self._fan_out(_json_message({"type": "server_closed"}))
@@ -686,7 +694,11 @@ class SugarscapeServer:
         if parsed.path == "/client/player":
             return _http_response(200, _player_page(), "text/html; charset=utf-8")
         if parsed.path == "/client/global":
-            return _http_response(200, _global_page(), "text/html; charset=utf-8")
+            page = (
+                (Path(__file__).resolve().parents[2] / "replay-viewer/index.html").read_text()
+                if "research" in self.config else _global_page()
+            )
+            return _http_response(200, page, "text/html; charset=utf-8")
         if parsed.path == "/global":
             return None
         if parsed.path != "/player":
@@ -801,17 +813,7 @@ class SugarscapeServer:
             # seconds into a hosted episode. Greet every spectator immediately
             # so the stream is never silent (v1 satisfied the same probe via
             # its catch-up frame buffer).
-            await connection.send(
-                _json_message(
-                    {
-                        "type": "status",
-                        "protocol": PROTOCOL,
-                        "phase": "run" if self._window_closed else "submission_window",
-                        "seats": len(self._submitted),
-                        "submitted": sum(self._submitted),
-                    }
-                )
-            )
+            await connection.send(self._status_message())
             # Arrived after the episode finished: hand over the result rather
             # than holding a connection open on a world that is already decided.
             # Truthiness, NOT `is not None`: the field defaults to "" rather than
@@ -858,12 +860,14 @@ class SugarscapeServer:
             duration_ns=self._submission_window_ns,
             submitted=sum(self._submitted),
         )
+        if "research" in self.config:
+            self._fan_out(self._status_message())
 
     async def _execute_episode(self, loop: asyncio.AbstractEventLoop) -> None:
         if "research" in self.config and not all(self._submitted):
             failure = {"failed_policy_index": 0, "message": "Research controller did not submit a valid action before its deadline"}
             await asyncio.to_thread(atomic_write_uri, os.environ["COGAME_PLAYER_FAILURE_URI"], _json_message(failure).encode())
-            self._fan_out(_json_message({"type": "failure", **failure}))
+            self._fan_out(_json_message({"type": "failure", "protocol": self._protocol, **failure}))
             return
 
         def frame_sink(frame: dict[str, object]) -> None:
@@ -897,7 +901,7 @@ class SugarscapeServer:
         )
         terminal = {
             "type": "result",
-            "protocol": PROTOCOL,
+            "protocol": self._protocol,
             "score_method": results["score_method"],
             "scores": results["scores"],
             "details": results["details"],
@@ -990,13 +994,25 @@ class SugarscapeServer:
                     pass
             queue.put_nowait(message)
 
+    def _status_message(self) -> str:
+        status = {
+            "type": "status",
+            "protocol": self._protocol,
+            "phase": "run" if self._window_closed else "submission_window",
+            "seats": len(self._submitted),
+            "submitted": sum(self._submitted),
+        }
+        if "research" in self.config:
+            status.update(study=self.config["research"]["study"], mode=self.config["research"]["mode"])
+        return _json_message(status)
+
     def _observation(self, slot: int) -> dict[str, object]:
         if "research" in self.config:
             return research.observation(self.config, slot)
         limits = ruleset_limits(self.config)
         return {
             "type": "observation",
-            "protocol": PROTOCOL,
+            "protocol": self._protocol,
             "seat": slot,
             "config": public_config(self.config),
             "target": self._targets[slot].as_dict(),
