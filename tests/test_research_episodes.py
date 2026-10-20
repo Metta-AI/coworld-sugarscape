@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 import os
 from pathlib import Path
 import subprocess
@@ -115,7 +116,11 @@ def test_carrella_and_constructive_witnesses_complete_through_player_protocol(
         actual = frame["measurements"]
         assert actual["population"] == int(target["population"])
         assert actual["native_tick"] == int(target["tick"])
-        assert actual["utility_gini"] == float(target["gini"])
+        # libm differs across Darwin/ARM and Linux/x86: max observed error 1.25e-16.
+        # Counts, trades, prices and landscape resources remain exact below.
+        assert math.isclose(
+            actual["utility_gini"], float(target["gini"]), rel_tol=0, abs_tol=1e-14
+        )
         assert actual["trade_count"] == int(target["trade_count"])
         assert actual["mean_price"] == float(target["mean_price"])
         assert sum(frame["sugar"]) == int(target["landscape_sugar"])
