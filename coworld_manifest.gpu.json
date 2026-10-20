@@ -251,7 +251,7 @@
     "protocols": {
       "player": {
         "type": "uri",
-        "value": "https://github.com/Metta-AI/coworld-sugarscape/blob/main/docs/PROTOCOL.md\n\nResearch variants use sugarscape-research/1. Receive an observation with study, mode and parameter_schema; send {\"type\":\"action\",\"parameters\":{...}}. Fixed reference modes require an empty object. Calibration uses the closed observed schema. Seeds and auth tokens are withheld from player observations. Study sources and scientific qualifications are recorded in replay/details. A missing submission fails the episode; no reference completion is manufactured."
+        "value": "https://github.com/Metta-AI/coworld-sugarscape/blob/main/docs/PROTOCOL.md"
       },
       "global": {
         "type": "uri",
