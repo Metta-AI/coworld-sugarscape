@@ -108,6 +108,8 @@ def run_variant(variant, seed: int, output: Path, timesteps: int | None):
                 ):
                     raise ValueError("invalid research spectator greeting")
                 stream.write(json.dumps(status) + "\n")
+                if not observer.ping().wait(timeout=3):
+                    raise TimeoutError("research global endpoint did not answer Ping")
                 player_environment = {
                     **environment,
                     "COWORLD_PLAYER_WS_URL": f"ws://127.0.0.1:{port}/player?slot=0&token=local-research-controller",
@@ -125,8 +127,6 @@ def run_variant(variant, seed: int, output: Path, timesteps: int | None):
                     raise RuntimeError(
                         f"baseline player failed: {output / 'player.log'}"
                     )
-                if not observer.ping().wait(timeout=3):
-                    raise TimeoutError("research global endpoint did not answer Ping")
                 while True:
                     message = json.loads(observer.recv(timeout=600))
                     stream.write(json.dumps(message) + "\n")
