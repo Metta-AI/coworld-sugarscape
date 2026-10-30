@@ -1,0 +1,12 @@
+[
+  {
+    "path": "carrella-seed123.csv",
+    "url": "https://raw.githubusercontent.com/Metta-AI/sugarscape/bc33bd58e92914ce1652f2c15ccd77d99dc1895b/replications/carrella_2021/results/independent-model-2026-10-16/results.csv",
+    "sha256": "defa6fa1ba71aa4dfd4df9121c36d1b985febd4d0eb86e6b3322576963dffdc5"
+  },
+  {
+    "path": "thaler-seq-baseline.csv",
+    "url": "https://raw.githubusercontent.com/Metta-AI/sugarscape/cea904b14248371b1281a29b8f73bf5bb0f7d5bd/replications/thaler_2019/results/population-observer-qualification-2026-10-17/qualification/seq-normal-1.csv",
+    "sha256": "f37f59ce772248c4c3630311a48a3a10bc9f3ec942009e6a087ba52ba1bac925"
+  }
+]
