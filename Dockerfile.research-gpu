@@ -1,0 +1,45 @@
+FROM python:3.13.5-slim-bookworm AS sources
+WORKDIR /app
+COPY tools/fetch_research_sources.py /app/tools/fetch_research_sources.py
+COPY src/coworld/research_sources /app/src/coworld/research_sources
+RUN python tools/fetch_research_sources.py --kind sources
+
+FROM nvidia/cuda:11.8.0-devel-ubuntu22.04@sha256:94fd755736cb58979173d491504f0b573247b1745250249415b07fefc738e41f AS richmond
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends git cmake make g++ python3 ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+RUN mkdir /opt/richmond \
+    && git clone --filter=blob:none --no-checkout https://github.com/FLAMEGPU/FLAMEGPU2-submodel-benchmark.git /opt/richmond/benchmark \
+    && git -C /opt/richmond/benchmark checkout --detach 290702073492677f2fc9164419e9d5900d119e02 \
+    && git clone --filter=blob:none --no-checkout https://github.com/FLAMEGPU/FLAMEGPU2.git /opt/richmond/engine \
+    && git -C /opt/richmond/engine checkout --detach 19136c18629af0a52ac4355ff705596b22bedac1
+COPY --from=sources /app/src/coworld/research_sources/richmond_2023 /app/src/coworld/research_sources/richmond_2023
+COPY tools/setup_richmond_research.py tools/richmond_gpu_probe.cu /app/tools/
+RUN python3 /app/tools/setup_richmond_research.py
+
+FROM python:3.11.14-slim-bookworm AS worker
+RUN pip install --no-cache-dir pydantic==2.12.3 jsonschema==4.25.1
+
+FROM python:3.13.5-slim-bookworm
+RUN apt-get update && apt-get install -y --no-install-recommends libstdc++6 libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+RUN pip install --no-cache-dir websockets==17.0.1 pydantic==2.12.3 jsonschema==4.25.1
+COPY --from=worker /usr/local /opt/research-python
+COPY --from=richmond /usr/local/cuda-11.8 /usr/local/cuda-11.8
+COPY --from=richmond /opt/richmond /opt/richmond
+WORKDIR /app
+COPY src /app/src
+COPY --from=sources /app/src/coworld/research_sources /app/src/coworld/research_sources
+COPY targets /app/targets
+COPY players/baseline /app/players/baseline
+COPY replay-viewer/index.html /app/replay-viewer/index.html
+COPY tools/research_experiments.py /app/tools/research_experiments.py
+COPY coworld_manifest.gpu.json /app/coworld_manifest.json
+COPY tests/verify_richmond_system.py /qualification/verify_richmond_system.py
+ENV COWORLD_RICHMOND=/opt/richmond
+ENV COWORLD_RESEARCH_PYTHON=/opt/research-python/bin/python3.11
+ENV COWORLD_RESEARCH_PREFIX=/opt/research-python
+ENV NVIDIA_VISIBLE_DEVICES=all NVIDIA_DRIVER_CAPABILITIES=compute,utility
+ENV LD_LIBRARY_PATH=/usr/local/cuda-11.8/lib64:/usr/local/nvidia/lib:/usr/local/nvidia/lib64
+ENV PYTHONPATH=/app/src PYTHONHASHSEED=0
+CMD ["python", "-m", "coworld.server"]
