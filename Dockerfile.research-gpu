@@ -1,3 +1,9 @@
+FROM python:3.13.5-slim-bookworm AS sources
+WORKDIR /app
+COPY tools/fetch_research_sources.py /app/tools/fetch_research_sources.py
+COPY src/coworld/research_sources /app/src/coworld/research_sources
+RUN python tools/fetch_research_sources.py
+
 FROM nvidia/cuda:11.8.0-devel-ubuntu22.04@sha256:94fd755736cb58979173d491504f0b573247b1745250249415b07fefc738e41f AS richmond
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends git cmake make g++ python3 ca-certificates \
@@ -7,7 +13,7 @@ RUN mkdir /opt/richmond \
     && git -C /opt/richmond/benchmark checkout --detach 290702073492677f2fc9164419e9d5900d119e02 \
     && git clone --filter=blob:none --no-checkout https://github.com/FLAMEGPU/FLAMEGPU2.git /opt/richmond/engine \
     && git -C /opt/richmond/engine checkout --detach 19136c18629af0a52ac4355ff705596b22bedac1
-COPY src/coworld/research_sources/richmond_2023 /app/src/coworld/research_sources/richmond_2023
+COPY --from=sources /app/src/coworld/research_sources/richmond_2023 /app/src/coworld/research_sources/richmond_2023
 COPY tools/setup_richmond_research.py tools/richmond_gpu_probe.cu /app/tools/
 RUN python3 /app/tools/setup_richmond_research.py
 
@@ -23,6 +29,7 @@ COPY --from=richmond /usr/local/cuda-11.8 /usr/local/cuda-11.8
 COPY --from=richmond /opt/richmond /opt/richmond
 WORKDIR /app
 COPY src /app/src
+COPY --from=sources /app/src/coworld/research_sources /app/src/coworld/research_sources
 COPY targets /app/targets
 COPY players/baseline /app/players/baseline
 COPY replay-viewer/index.html /app/replay-viewer/index.html

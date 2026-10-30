@@ -1,6 +1,0 @@
-FROM php:5.6-apache
-RUN echo "ServerName localhost" >> /etc/apache2/apache2.conf
-#RUN apt-get clean -y && apt-get update -y && apt-get install -y curl
-RUN apt-get install -y curl
-RUN docker-php-ext-install mysqli
-# RUN docker-php-ext-install curl

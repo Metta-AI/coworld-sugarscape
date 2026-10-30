@@ -202,3 +202,6 @@ The ten-paper replication evidence remains in [Metta-AI/sugarscape](https://app.
 Scientific evidence distinguishes source equivalence, public protocol execution,
 container execution, hosted certification and full campaign completion.
 A passed stage does not imply the others passed.
+
+Research source setup: `python tools/fetch_research_sources.py` restores pinned inputs before native setup.
+`tools/setup_research.py` and Docker builds run this automatically. Episodes make no source downloads.
