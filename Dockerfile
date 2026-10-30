@@ -1,3 +1,9 @@
+FROM python:3.13.5-slim-bookworm AS sources
+WORKDIR /app
+COPY tools/fetch_research_sources.py /app/tools/fetch_research_sources.py
+COPY src/coworld/research_sources /app/src/coworld/research_sources
+RUN python tools/fetch_research_sources.py
+
 FROM python:3.11.14-slim-bookworm AS research
 RUN pip install --no-cache-dir pydantic==2.12.3 jsonschema==4.25.1
 
@@ -10,7 +16,7 @@ FROM python:3.13.5-slim-bookworm AS netlogo
 COPY --from=java /opt/java/openjdk /opt/java/openjdk
 WORKDIR /app
 COPY tools/setup_netlogo_research.py /app/tools/setup_netlogo_research.py
-COPY src/coworld/research_sources /app/src/coworld/research_sources
+COPY --from=sources /app/src/coworld/research_sources /app/src/coworld/research_sources
 RUN python tools/setup_netlogo_research.py --javac /opt/java/openjdk/bin/javac \
     && rm build/research-runtimes/*.tgz
 
@@ -20,12 +26,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends haskell-stack g
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY tools/setup_thaler_research.py /app/tools/setup_thaler_research.py
-COPY src/coworld/research_sources/thaler_2019 /app/src/coworld/research_sources/thaler_2019
+COPY --from=sources /app/src/coworld/research_sources/thaler_2019 /app/src/coworld/research_sources/thaler_2019
 RUN --mount=type=cache,id=sugarscape-thaler-ghc843,target=/opt/thaler-stack python3 tools/setup_thaler_research.py /opt/thaler
 FROM julia:1.11.3-bookworm AS quera
 ENV JULIA_DEPOT_PATH=/opt/julia-depot JULIA_NUM_THREADS=1 JULIA_NUM_PRECOMPILE_TASKS=1 JULIA_PKG_PRECOMPILE_AUTO=0 JULIA_CPU_TARGET=generic OPENBLAS_NUM_THREADS=1
 WORKDIR /app
-COPY src/coworld/research_sources/quera_2025 /app/src/coworld/research_sources/quera_2025
+COPY --from=sources /app/src/coworld/research_sources/quera_2025 /app/src/coworld/research_sources/quera_2025
 RUN julia --startup-file=no --project=/app/src/coworld/research_sources/quera_2025 -e 'using SHA; p="/app/src/coworld/research_sources/quera_2025/Manifest.toml"; h=bytes2hex(sha256(read(p))); @assert h=="3b1cdef37a183be5822a4e3032fa3125ad3dee70ec231c387791c036bdbd2f81"; using Pkg; Pkg.instantiate(); using DiffABM, Images; @assert bytes2hex(sha256(read(p)))==h'
 
 FROM mysql:5.7@sha256:4bc6bc963e6d8443453676cae56536f4b8156d78bae03c0145cbe47c2aad73bb AS lima_database
@@ -41,7 +47,7 @@ RUN curl -fL 'https://github.com/AdoptOpenJDK/openjdk15-binaries/releases/downlo
     && echo '94f20ca8ea97773571492e622563883b8869438a015d02df6028180dd9acc24d  /tmp/java15.tgz' | sha256sum -c - \
     && mkdir /opt/java15 && tar xzf /tmp/java15.tgz --strip-components=1 -C /opt/java15
 ENV JAVA_HOME=/opt/java15
-COPY src/coworld/research_sources/lima_2024/original/shared_volume/jacamo/jacamo_model /opt/lima/jacamo_model
+COPY --from=sources /app/src/coworld/research_sources/lima_2024/original/shared_volume/jacamo/jacamo_model /opt/lima/jacamo_model
 COPY tools/setup_lima_jacamo.gradle /tmp/setup.gradle
 WORKDIR /opt/lima/jacamo_model
 RUN --mount=type=cache,id=sugarscape-lima-gradle742,target=/home/gradle/.gradle \
@@ -64,7 +70,7 @@ COPY --from=lima_jacamo /opt/java15 /opt/lima/java15
 COPY --from=lima_jacamo /opt/lima/jacamo_model/coworld-runtime /opt/lima/jacamo
 COPY --from=lima_netlogo /opt/java/openjdk /opt/lima/java8
 COPY --from=lima_netlogo /opt/lima/netlogo /opt/lima/netlogo
-COPY src/coworld/research_sources/lima_2024 /opt/lima/source
+COPY --from=sources /app/src/coworld/research_sources/lima_2024 /opt/lima/source
 COPY src/coworld/lima_runner.py src/coworld/lima_api.py /opt/lima/
 COPY tools/qualify_lima_runtime.py /tmp/qualify_lima_runtime.py
 RUN python /tmp/qualify_lima_runtime.py
@@ -90,6 +96,7 @@ COPY --from=lima /opt/lima /opt/lima
 COPY --from=lima /usr/local /opt/lima-python
 WORKDIR /app
 COPY src /app/src
+COPY --from=sources /app/src/coworld/research_sources /app/src/coworld/research_sources
 COPY targets /app/targets
 COPY replay-viewer/index.html /app/replay-viewer/index.html
 COPY players/baseline /app/players/baseline

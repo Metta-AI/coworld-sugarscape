@@ -4,6 +4,7 @@
 from pathlib import Path
 import os
 import subprocess
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKERS = {
@@ -26,6 +27,9 @@ WORKERS = {
     ),
 }
 if __name__ == "__main__":
+    subprocess.run(
+        [sys.executable, str(ROOT / "tools/fetch_research_sources.py")], check=True
+    )
     environment = {
         key: value
         for key, value in os.environ.items()
