@@ -48,13 +48,15 @@ if __name__ == "__main__":
     args = parser.parse_args()
     inputs = []
     if args.kind in {"sources", "all"}:
+        downloads = json.loads((ROOT / "downloads.json").read_bytes())
         for entry in json.loads((ROOT / "manifest.json").read_bytes()):
-            for name, url in entry["downloads"].items():
+            packaging = downloads[entry["study"]]
+            for name, url in packaging["files"].items():
                 inputs.append(
                     (url, ROOT / entry["study"] / name, entry["files_sha256"][name])
                 )
-            if "archive" in entry:
-                pin = entry["archive"]
+            if "archive" in packaging:
+                pin = packaging["archive"]
                 archive = fetch(
                     (
                         pin["url"],
