@@ -86,11 +86,14 @@ Reproducibility assumes `PYTHONHASHSEED=0`; both Dockerfiles set it, and the
 server re-executes itself with that value when necessary. A recorded results or
 replay seed reproduces an episode on the pinned interpreter.
 
-## Replicated research worlds
+## Research worlds
 
-The [research variant design](docs/designs/2026-10-20-replication-variants.md) maps ten completed Sugarscape method studies into a common Coworld collection.
-It distinguishes native paper engines from DTL adaptations, identifies resource constraints, and defines the first adapter and acceptance checks.
-These research variants are planned; the five existing variants remain the currently implemented collection.
+The [native research collection](docs/RESEARCH.md) exposes six study engines as
+46 named variants with pinned sources, parameter protocols and research replays.
+Reference experiments and the McCulloch calibration challenge have separate score semantics.
+The guide includes native setup, prospective comparisons, league settings and remaining engines.
+
+The [original research variant design](docs/designs/2026-10-20-replication-variants.md) records the adapter plan and acceptance checks.
 
 ## Training
 

@@ -115,7 +115,9 @@ class StudioVariantCatalog:
         ]
         for raw in manifest.get("variants") or []:
             variant_id = raw.get("id")
-            if variant_id in _EXCLUDED_VARIANTS:
+            # Studio compiles SugarLang. Research controllers submit parameters
+            # through their own protocol and are run by research_experiments.py.
+            if variant_id in _EXCLUDED_VARIANTS or "research" in raw["game_config"]:
                 continue
             kind = _MANIFEST_VARIANT_KINDS.get(variant_id)
             if kind is None:
