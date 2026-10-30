@@ -113,3 +113,8 @@ zippy/
 /src/coworld/research_sources/oremland_2014/RunPolicyBatch.java
 /src/coworld/research_sources/oremland_2014/model.nlogo
 /src/coworld/research_sources/oremland_2014/sugar-map.txt
+/src/coworld/research_sources/brearcliffe_2020/model.nlogo
+/src/coworld/research_sources/brearcliffe_2020/LICENSE.author
+/src/coworld/research_sources/brearcliffe_2020/symmetric-sugar-map.txt
+
+/tests/fixtures/research/carrella-seed123.csv

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import math
 import os
@@ -75,9 +76,14 @@ def test_mcculloch_public_episodes_reproduce_released_model_trajectories(
         name = f"paper-mcculloch-{target['max_metabolism']}-{target['max_vision']}"
         folder = output / name / "0"
         replay = json.loads(zlib.decompress((folder / "replay.bin").read_bytes()))
-        assert [f["measurements"]["population"] for f in replay["frames"]] == target[
-            "population"
-        ]
+        population = [f["measurements"]["population"] for f in replay["frames"]]
+        assert len(population) == target["observations"]
+        assert (
+            hashlib.sha256(
+                json.dumps(population, separators=(",", ":")).encode()
+            ).hexdigest()
+            == target["population_sha256"]
+        )
         assert [f["timestep"] for f in replay["frames"]] == list(range(101))
         assert replay["details"]["duration_override"] is False
         messages = [
