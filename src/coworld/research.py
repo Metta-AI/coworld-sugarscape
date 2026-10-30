@@ -76,6 +76,13 @@ class ReturnParameters(Parameters):
     period: Literal[5, 6]
 
 
+class ThalerParameters(Parameters):
+    implementation: Literal["seq", "io", "tvar", "tarray"]
+    population: Literal[500, 1000, 1500, 2000, 2500]
+    rebirthing: bool
+    capabilities: Literal[1, 4]
+
+
 class QueraParameters(Parameters):
     vision_probability: float = Field(ge=0, le=1)
     metabolism_alpha: float = Field(gt=0, le=20)
@@ -93,6 +100,7 @@ class ResearchSpec(Parameters):
         "dogan_2026",
         "brearcliffe_2020",
         "oremland_2014",
+        "thaler_2019",
         "quera_2025",
     ]
     mode: Literal["reference", "population-calibration"] = "reference"
@@ -122,6 +130,7 @@ PARAMETER_MODELS = {
     "dogan_2026": DoganParameters,
     "brearcliffe_2020": BrearcliffeParameters,
     "oremland_2014": OremlandParameters,
+    "thaler_2019": ThalerParameters,
     "quera_2025": QueraParameters,
 }
 PAPER_HORIZONS = {
@@ -158,6 +167,13 @@ def resolve_config(
         raise ValueError(
             "research horizon exceeds the supported original study horizon"
         )
+    if config.research.study == "thaler_2019":
+        if config.timesteps != 1000:
+            raise ValueError(
+                "native Haskell observers require the original1000-observation invocation"
+            )
+        if parameters.implementation == "seq" and parameters.capabilities != 1:
+            raise ValueError("sequential Haskell supports exactly one capability")
     config.research.parameters = parameters.model_dump()
     if config.seed == -1:
         config.seed = (seed_source or (lambda: secrets.randbits(63)))()
@@ -396,6 +412,10 @@ def run_native_episode(
     if not validation.valid:
         raise ValueError(str(validation.errors))
     parameters = spec.parameters if spec.mode == "reference" else validation.normalized
+    if spec.study == "thaler_2019":
+        from .thaler_research import run
+
+        return run(resolved, parameters, source_entry(spec.study))
     if spec.study == "quera_2025":
         from .quera_research import run
 

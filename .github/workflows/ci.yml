@@ -54,12 +54,17 @@ jobs:
   image-smoke:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
           persist-credentials: false
+      - name: Free hosted runner disk for native image builds
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          df -h /
       - run: docker build --tag sugarscape-ci --file Dockerfile .
       - name: Check headless engine import
         run: >-
@@ -85,6 +90,10 @@ jobs:
           python tools/research_experiments.py --out /tmp/brearcliffe-smoke
           --variant paper-brearcliffe-released-code-rule-m-ec
           --seeds 20261019 --timesteps 100
+      - name: Qualify the four native Haskell kernels through public episodes
+        run: >-
+          docker run --rm --network none -v "$PWD/tests:/qualification:ro"
+          sugarscape-ci python /qualification/verify_thaler_system.py /tmp/thaler-proof
       - name: Qualify native Julia forward history over the public protocol
         run: >-
           docker run --rm --network none -v "$PWD/tests:/qualification:ro"
