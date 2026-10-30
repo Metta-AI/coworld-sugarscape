@@ -2,7 +2,7 @@ FROM python:3.13.5-slim-bookworm AS sources
 WORKDIR /app
 COPY tools/fetch_research_sources.py /app/tools/fetch_research_sources.py
 COPY src/coworld/research_sources /app/src/coworld/research_sources
-RUN python tools/fetch_research_sources.py
+RUN python tools/fetch_research_sources.py --kind sources
 
 FROM python:3.11.14-slim-bookworm AS research
 RUN pip install --no-cache-dir pydantic==2.12.3 jsonschema==4.25.1

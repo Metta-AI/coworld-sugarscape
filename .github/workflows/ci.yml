@@ -65,6 +65,8 @@ jobs:
         run: >-
           docker run --rm --network none sugarscape-ci python -c
           "import sys; import coworld.dtl; assert 'tkinter' not in sys.modules"
+      - name: Fetch hash-pinned native reference fixtures
+        run: python3 tools/fetch_research_sources.py --kind fixtures
       - name: Run native Python reference episodes over the public protocol
         run: >-
           docker run --rm --network none sugarscape-ci
