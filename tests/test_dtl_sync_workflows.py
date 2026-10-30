@@ -81,10 +81,10 @@ def test_ci_builds_and_smokes_game_on_prs() -> None:
     assert job["if"] == "github.event_name == 'pull_request'"
     assert job["steps"][0]["with"]["submodules"] == "recursive"
     commands = [step["run"] for step in job["steps"] if "run" in step]
-    assert commands[0] == "docker build --tag sugarscape-ci --file Dockerfile ."
-    assert "docker run --rm --network none sugarscape-ci python -c" in commands[1]
-    assert "import coworld.dtl" in commands[1]
-    assert "'tkinter' not in sys.modules" in commands[1]
+    assert commands[1] == "docker build --tag sugarscape-ci --file Dockerfile ."
+    assert "docker run --rm --network none sugarscape-ci python -c" in commands[2]
+    assert "import coworld.dtl" in commands[2]
+    assert "'tkinter' not in sys.modules" in commands[2]
     assert all("docker push" not in command for command in commands)
 
 
