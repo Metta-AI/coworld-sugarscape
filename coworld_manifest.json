@@ -54,7 +54,7 @@
           ],
           "properties": {
             "study": {
-              "enum": ["mcculloch_2022", "carrella_2021", "izquierdo_2009", "dogan_2026", "brearcliffe_2020", "oremland_2014"]
+              "enum": ["mcculloch_2022", "carrella_2021", "izquierdo_2009", "dogan_2026", "brearcliffe_2020", "oremland_2014", "quera_2025"]
             },
             "mode": {
               "enum": [
@@ -8728,6 +8728,32 @@
             ],
             "phase": 4,
             "clipped": true
+          }
+        }
+      }
+    },
+    {
+      "id": "paper-quera-forward",
+      "name": "Quera native forward reference",
+      "description": "Original Julia forward method: 25x25 cells, 100 agent slots, 50 stored states and 49 transitions. Physical parameters satisfy dependent vision probability. This episode does not perform training or gradients. Noncompetitive score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 49,
+        "research": {
+          "study": "quera_2025",
+          "mode": "reference",
+          "parameters": {
+            "vision_probability": 0.2,
+            "metabolism_alpha": 2.0,
+            "metabolism_beta": 5.0,
+            "wealth_alpha": 5.0,
+            "wealth_beta": 2.0,
+            "regeneration": 1.0
           }
         }
       }

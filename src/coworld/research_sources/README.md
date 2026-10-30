@@ -28,3 +28,7 @@ The NetLogo runtime archives are official distributions pinned by `netlogo-runti
 Build-time setup verifies complete archive hashes before extraction and retains distribution notices under `app/`.
 Per-episode checks verify every runtime jar and compiled recorder/extension file against the build qualification.
 These third-party notices and terms are not replaced by the research fork's root license.
+
+Quera retains the author's MIT-licensed DiffABM.jl source at commit `9178eccd56dd352e3515e276239654239f8d3b41`.
+`Manifest.toml` is the qualified study's forward dependency lock, not an author-supplied historical lockfile.
+The adapter executes only forward dynamics; BlackBIRDS, flow fitting and the 5,000-epoch campaign remain external research.
