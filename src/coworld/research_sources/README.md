@@ -5,7 +5,9 @@ Run `python tools/fetch_research_sources.py` before native setup or local episod
 Setup and Docker builds download selected files from immutable public Git commits or the hash-pinned author release.
 Downloads are verified before writing, ignored by Git, and included in the image for offline episodes.
 Existing downloaded files must match their pins; setup fails rather than replacing local edits.
-`manifest.json` pins each commit and every file hash. Runtime verifies those hashes before importing a model.
+`manifest.json` owns scientific source identity: commits, file hashes and qualification metadata.
+`downloads.json` owns build-time retrieval instructions and archive pins.
+Runtime verifies source hashes before importing a model; build transport is excluded from scientific identity.
 Update snapshots from an explicitly reviewed commit, preserving their corresponding notices and validation evidence.
 
 McCulloch's study model preserves the MIT-licensed released implementation's behavior, including initialization collisions.

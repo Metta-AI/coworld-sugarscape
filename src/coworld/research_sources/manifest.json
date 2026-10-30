@@ -9,12 +9,7 @@
       "sugarscape_cg/LICENSE.uncertainty": "8abd7b03cd2715c97e807ffda71b9f94a055141da5a44d6f65e7e1295da32fab"
     },
     "entrypoint": "independent.py",
-    "engine": "study-independent-python",
-    "downloads": {
-      "independent.py": "https://raw.githubusercontent.com/Metta-AI/sugarscape/960e703f24da4f498ca423bdaa5537c3200e5c8c/replications/mcculloch_2022/independent.py",
-      "sugarscape_cg/sugar-map.txt": "https://raw.githubusercontent.com/Metta-AI/sugarscape/960e703f24da4f498ca423bdaa5537c3200e5c8c/replications/mcculloch_2022/sugarscape_cg/sugar-map.txt",
-      "sugarscape_cg/LICENSE.uncertainty": "https://raw.githubusercontent.com/Metta-AI/sugarscape/960e703f24da4f498ca423bdaa5537c3200e5c8c/replications/mcculloch_2022/sugarscape_cg/LICENSE.uncertainty"
-    }
+    "engine": "study-independent-python"
   },
   {
     "study": "carrella_2021",
@@ -24,10 +19,7 @@
       "model.py": "23d73549848eadf237d38534a5cdae71c240c03cc9ef0fed4655cabb615ad36a"
     },
     "entrypoint": "model.py",
-    "engine": "study-independent-python",
-    "downloads": {
-      "model.py": "https://raw.githubusercontent.com/Metta-AI/sugarscape/bc33bd58e92914ce1652f2c15ccd77d99dc1895b/replications/carrella_2021/model.py"
-    }
+    "engine": "study-independent-python"
   },
   {
     "study": "izquierdo_2009",
@@ -38,11 +30,7 @@
       "results/full-model-return-2026-10-17/capacity.csv": "55f911e1fa16c9ad1ba1be69cf122e7b2ab7cf5e4aef0131d46bd6963262ad3e"
     },
     "entrypoint": "model.py",
-    "engine": "study-independent-python",
-    "downloads": {
-      "model.py": "https://raw.githubusercontent.com/Metta-AI/sugarscape/91441ad4115b0c351a654127acc29cc16ab3ea0c/replications/izquierdo_2009/model.py",
-      "results/full-model-return-2026-10-17/capacity.csv": "https://raw.githubusercontent.com/Metta-AI/sugarscape/91441ad4115b0c351a654127acc29cc16ab3ea0c/replications/izquierdo_2009/results/full-model-return-2026-10-17/capacity.csv"
-    }
+    "engine": "study-independent-python"
   },
   {
     "study": "dogan_2026",
@@ -58,16 +46,7 @@
       "sugarscape_ai_tax/model.py": "a3e264cb1640691451b2936cd85a17f21bc8b17f5a2f36977dc8ee1db698ed24",
       "sugarscape_ai_tax/sugar-map.txt": "cd9b4661c8813d3e268995676d5ba84394ee813986adb0d657dc9be4a1fab675"
     },
-    "engine": "author-python",
-    "downloads": {
-      "LICENSE": "https://raw.githubusercontent.com/Metta-AI/sugarscape/82cb45f731d76c985209fac842b857db305320ae/replications/dogan_2026/vendor/LICENSE",
-      "LICENSES/Apache-2.0.txt": "https://raw.githubusercontent.com/Metta-AI/sugarscape/82cb45f731d76c985209fac842b857db305320ae/replications/dogan_2026/vendor/LICENSES/Apache-2.0.txt",
-      "NOTICE": "https://raw.githubusercontent.com/Metta-AI/sugarscape/82cb45f731d76c985209fac842b857db305320ae/replications/dogan_2026/vendor/NOTICE",
-      "sugarscape_ai_tax/__init__.py": "https://raw.githubusercontent.com/Metta-AI/sugarscape/82cb45f731d76c985209fac842b857db305320ae/replications/dogan_2026/vendor/sugarscape_ai_tax/__init__.py",
-      "sugarscape_ai_tax/agents.py": "https://raw.githubusercontent.com/Metta-AI/sugarscape/82cb45f731d76c985209fac842b857db305320ae/replications/dogan_2026/vendor/sugarscape_ai_tax/agents.py",
-      "sugarscape_ai_tax/model.py": "https://raw.githubusercontent.com/Metta-AI/sugarscape/82cb45f731d76c985209fac842b857db305320ae/replications/dogan_2026/vendor/sugarscape_ai_tax/model.py",
-      "sugarscape_ai_tax/sugar-map.txt": "https://raw.githubusercontent.com/Metta-AI/sugarscape/82cb45f731d76c985209fac842b857db305320ae/replications/dogan_2026/vendor/sugarscape_ai_tax/sugar-map.txt"
-    }
+    "engine": "author-python"
   },
   {
     "study": "brearcliffe_2020",
@@ -80,19 +59,7 @@
       "LICENSE.author": "600ca4e25fe11762b75a97e714707fab48bb778374e92d24c6ca068791661c11",
       "symmetric-sugar-map.txt": "b36a8a31d804198683d30a29217d1e08830bd04ac539fa2c7250bb3168d3ba9a"
     },
-    "engine": "native-netlogo",
-    "downloads": {
-      "Replay.java": "https://raw.githubusercontent.com/Metta-AI/sugarscape/b64684cbe24b2b17f5cb32819040db4581fe7e25/replications/brearcliffe_2020/Replay.java"
-    },
-    "archive": {
-      "url": "https://www.comses.net/codebases/ffb52fc3-69e1-4bbd-b5d7-fa460617f74e/releases/1.0.0/download/",
-      "sha256": "38a7938cdfc03e74e103b9bb55f272aa61986d42fc0e464ed1d164a7bfcd5f38",
-      "files": {
-        "model.nlogo": "code/Creating_Intelligent_Agents.nlogo",
-        "LICENSE.author": "LICENSE",
-        "symmetric-sugar-map.txt": "data/symmetric-sugar-map.txt"
-      }
-    }
+    "engine": "native-netlogo"
   },
   {
     "study": "oremland_2014",
@@ -104,12 +71,7 @@
       "model.nlogo": "1cc6ee9db0852ea2a071004aa31eb797a06131b434cffc82f697993057aca816",
       "sugar-map.txt": "cd9b4661c8813d3e268995676d5ba84394ee813986adb0d657dc9be4a1fab675"
     },
-    "engine": "native-netlogo",
-    "downloads": {
-      "RunPolicyBatch.java": "https://raw.githubusercontent.com/Metta-AI/sugarscape/c1ad995a3e8c6dc7b91686e30fd772c4876cdd18/replications/oremland_2014/RunPolicyBatch.java",
-      "model.nlogo": "https://raw.githubusercontent.com/Metta-AI/sugarscape/c1ad995a3e8c6dc7b91686e30fd772c4876cdd18/replications/oremland_2014/results/policy-indexing-2026-10-18/oremland.nlogo",
-      "sugar-map.txt": "https://raw.githubusercontent.com/Metta-AI/sugarscape/c1ad995a3e8c6dc7b91686e30fd772c4876cdd18/replications/oremland_2014/results/policy-indexing-2026-10-18/sugar-map.txt"
-    }
+    "engine": "native-netlogo"
   },
   {
     "repository": "https://github.com/arnauqb/DiffABM.jl",
@@ -142,32 +104,7 @@
     "study": "quera_2025",
     "engine": "native-julia",
     "entrypoint": "src/DiffABM.jl",
-    "dependency_lock_origin": "Qualified forward-study environment, not an author-supplied lockfile",
-    "downloads": {
-      "LICENSE": "https://raw.githubusercontent.com/arnauqb/DiffABM.jl/9178eccd56dd352e3515e276239654239f8d3b41/LICENSE",
-      "scripts/sugar-map.txt": "https://raw.githubusercontent.com/arnauqb/DiffABM.jl/9178eccd56dd352e3515e276239654239f8d3b41/scripts/sugar-map.txt",
-      "src/AxtellFirms/AxtellFirms.jl": "https://raw.githubusercontent.com/arnauqb/DiffABM.jl/9178eccd56dd352e3515e276239654239f8d3b41/src/AxtellFirms/AxtellFirms.jl",
-      "src/AxtellFirms/AxtellFirmsVectorized.jl": "https://raw.githubusercontent.com/arnauqb/DiffABM.jl/9178eccd56dd352e3515e276239654239f8d3b41/src/AxtellFirms/AxtellFirmsVectorized.jl",
-      "src/BrockHommes.jl": "https://raw.githubusercontent.com/arnauqb/DiffABM.jl/9178eccd56dd352e3515e276239654239f8d3b41/src/BrockHommes.jl",
-      "src/DiffABM.jl": "https://raw.githubusercontent.com/arnauqb/DiffABM.jl/9178eccd56dd352e3515e276239654239f8d3b41/src/DiffABM.jl",
-      "src/GameOfLife.jl": "https://raw.githubusercontent.com/arnauqb/DiffABM.jl/9178eccd56dd352e3515e276239654239f8d3b41/src/GameOfLife.jl",
-      "src/RandomWalk.jl": "https://raw.githubusercontent.com/arnauqb/DiffABM.jl/9178eccd56dd352e3515e276239654239f8d3b41/src/RandomWalk.jl",
-      "src/SugarScape.jl": "https://raw.githubusercontent.com/arnauqb/DiffABM.jl/9178eccd56dd352e3515e276239654239f8d3b41/src/SugarScape.jl",
-      "src/diff_utils.jl": "https://raw.githubusercontent.com/arnauqb/DiffABM.jl/9178eccd56dd352e3515e276239654239f8d3b41/src/diff_utils.jl",
-      "src/discrete_randomness.jl": "https://raw.githubusercontent.com/arnauqb/DiffABM.jl/9178eccd56dd352e3515e276239654239f8d3b41/src/discrete_randomness.jl",
-      "src/sir_heterograph/infection.jl": "https://raw.githubusercontent.com/arnauqb/DiffABM.jl/9178eccd56dd352e3515e276239654239f8d3b41/src/sir_heterograph/infection.jl",
-      "src/sir_heterograph/june_graph_loader.jl": "https://raw.githubusercontent.com/arnauqb/DiffABM.jl/9178eccd56dd352e3515e276239654239f8d3b41/src/sir_heterograph/june_graph_loader.jl",
-      "src/sir_heterograph/mp.jl": "https://raw.githubusercontent.com/arnauqb/DiffABM.jl/9178eccd56dd352e3515e276239654239f8d3b41/src/sir_heterograph/mp.jl",
-      "src/sir_heterograph/policies.jl": "https://raw.githubusercontent.com/arnauqb/DiffABM.jl/9178eccd56dd352e3515e276239654239f8d3b41/src/sir_heterograph/policies.jl",
-      "src/sir_heterograph/sir.jl": "https://raw.githubusercontent.com/arnauqb/DiffABM.jl/9178eccd56dd352e3515e276239654239f8d3b41/src/sir_heterograph/sir.jl",
-      "src/sir_heterograph/utils.jl": "https://raw.githubusercontent.com/arnauqb/DiffABM.jl/9178eccd56dd352e3515e276239654239f8d3b41/src/sir_heterograph/utils.jl",
-      "src/sir_nonvec.jl": "https://raw.githubusercontent.com/arnauqb/DiffABM.jl/9178eccd56dd352e3515e276239654239f8d3b41/src/sir_nonvec.jl",
-      "src/sir_simple.jl": "https://raw.githubusercontent.com/arnauqb/DiffABM.jl/9178eccd56dd352e3515e276239654239f8d3b41/src/sir_simple.jl",
-      "src/sir_simple_vec.jl": "https://raw.githubusercontent.com/arnauqb/DiffABM.jl/9178eccd56dd352e3515e276239654239f8d3b41/src/sir_simple_vec.jl",
-      "src/utils.jl": "https://raw.githubusercontent.com/arnauqb/DiffABM.jl/9178eccd56dd352e3515e276239654239f8d3b41/src/utils.jl",
-      "Manifest.toml": "https://raw.githubusercontent.com/Metta-AI/sugarscape/e2386f24e241458ac7e587c7c0fe527ab2032c66/replications/source-audits/quera-2025-jmlr/Manifest.toml",
-      "Project.toml": "https://raw.githubusercontent.com/Metta-AI/sugarscape/e2386f24e241458ac7e587c7c0fe527ab2032c66/replications/source-audits/quera-2025-jmlr/Project.toml"
-    }
+    "dependency_lock_origin": "Qualified forward-study environment, not an author-supplied lockfile"
   },
   {
     "repository": "https://github.com/thalerjonathan/haskell-stm-sugarscape",
@@ -250,80 +187,6 @@
     "engine": "native-haskell",
     "entrypoint": "original/criterion/sugarscape-seq/src/Main.hs",
     "preparer_repository": "https://github.com/Metta-AI/sugarscape",
-    "preparer_revision": "cea904b14248371b1281a29b8f73bf5bb0f7d5bd",
-    "downloads": {
-      "original/criterion/sugarscape-io/ChangeLog.md": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-io/ChangeLog.md",
-      "original/criterion/sugarscape-io/LICENSE": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-io/LICENSE",
-      "original/criterion/sugarscape-io/Setup.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-io/Setup.hs",
-      "original/criterion/sugarscape-io/src/Agent.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-io/src/Agent.hs",
-      "original/criterion/sugarscape-io/src/Common.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-io/src/Common.hs",
-      "original/criterion/sugarscape-io/src/Discrete.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-io/src/Discrete.hs",
-      "original/criterion/sugarscape-io/src/Environment.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-io/src/Environment.hs",
-      "original/criterion/sugarscape-io/src/GlossRunner.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-io/src/GlossRunner.hs",
-      "original/criterion/sugarscape-io/src/Init.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-io/src/Init.hs",
-      "original/criterion/sugarscape-io/src/Main.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-io/src/Main.hs",
-      "original/criterion/sugarscape-io/src/Model.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-io/src/Model.hs",
-      "original/criterion/sugarscape-io/src/Random.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-io/src/Random.hs",
-      "original/criterion/sugarscape-io/src/Renderer.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-io/src/Renderer.hs",
-      "original/criterion/sugarscape-io/src/Simulation.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-io/src/Simulation.hs",
-      "original/criterion/sugarscape-io/src/Utils.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-io/src/Utils.hs",
-      "original/criterion/sugarscape-io/stack.yaml": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-io/stack.yaml",
-      "original/criterion/sugarscape-io/sugarscape-io.cabal": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-io/sugarscape-io.cabal",
-      "original/criterion/sugarscape-seq/ChangeLog.md": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-seq/ChangeLog.md",
-      "original/criterion/sugarscape-seq/LICENSE": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-seq/LICENSE",
-      "original/criterion/sugarscape-seq/Setup.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-seq/Setup.hs",
-      "original/criterion/sugarscape-seq/src/Agent.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-seq/src/Agent.hs",
-      "original/criterion/sugarscape-seq/src/AgentMonad.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-seq/src/AgentMonad.hs",
-      "original/criterion/sugarscape-seq/src/Common.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-seq/src/Common.hs",
-      "original/criterion/sugarscape-seq/src/Discrete.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-seq/src/Discrete.hs",
-      "original/criterion/sugarscape-seq/src/Environment.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-seq/src/Environment.hs",
-      "original/criterion/sugarscape-seq/src/GlossRunner.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-seq/src/GlossRunner.hs",
-      "original/criterion/sugarscape-seq/src/Init.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-seq/src/Init.hs",
-      "original/criterion/sugarscape-seq/src/Main.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-seq/src/Main.hs",
-      "original/criterion/sugarscape-seq/src/Model.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-seq/src/Model.hs",
-      "original/criterion/sugarscape-seq/src/Random.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-seq/src/Random.hs",
-      "original/criterion/sugarscape-seq/src/Renderer.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-seq/src/Renderer.hs",
-      "original/criterion/sugarscape-seq/src/Simulation.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-seq/src/Simulation.hs",
-      "original/criterion/sugarscape-seq/src/Utils.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-seq/src/Utils.hs",
-      "original/criterion/sugarscape-seq/stack.yaml": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-seq/stack.yaml",
-      "original/criterion/sugarscape-seq/sugarscape-seq.cabal": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-seq/sugarscape-seq.cabal",
-      "original/criterion/sugarscape-tarray/ChangeLog.md": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tarray/ChangeLog.md",
-      "original/criterion/sugarscape-tarray/LICENSE": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tarray/LICENSE",
-      "original/criterion/sugarscape-tarray/Setup.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tarray/Setup.hs",
-      "original/criterion/sugarscape-tarray/src/Agent.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tarray/src/Agent.hs",
-      "original/criterion/sugarscape-tarray/src/Common.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tarray/src/Common.hs",
-      "original/criterion/sugarscape-tarray/src/Discrete.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tarray/src/Discrete.hs",
-      "original/criterion/sugarscape-tarray/src/Environment.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tarray/src/Environment.hs",
-      "original/criterion/sugarscape-tarray/src/GlossRunner.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tarray/src/GlossRunner.hs",
-      "original/criterion/sugarscape-tarray/src/Init.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tarray/src/Init.hs",
-      "original/criterion/sugarscape-tarray/src/Main.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tarray/src/Main.hs",
-      "original/criterion/sugarscape-tarray/src/Model.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tarray/src/Model.hs",
-      "original/criterion/sugarscape-tarray/src/Random.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tarray/src/Random.hs",
-      "original/criterion/sugarscape-tarray/src/Renderer.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tarray/src/Renderer.hs",
-      "original/criterion/sugarscape-tarray/src/Simulation.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tarray/src/Simulation.hs",
-      "original/criterion/sugarscape-tarray/src/Utils.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tarray/src/Utils.hs",
-      "original/criterion/sugarscape-tarray/stack.yaml": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tarray/stack.yaml",
-      "original/criterion/sugarscape-tarray/sugarscape-tarray.cabal": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tarray/sugarscape-tarray.cabal",
-      "original/criterion/sugarscape-tvar/ChangeLog.md": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tvar/ChangeLog.md",
-      "original/criterion/sugarscape-tvar/LICENSE": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tvar/LICENSE",
-      "original/criterion/sugarscape-tvar/Setup.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tvar/Setup.hs",
-      "original/criterion/sugarscape-tvar/src/Agent.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tvar/src/Agent.hs",
-      "original/criterion/sugarscape-tvar/src/Common.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tvar/src/Common.hs",
-      "original/criterion/sugarscape-tvar/src/Discrete.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tvar/src/Discrete.hs",
-      "original/criterion/sugarscape-tvar/src/Environment.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tvar/src/Environment.hs",
-      "original/criterion/sugarscape-tvar/src/GlossRunner.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tvar/src/GlossRunner.hs",
-      "original/criterion/sugarscape-tvar/src/Init.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tvar/src/Init.hs",
-      "original/criterion/sugarscape-tvar/src/Main.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tvar/src/Main.hs",
-      "original/criterion/sugarscape-tvar/src/Model.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tvar/src/Model.hs",
-      "original/criterion/sugarscape-tvar/src/Random.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tvar/src/Random.hs",
-      "original/criterion/sugarscape-tvar/src/Renderer.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tvar/src/Renderer.hs",
-      "original/criterion/sugarscape-tvar/src/Simulation.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tvar/src/Simulation.hs",
-      "original/criterion/sugarscape-tvar/src/Utils.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tvar/src/Utils.hs",
-      "original/criterion/sugarscape-tvar/stack.yaml": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tvar/stack.yaml",
-      "original/criterion/sugarscape-tvar/sugarscape-tvar.cabal": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tvar/sugarscape-tvar.cabal",
-      "prepare_population_observers.py": "https://raw.githubusercontent.com/Metta-AI/sugarscape/cea904b14248371b1281a29b8f73bf5bb0f7d5bd/replications/thaler_2019/prepare_population_observers.py",
-      "stack-global-config.yaml": "https://raw.githubusercontent.com/Metta-AI/sugarscape/cea904b14248371b1281a29b8f73bf5bb0f7d5bd/replications/thaler_2019/timing/stack-global-config.yaml",
-      "timing/revision-fidelity.json": "https://raw.githubusercontent.com/Metta-AI/sugarscape/cea904b14248371b1281a29b8f73bf5bb0f7d5bd/replications/thaler_2019/timing/revision-fidelity.json"
-    }
+    "preparer_revision": "cea904b14248371b1281a29b8f73bf5bb0f7d5bd"
   }
 ]
