@@ -9,7 +9,12 @@
       "sugarscape_cg/LICENSE.uncertainty": "8abd7b03cd2715c97e807ffda71b9f94a055141da5a44d6f65e7e1295da32fab"
     },
     "entrypoint": "independent.py",
-    "engine": "study-independent-python"
+    "engine": "study-independent-python",
+    "downloads": {
+      "independent.py": "replications/mcculloch_2022/independent.py",
+      "sugarscape_cg/sugar-map.txt": "replications/mcculloch_2022/sugarscape_cg/sugar-map.txt",
+      "sugarscape_cg/LICENSE.uncertainty": "replications/mcculloch_2022/sugarscape_cg/LICENSE.uncertainty"
+    }
   },
   {
     "study": "carrella_2021",
@@ -19,7 +24,10 @@
       "model.py": "23d73549848eadf237d38534a5cdae71c240c03cc9ef0fed4655cabb615ad36a"
     },
     "entrypoint": "model.py",
-    "engine": "study-independent-python"
+    "engine": "study-independent-python",
+    "downloads": {
+      "model.py": "replications/carrella_2021/model.py"
+    }
   },
   {
     "study": "izquierdo_2009",
@@ -30,7 +38,11 @@
       "results/full-model-return-2026-10-17/capacity.csv": "55f911e1fa16c9ad1ba1be69cf122e7b2ab7cf5e4aef0131d46bd6963262ad3e"
     },
     "entrypoint": "model.py",
-    "engine": "study-independent-python"
+    "engine": "study-independent-python",
+    "downloads": {
+      "model.py": "replications/izquierdo_2009/model.py",
+      "results/full-model-return-2026-10-17/capacity.csv": "replications/izquierdo_2009/results/full-model-return-2026-10-17/capacity.csv"
+    }
   },
   {
     "study": "dogan_2026",
@@ -46,7 +58,16 @@
       "sugarscape_ai_tax/model.py": "a3e264cb1640691451b2936cd85a17f21bc8b17f5a2f36977dc8ee1db698ed24",
       "sugarscape_ai_tax/sugar-map.txt": "cd9b4661c8813d3e268995676d5ba84394ee813986adb0d657dc9be4a1fab675"
     },
-    "engine": "author-python"
+    "engine": "author-python",
+    "downloads": {
+      "LICENSE": "replications/dogan_2026/vendor/LICENSE",
+      "LICENSES/Apache-2.0.txt": "replications/dogan_2026/vendor/LICENSES/Apache-2.0.txt",
+      "NOTICE": "replications/dogan_2026/vendor/NOTICE",
+      "sugarscape_ai_tax/__init__.py": "replications/dogan_2026/vendor/sugarscape_ai_tax/__init__.py",
+      "sugarscape_ai_tax/agents.py": "replications/dogan_2026/vendor/sugarscape_ai_tax/agents.py",
+      "sugarscape_ai_tax/model.py": "replications/dogan_2026/vendor/sugarscape_ai_tax/model.py",
+      "sugarscape_ai_tax/sugar-map.txt": "replications/dogan_2026/vendor/sugarscape_ai_tax/sugar-map.txt"
+    }
   },
   {
     "study": "brearcliffe_2020",
@@ -59,7 +80,10 @@
       "LICENSE.author": "600ca4e25fe11762b75a97e714707fab48bb778374e92d24c6ca068791661c11",
       "symmetric-sugar-map.txt": "b36a8a31d804198683d30a29217d1e08830bd04ac539fa2c7250bb3168d3ba9a"
     },
-    "engine": "native-netlogo"
+    "engine": "native-netlogo",
+    "downloads": {
+      "Replay.java": "replications/brearcliffe_2020/Replay.java"
+    }
   },
   {
     "study": "oremland_2014",
@@ -71,7 +95,68 @@
       "model.nlogo": "1cc6ee9db0852ea2a071004aa31eb797a06131b434cffc82f697993057aca816",
       "sugar-map.txt": "cd9b4661c8813d3e268995676d5ba84394ee813986adb0d657dc9be4a1fab675"
     },
-    "engine": "native-netlogo"
+    "engine": "native-netlogo",
+    "downloads": {
+      "RunPolicyBatch.java": "replications/oremland_2014/RunPolicyBatch.java",
+      "model.nlogo": "replications/oremland_2014/results/policy-indexing-2026-10-18/oremland.nlogo",
+      "sugar-map.txt": "replications/oremland_2014/results/policy-indexing-2026-10-18/sugar-map.txt"
+    }
+  },
+  {
+    "repository": "https://github.com/arnauqb/DiffABM.jl",
+    "revision": "9178eccd56dd352e3515e276239654239f8d3b41",
+    "files_sha256": {
+      "LICENSE": "d7e0a36b096c8fcc2db28cadc238b42af91ed38609474deeddc81ad8eead63c4",
+      "Manifest.toml": "3b1cdef37a183be5822a4e3032fa3125ad3dee70ec231c387791c036bdbd2f81",
+      "Project.toml": "9be969f00b3b28bb99985b55205413c8d13f091edc5a827f6d260e08b552ba58",
+      "scripts/sugar-map.txt": "cd9b4661c8813d3e268995676d5ba84394ee813986adb0d657dc9be4a1fab675",
+      "src/AxtellFirms/AxtellFirms.jl": "847423bb04b5caa34239c513ca8533314607e6dd07e4263755be4f046070aea9",
+      "src/AxtellFirms/AxtellFirmsVectorized.jl": "78190cce37c9b93bb02b8f954881911e2452abc622003c9f9907bcc4e73289f8",
+      "src/BrockHommes.jl": "dc5ee24e1b9568170767ce9c559897c4aa36446e57eb3b96e0f3d555dcd00bf1",
+      "src/DiffABM.jl": "0e74f405134072c54f98bc09538440aafb6773755f897d04dfc1ae3848efa817",
+      "src/GameOfLife.jl": "3ea836c571f9cfe692510c318377c2de31fb49e2e49d8e683ef302e065e2e151",
+      "src/RandomWalk.jl": "12222cb5a126d11719dec8769b7c82c44cfcd690176a935a70da19df212b418a",
+      "src/SugarScape.jl": "d75bdd16ca51dd30851e794a490531c960a0445ccb44153b4ad624882f5b4959",
+      "src/diff_utils.jl": "24e61470f4c3a6776635ccf517daa1939e136f03eb9b14f5137aecd2b7f8488a",
+      "src/discrete_randomness.jl": "505f7af4963560ccc1b5605c2262f046d93ae762c483fdc88883dee42b406b9e",
+      "src/sir_heterograph/infection.jl": "9b62743195c508e7371ee7f2c2f44cae90569dc4ff379a3b019bc03ad9bf5d42",
+      "src/sir_heterograph/june_graph_loader.jl": "c65a9da2334affab537cc98e8f60605667dc5b52c3b980946e2fbf7d010ed731",
+      "src/sir_heterograph/mp.jl": "c334541f15a0dae544c52fb2e71d4383d121d3d23c60b89802d655b641b6a522",
+      "src/sir_heterograph/policies.jl": "ae713fda334859a083202fb8e7cbf930f8c5da30c7e241f483ae803d9ddf4821",
+      "src/sir_heterograph/sir.jl": "8afcd7d50ef9b63de24572e3a4f4b528baa8e36c486d544470fdd3f2997f594d",
+      "src/sir_heterograph/utils.jl": "5f357138fef7da2d12ce4eb5caab51ecab04e49f6d6554cc62faa812e6a8a889",
+      "src/sir_nonvec.jl": "c80a2f5d7133ab9d95993f10107d3b65fc1589c9a8c5a83a6b8407cca7b8a865",
+      "src/sir_simple.jl": "e0b9018d4d8c3a753bc0fea9560d7b831d5f1e484bc8a20ed5cc36bef00216ef",
+      "src/sir_simple_vec.jl": "d9ce1f620a10b4b19da99cc895eb87a63da551cc64bad2dda2ff195589337dd1",
+      "src/utils.jl": "0f37a5bee8c13d8014c5891fddc68e00e2f6efe3cc3c653991496fcb7d017105"
+    },
+    "study": "quera_2025",
+    "engine": "native-julia",
+    "entrypoint": "src/DiffABM.jl",
+    "dependency_lock_origin": "Qualified forward-study environment, not an author-supplied lockfile",
+    "downloads": {
+      "LICENSE": "LICENSE",
+      "scripts/sugar-map.txt": "scripts/sugar-map.txt",
+      "src/AxtellFirms/AxtellFirms.jl": "src/AxtellFirms/AxtellFirms.jl",
+      "src/AxtellFirms/AxtellFirmsVectorized.jl": "src/AxtellFirms/AxtellFirmsVectorized.jl",
+      "src/BrockHommes.jl": "src/BrockHommes.jl",
+      "src/DiffABM.jl": "src/DiffABM.jl",
+      "src/GameOfLife.jl": "src/GameOfLife.jl",
+      "src/RandomWalk.jl": "src/RandomWalk.jl",
+      "src/SugarScape.jl": "src/SugarScape.jl",
+      "src/diff_utils.jl": "src/diff_utils.jl",
+      "src/discrete_randomness.jl": "src/discrete_randomness.jl",
+      "src/sir_heterograph/infection.jl": "src/sir_heterograph/infection.jl",
+      "src/sir_heterograph/june_graph_loader.jl": "src/sir_heterograph/june_graph_loader.jl",
+      "src/sir_heterograph/mp.jl": "src/sir_heterograph/mp.jl",
+      "src/sir_heterograph/policies.jl": "src/sir_heterograph/policies.jl",
+      "src/sir_heterograph/sir.jl": "src/sir_heterograph/sir.jl",
+      "src/sir_heterograph/utils.jl": "src/sir_heterograph/utils.jl",
+      "src/sir_nonvec.jl": "src/sir_nonvec.jl",
+      "src/sir_simple.jl": "src/sir_simple.jl",
+      "src/sir_simple_vec.jl": "src/sir_simple_vec.jl",
+      "src/utils.jl": "src/utils.jl"
+    }
   },
   {
     "repository": "https://github.com/thalerjonathan/haskell-stm-sugarscape",
@@ -154,39 +239,77 @@
     "engine": "native-haskell",
     "entrypoint": "original/criterion/sugarscape-seq/src/Main.hs",
     "preparer_repository": "https://github.com/Metta-AI/sugarscape",
-    "preparer_revision": "cea904b14248371b1281a29b8f73bf5bb0f7d5bd"
-  },
-  {
-    "repository": "https://github.com/arnauqb/DiffABM.jl",
-    "revision": "9178eccd56dd352e3515e276239654239f8d3b41",
-    "files_sha256": {
-      "LICENSE": "d7e0a36b096c8fcc2db28cadc238b42af91ed38609474deeddc81ad8eead63c4",
-      "Manifest.toml": "3b1cdef37a183be5822a4e3032fa3125ad3dee70ec231c387791c036bdbd2f81",
-      "Project.toml": "9be969f00b3b28bb99985b55205413c8d13f091edc5a827f6d260e08b552ba58",
-      "scripts/sugar-map.txt": "cd9b4661c8813d3e268995676d5ba84394ee813986adb0d657dc9be4a1fab675",
-      "src/AxtellFirms/AxtellFirms.jl": "847423bb04b5caa34239c513ca8533314607e6dd07e4263755be4f046070aea9",
-      "src/AxtellFirms/AxtellFirmsVectorized.jl": "78190cce37c9b93bb02b8f954881911e2452abc622003c9f9907bcc4e73289f8",
-      "src/BrockHommes.jl": "dc5ee24e1b9568170767ce9c559897c4aa36446e57eb3b96e0f3d555dcd00bf1",
-      "src/DiffABM.jl": "0e74f405134072c54f98bc09538440aafb6773755f897d04dfc1ae3848efa817",
-      "src/GameOfLife.jl": "3ea836c571f9cfe692510c318377c2de31fb49e2e49d8e683ef302e065e2e151",
-      "src/RandomWalk.jl": "12222cb5a126d11719dec8769b7c82c44cfcd690176a935a70da19df212b418a",
-      "src/SugarScape.jl": "d75bdd16ca51dd30851e794a490531c960a0445ccb44153b4ad624882f5b4959",
-      "src/diff_utils.jl": "24e61470f4c3a6776635ccf517daa1939e136f03eb9b14f5137aecd2b7f8488a",
-      "src/discrete_randomness.jl": "505f7af4963560ccc1b5605c2262f046d93ae762c483fdc88883dee42b406b9e",
-      "src/sir_heterograph/infection.jl": "9b62743195c508e7371ee7f2c2f44cae90569dc4ff379a3b019bc03ad9bf5d42",
-      "src/sir_heterograph/june_graph_loader.jl": "c65a9da2334affab537cc98e8f60605667dc5b52c3b980946e2fbf7d010ed731",
-      "src/sir_heterograph/mp.jl": "c334541f15a0dae544c52fb2e71d4383d121d3d23c60b89802d655b641b6a522",
-      "src/sir_heterograph/policies.jl": "ae713fda334859a083202fb8e7cbf930f8c5da30c7e241f483ae803d9ddf4821",
-      "src/sir_heterograph/sir.jl": "8afcd7d50ef9b63de24572e3a4f4b528baa8e36c486d544470fdd3f2997f594d",
-      "src/sir_heterograph/utils.jl": "5f357138fef7da2d12ce4eb5caab51ecab04e49f6d6554cc62faa812e6a8a889",
-      "src/sir_nonvec.jl": "c80a2f5d7133ab9d95993f10107d3b65fc1589c9a8c5a83a6b8407cca7b8a865",
-      "src/sir_simple.jl": "e0b9018d4d8c3a753bc0fea9560d7b831d5f1e484bc8a20ed5cc36bef00216ef",
-      "src/sir_simple_vec.jl": "d9ce1f620a10b4b19da99cc895eb87a63da551cc64bad2dda2ff195589337dd1",
-      "src/utils.jl": "0f37a5bee8c13d8014c5891fddc68e00e2f6efe3cc3c653991496fcb7d017105"
-    },
-    "study": "quera_2025",
-    "engine": "native-julia",
-    "entrypoint": "src/DiffABM.jl",
-    "dependency_lock_origin": "Qualified forward-study environment, not an author-supplied lockfile"
+    "preparer_revision": "cea904b14248371b1281a29b8f73bf5bb0f7d5bd",
+    "downloads": {
+      "original/criterion/sugarscape-io/ChangeLog.md": "criterion/sugarscape-io/ChangeLog.md",
+      "original/criterion/sugarscape-io/LICENSE": "criterion/sugarscape-io/LICENSE",
+      "original/criterion/sugarscape-io/Setup.hs": "criterion/sugarscape-io/Setup.hs",
+      "original/criterion/sugarscape-io/src/Agent.hs": "criterion/sugarscape-io/src/Agent.hs",
+      "original/criterion/sugarscape-io/src/Common.hs": "criterion/sugarscape-io/src/Common.hs",
+      "original/criterion/sugarscape-io/src/Discrete.hs": "criterion/sugarscape-io/src/Discrete.hs",
+      "original/criterion/sugarscape-io/src/Environment.hs": "criterion/sugarscape-io/src/Environment.hs",
+      "original/criterion/sugarscape-io/src/GlossRunner.hs": "criterion/sugarscape-io/src/GlossRunner.hs",
+      "original/criterion/sugarscape-io/src/Init.hs": "criterion/sugarscape-io/src/Init.hs",
+      "original/criterion/sugarscape-io/src/Main.hs": "criterion/sugarscape-io/src/Main.hs",
+      "original/criterion/sugarscape-io/src/Model.hs": "criterion/sugarscape-io/src/Model.hs",
+      "original/criterion/sugarscape-io/src/Random.hs": "criterion/sugarscape-io/src/Random.hs",
+      "original/criterion/sugarscape-io/src/Renderer.hs": "criterion/sugarscape-io/src/Renderer.hs",
+      "original/criterion/sugarscape-io/src/Simulation.hs": "criterion/sugarscape-io/src/Simulation.hs",
+      "original/criterion/sugarscape-io/src/Utils.hs": "criterion/sugarscape-io/src/Utils.hs",
+      "original/criterion/sugarscape-io/stack.yaml": "criterion/sugarscape-io/stack.yaml",
+      "original/criterion/sugarscape-io/sugarscape-io.cabal": "criterion/sugarscape-io/sugarscape-io.cabal",
+      "original/criterion/sugarscape-seq/ChangeLog.md": "criterion/sugarscape-seq/ChangeLog.md",
+      "original/criterion/sugarscape-seq/LICENSE": "criterion/sugarscape-seq/LICENSE",
+      "original/criterion/sugarscape-seq/Setup.hs": "criterion/sugarscape-seq/Setup.hs",
+      "original/criterion/sugarscape-seq/src/Agent.hs": "criterion/sugarscape-seq/src/Agent.hs",
+      "original/criterion/sugarscape-seq/src/AgentMonad.hs": "criterion/sugarscape-seq/src/AgentMonad.hs",
+      "original/criterion/sugarscape-seq/src/Common.hs": "criterion/sugarscape-seq/src/Common.hs",
+      "original/criterion/sugarscape-seq/src/Discrete.hs": "criterion/sugarscape-seq/src/Discrete.hs",
+      "original/criterion/sugarscape-seq/src/Environment.hs": "criterion/sugarscape-seq/src/Environment.hs",
+      "original/criterion/sugarscape-seq/src/GlossRunner.hs": "criterion/sugarscape-seq/src/GlossRunner.hs",
+      "original/criterion/sugarscape-seq/src/Init.hs": "criterion/sugarscape-seq/src/Init.hs",
+      "original/criterion/sugarscape-seq/src/Main.hs": "criterion/sugarscape-seq/src/Main.hs",
+      "original/criterion/sugarscape-seq/src/Model.hs": "criterion/sugarscape-seq/src/Model.hs",
+      "original/criterion/sugarscape-seq/src/Random.hs": "criterion/sugarscape-seq/src/Random.hs",
+      "original/criterion/sugarscape-seq/src/Renderer.hs": "criterion/sugarscape-seq/src/Renderer.hs",
+      "original/criterion/sugarscape-seq/src/Simulation.hs": "criterion/sugarscape-seq/src/Simulation.hs",
+      "original/criterion/sugarscape-seq/src/Utils.hs": "criterion/sugarscape-seq/src/Utils.hs",
+      "original/criterion/sugarscape-seq/stack.yaml": "criterion/sugarscape-seq/stack.yaml",
+      "original/criterion/sugarscape-seq/sugarscape-seq.cabal": "criterion/sugarscape-seq/sugarscape-seq.cabal",
+      "original/criterion/sugarscape-tarray/ChangeLog.md": "criterion/sugarscape-tarray/ChangeLog.md",
+      "original/criterion/sugarscape-tarray/LICENSE": "criterion/sugarscape-tarray/LICENSE",
+      "original/criterion/sugarscape-tarray/Setup.hs": "criterion/sugarscape-tarray/Setup.hs",
+      "original/criterion/sugarscape-tarray/src/Agent.hs": "criterion/sugarscape-tarray/src/Agent.hs",
+      "original/criterion/sugarscape-tarray/src/Common.hs": "criterion/sugarscape-tarray/src/Common.hs",
+      "original/criterion/sugarscape-tarray/src/Discrete.hs": "criterion/sugarscape-tarray/src/Discrete.hs",
+      "original/criterion/sugarscape-tarray/src/Environment.hs": "criterion/sugarscape-tarray/src/Environment.hs",
+      "original/criterion/sugarscape-tarray/src/GlossRunner.hs": "criterion/sugarscape-tarray/src/GlossRunner.hs",
+      "original/criterion/sugarscape-tarray/src/Init.hs": "criterion/sugarscape-tarray/src/Init.hs",
+      "original/criterion/sugarscape-tarray/src/Main.hs": "criterion/sugarscape-tarray/src/Main.hs",
+      "original/criterion/sugarscape-tarray/src/Model.hs": "criterion/sugarscape-tarray/src/Model.hs",
+      "original/criterion/sugarscape-tarray/src/Random.hs": "criterion/sugarscape-tarray/src/Random.hs",
+      "original/criterion/sugarscape-tarray/src/Renderer.hs": "criterion/sugarscape-tarray/src/Renderer.hs",
+      "original/criterion/sugarscape-tarray/src/Simulation.hs": "criterion/sugarscape-tarray/src/Simulation.hs",
+      "original/criterion/sugarscape-tarray/src/Utils.hs": "criterion/sugarscape-tarray/src/Utils.hs",
+      "original/criterion/sugarscape-tarray/stack.yaml": "criterion/sugarscape-tarray/stack.yaml",
+      "original/criterion/sugarscape-tarray/sugarscape-tarray.cabal": "criterion/sugarscape-tarray/sugarscape-tarray.cabal",
+      "original/criterion/sugarscape-tvar/ChangeLog.md": "criterion/sugarscape-tvar/ChangeLog.md",
+      "original/criterion/sugarscape-tvar/LICENSE": "criterion/sugarscape-tvar/LICENSE",
+      "original/criterion/sugarscape-tvar/Setup.hs": "criterion/sugarscape-tvar/Setup.hs",
+      "original/criterion/sugarscape-tvar/src/Agent.hs": "criterion/sugarscape-tvar/src/Agent.hs",
+      "original/criterion/sugarscape-tvar/src/Common.hs": "criterion/sugarscape-tvar/src/Common.hs",
+      "original/criterion/sugarscape-tvar/src/Discrete.hs": "criterion/sugarscape-tvar/src/Discrete.hs",
+      "original/criterion/sugarscape-tvar/src/Environment.hs": "criterion/sugarscape-tvar/src/Environment.hs",
+      "original/criterion/sugarscape-tvar/src/GlossRunner.hs": "criterion/sugarscape-tvar/src/GlossRunner.hs",
+      "original/criterion/sugarscape-tvar/src/Init.hs": "criterion/sugarscape-tvar/src/Init.hs",
+      "original/criterion/sugarscape-tvar/src/Main.hs": "criterion/sugarscape-tvar/src/Main.hs",
+      "original/criterion/sugarscape-tvar/src/Model.hs": "criterion/sugarscape-tvar/src/Model.hs",
+      "original/criterion/sugarscape-tvar/src/Random.hs": "criterion/sugarscape-tvar/src/Random.hs",
+      "original/criterion/sugarscape-tvar/src/Renderer.hs": "criterion/sugarscape-tvar/src/Renderer.hs",
+      "original/criterion/sugarscape-tvar/src/Simulation.hs": "criterion/sugarscape-tvar/src/Simulation.hs",
+      "original/criterion/sugarscape-tvar/src/Utils.hs": "criterion/sugarscape-tvar/src/Utils.hs",
+      "original/criterion/sugarscape-tvar/stack.yaml": "criterion/sugarscape-tvar/stack.yaml",
+      "original/criterion/sugarscape-tvar/sugarscape-tvar.cabal": "criterion/sugarscape-tvar/sugarscape-tvar.cabal"
+    }
   }
 ]
