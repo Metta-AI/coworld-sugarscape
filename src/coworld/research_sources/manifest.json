@@ -9,7 +9,12 @@
       "sugarscape_cg/LICENSE.uncertainty": "8abd7b03cd2715c97e807ffda71b9f94a055141da5a44d6f65e7e1295da32fab"
     },
     "entrypoint": "independent.py",
-    "engine": "study-independent-python"
+    "engine": "study-independent-python",
+    "downloads": {
+      "independent.py": "replications/mcculloch_2022/independent.py",
+      "sugarscape_cg/sugar-map.txt": "replications/mcculloch_2022/sugarscape_cg/sugar-map.txt",
+      "sugarscape_cg/LICENSE.uncertainty": "replications/mcculloch_2022/sugarscape_cg/LICENSE.uncertainty"
+    }
   },
   {
     "study": "carrella_2021",
@@ -19,7 +24,10 @@
       "model.py": "23d73549848eadf237d38534a5cdae71c240c03cc9ef0fed4655cabb615ad36a"
     },
     "entrypoint": "model.py",
-    "engine": "study-independent-python"
+    "engine": "study-independent-python",
+    "downloads": {
+      "model.py": "replications/carrella_2021/model.py"
+    }
   },
   {
     "study": "izquierdo_2009",
@@ -30,7 +38,11 @@
       "results/full-model-return-2026-10-17/capacity.csv": "55f911e1fa16c9ad1ba1be69cf122e7b2ab7cf5e4aef0131d46bd6963262ad3e"
     },
     "entrypoint": "model.py",
-    "engine": "study-independent-python"
+    "engine": "study-independent-python",
+    "downloads": {
+      "model.py": "replications/izquierdo_2009/model.py",
+      "results/full-model-return-2026-10-17/capacity.csv": "replications/izquierdo_2009/results/full-model-return-2026-10-17/capacity.csv"
+    }
   },
   {
     "study": "dogan_2026",
@@ -46,7 +58,16 @@
       "sugarscape_ai_tax/model.py": "a3e264cb1640691451b2936cd85a17f21bc8b17f5a2f36977dc8ee1db698ed24",
       "sugarscape_ai_tax/sugar-map.txt": "cd9b4661c8813d3e268995676d5ba84394ee813986adb0d657dc9be4a1fab675"
     },
-    "engine": "author-python"
+    "engine": "author-python",
+    "downloads": {
+      "LICENSE": "replications/dogan_2026/vendor/LICENSE",
+      "LICENSES/Apache-2.0.txt": "replications/dogan_2026/vendor/LICENSES/Apache-2.0.txt",
+      "NOTICE": "replications/dogan_2026/vendor/NOTICE",
+      "sugarscape_ai_tax/__init__.py": "replications/dogan_2026/vendor/sugarscape_ai_tax/__init__.py",
+      "sugarscape_ai_tax/agents.py": "replications/dogan_2026/vendor/sugarscape_ai_tax/agents.py",
+      "sugarscape_ai_tax/model.py": "replications/dogan_2026/vendor/sugarscape_ai_tax/model.py",
+      "sugarscape_ai_tax/sugar-map.txt": "replications/dogan_2026/vendor/sugarscape_ai_tax/sugar-map.txt"
+    }
   },
   {
     "study": "brearcliffe_2020",
@@ -59,7 +80,10 @@
       "LICENSE.author": "600ca4e25fe11762b75a97e714707fab48bb778374e92d24c6ca068791661c11",
       "symmetric-sugar-map.txt": "b36a8a31d804198683d30a29217d1e08830bd04ac539fa2c7250bb3168d3ba9a"
     },
-    "engine": "native-netlogo"
+    "engine": "native-netlogo",
+    "downloads": {
+      "Replay.java": "replications/brearcliffe_2020/Replay.java"
+    }
   },
   {
     "study": "oremland_2014",
@@ -71,6 +95,11 @@
       "model.nlogo": "1cc6ee9db0852ea2a071004aa31eb797a06131b434cffc82f697993057aca816",
       "sugar-map.txt": "cd9b4661c8813d3e268995676d5ba84394ee813986adb0d657dc9be4a1fab675"
     },
-    "engine": "native-netlogo"
+    "engine": "native-netlogo",
+    "downloads": {
+      "RunPolicyBatch.java": "replications/oremland_2014/RunPolicyBatch.java",
+      "model.nlogo": "replications/oremland_2014/results/policy-indexing-2026-10-18/oremland.nlogo",
+      "sugar-map.txt": "replications/oremland_2014/results/policy-indexing-2026-10-18/sugar-map.txt"
+    }
   }
 ]

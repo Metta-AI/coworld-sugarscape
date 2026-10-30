@@ -94,3 +94,22 @@ zippy/
 # Qualified native study interpreter environments
 .research-venv/
 .dogan-venv/
+
+# Pinned research inputs materialized by tools/fetch_research_sources.py.
+/src/coworld/research_sources/mcculloch_2022/independent.py
+/src/coworld/research_sources/mcculloch_2022/sugarscape_cg/sugar-map.txt
+/src/coworld/research_sources/mcculloch_2022/sugarscape_cg/LICENSE.uncertainty
+/src/coworld/research_sources/carrella_2021/model.py
+/src/coworld/research_sources/izquierdo_2009/model.py
+/src/coworld/research_sources/izquierdo_2009/results/full-model-return-2026-10-17/capacity.csv
+/src/coworld/research_sources/dogan_2026/LICENSE
+/src/coworld/research_sources/dogan_2026/LICENSES/Apache-2.0.txt
+/src/coworld/research_sources/dogan_2026/NOTICE
+/src/coworld/research_sources/dogan_2026/sugarscape_ai_tax/__init__.py
+/src/coworld/research_sources/dogan_2026/sugarscape_ai_tax/agents.py
+/src/coworld/research_sources/dogan_2026/sugarscape_ai_tax/model.py
+/src/coworld/research_sources/dogan_2026/sugarscape_ai_tax/sugar-map.txt
+/src/coworld/research_sources/brearcliffe_2020/Replay.java
+/src/coworld/research_sources/oremland_2014/RunPolicyBatch.java
+/src/coworld/research_sources/oremland_2014/model.nlogo
+/src/coworld/research_sources/oremland_2014/sugar-map.txt

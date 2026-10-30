@@ -1,3 +1,9 @@
+FROM python:3.13.5-slim-bookworm AS sources
+WORKDIR /app
+COPY tools/fetch_research_sources.py /app/tools/fetch_research_sources.py
+COPY src/coworld/research_sources /app/src/coworld/research_sources
+RUN python tools/fetch_research_sources.py
+
 FROM python:3.11.14-slim-bookworm AS research
 RUN pip install --no-cache-dir pydantic==2.12.3 jsonschema==4.25.1
 
@@ -10,7 +16,7 @@ FROM python:3.13.5-slim-bookworm AS netlogo
 COPY --from=java /opt/java/openjdk /opt/java/openjdk
 WORKDIR /app
 COPY tools/setup_netlogo_research.py /app/tools/setup_netlogo_research.py
-COPY src/coworld/research_sources /app/src/coworld/research_sources
+COPY --from=sources /app/src/coworld/research_sources /app/src/coworld/research_sources
 RUN python tools/setup_netlogo_research.py --javac /opt/java/openjdk/bin/javac \
     && rm build/research-runtimes/*.tgz
 
@@ -26,6 +32,7 @@ COPY --from=java /opt/java/openjdk /opt/java/openjdk
 COPY --from=netlogo /app/build/research-runtimes /opt/research-runtimes
 WORKDIR /app
 COPY src /app/src
+COPY --from=sources /app/src/coworld/research_sources /app/src/coworld/research_sources
 COPY targets /app/targets
 COPY replay-viewer/index.html /app/replay-viewer/index.html
 COPY players/baseline /app/players/baseline
