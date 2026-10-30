@@ -267,3 +267,16 @@ zippy/
 /src/coworld/research_sources/richmond_2023/reference/occupationperStep.csv
 /src/coworld/research_sources/richmond_2023/reference/performance_scalingperStep.csv
 /src/coworld/research_sources/richmond_2023/reference/resolution_steps.csv
+/src/coworld/research_sources/brearcliffe_2020/model.nlogo
+/src/coworld/research_sources/brearcliffe_2020/LICENSE.author
+/src/coworld/research_sources/brearcliffe_2020/symmetric-sugar-map.txt
+/tests/fixtures/research/carrella-seed123.csv
+/src/coworld/research_sources/quera_2025/Manifest.toml
+/src/coworld/research_sources/quera_2025/Project.toml
+/src/coworld/research_sources/thaler_2019/prepare_population_observers.py
+/src/coworld/research_sources/thaler_2019/stack-global-config.yaml
+/src/coworld/research_sources/thaler_2019/timing/revision-fidelity.json
+/tests/fixtures/research/thaler-seq-baseline.csv
+/src/coworld/research_sources/lima_2024/audit_snapshot.py
+/src/coworld/research_sources/richmond_2023/audit_native.py
+/src/coworld/research_sources/richmond_2023/source-manifest.json

@@ -2,7 +2,7 @@ FROM python:3.13.5-slim-bookworm AS sources
 WORKDIR /app
 COPY tools/fetch_research_sources.py /app/tools/fetch_research_sources.py
 COPY src/coworld/research_sources /app/src/coworld/research_sources
-RUN python tools/fetch_research_sources.py
+RUN python tools/fetch_research_sources.py --kind sources
 
 FROM nvidia/cuda:11.8.0-devel-ubuntu22.04@sha256:94fd755736cb58979173d491504f0b573247b1745250249415b07fefc738e41f AS richmond
 ENV DEBIAN_FRONTEND=noninteractive

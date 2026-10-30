@@ -205,3 +205,7 @@ A passed stage does not imply the others passed.
 
 Research source setup: `python tools/fetch_research_sources.py` restores pinned inputs before native setup.
 `tools/setup_research.py` and Docker builds run this automatically. Episodes make no source downloads.
+
+Native reference fixtures are restored by setup with their original hashes.
+Use `python tools/fetch_research_sources.py --kind fixtures` for standalone qualification checks.
+The McCulloch fixture retains canonical population hashes for all 101 observations in each run.
