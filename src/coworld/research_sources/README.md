@@ -2,10 +2,9 @@
 
 These are pinned research inputs from reviewed studies in Metta-AI/sugarscape.
 Run `python tools/fetch_research_sources.py` before native setup or local episodes.
-Setup and Docker builds download selected files from immutable public Git commits.
+Setup and Docker builds download selected files from immutable public Git commits or the hash-pinned author release.
 Downloads are verified before writing, ignored by Git, and included in the image for offline episodes.
 Existing downloaded files must match their pins; setup fails rather than replacing local edits.
-Sources unavailable at their declared upstream paths remain bundled.
 `manifest.json` pins each commit and every file hash. Runtime verifies those hashes before importing a model.
 Update snapshots from an explicitly reviewed commit, preserving their corresponding notices and validation evidence.
 
@@ -18,7 +17,7 @@ Original research evidence and full provenance remain in the pinned source commi
 Dogan's original `sugarscape_ai_tax` package retains its MIT license, Apache dependency license and NOTICE.
 The source pin is the reviewed study branch, with unchanged model files; tax calibration is performed before the episode.
 Brearcliffe's model and license come from the author's released archive retained by the study.
-The release omitted the landscape, so the qualified symmetric map is bundled with its own file hash.
+The model, license and symmetric map are restored from the unchanged, hash-pinned author release.
 `Replay.java` is the study recorder, preserving `with-local-randomness` around observations.
 Oremland's model is the explicitly documented study reconstruction, not recovered author source.
 Its unchanged `RunPolicyBatch.java` exports the original evaluator endpoint and survivor-state hash.
