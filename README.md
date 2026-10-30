@@ -93,6 +93,8 @@ The [native research collection](docs/RESEARCH.md) exposes seven study engines a
 Reference experiments and the McCulloch calibration challenge have separate score semantics.
 The guide includes native setup, prospective comparisons, league settings and remaining engines.
 
+The [original research variant design](docs/designs/2026-10-20-replication-variants.md) records the adapter plan and acceptance checks.
+
 ## Training
 
 `tools/training_bridge.py` runs the same pinned DTL simulator, SugarLang validator,

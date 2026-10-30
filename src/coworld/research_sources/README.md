@@ -1,6 +1,11 @@
 # Pinned research sources
 
-These are exact source snapshots from reviewed studies in Metta-AI/sugarscape.
+These are pinned research inputs from reviewed studies in Metta-AI/sugarscape.
+Run `python tools/fetch_research_sources.py` before native setup or local episodes.
+Setup and Docker builds download selected files from immutable public Git commits.
+Downloads are verified before writing, ignored by Git, and included in the image for offline episodes.
+Existing downloaded files must match their pins; setup fails rather than replacing local edits.
+Sources unavailable at their declared upstream paths remain bundled.
 `manifest.json` pins each commit and every file hash. Runtime verifies those hashes before importing a model.
 Update snapshots from an explicitly reviewed commit, preserving their corresponding notices and validation evidence.
 
