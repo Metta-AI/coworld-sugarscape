@@ -82,10 +82,12 @@ def run(url: str) -> None:
         observation = json.loads(websocket.recv())
         if observation.get("type") != "observation":
             raise RuntimeError("game didn't send a Sugarscape observation")
-        ruleset = choose_ruleset(observation["target"])
-        websocket.send(
-            json.dumps({"type": "action", "ruleset": ruleset}, separators=(",", ":"))
-        )
+        if observation.get("protocol") == "sugarscape-research/1":
+            parameters = {} if observation["mode"] == "reference" else observation["reference_parameters"]
+            action = {"type": "action", "parameters": parameters}
+        else:
+            action = {"type": "action", "ruleset": choose_ruleset(observation["target"])}
+        websocket.send(json.dumps(action, separators=(",", ":")))
         acknowledgement = json.loads(websocket.recv())
         if (
             acknowledgement.get("type") != "ack"

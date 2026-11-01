@@ -65,7 +65,7 @@ def test_ci_runs_project_suite_and_actionlint() -> None:
     tests = jobs["tests"]
     assert tests["env"]["PYTHONHASHSEED"] == "0"
     commands = [step["run"] for step in tests["steps"] if "run" in step]
-    assert commands == ["uv sync", '.venv/bin/python -m pytest -q -n auto -m "not perf"',
+    assert commands == ["uv sync", ".venv/bin/python tools/setup_research.py", '.venv/bin/python -m pytest -q -n auto -m "not perf"',
                         ".venv/bin/python -m pytest -q -m perf"]
     lint_commands = [step["run"] for step in jobs["workflow-lint"]["steps"] if "run" in step]
     install, run = lint_commands

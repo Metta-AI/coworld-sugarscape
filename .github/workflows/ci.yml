@@ -27,6 +27,8 @@ jobs:
           version: '0.12.13'
           enable-cache: false
       - run: uv sync
+      - name: Install qualified native study interpreters
+        run: .venv/bin/python tools/setup_research.py
       - name: Run functional tests in parallel
         run: .venv/bin/python -m pytest -q -n auto -m "not perf"
       - name: Run performance tests serially
@@ -52,7 +54,7 @@ jobs:
   image-smoke:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -63,3 +65,23 @@ jobs:
         run: >-
           docker run --rm --network none sugarscape-ci python -c
           "import sys; import coworld.dtl; assert 'tkinter' not in sys.modules"
+      - name: Fetch hash-pinned native reference fixtures
+        run: python3 tools/fetch_research_sources.py --kind fixtures
+      - name: Run native Python reference episodes over the public protocol
+        run: >-
+          docker run --rm --network none sugarscape-ci
+          python tools/research_experiments.py --out /tmp/python-proof
+          --variant paper-mcculloch-4-7 --variant paper-carrella
+          --variant paper-izquierdo-return-5 --variant paper-izquierdo-return-6
+          --variant paper-dogan-fast --seeds 0
+      - name: Run native NetLogo endpoint reference
+        run: >-
+          docker run --rm --network none sugarscape-ci
+          python tools/research_experiments.py --out /tmp/oremland-proof
+          --variant paper-oremland-phase-0-unclipped --seeds 1
+      - name: Run native NetLogo trajectory smoke
+        run: >-
+          docker run --rm --network none sugarscape-ci
+          python tools/research_experiments.py --out /tmp/brearcliffe-smoke
+          --variant paper-brearcliffe-released-code-rule-m-ec
+          --seeds 20261019 --timesteps 100

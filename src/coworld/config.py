@@ -59,6 +59,11 @@ def resolve_episode_config(
     not consume the process-global DTL random stream.
     """
 
+    if "research" in raw_config:
+        from .research import resolve_config
+
+        return resolve_config(raw_config, seed_source=seed_source)
+
     config = load_dtl_defaults()
     config.update(deepcopy(dict(raw_config)))
     seed = config.get("seed", -1)
