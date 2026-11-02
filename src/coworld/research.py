@@ -103,6 +103,7 @@ class ResearchSpec(Parameters):
         "thaler_2019",
         "quera_2025",
         "lima_2024",
+        "richmond_2023",
     ]
     mode: Literal["reference", "population-calibration"] = "reference"
     parameters: dict[str, object]
@@ -134,9 +135,11 @@ PARAMETER_MODELS = {
     "thaler_2019": ThalerParameters,
     "quera_2025": QueraParameters,
     "lima_2024": Parameters,
+    "richmond_2023": Parameters,
 }
 WORKER_TIMEOUT_SECONDS = {study: 600 for study in PARAMETER_MODELS}
 WORKER_TIMEOUT_SECONDS["lima_2024"] = 3300
+WORKER_TIMEOUT_SECONDS["richmond_2023"] = 1800
 
 PAPER_HORIZONS = {
     "mcculloch_2022": 100,
@@ -171,6 +174,10 @@ def resolve_config(
     ):
         raise ValueError(
             "research horizon exceeds the supported original study horizon"
+        )
+    if config.research.study == "richmond_2023" and config.timesteps != 100:
+        raise ValueError(
+            "the original 84-case GPU benchmark requires its fixed 100/3-step condition horizons"
         )
     if config.research.study == "lima_2024" and config.timesteps != 1000:
         raise ValueError(
@@ -421,6 +428,10 @@ def run_native_episode(
     if not validation.valid:
         raise ValueError(str(validation.errors))
     parameters = spec.parameters if spec.mode == "reference" else validation.normalized
+    if spec.study == "richmond_2023":
+        from .richmond_research import run
+
+        return run(resolved, parameters, source_entry(spec.study), SOURCE_ROOT)
     if spec.study == "lima_2024":
         from .lima_research import run
 
