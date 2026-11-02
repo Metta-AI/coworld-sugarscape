@@ -4,7 +4,7 @@
   "tags": ["agent-based-model", "economics", "generative-social-science"],
   "game": {
     "name": "sugarscape",
-    "description": "Grow a target social distribution by submitting one declarative SugarLang ruleset.",
+    "description": "Explore Sugarscape with declarative rulesets and a collection of native paper-model research variants.",
     "owner": "Metta-AI",
     "config_schema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -54,7 +54,7 @@
           ],
           "properties": {
             "study": {
-              "enum": ["mcculloch_2022", "carrella_2021", "izquierdo_2009", "dogan_2026", "brearcliffe_2020", "oremland_2014", "thaler_2019", "quera_2025"]
+              "enum": ["mcculloch_2022", "carrella_2021", "izquierdo_2009", "dogan_2026", "brearcliffe_2020", "oremland_2014", "thaler_2019", "quera_2025", "lima_2024"]
             },
             "mode": {
               "enum": [
@@ -113,6 +113,7 @@
       "image": "{{GAME_IMAGE}}",
       "run": ["python", "-m", "coworld.server"],
       "env": {"PYTHONHASHSEED": "0"},
+      "resources": {"requests": {"cpu": "2", "memory": "4Gi", "ephemeral-storage": "15Gi"}, "limits": {"cpu": "2", "memory": "6Gi"}},
       "source_url": "https://github.com/Metta-AI/coworld-sugarscape/tree/main"
     },
     "replay_viewer": {"bundle": "build/replay-viewer", "replay_compression": "gzip"},
@@ -8949,6 +8950,25 @@
           }
         }
       }
+    },
+    {
+      "id": "paper-lima-container",
+      "name": "Lima native architecture reference",
+      "description": "Two original 1000-step NetLogo 6.0.4 models, original JaCaMo model and MySQL 5.7 HTTP routing, colocated inside a private game pod. Native random streams and asynchronous scheduling are not seeded by the episode seed. No host-GUI, spontaneous AgentSpeak re-entry or synchronized spatial trajectory claim. Noncompetitive score zero.",
+      "game_config": {
+        "seats": 1,
+        "players": [
+          {
+            "name": "Research controller"
+          }
+        ],
+        "timesteps": 1000,
+        "research": {
+          "study": "lima_2024",
+          "mode": "reference",
+          "parameters": {}
+        }
+      }
     }
   ],
   "certification": {
@@ -8970,5 +8990,5 @@
     }
   },
   "players_per_user": 1,
-  "episode_timeout_minutes": 20
+  "episode_timeout_minutes": 65
 }

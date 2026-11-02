@@ -20,7 +20,9 @@ sys.path.insert(0, str(ROOT / "src"))
 from coworld.config import resolve_episode_config  # noqa: E402
 
 
-def run_variant(variant, seed: int, output: Path, timesteps: int | None):
+def run_variant(
+    variant, seed: int, output: Path, timesteps: int | None, timeout_seconds: int
+):
     output.mkdir(parents=True, exist_ok=False)
     config = {
         **variant["game_config"],
@@ -75,6 +77,7 @@ def run_variant(variant, seed: int, output: Path, timesteps: int | None):
                 "variant": variant["id"],
                 "command": command,
                 "duration_override": timesteps,
+                "timeout_seconds": timeout_seconds,
                 "seed": seed,
             },
             indent=2,
@@ -128,7 +131,7 @@ def run_variant(variant, seed: int, output: Path, timesteps: int | None):
                         f"baseline player failed: {output / 'player.log'}"
                     )
                 while True:
-                    message = json.loads(observer.recv(timeout=600))
+                    message = json.loads(observer.recv(timeout=timeout_seconds))
                     stream.write(json.dumps(message) + "\n")
                     if message["type"] in {"failure", "server_closed"}:
                         raise RuntimeError(
@@ -138,7 +141,7 @@ def run_variant(variant, seed: int, output: Path, timesteps: int | None):
                         raise ValueError("inconsistent research spectator protocol")
                     if message["type"] == "result":
                         break
-            code = server.wait(timeout=600)
+            code = server.wait(timeout=timeout_seconds)
             if code != 0:
                 raise RuntimeError(f"native episode failed: {output / 'game.log'}")
         finally:
@@ -167,7 +170,15 @@ def main() -> int:
         type=int,
         help="Explicit smoke duration; recorded separately from the study horizon",
     )
+    parser.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=600,
+        help="Bound each native episode; use 3300 for the full Lima architecture",
+    )
     args = parser.parse_args()
+    if not 30 <= args.timeout_seconds <= 3600:
+        parser.error("timeout-seconds must be between 30 and 3600")
     if len(args.seeds) != len(set(args.seeds)) or any(seed < 0 for seed in args.seeds):
         parser.error("seeds must be distinct non-negative integers")
     if len(args.variant) != len(set(args.variant)):
@@ -181,7 +192,13 @@ def main() -> int:
     output = args.out.resolve()
     output.mkdir(parents=True, exist_ok=False)
     records = [
-        run_variant(variants[name], seed, output / name / str(seed), args.timesteps)
+        run_variant(
+            variants[name],
+            seed,
+            output / name / str(seed),
+            args.timesteps,
+            args.timeout_seconds,
+        )
         for name in args.variant
         for seed in args.seeds
     ]
