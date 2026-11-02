@@ -76,6 +76,15 @@ class ReturnParameters(Parameters):
     period: Literal[5, 6]
 
 
+class QueraParameters(Parameters):
+    vision_probability: float = Field(ge=0, le=1)
+    metabolism_alpha: float = Field(gt=0, le=20)
+    metabolism_beta: float = Field(gt=0, le=20)
+    wealth_alpha: float = Field(gt=0, le=20)
+    wealth_beta: float = Field(gt=0, le=20)
+    regeneration: float = Field(ge=0, le=10)
+
+
 class ResearchSpec(Parameters):
     study: Literal[
         "mcculloch_2022",
@@ -84,6 +93,7 @@ class ResearchSpec(Parameters):
         "dogan_2026",
         "brearcliffe_2020",
         "oremland_2014",
+        "quera_2025",
     ]
     mode: Literal["reference", "population-calibration"] = "reference"
     parameters: dict[str, object]
@@ -112,8 +122,14 @@ PARAMETER_MODELS = {
     "dogan_2026": DoganParameters,
     "brearcliffe_2020": BrearcliffeParameters,
     "oremland_2014": OremlandParameters,
+    "quera_2025": QueraParameters,
 }
-PAPER_HORIZONS = {"mcculloch_2022": 100, "carrella_2021": 500, "dogan_2026": 300}
+PAPER_HORIZONS = {
+    "mcculloch_2022": 100,
+    "carrella_2021": 500,
+    "dogan_2026": 300,
+    "quera_2025": 49,
+}
 
 
 def resolve_config(
@@ -380,6 +396,10 @@ def run_native_episode(
     if not validation.valid:
         raise ValueError(str(validation.errors))
     parameters = spec.parameters if spec.mode == "reference" else validation.normalized
+    if spec.study == "quera_2025":
+        from .quera_research import run
+
+        return run(resolved, parameters, source_entry(spec.study), SOURCE_ROOT)
     if spec.study in {"brearcliffe_2020", "oremland_2014"}:
         from .netlogo_research import run
 
