@@ -23,7 +23,7 @@ RUN python tools/setup_netlogo_research.py --javac /opt/java/openjdk/bin/javac \
 FROM julia:1.11.3-bookworm AS quera
 ENV JULIA_DEPOT_PATH=/opt/julia-depot JULIA_NUM_THREADS=1 JULIA_NUM_PRECOMPILE_TASKS=1 JULIA_PKG_PRECOMPILE_AUTO=0 JULIA_CPU_TARGET=generic OPENBLAS_NUM_THREADS=1
 WORKDIR /app
-COPY src/coworld/research_sources/quera_2025 /app/src/coworld/research_sources/quera_2025
+COPY --from=sources /app/src/coworld/research_sources/quera_2025 /app/src/coworld/research_sources/quera_2025
 RUN julia --startup-file=no --project=/app/src/coworld/research_sources/quera_2025 -e 'using SHA; p="/app/src/coworld/research_sources/quera_2025/Manifest.toml"; h=bytes2hex(sha256(read(p))); @assert h=="3b1cdef37a183be5822a4e3032fa3125ad3dee70ec231c387791c036bdbd2f81"; using Pkg; Pkg.instantiate(); using DiffABM, Images; @assert bytes2hex(sha256(read(p)))==h'
 
 FROM python:3.13.5-slim-bookworm
