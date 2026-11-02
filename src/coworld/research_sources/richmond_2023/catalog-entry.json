@@ -1,0 +1,24 @@
+{
+  "study": "richmond_2023",
+  "repository": "https://github.com/FLAMEGPU/FLAMEGPU2-submodel-benchmark",
+  "revision": "290702073492677f2fc9164419e9d5900d119e02",
+  "engine_repository": "https://github.com/FLAMEGPU/FLAMEGPU2",
+  "engine_revision": "19136c18629af0a52ac4355ff705596b22bedac1",
+  "engine": "author-flamegpu2-cuda",
+  "files_sha256": {
+    "audit_native.py": "8d3c44ffcb2f19c7f3a6d6a71423b638f776857a25ad6107bcaac270f02610d5",
+    "main.cu": "b2daf9e6ee2b3faf4a13e30ba19f4293e1f922a993d30cb5e72fb1d4c2b8f56d",
+    "reference/occupationperStep.csv": "dcd145710d4d66e223095e512b83ef41c5c0444cb64accfcbd1b673e1939eb75",
+    "reference/performance_scalingperStep.csv": "022b45bd8c945fb0f4c7aba6ae2385c433b3b436f5a26601cbad0f4055c1e48b",
+    "reference/resolution_steps.csv": "c6b689578add1ab0a7eb0f31e48d9d7888e9e9073236626982149dbfa4006980",
+    "source-manifest.json": "571a8158fc9a2cac1d7fdfaca18ad4c3665faaa2da652ce3c1ba434520c92f99"
+  },
+  "scope": "Full unmodified84-condition benchmark. Published rules/source discrepancies remain unchanged. No historical V100 timing equivalence.",
+  "measurement_auditor": {
+    "repository": "https://github.com/Metta-AI/sugarscape",
+    "revision": "e57d200c0ead5c6066b2d9c98045e3ada5f3f726",
+    "files": [
+      "audit_native.py"
+    ]
+  }
+}

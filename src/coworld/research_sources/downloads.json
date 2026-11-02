@@ -212,5 +212,15 @@
       "original/shared_volume/sugar-map.txt": "https://raw.githubusercontent.com/GustavoLLima/open_mas_docker_opt/3838dad156f62484d0e664b49ffc4e05ac077280/shared_volume/sugar-map.txt",
       "audit_snapshot.py": "https://raw.githubusercontent.com/Metta-AI/sugarscape/363175bde20af32cda1530af8f95bf7809f57c43/replications/lima_2024/audit_snapshot.py"
     }
+  },
+  "richmond_2023": {
+    "files": {
+      "main.cu": "https://raw.githubusercontent.com/FLAMEGPU/FLAMEGPU2-submodel-benchmark/290702073492677f2fc9164419e9d5900d119e02/src/main.cu",
+      "reference/occupationperStep.csv": "https://raw.githubusercontent.com/FLAMEGPU/FLAMEGPU2-submodel-benchmark/290702073492677f2fc9164419e9d5900d119e02/sample/data/v100-515.65.01/2.0.0-rc-v100-11.0-beltsoff/occupationperStep.csv",
+      "reference/performance_scalingperStep.csv": "https://raw.githubusercontent.com/FLAMEGPU/FLAMEGPU2-submodel-benchmark/290702073492677f2fc9164419e9d5900d119e02/sample/data/v100-515.65.01/2.0.0-rc-v100-11.0-beltsoff/performance_scalingperStep.csv",
+      "reference/resolution_steps.csv": "https://raw.githubusercontent.com/FLAMEGPU/FLAMEGPU2-submodel-benchmark/290702073492677f2fc9164419e9d5900d119e02/sample/data/v100-515.65.01/2.0.0-rc-v100-11.0-beltsoff/resolution_steps.csv",
+      "audit_native.py": "https://raw.githubusercontent.com/Metta-AI/sugarscape/e57d200c0ead5c6066b2d9c98045e3ada5f3f726/replications/richmond_2023/audit_native.py",
+      "source-manifest.json": "https://raw.githubusercontent.com/Metta-AI/sugarscape/e57d200c0ead5c6066b2d9c98045e3ada5f3f726/replications/richmond_2023/results/native-qualification-launch-2026-10-17/source-manifest.json"
+    }
   }
 }
