@@ -88,8 +88,8 @@ replay seed reproduces an episode on the pinned interpreter.
 
 ## Research worlds
 
-The [native research collection](docs/RESEARCH.md) exposes eight study engines as
-55 named variants with pinned sources, parameter protocols and research replays.
+The [native research collection](docs/RESEARCH.md) exposes nine study engines as
+56 named variants with pinned sources, parameter protocols and research replays.
 Reference experiments and the McCulloch calibration challenge have separate score semantics.
 The guide includes native setup, prospective comparisons, league settings and remaining engines.
 
