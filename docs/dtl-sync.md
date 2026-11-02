@@ -35,6 +35,11 @@ The test job initializes submodules, uses Python 3.13.5 and uv 0.12.13, runs
 for the structural tests; it is not a game runtime dependency. Workflow `'on'`
 keys are quoted so PyYAML's safe loader preserves them as strings.
 
+The image job removes the hosted runner's unused Android, .NET, and GHC
+installations before building. Native runtimes are built inside Docker;
+their intermediate layers can exhaust the runner disk otherwise. The job
+prints free disk space before and after preparation.
+
 ## Local checks
 
 From an initialized clone, with Python 3.13.5 and uv 0.12.13:
