@@ -207,19 +207,18 @@ function layoutStage() {
   BOARD.h = BOARD.w;
   // Right column, flush to the stage margin.
   BOARD.x = W - MARGIN - BOARD.w;
-  // Left column: masthead and clock at its top, panels filling the rest. It
-  // keeps its full height because the transport belongs to the board only.
+  const fullWidthTransport = BOARD.w < 260 * perPixel;
   RAIL.x = MARGIN;
   RAIL.y = BUG_H + BAND_GAP;
   RAIL.w = BOARD.x - RAIL_GUTTER - MARGIN;
-  RAIL.h = H - RAIL.y - MARGIN;
-  // The transport is laid out in CSS and must sit under the board it belongs to.
-  // Both edges go over as custom properties; a hardcoded left was fine only while
-  // the board was the left-hand column.
+  // The controls need the rail's bottom lane when they cannot fit under the board.
+  RAIL.h = H - RAIL.y - MARGIN - (fullWidthTransport ? transportH : 0);
+  const transportWidth = fullWidthTransport ? W - 2 * MARGIN : BOARD.w;
+  const transportLeft = fullWidthTransport ? MARGIN : BOARD.x;
   document.documentElement.style.setProperty(
-    "--board-width", `${(BOARD.w / W * 100).toFixed(2)}%`);
+    "--transport-width", `${(transportWidth / W * 100).toFixed(2)}%`);
   document.documentElement.style.setProperty(
-    "--board-left", `${(BOARD.x / W * 100).toFixed(2)}%`);
+    "--transport-left", `${(transportLeft / W * 100).toFixed(2)}%`);
   // The transport's own lane, which sits UNDER the lattice rather than over it.
   // Centred in the reserved band so it is neither against the board nor the
   // stage edge.
@@ -4826,14 +4825,14 @@ function placeTargetPicker() {
     left: matrix.a * x + matrix.c * y + matrix.e - stageBox.left,
     top: matrix.b * x + matrix.d * y + matrix.f - stageBox.top,
   });
-  // BELOW the heading, not on it. The panel's title is a long left-aligned
-  // question and the picker is right-aligned, so sharing that row printed the
-  // menu straight through "DID THE RULES GROW THE TARGET?". The row under it is
-  // clear on the right — the score and its labels are all left-aligned.
-  const corner = at(RAIL.x + RAIL.w - 18, RAIL.y + (dense() ? 58 : 40));
+  // Keep the picker below the heading and within the rail, even for long options.
+  const rowY = RAIL.y + (dense() ? 58 : 40);
+  const corner = at(RAIL.x + RAIL.w - 18, rowY);
+  const left = at(RAIL.x + 18, rowY);
   targetPick.style.right = `${Math.round(stageBox.width - corner.left)}px`;
   targetPick.style.top = `${Math.round(corner.top)}px`;
   targetPick.style.left = "auto";
+  targetPick.style.maxWidth = `${Math.floor(corner.left - left.left)}px`;
 }
 
 targetSelect.addEventListener("change", () => {

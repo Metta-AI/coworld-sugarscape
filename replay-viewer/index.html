@@ -143,31 +143,13 @@ html, body {
    24x24 CSS-px minimum target size. Every dimension below is a clamp with an
    accessible floor, so the chrome stays operable at the smallest embed and
    grows to comfortable at full size. */
-/* The transport lives in its OWN LANE, reserved in broadcast.js by layoutStage.
-   It used to float over the board: two lattice rows at 1280 and three at 640,
-   where the pixel floors below bite while the board scales down, so the compact
-   variant covered MORE of the primary read surface than the full-size one.
-
-   The lane is measured in CSS PIXELS now rather than being a fixed 9.63% of the
-   stage, because what the pill needs is a physical 34px and nothing else. The
-   width below is likewise no longer the hardcoded 798/1920 = 41.6%: the board
-   grows as the chrome around it shrinks, so layoutStage publishes its width as
-   --board-width and this follows it. */
-/* NO PILL. The transport sits in the empty lane UNDER the lattice.
- *
- * It used to be a bordered, blurred capsule floating over the board's bottom
- * edge — a plate laid across the one surface the broadcast exists to show, to
- * hold five controls that already read perfectly well on the ground. The lane
- * below the board was reserved for it all along and was sitting empty, so the
- * pill was occluding the lattice for no reason at all. Chrome removed; position
- * published by layoutStage as --transport-top so it tracks the board. */
+/* layoutStage reserves a lane under the board, widening it across the stage
+   when the controls' minimum width cannot fit inside the board column. */
 .controls {
   position: absolute;
-  left: var(--board-left, 1.6%);
+  left: var(--transport-left, 1.6%);
   top: var(--transport-top, 92%);
-  /* Set by layoutStage from the live BOARD.w; the fallback is the old fixed
-     798 / 1920 in case the script has not laid out yet. */
-  width: var(--board-width, 41.6%);
+  width: var(--transport-width, 41.6%);
   min-width: 260px;
   max-width: calc(100% - 3.2%);
   display: flex;
@@ -338,6 +320,7 @@ html, body {
   font: 600 clamp(9px, 0.62vw, 13px)/1 var(--mono, ui-monospace, monospace);
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  white-space: nowrap;
   color: var(--muted);
 }
 .target-pick[hidden] { display: none; }
@@ -350,6 +333,7 @@ html, body {
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 4px 8px;
+  min-width: 0;
   max-width: 60%;
   cursor: pointer;
 }
@@ -805,19 +789,18 @@ function layoutStage() {
   BOARD.h = BOARD.w;
   // Right column, flush to the stage margin.
   BOARD.x = W - MARGIN - BOARD.w;
-  // Left column: masthead and clock at its top, panels filling the rest. It
-  // keeps its full height because the transport belongs to the board only.
+  const fullWidthTransport = BOARD.w < 260 * perPixel;
   RAIL.x = MARGIN;
   RAIL.y = BUG_H + BAND_GAP;
   RAIL.w = BOARD.x - RAIL_GUTTER - MARGIN;
-  RAIL.h = H - RAIL.y - MARGIN;
-  // The transport is laid out in CSS and must sit under the board it belongs to.
-  // Both edges go over as custom properties; a hardcoded left was fine only while
-  // the board was the left-hand column.
+  // The controls need the rail's bottom lane when they cannot fit under the board.
+  RAIL.h = H - RAIL.y - MARGIN - (fullWidthTransport ? transportH : 0);
+  const transportWidth = fullWidthTransport ? W - 2 * MARGIN : BOARD.w;
+  const transportLeft = fullWidthTransport ? MARGIN : BOARD.x;
   document.documentElement.style.setProperty(
-    "--board-width", `${(BOARD.w / W * 100).toFixed(2)}%`);
+    "--transport-width", `${(transportWidth / W * 100).toFixed(2)}%`);
   document.documentElement.style.setProperty(
-    "--board-left", `${(BOARD.x / W * 100).toFixed(2)}%`);
+    "--transport-left", `${(transportLeft / W * 100).toFixed(2)}%`);
   // The transport's own lane, which sits UNDER the lattice rather than over it.
   // Centred in the reserved band so it is neither against the board nor the
   // stage edge.
@@ -5424,14 +5407,14 @@ function placeTargetPicker() {
     left: matrix.a * x + matrix.c * y + matrix.e - stageBox.left,
     top: matrix.b * x + matrix.d * y + matrix.f - stageBox.top,
   });
-  // BELOW the heading, not on it. The panel's title is a long left-aligned
-  // question and the picker is right-aligned, so sharing that row printed the
-  // menu straight through "DID THE RULES GROW THE TARGET?". The row under it is
-  // clear on the right — the score and its labels are all left-aligned.
-  const corner = at(RAIL.x + RAIL.w - 18, RAIL.y + (dense() ? 58 : 40));
+  // Keep the picker below the heading and within the rail, even for long options.
+  const rowY = RAIL.y + (dense() ? 58 : 40);
+  const corner = at(RAIL.x + RAIL.w - 18, rowY);
+  const left = at(RAIL.x + 18, rowY);
   targetPick.style.right = `${Math.round(stageBox.width - corner.left)}px`;
   targetPick.style.top = `${Math.round(corner.top)}px`;
   targetPick.style.left = "auto";
+  targetPick.style.maxWidth = `${Math.floor(corner.left - left.left)}px`;
 }
 
 targetSelect.addEventListener("change", () => {
