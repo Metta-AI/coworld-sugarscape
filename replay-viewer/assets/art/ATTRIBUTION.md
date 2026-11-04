@@ -1,7 +1,7 @@
 # Art attribution
 
 `gnomes.aseprite` is a byte-for-byte copy of `data/gnomes.aseprite` from
-[heartleaf](https://github.com/Metta-AI/heartleaf), vendored here so that
+[heartleaf](https://github.com/softmax-universe/heartleaf), vendored here so that
 `tools/export_settler.nim` reproduces the settler atlas from a file inside this
 repository rather than from a checkout somewhere else on the machine.
 

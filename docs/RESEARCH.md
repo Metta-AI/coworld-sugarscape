@@ -150,19 +150,19 @@ The owner supplies the league/division identity and can rotate an existing varia
 Use repeated prospective seeds when evaluating policy quality; a single grade has sampling uncertainty.
 Do not mix reference-zero and calibration scores into one leaderboard.
 No game-owned commissioner or Conductor integration is required.
-See the platform's [league contract](https://github.com/Metta-AI/metta/blob/aaa330489a54e39408e840f33d90b32b006533d2/packages/coworld/src/coworld/docs/PLATFORM_LADDER_LEAGUE.md).
+See the platform's [league contract](https://github.com/softmax-universe/softmax/blob/aaa330489a54e39408e840f33d90b32b006533d2/packages/coworld/src/coworld/docs/PLATFORM_LADDER_LEAGUE.md).
 
-Relevant merged work: [scenario pool](https://app.graphite.dev/github/pr/Metta-AI/coworld-sugarscape/16),
-[Ruleset Studio](https://app.graphite.dev/github/pr/Metta-AI/coworld-sugarscape/18),
-[experiment runners](https://app.graphite.dev/github/pr/Metta-AI/coworld-sugarscape/39),
-[Eval ladders](https://app.graphite.dev/github/pr/Metta-AI/metta/27935).
+Relevant merged work: [scenario pool](https://app.graphite.dev/github/pr/softmax-universe/coworld-sugarscape/16),
+[Ruleset Studio](https://app.graphite.dev/github/pr/softmax-universe/coworld-sugarscape/18),
+[experiment runners](https://app.graphite.dev/github/pr/softmax-universe/coworld-sugarscape/39),
+[Eval ladders](https://app.graphite.dev/github/pr/softmax-universe/softmax/27935).
 
 ## Remaining native engines
 
 Richmond requires native CUDA. The platform currently rejects GPU requests from game runnables.
 A linked GPU companion needs qualified game GPU dispatch support before hosted execution.
 Richmond is not registered or represented as a completed hosted Coworld adapter.
-The ten-paper replication evidence remains in [Metta-AI/sugarscape](https://app.graphite.dev/github/pr/Metta-AI/sugarscape/1).
+The ten-paper replication evidence remains in [softmax-universe/sugarscape](https://app.graphite.dev/github/pr/softmax-universe/sugarscape/1).
 
 The scientific evidence for a registered adapter must distinguish source equivalence, local protocol execution,
 container execution, hosted certification and full campaign completion.

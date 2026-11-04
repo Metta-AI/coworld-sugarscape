@@ -1,11 +1,11 @@
 {
-  "$schema": "https://raw.githubusercontent.com/Metta-AI/metta/main/packages/coworld/src/coworld/coworld_manifest_schema.json",
+  "$schema": "https://raw.githubusercontent.com/softmax-universe/softmax/main/packages/coworld/src/coworld/coworld_manifest_schema.json",
   "apiVersion": "coworld.softmax.com/v1",
   "tags": ["agent-based-model", "economics", "generative-social-science"],
   "game": {
     "name": "sugarscape",
     "description": "Explore Sugarscape with declarative rulesets and a collection of native paper-model research variants.",
-    "owner": "Metta-AI",
+    "owner": "softmax-universe",
     "config_schema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
@@ -114,20 +114,20 @@
       "run": ["python", "-m", "coworld.server"],
       "env": {"PYTHONHASHSEED": "0"},
       "resources": {"requests": {"cpu": "2", "memory": "4Gi", "ephemeral-storage": "15Gi"}, "limits": {"cpu": "2", "memory": "6Gi"}},
-      "source_url": "https://github.com/Metta-AI/coworld-sugarscape/tree/main"
+      "source_url": "https://github.com/softmax-universe/coworld-sugarscape/tree/main"
     },
     "replay_viewer": {"bundle": "build/replay-viewer", "replay_compression": "gzip"},
     "protocols": {
-      "player": {"type": "uri", "value": "https://github.com/Metta-AI/coworld-sugarscape/blob/main/docs/PROTOCOL.md"},
-      "global": {"type": "uri", "value": "https://github.com/Metta-AI/coworld-sugarscape/blob/main/docs/PROTOCOL.md"}
+      "player": {"type": "uri", "value": "https://github.com/softmax-universe/coworld-sugarscape/blob/main/docs/PROTOCOL.md"},
+      "global": {"type": "uri", "value": "https://github.com/softmax-universe/coworld-sugarscape/blob/main/docs/PROTOCOL.md"}
     },
     "docs": {
-      "readme": {"type": "uri", "value": "https://github.com/Metta-AI/coworld-sugarscape/blob/main/README.md"},
+      "readme": {"type": "uri", "value": "https://github.com/softmax-universe/coworld-sugarscape/blob/main/README.md"},
       "pages": [
-        {"id": "rules", "title": "SugarLang rules", "content": {"type": "uri", "value": "https://github.com/Metta-AI/coworld-sugarscape/blob/main/docs/RULES.md"}},
-        {"id": "targets", "title": "Target catalog", "content": {"type": "uri", "value": "https://github.com/Metta-AI/coworld-sugarscape/blob/main/docs/TARGETS.md"}},
-        {"id": "scenarios", "title": "Ladder scenario catalog", "content": {"type": "uri", "value": "https://github.com/Metta-AI/coworld-sugarscape/blob/main/docs/SCENARIOS.md"}},
-        {"id": "getting-started", "title": "Getting started", "content": {"type": "uri", "value": "https://github.com/Metta-AI/coworld-sugarscape/blob/main/docs/getting-started.md"}}
+        {"id": "rules", "title": "SugarLang rules", "content": {"type": "uri", "value": "https://github.com/softmax-universe/coworld-sugarscape/blob/main/docs/RULES.md"}},
+        {"id": "targets", "title": "Target catalog", "content": {"type": "uri", "value": "https://github.com/softmax-universe/coworld-sugarscape/blob/main/docs/TARGETS.md"}},
+        {"id": "scenarios", "title": "Ladder scenario catalog", "content": {"type": "uri", "value": "https://github.com/softmax-universe/coworld-sugarscape/blob/main/docs/SCENARIOS.md"}},
+        {"id": "getting-started", "title": "Getting started", "content": {"type": "uri", "value": "https://github.com/softmax-universe/coworld-sugarscape/blob/main/docs/getting-started.md"}}
       ]
     }
   },
@@ -140,7 +140,7 @@
       "image": "{{BASELINE_IMAGE}}",
       "run": ["python", "-m", "players.baseline.player"],
       "env": {"PYTHONHASHSEED": "0"},
-      "source_url": "https://github.com/Metta-AI/coworld-sugarscape/tree/main/players/baseline"
+      "source_url": "https://github.com/softmax-universe/coworld-sugarscape/tree/main/players/baseline"
     }
   ],
   "variants": [
