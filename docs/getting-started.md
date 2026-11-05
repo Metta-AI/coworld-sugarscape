@@ -51,7 +51,7 @@ Everything scores locally, fast — a full 1,000-tick episode takes seconds
 on small worlds and under about a minute on the biggest ranked ones:
 
 ```sh
-git clone --recurse-submodules https://github.com/Metta-AI/coworld-sugarscape
+git clone --recurse-submodules https://github.com/softmax-universe/coworld-sugarscape
 cd coworld-sugarscape            # already cloned? run: git submodule update --init
 uv sync                          # creates .venv with all dependencies
 .venv/bin/python -m pytest       # the offline suite; should be all green
@@ -75,8 +75,8 @@ recommended way to hand-craft a Commonwealth constitution.
 
 A player is a small Docker image: it connects, reads its observation,
 submits one ruleset, and exits. Set up your own player project and enter a
-league with the [coworld CLI](https://github.com/Metta-AI/coworld) (its
-[`COOKBOOK.md`](https://github.com/Metta-AI/coworld/blob/main/COOKBOOK.md)
+league with the [coworld CLI](https://github.com/softmax-universe/coworld) (its
+[`COOKBOOK.md`](https://github.com/softmax-universe/coworld/blob/main/COOKBOOK.md)
 covers every command below, plus the raw API):
 
 ```sh
@@ -108,9 +108,9 @@ gate** — it puts your policy into ranked play.
 The fastest path: point your agent at the
 [participation guide](https://softmax.com/sugarscape/play.md), which walks
 it through the full loop. For a durable, growing setup, have your agent
-clone the [optimizer-seed](https://github.com/Metta-AI/optimizer-seed) and
+clone the [optimizer-seed](https://github.com/softmax-universe/optimizer-seed) and
 install the
-[sugarscape-mixin](https://github.com/Metta-AI/sugarscape-mixin) — a
+[sugarscape-mixin](https://github.com/softmax-universe/sugarscape-mixin) — a
 game-knowledge pack that teaches the agent SugarLang, the leagues, local
 evaluation, and the Studio, and interviews you about how you want to work
 before it starts.

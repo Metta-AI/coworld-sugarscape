@@ -1,36 +1,36 @@
 {
   "mcculloch_2022": {
     "files": {
-      "independent.py": "https://raw.githubusercontent.com/Metta-AI/sugarscape/960e703f24da4f498ca423bdaa5537c3200e5c8c/replications/mcculloch_2022/independent.py",
-      "sugarscape_cg/sugar-map.txt": "https://raw.githubusercontent.com/Metta-AI/sugarscape/960e703f24da4f498ca423bdaa5537c3200e5c8c/replications/mcculloch_2022/sugarscape_cg/sugar-map.txt",
-      "sugarscape_cg/LICENSE.uncertainty": "https://raw.githubusercontent.com/Metta-AI/sugarscape/960e703f24da4f498ca423bdaa5537c3200e5c8c/replications/mcculloch_2022/sugarscape_cg/LICENSE.uncertainty"
+      "independent.py": "https://raw.githubusercontent.com/softmax-universe/sugarscape/960e703f24da4f498ca423bdaa5537c3200e5c8c/replications/mcculloch_2022/independent.py",
+      "sugarscape_cg/sugar-map.txt": "https://raw.githubusercontent.com/softmax-universe/sugarscape/960e703f24da4f498ca423bdaa5537c3200e5c8c/replications/mcculloch_2022/sugarscape_cg/sugar-map.txt",
+      "sugarscape_cg/LICENSE.uncertainty": "https://raw.githubusercontent.com/softmax-universe/sugarscape/960e703f24da4f498ca423bdaa5537c3200e5c8c/replications/mcculloch_2022/sugarscape_cg/LICENSE.uncertainty"
     }
   },
   "carrella_2021": {
     "files": {
-      "model.py": "https://raw.githubusercontent.com/Metta-AI/sugarscape/bc33bd58e92914ce1652f2c15ccd77d99dc1895b/replications/carrella_2021/model.py"
+      "model.py": "https://raw.githubusercontent.com/softmax-universe/sugarscape/bc33bd58e92914ce1652f2c15ccd77d99dc1895b/replications/carrella_2021/model.py"
     }
   },
   "izquierdo_2009": {
     "files": {
-      "model.py": "https://raw.githubusercontent.com/Metta-AI/sugarscape/91441ad4115b0c351a654127acc29cc16ab3ea0c/replications/izquierdo_2009/model.py",
-      "results/full-model-return-2026-10-17/capacity.csv": "https://raw.githubusercontent.com/Metta-AI/sugarscape/91441ad4115b0c351a654127acc29cc16ab3ea0c/replications/izquierdo_2009/results/full-model-return-2026-10-17/capacity.csv"
+      "model.py": "https://raw.githubusercontent.com/softmax-universe/sugarscape/91441ad4115b0c351a654127acc29cc16ab3ea0c/replications/izquierdo_2009/model.py",
+      "results/full-model-return-2026-10-17/capacity.csv": "https://raw.githubusercontent.com/softmax-universe/sugarscape/91441ad4115b0c351a654127acc29cc16ab3ea0c/replications/izquierdo_2009/results/full-model-return-2026-10-17/capacity.csv"
     }
   },
   "dogan_2026": {
     "files": {
-      "LICENSE": "https://raw.githubusercontent.com/Metta-AI/sugarscape/82cb45f731d76c985209fac842b857db305320ae/replications/dogan_2026/vendor/LICENSE",
-      "LICENSES/Apache-2.0.txt": "https://raw.githubusercontent.com/Metta-AI/sugarscape/82cb45f731d76c985209fac842b857db305320ae/replications/dogan_2026/vendor/LICENSES/Apache-2.0.txt",
-      "NOTICE": "https://raw.githubusercontent.com/Metta-AI/sugarscape/82cb45f731d76c985209fac842b857db305320ae/replications/dogan_2026/vendor/NOTICE",
-      "sugarscape_ai_tax/__init__.py": "https://raw.githubusercontent.com/Metta-AI/sugarscape/82cb45f731d76c985209fac842b857db305320ae/replications/dogan_2026/vendor/sugarscape_ai_tax/__init__.py",
-      "sugarscape_ai_tax/agents.py": "https://raw.githubusercontent.com/Metta-AI/sugarscape/82cb45f731d76c985209fac842b857db305320ae/replications/dogan_2026/vendor/sugarscape_ai_tax/agents.py",
-      "sugarscape_ai_tax/model.py": "https://raw.githubusercontent.com/Metta-AI/sugarscape/82cb45f731d76c985209fac842b857db305320ae/replications/dogan_2026/vendor/sugarscape_ai_tax/model.py",
-      "sugarscape_ai_tax/sugar-map.txt": "https://raw.githubusercontent.com/Metta-AI/sugarscape/82cb45f731d76c985209fac842b857db305320ae/replications/dogan_2026/vendor/sugarscape_ai_tax/sugar-map.txt"
+      "LICENSE": "https://raw.githubusercontent.com/softmax-universe/sugarscape/82cb45f731d76c985209fac842b857db305320ae/replications/dogan_2026/vendor/LICENSE",
+      "LICENSES/Apache-2.0.txt": "https://raw.githubusercontent.com/softmax-universe/sugarscape/82cb45f731d76c985209fac842b857db305320ae/replications/dogan_2026/vendor/LICENSES/Apache-2.0.txt",
+      "NOTICE": "https://raw.githubusercontent.com/softmax-universe/sugarscape/82cb45f731d76c985209fac842b857db305320ae/replications/dogan_2026/vendor/NOTICE",
+      "sugarscape_ai_tax/__init__.py": "https://raw.githubusercontent.com/softmax-universe/sugarscape/82cb45f731d76c985209fac842b857db305320ae/replications/dogan_2026/vendor/sugarscape_ai_tax/__init__.py",
+      "sugarscape_ai_tax/agents.py": "https://raw.githubusercontent.com/softmax-universe/sugarscape/82cb45f731d76c985209fac842b857db305320ae/replications/dogan_2026/vendor/sugarscape_ai_tax/agents.py",
+      "sugarscape_ai_tax/model.py": "https://raw.githubusercontent.com/softmax-universe/sugarscape/82cb45f731d76c985209fac842b857db305320ae/replications/dogan_2026/vendor/sugarscape_ai_tax/model.py",
+      "sugarscape_ai_tax/sugar-map.txt": "https://raw.githubusercontent.com/softmax-universe/sugarscape/82cb45f731d76c985209fac842b857db305320ae/replications/dogan_2026/vendor/sugarscape_ai_tax/sugar-map.txt"
     }
   },
   "brearcliffe_2020": {
     "files": {
-      "Replay.java": "https://raw.githubusercontent.com/Metta-AI/sugarscape/b64684cbe24b2b17f5cb32819040db4581fe7e25/replications/brearcliffe_2020/Replay.java"
+      "Replay.java": "https://raw.githubusercontent.com/softmax-universe/sugarscape/b64684cbe24b2b17f5cb32819040db4581fe7e25/replications/brearcliffe_2020/Replay.java"
     },
     "archive": {
       "url": "https://www.comses.net/codebases/ffb52fc3-69e1-4bbd-b5d7-fa460617f74e/releases/1.0.0/download/",
@@ -44,9 +44,9 @@
   },
   "oremland_2014": {
     "files": {
-      "RunPolicyBatch.java": "https://raw.githubusercontent.com/Metta-AI/sugarscape/c1ad995a3e8c6dc7b91686e30fd772c4876cdd18/replications/oremland_2014/RunPolicyBatch.java",
-      "model.nlogo": "https://raw.githubusercontent.com/Metta-AI/sugarscape/c1ad995a3e8c6dc7b91686e30fd772c4876cdd18/replications/oremland_2014/results/policy-indexing-2026-10-18/oremland.nlogo",
-      "sugar-map.txt": "https://raw.githubusercontent.com/Metta-AI/sugarscape/c1ad995a3e8c6dc7b91686e30fd772c4876cdd18/replications/oremland_2014/results/policy-indexing-2026-10-18/sugar-map.txt"
+      "RunPolicyBatch.java": "https://raw.githubusercontent.com/softmax-universe/sugarscape/c1ad995a3e8c6dc7b91686e30fd772c4876cdd18/replications/oremland_2014/RunPolicyBatch.java",
+      "model.nlogo": "https://raw.githubusercontent.com/softmax-universe/sugarscape/c1ad995a3e8c6dc7b91686e30fd772c4876cdd18/replications/oremland_2014/results/policy-indexing-2026-10-18/oremland.nlogo",
+      "sugar-map.txt": "https://raw.githubusercontent.com/softmax-universe/sugarscape/c1ad995a3e8c6dc7b91686e30fd772c4876cdd18/replications/oremland_2014/results/policy-indexing-2026-10-18/sugar-map.txt"
     }
   },
   "quera_2025": {
@@ -72,8 +72,8 @@
       "src/sir_simple.jl": "https://raw.githubusercontent.com/arnauqb/DiffABM.jl/9178eccd56dd352e3515e276239654239f8d3b41/src/sir_simple.jl",
       "src/sir_simple_vec.jl": "https://raw.githubusercontent.com/arnauqb/DiffABM.jl/9178eccd56dd352e3515e276239654239f8d3b41/src/sir_simple_vec.jl",
       "src/utils.jl": "https://raw.githubusercontent.com/arnauqb/DiffABM.jl/9178eccd56dd352e3515e276239654239f8d3b41/src/utils.jl",
-      "Manifest.toml": "https://raw.githubusercontent.com/Metta-AI/sugarscape/e2386f24e241458ac7e587c7c0fe527ab2032c66/replications/source-audits/quera-2025-jmlr/Manifest.toml",
-      "Project.toml": "https://raw.githubusercontent.com/Metta-AI/sugarscape/e2386f24e241458ac7e587c7c0fe527ab2032c66/replications/source-audits/quera-2025-jmlr/Project.toml"
+      "Manifest.toml": "https://raw.githubusercontent.com/softmax-universe/sugarscape/e2386f24e241458ac7e587c7c0fe527ab2032c66/replications/source-audits/quera-2025-jmlr/Manifest.toml",
+      "Project.toml": "https://raw.githubusercontent.com/softmax-universe/sugarscape/e2386f24e241458ac7e587c7c0fe527ab2032c66/replications/source-audits/quera-2025-jmlr/Project.toml"
     }
   },
   "thaler_2019": {
@@ -147,9 +147,9 @@
       "original/criterion/sugarscape-tvar/src/Utils.hs": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tvar/src/Utils.hs",
       "original/criterion/sugarscape-tvar/stack.yaml": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tvar/stack.yaml",
       "original/criterion/sugarscape-tvar/sugarscape-tvar.cabal": "https://raw.githubusercontent.com/thalerjonathan/haskell-stm-sugarscape/f5851488bf2369e2bbdc3f2499ed69c142de9fec/criterion/sugarscape-tvar/sugarscape-tvar.cabal",
-      "prepare_population_observers.py": "https://raw.githubusercontent.com/Metta-AI/sugarscape/cea904b14248371b1281a29b8f73bf5bb0f7d5bd/replications/thaler_2019/prepare_population_observers.py",
-      "stack-global-config.yaml": "https://raw.githubusercontent.com/Metta-AI/sugarscape/cea904b14248371b1281a29b8f73bf5bb0f7d5bd/replications/thaler_2019/timing/stack-global-config.yaml",
-      "timing/revision-fidelity.json": "https://raw.githubusercontent.com/Metta-AI/sugarscape/cea904b14248371b1281a29b8f73bf5bb0f7d5bd/replications/thaler_2019/timing/revision-fidelity.json"
+      "prepare_population_observers.py": "https://raw.githubusercontent.com/softmax-universe/sugarscape/cea904b14248371b1281a29b8f73bf5bb0f7d5bd/replications/thaler_2019/prepare_population_observers.py",
+      "stack-global-config.yaml": "https://raw.githubusercontent.com/softmax-universe/sugarscape/cea904b14248371b1281a29b8f73bf5bb0f7d5bd/replications/thaler_2019/timing/stack-global-config.yaml",
+      "timing/revision-fidelity.json": "https://raw.githubusercontent.com/softmax-universe/sugarscape/cea904b14248371b1281a29b8f73bf5bb0f7d5bd/replications/thaler_2019/timing/revision-fidelity.json"
     }
   },
   "lima_2024": {
@@ -210,7 +210,7 @@
       "original/shared_volume/register.py": "https://raw.githubusercontent.com/GustavoLLima/open_mas_docker_opt/3838dad156f62484d0e664b49ffc4e05ac077280/shared_volume/register.py",
       "original/shared_volume/router.py": "https://raw.githubusercontent.com/GustavoLLima/open_mas_docker_opt/3838dad156f62484d0e664b49ffc4e05ac077280/shared_volume/router.py",
       "original/shared_volume/sugar-map.txt": "https://raw.githubusercontent.com/GustavoLLima/open_mas_docker_opt/3838dad156f62484d0e664b49ffc4e05ac077280/shared_volume/sugar-map.txt",
-      "audit_snapshot.py": "https://raw.githubusercontent.com/Metta-AI/sugarscape/363175bde20af32cda1530af8f95bf7809f57c43/replications/lima_2024/audit_snapshot.py"
+      "audit_snapshot.py": "https://raw.githubusercontent.com/softmax-universe/sugarscape/363175bde20af32cda1530af8f95bf7809f57c43/replications/lima_2024/audit_snapshot.py"
     }
   }
 }

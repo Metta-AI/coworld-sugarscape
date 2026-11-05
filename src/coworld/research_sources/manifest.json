@@ -1,7 +1,7 @@
 [
   {
     "study": "mcculloch_2022",
-    "repository": "https://github.com/Metta-AI/sugarscape",
+    "repository": "https://github.com/softmax-universe/sugarscape",
     "revision": "960e703f24da4f498ca423bdaa5537c3200e5c8c",
     "files_sha256": {
       "independent.py": "03e093abd71d949c778e2f65f94b9a554fa36ee62fae59b49eca3a18a6358945",
@@ -13,7 +13,7 @@
   },
   {
     "study": "carrella_2021",
-    "repository": "https://github.com/Metta-AI/sugarscape",
+    "repository": "https://github.com/softmax-universe/sugarscape",
     "revision": "bc33bd58e92914ce1652f2c15ccd77d99dc1895b",
     "files_sha256": {
       "model.py": "23d73549848eadf237d38534a5cdae71c240c03cc9ef0fed4655cabb615ad36a"
@@ -23,7 +23,7 @@
   },
   {
     "study": "izquierdo_2009",
-    "repository": "https://github.com/Metta-AI/sugarscape",
+    "repository": "https://github.com/softmax-universe/sugarscape",
     "revision": "91441ad4115b0c351a654127acc29cc16ab3ea0c",
     "files_sha256": {
       "model.py": "233dc44d6f176ef65e91d944ba728e8bb3968b57a0004b39810e11dbb6d1f1d6",
@@ -34,7 +34,7 @@
   },
   {
     "study": "dogan_2026",
-    "repository": "https://github.com/Metta-AI/sugarscape",
+    "repository": "https://github.com/softmax-universe/sugarscape",
     "revision": "82cb45f731d76c985209fac842b857db305320ae",
     "entrypoint": "sugarscape_ai_tax/model.py",
     "files_sha256": {
@@ -50,7 +50,7 @@
   },
   {
     "study": "brearcliffe_2020",
-    "repository": "https://github.com/Metta-AI/sugarscape",
+    "repository": "https://github.com/softmax-universe/sugarscape",
     "revision": "b64684cbe24b2b17f5cb32819040db4581fe7e25",
     "entrypoint": "model.nlogo",
     "files_sha256": {
@@ -63,7 +63,7 @@
   },
   {
     "study": "oremland_2014",
-    "repository": "https://github.com/Metta-AI/sugarscape",
+    "repository": "https://github.com/softmax-universe/sugarscape",
     "revision": "c1ad995a3e8c6dc7b91686e30fd772c4876cdd18",
     "entrypoint": "model.nlogo",
     "files_sha256": {
@@ -186,7 +186,7 @@
     "study": "thaler_2019",
     "engine": "native-haskell",
     "entrypoint": "original/criterion/sugarscape-seq/src/Main.hs",
-    "preparer_repository": "https://github.com/Metta-AI/sugarscape",
+    "preparer_repository": "https://github.com/softmax-universe/sugarscape",
     "preparer_revision": "cea904b14248371b1281a29b8f73bf5bb0f7d5bd"
   },
   {
@@ -256,7 +256,7 @@
       "original/shared_volume/sugar-map.txt": "cd9b4661c8813d3e268995676d5ba84394ee813986adb0d657dc9be4a1fab675"
     },
     "measurement_auditor": {
-      "repository": "https://github.com/Metta-AI/sugarscape",
+      "repository": "https://github.com/softmax-universe/sugarscape",
       "revision": "363175bde20af32cda1530af8f95bf7809f57c43",
       "files": [
         "audit_snapshot.py",

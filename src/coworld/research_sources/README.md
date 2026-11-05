@@ -1,6 +1,6 @@
 # Pinned research sources
 
-These are pinned research inputs from reviewed studies in Metta-AI/sugarscape.
+These are pinned research inputs from reviewed studies in softmax-universe/sugarscape.
 Run `python tools/fetch_research_sources.py` before native setup or local episodes.
 Setup and Docker builds download selected files from immutable public Git commits or the hash-pinned author release.
 Downloads are verified before writing, ignored by Git, and included in the image for offline episodes.
